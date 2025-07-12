@@ -281,7 +281,7 @@ detect_deployment_paths() {
     echo "   数据目录: $BASE_DATA_DIR" >&2
     
     # 支持环境变量覆盖
-    if [[ -n "${BLOCKCHAIN_BENCHMARK_DATA_DIR}" ]]; then
+    if [[ -n "${BLOCKCHAIN_BENCHMARK_DATA_DIR:-}" ]]; then
         echo "   (使用环境变量: BLOCKCHAIN_BENCHMARK_DATA_DIR)" >&2
     fi
     
