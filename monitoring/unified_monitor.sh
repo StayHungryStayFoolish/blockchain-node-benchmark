@@ -10,8 +10,8 @@
 # 严格错误处理
 set -euo pipefail
 
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
 init_logger "unified_monitor" $LOG_LEVEL "${LOGS_DIR}/unified_monitor.log"
@@ -40,9 +40,8 @@ cleanup_monitor_processes() {
     }
 }
 
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/../core/common_functions.sh"
-source "$(dirname "$0")/iostat_collector.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/iostat_collector.sh"
 
 readonly UNIFIED_LOG="${LOGS_DIR}/performance_$(date +%Y%m%d_%H%M%S).csv"
 readonly OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_$(date +%Y%m%d_%H%M%S).csv"
@@ -251,9 +250,9 @@ get_ena_allowance_data() {
 }
 
 # 加载iostat收集器函数
-source "$(dirname "$0")/iostat_collector.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/iostat_collector.sh"
 # 加载ENA网络监控器
-source "$(dirname "$0")/ena_network_monitor.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/ena_network_monitor.sh"
 
 # 监控开销统计 (基于真实 /proc/[pid]/io)
 get_monitoring_overhead() {

@@ -5,8 +5,8 @@
 # 基于分析报告，批量修复项目中的日志配置不统一问题
 # =====================================================================
 
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/unified_logger.sh"
 
 init_logger "batch_fix_logging" $LOG_LEVEL_INFO "${LOGS_DIR}/batch_fix_logging.log"
 
@@ -88,7 +88,7 @@ fix_shell_script() {
             echo "$line"
             # 在source config.sh后添加统一日志
             if [[ "$line" =~ source.*config\.sh ]]; then
-                echo 'source "$(dirname "$0")/../utils/unified_logger.sh"'
+                echo 'source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"'
                 echo ""
                 echo "# 初始化统一日志管理器"
                 echo "init_logger \"$component_name\" \$LOG_LEVEL \"\${LOGS_DIR}/${component_name}.log\""

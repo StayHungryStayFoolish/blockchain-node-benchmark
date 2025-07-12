@@ -782,62 +782,6 @@ NETWORK_INTERFACE=$(detect_network_interface)
 # 创建必要的目录
 create_directories_safely "${LOGS_DIR}" "${REPORTS_DIR}" "${VEGETA_RESULTS_DIR}" "${TMP_DIR}" "${ARCHIVES_DIR}" "${MEMORY_SHARE_DIR}" "${ERROR_LOG_DIR}" "${PYTHON_ERROR_LOG_DIR}"
 
-# =====================================================================
-# 配置验证函数
-# =====================================================================
-
-validate_config() {
-    echo "🔍 验证配置..."
-    local errors=0
-    
-    # 检查必需的配置项
-    [[ -z "$LOCAL_RPC_URL" ]] && {
-        echo "❌ LOCAL_RPC_URL 未设置" >&2
-        ((errors++))
-    }
-    
-    [[ -z "$LEDGER_DEVICE" ]] && {
-        echo "❌ LEDGER_DEVICE 未设置" >&2
-        ((errors++))
-    }
-    
-    [[ -z "$DATA_VOL_TYPE" ]] && {
-        echo "❌ DATA_VOL_TYPE 未设置" >&2
-        ((errors++))
-    }
-    
-    # 验证RPC模式
-    if [[ "$RPC_MODE" != "single" && "$RPC_MODE" != "mixed" ]]; then
-        echo "❌ 错误: 无效的RPC模式: $RPC_MODE (支持: single, mixed)" >&2
-        ((errors++))
-    fi
-    
-    # 检查数值配置的合理性
-    [[ $STANDARD_INITIAL_QPS -le 0 ]] && {
-        echo "❌ STANDARD_INITIAL_QPS 必须大于0" >&2
-        ((errors++))
-    }
-    
-    [[ $STANDARD_MAX_QPS -le $STANDARD_INITIAL_QPS ]] && {
-        echo "❌ STANDARD_MAX_QPS 必须大于 STANDARD_INITIAL_QPS" >&2
-        ((errors++))
-    }
-    
-    # 检查目录权限
-    [[ ! -w "$DATA_DIR" ]] && {
-        echo "❌ 数据目录 $DATA_DIR 不可写" >&2
-        ((errors++))
-    }
-    
-    if [[ $errors -eq 0 ]]; then
-        echo "✅ 配置验证通过"
-        return 0
-    else
-        echo "❌ 发现 $errors 个配置错误"
-        return 1
-    fi
-}
-
 # 执行EBS性能基准计算
 calculate_ebs_performance_baselines
 

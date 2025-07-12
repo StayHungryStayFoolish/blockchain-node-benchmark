@@ -7,8 +7,8 @@
 # =====================================================================
 
 # 加载错误处理和配置
-source "$(dirname "$0")/../utils/error_handler.sh"
-source "$(dirname "$0")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/error_handler.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 
 setup_error_handling "$(basename "$0")" "监控协调器"
 log_script_start "$(basename "$0")"

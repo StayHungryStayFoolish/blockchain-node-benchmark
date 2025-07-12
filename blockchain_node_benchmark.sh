@@ -17,7 +17,7 @@ check_deployment() {
     if [[ ! -r "$script_path" ]]; then
         echo "❌ 错误: 无法读取框架目录" >&2
         echo "💡 解决方案: 检查目录权限" >&2
-        exit 1
+        return 1
     fi
     
     echo "✅ 部署环境验证通过" >&2
@@ -47,7 +47,9 @@ show_framework_info() {
 }
 
 # 执行部署检查
-check_deployment
+if ! check_deployment; then
+    exit 1
+fi
 
 # 如果没有参数，显示框架信息
 if [[ $# -eq 0 ]]; then
@@ -685,7 +687,9 @@ main() {
     show_framework_info
     
     # 检查部署环境
-    check_deployment
+    if ! check_deployment; then
+        exit 1
+    fi
     
     # 初始化目录
     detect_deployment_paths

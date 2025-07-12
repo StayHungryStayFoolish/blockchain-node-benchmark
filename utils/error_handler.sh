@@ -16,16 +16,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/unified_logger.sh"
 
 # 全局错误处理配置 - 使用config.sh中的统一配置
-readonly ERROR_LOG_DIR="${ERROR_LOG_DIR:-${LOGS_DIR:-/tmp}/error_logs}"
-readonly ERROR_LOG_FILE="${ERROR_LOG_DIR}/framework_errors_$(date +%Y%m%d).log"
+if [[ -z "${ERROR_LOG_DIR:-}" ]]; then
+    readonly ERROR_LOG_DIR="${LOGS_DIR:-/tmp}/error_logs"
+fi
+if [[ -z "${ERROR_LOG_FILE:-}" ]]; then
+    readonly ERROR_LOG_FILE="${ERROR_LOG_DIR}/framework_errors_$(date +%Y%m%d).log"
+fi
 
 # 确保错误日志目录存在
 mkdir -p "$ERROR_LOG_DIR" 2>/dev/null || {
     # 如果无法创建配置的目录，使用系统临时目录作为后备
-    readonly FALLBACK_ERROR_LOG_DIR="/tmp/solana-qps-errors"
+    if [[ -z "${FALLBACK_ERROR_LOG_DIR:-}" ]]; then
+        readonly FALLBACK_ERROR_LOG_DIR="/tmp/solana-qps-errors"
+    fi
     mkdir -p "$FALLBACK_ERROR_LOG_DIR"
-    readonly ERROR_LOG_DIR="$FALLBACK_ERROR_LOG_DIR"
-    readonly ERROR_LOG_FILE="${ERROR_LOG_DIR}/framework_errors_$(date +%Y%m%d).log"
+    if [[ "$ERROR_LOG_DIR" != "$FALLBACK_ERROR_LOG_DIR" ]]; then
+        ERROR_LOG_DIR="$FALLBACK_ERROR_LOG_DIR"
+        ERROR_LOG_FILE="${ERROR_LOG_DIR}/framework_errors_$(date +%Y%m%d).log"
+    fi
     echo "⚠️ 使用后备错误日志目录: $ERROR_LOG_DIR" >&2
 }
 

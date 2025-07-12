@@ -10,8 +10,8 @@
 # 严格错误处理
 set -euo pipefail
 
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
 init_logger "bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/bottleneck_detector.log"
@@ -275,7 +275,7 @@ trigger_validator_log_analysis() {
     local log_analysis_output="${MEMORY_SHARE_DIR}/bottleneck_validator_analysis_${timestamp}.txt"
     
     # 调用验证器日志分析脚本
-    if bash "$(dirname "$0")/../analysis/analyze_validator_logs.sh" \
+    if bash "$(dirname "${BASH_SOURCE[0]}")/../analysis/analyze_validator_logs.sh" \
         -i "$VALIDATOR_LOG_PATH" \
         -o "$log_analysis_output" \
         --bottleneck-time "$bottleneck_time" \

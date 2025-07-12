@@ -6,7 +6,7 @@
 # 分析现有日志模式并生成迁移建议
 # =====================================================================
 
-source "$(dirname "$0")/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/unified_logger.sh"
 
 # 初始化迁移日志器
 init_logger "log_migrator" $LOG_LEVEL_INFO "${LOGS_DIR}/log_migration.log"
@@ -141,7 +141,7 @@ generate_migration_recommendations() {
 1. **引入统一日志管理器**
 ```bash
 # 在脚本开头添加
-source "$(dirname "$0")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化日志器
 init_logger "component_name" $LOG_LEVEL_INFO "${LOGS_DIR}/component_name.log"
@@ -230,7 +230,7 @@ migrate_shell_file() {
     {
         # 添加统一日志管理器引入
         echo '# 引入统一日志管理器'
-        echo 'source "$(dirname "$0")/../utils/unified_logger.sh"'
+        echo 'source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"'
         echo ''
         
         # 添加日志器初始化

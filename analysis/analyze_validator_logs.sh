@@ -6,8 +6,8 @@
 # =====================================================================
 
 # 加载配置文件
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
 init_logger "analyze_validator_logs" $LOG_LEVEL "${LOGS_DIR}/analyze_validator_logs.log"
@@ -42,7 +42,7 @@ parse_args() {
         case $1 in
             -h|--help)
                 show_help
-                exit 0
+                exit 0  # --help 应该直接退出整个脚本
                 ;;
             -i|--input)
                 INPUT_LOG="$2"
@@ -79,7 +79,7 @@ parse_args() {
             *)
                 echo "Unknown option: $1"
                 show_help
-                exit 1
+                return 1
                 ;;
         esac
     done
@@ -95,7 +95,7 @@ parse_args() {
 check_dependencies() {
     if ! command -v grep &> /dev/null || ! command -v awk &> /dev/null || ! command -v sort &> /dev/null; then
         echo "Error: Required tools (grep, awk, sort) are not installed"
-        exit 1
+        return 1
     fi
 }
 
@@ -103,13 +103,13 @@ check_dependencies() {
 check_input_file() {
     if [[ ! -f "$INPUT_LOG" ]]; then
         echo "Error: Input log file not found: $INPUT_LOG"
-        exit 1
+        return 1
     fi
     
     # 检查文件是否为空
     if [[ ! -s "$INPUT_LOG" ]]; then
         echo "Error: Input log file is empty: $INPUT_LOG"
-        exit 1
+        return 1
     fi
 }
 
@@ -628,10 +628,14 @@ main() {
     parse_args "$@"
     
     # 检查依赖
-    check_dependencies
+    if ! check_dependencies; then
+        exit 1
+    fi
     
     # 检查输入文件
-    check_input_file
+    if ! check_input_file; then
+        exit 1
+    fi
     
     # 判断是否为瓶颈时间关联分析
     if [[ -n "$BOTTLENECK_TIME" ]]; then

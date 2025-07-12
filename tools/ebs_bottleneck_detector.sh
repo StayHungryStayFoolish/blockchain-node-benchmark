@@ -3,14 +3,14 @@
 # 高频监控EBS性能，检测IOPS和Throughput瓶颈
 
 # 引入依赖
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
 init_logger "ebs_bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/ebs_bottleneck_detector.log"
 
-source "$(dirname "$0")/../utils/ebs_converter.sh"
-source "$(dirname "$0")/../monitoring/ec2_info_collector.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../monitoring/ec2_info_collector.sh"
 
 # 瓶颈检测配置
 readonly HIGH_FREQ_INTERVAL=1        # 高频监控间隔(秒)

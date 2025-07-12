@@ -6,7 +6,7 @@
 # =====================================================================
 
 # 加载配置文件
-source "$(dirname "$0")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 
 # 初始化变量
 ACCOUNTS_FILE=""
@@ -41,7 +41,7 @@ parse_args() {
         case $1 in
             -h|--help)
                 show_help
-                exit 0
+                exit 0  # --help 应该直接退出整个脚本
                 ;;
             -a|--accounts-file)
                 ACCOUNTS_FILE="$2"
@@ -74,7 +74,7 @@ parse_args() {
             *)
                 echo "Unknown option: $1"
                 show_help
-                exit 1
+                return 1
                 ;;
         esac
     done
@@ -98,7 +98,7 @@ parse_args() {
     else
         echo "Error: Invalid RPC mode: $RPC_MODE"
         show_help
-        exit 1
+        return 1
     fi
 }
 
@@ -106,7 +106,7 @@ parse_args() {
 check_dependencies() {
     if ! command -v jq &> /dev/null; then
         echo "Error: jq is not installed"
-        exit 1
+        return 1
     fi
 }
 
@@ -114,13 +114,13 @@ check_dependencies() {
 check_input_file() {
     if [[ ! -f "$ACCOUNTS_FILE" ]]; then
         echo "Error: Accounts file not found: $ACCOUNTS_FILE"
-        exit 1
+        return 1
     fi
     
     # 检查文件是否为空
     if [[ ! -s "$ACCOUNTS_FILE" ]]; then
         echo "Error: Accounts file is empty: $ACCOUNTS_FILE"
-        exit 1
+        return 1
     fi
 }
 
@@ -314,7 +314,7 @@ generate_targets() {
     # 检查是否有账户
     if [[ ${#accounts[@]} -eq 0 ]]; then
         echo "Error: No valid accounts found in $ACCOUNTS_FILE"
-        exit 1
+        return 1
     fi
     
     echo "Found ${#accounts[@]} accounts"
@@ -402,16 +402,22 @@ generate_targets() {
 # 主函数
 main() {
     # 检查依赖
-    check_dependencies
+    if ! check_dependencies; then
+        exit 1
+    fi
     
     # 解析参数
     parse_args "$@"
     
     # 检查输入文件
-    check_input_file
+    if ! check_input_file; then
+        exit 1
+    fi
     
     # 生成测试目标
-    generate_targets
+    if ! generate_targets; then
+        exit 1
+    fi
 }
 
 # 执行主函数

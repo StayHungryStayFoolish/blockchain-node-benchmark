@@ -9,7 +9,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common_functions.sh"
 source "${SCRIPT_DIR}/../config/config.sh"
-source "$(dirname "$0")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
 init_logger "master_qps_executor" $LOG_LEVEL "${LOGS_DIR}/master_qps_executor.log"
@@ -17,7 +17,7 @@ init_logger "master_qps_executor" $LOG_LEVEL "${LOGS_DIR}/master_qps_executor.lo
 source "${SCRIPT_DIR}/../utils/error_handler.sh"
 
 # 设置错误处理
-setup_error_handling "$(basename "$0")" "QPS测试引擎"
+setup_error_handling "$(basename "${BASH_SOURCE[0]}")" "QPS测试引擎"
 log_script_start "$(basename "$0")"
 
 # 全局变量

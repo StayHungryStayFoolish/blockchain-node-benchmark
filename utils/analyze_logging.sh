@@ -6,8 +6,8 @@
 # 适用于开发阶段的代码审查和标准化
 # =====================================================================
 
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/unified_logger.sh"
 
 init_logger "log_analyzer" $LOG_LEVEL_INFO "${LOGS_DIR}/log_analysis.log"
 
@@ -99,7 +99,7 @@ analyze_logging_status() {
     echo "### Shell脚本标准模板" >> "$ANALYSIS_REPORT"
     echo '```bash' >> "$ANALYSIS_REPORT"
     echo '# 在脚本开头添加' >> "$ANALYSIS_REPORT"
-    echo 'source "$(dirname "$0")/../utils/unified_logger.sh"' >> "$ANALYSIS_REPORT"
+    echo 'source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"' >> "$ANALYSIS_REPORT"
     echo 'init_logger "component_name" $LOG_LEVEL_INFO "${LOGS_DIR}/component_name.log"' >> "$ANALYSIS_REPORT"
     echo '' >> "$ANALYSIS_REPORT"
     echo '# 替换日志调用' >> "$ANALYSIS_REPORT"

@@ -4,7 +4,7 @@
 # QPS测试归档工具 - 按执行次数归档测试数据
 # =====================================================================
 
-source "$(dirname "$0")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 
 # 全局变量
 ARCHIVES_DIR="${DATA_DIR}/archives"

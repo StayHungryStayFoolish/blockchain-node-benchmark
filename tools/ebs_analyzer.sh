@@ -6,10 +6,10 @@
 # 使用统一日志管理器
 # =====================================================================
 
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/../core/common_functions.sh"
-source "$(dirname "$0")/../monitoring/iostat_collector.sh"
-source "$(dirname "$0")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../monitoring/iostat_collector.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
 init_logger "ebs_analyzer" $LOG_LEVEL "${LOGS_DIR}/ebs_analyzer.log"

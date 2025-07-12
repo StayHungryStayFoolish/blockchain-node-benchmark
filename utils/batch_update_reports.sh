@@ -5,8 +5,8 @@
 # 更新 analysis_reports 中与日志配置修复相关的报告
 # =====================================================================
 
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/unified_logger.sh"
 
 init_logger "batch_update_reports" $LOG_LEVEL_INFO "${LOGS_DIR}/batch_update_reports.log"
 

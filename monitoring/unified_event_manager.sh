@@ -6,7 +6,7 @@
 # 当任何组件检测到异常时，通知其他组件记录相同时间范围的数据
 # =====================================================================
 
-source "$(dirname "$0")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 
 readonly EVENT_LOG="${MEMORY_SHARE_DIR}/unified_events.json"
 readonly EVENT_LOCK="${MEMORY_SHARE_DIR}/event_manager.lock"

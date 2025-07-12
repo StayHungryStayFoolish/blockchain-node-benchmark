@@ -4,7 +4,7 @@
 # 系统日志分析器 - 分析QPS测试期间的系统事件
 # =====================================================================
 
-source "$(dirname "$0")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 
 # 系统日志路径
 SYSTEM_LOG_PATH="/var/log/syslog"
