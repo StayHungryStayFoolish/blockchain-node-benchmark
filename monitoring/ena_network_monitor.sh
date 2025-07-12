@@ -9,8 +9,8 @@
 
 set -euo pipefail
 
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
 init_logger "ena_network_monitor" $LOG_LEVEL "${LOGS_DIR}/ena_network_monitor.log"

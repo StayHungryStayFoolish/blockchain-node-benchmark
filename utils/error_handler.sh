@@ -9,6 +9,12 @@
 # 严格错误处理
 set -euo pipefail
 
+# 获取脚本目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 加载统一日志工具
+source "${SCRIPT_DIR}/unified_logger.sh"
+
 # 全局错误处理配置 - 使用config.sh中的统一配置
 readonly ERROR_LOG_DIR="${ERROR_LOG_DIR:-${LOGS_DIR:-/tmp}/error_logs}"
 readonly ERROR_LOG_FILE="${ERROR_LOG_DIR}/framework_errors_$(date +%Y%m%d).log"

@@ -6,8 +6,8 @@
 # 消除经验值，基于实时数据精准计算
 # =====================================================================
 
-source "$(dirname "$0")/../config/config.sh"
-source "$(dirname "$0")/../utils/ebs_converter.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
 
 # 获取完整的 iostat 数据
 get_iostat_data() {

@@ -250,8 +250,8 @@ is_running_on_ec2() {
 # 如果直接执行此脚本，显示EC2信息
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # 尝试加载config.sh
-    if [[ -f "$(dirname "$0")/config.sh" ]]; then
-        source "$(dirname "$0")/../config/config.sh"
+    if [[ -f "$(dirname "${BASH_SOURCE[0]}")/config.sh" ]]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
     fi
     
     if is_running_on_ec2; then
