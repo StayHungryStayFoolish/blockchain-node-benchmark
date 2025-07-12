@@ -9,11 +9,11 @@
 # 严格错误处理
 set -euo pipefail
 
-# 获取脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 获取当前脚本目录（使用局部变量避免污染全局SCRIPT_DIR）
+LOCAL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 加载统一日志工具
-source "${SCRIPT_DIR}/unified_logger.sh"
+source "${LOCAL_SCRIPT_DIR}/unified_logger.sh"
 
 # 全局错误处理配置 - 使用config.sh中的统一配置
 if [[ -z "${ERROR_LOG_DIR:-}" ]]; then

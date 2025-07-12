@@ -251,6 +251,11 @@ detect_deployment_platform() {
 # ----- 路径检测和配置函数 -----
 # 检测部署环境并设置路径
 detect_deployment_paths() {
+    # 防止重复执行
+    if [[ "${DEPLOYMENT_PATHS_DETECTED:-false}" == "true" ]]; then
+        return 0
+    fi
+    
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local framework_dir="$(dirname "$script_dir")"
     local deployment_dir="$(dirname "$framework_dir")"
@@ -327,6 +332,9 @@ detect_deployment_paths() {
     echo "   框架目录: $BASE_FRAMEWORK_DIR" >&2
     echo "   数据目录: $BASE_DATA_DIR" >&2
     echo "   内存共享: $MEMORY_SHARE_DIR" >&2
+    
+    # 标记路径检测已完成
+    DEPLOYMENT_PATHS_DETECTED=true
 }
 
 # ----- 部署结构验证函数 -----
@@ -770,20 +778,26 @@ show_config() {
 # 系统初始化区域 - 自动执行的初始化代码
 # =====================================================================
 
-# 执行路径检测和配置
-detect_deployment_paths
+# 防止重复初始化
+if [[ "${CONFIG_INITIALIZED:-false}" != "true" ]]; then
+    # 执行路径检测和配置
+    detect_deployment_paths
 
-# 执行部署平台检测 (必须在路径检测之后)
-detect_deployment_platform
+    # 执行部署平台检测 (必须在路径检测之后)
+    detect_deployment_platform
 
-# 设置网络接口
-NETWORK_INTERFACE=$(detect_network_interface)
+    # 设置网络接口
+    NETWORK_INTERFACE=$(detect_network_interface)
 
-# 创建必要的目录
-create_directories_safely "${LOGS_DIR}" "${REPORTS_DIR}" "${VEGETA_RESULTS_DIR}" "${TMP_DIR}" "${ARCHIVES_DIR}" "${MEMORY_SHARE_DIR}" "${ERROR_LOG_DIR}" "${PYTHON_ERROR_LOG_DIR}"
+    # 创建必要的目录
+    create_directories_safely "${LOGS_DIR}" "${REPORTS_DIR}" "${VEGETA_RESULTS_DIR}" "${TMP_DIR}" "${ARCHIVES_DIR}" "${MEMORY_SHARE_DIR}" "${ERROR_LOG_DIR}" "${PYTHON_ERROR_LOG_DIR}"
 
-# 执行EBS性能基准计算
-calculate_ebs_performance_baselines
+    # 执行EBS性能基准计算
+    calculate_ebs_performance_baselines
+
+    # 标记配置已初始化
+    CONFIG_INITIALIZED=true
+fi
 
 # 自动验证配置 (如果直接执行此脚本)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

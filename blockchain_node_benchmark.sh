@@ -97,11 +97,17 @@ trap cleanup_framework EXIT INT TERM
 prepare_test_data() {
     echo "📊 准备测试数据..."
     
+    # 临时调试信息 - 验证SCRIPT_DIR修复效果
+    echo "DEBUG: SCRIPT_DIR = $SCRIPT_DIR"
+    echo "DEBUG: PWD = $(pwd)"
+    echo "DEBUG: 检查文件: ${SCRIPT_DIR}/tools/fetch_active_accounts.py"
+    ls -la "${SCRIPT_DIR}/tools/fetch_active_accounts.py" 2>/dev/null && echo "✅ 文件存在" || echo "❌ 文件不存在"
+    
     # 检查账户文件是否存在
     if [[ ! -f "$ACCOUNTS_OUTPUT_FILE" ]]; then
         echo "🔍 获取活跃账户..."
-        if [[ -f "${SCRIPT_DIR}/tools/fetch-active-accounts.py" ]]; then
-            python3 "${SCRIPT_DIR}/tools/fetch-active-accounts.py" \
+        if [[ -f "${SCRIPT_DIR}/tools/fetch_active_accounts.py" ]]; then
+            python3 "${SCRIPT_DIR}/tools/fetch_active_accounts.py" \
                 --rpc-url "$LOCAL_RPC_URL" \
                 --output "$ACCOUNTS_OUTPUT_FILE" \
                 --count "$ACCOUNT_COUNT"
@@ -113,7 +119,8 @@ prepare_test_data() {
                 return 1
             fi
         else
-            echo "❌ 账户获取脚本不存在: tools/fetch-active-accounts.py"
+            echo "❌ 账户获取脚本不存在: ${SCRIPT_DIR}/tools/fetch_active_accounts.py"
+            echo "   请检查文件是否存在和路径是否正确"
             return 1
         fi
     else
@@ -691,9 +698,7 @@ main() {
         exit 1
     fi
     
-    # 初始化目录
-    detect_deployment_paths
-    create_directories_safely "$LOGS_DIR" "$REPORTS_DIR" "$VEGETA_RESULTS_DIR" "$TMP_DIR" "$MEMORY_SHARE_DIR"
+    # 注意：目录初始化已在config.sh中完成，无需重复执行
     
     # 阶段1: 准备测试数据
     echo "📋 阶段1: 准备测试数据"

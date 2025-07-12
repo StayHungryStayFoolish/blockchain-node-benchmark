@@ -6,15 +6,15 @@
 # =====================================================================
 
 # 加载共享函数和配置
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/common_functions.sh"
-source "${SCRIPT_DIR}/../config/config.sh"
+QPS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${QPS_SCRIPT_DIR}/common_functions.sh"
+source "${QPS_SCRIPT_DIR}/../config/config.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
 init_logger "master_qps_executor" $LOG_LEVEL "${LOGS_DIR}/master_qps_executor.log"
 
-source "${SCRIPT_DIR}/../utils/error_handler.sh"
+source "${QPS_SCRIPT_DIR}/../utils/error_handler.sh"
 
 # 设置错误处理
 setup_error_handling "$(basename "${BASH_SOURCE[0]}")" "QPS测试引擎"
