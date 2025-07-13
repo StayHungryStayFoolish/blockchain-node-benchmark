@@ -13,12 +13,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 # 日志配置常量
 # =====================================================================
 
-# 日志级别定义
-readonly LOG_LEVEL_DEBUG=0
-readonly LOG_LEVEL_INFO=1
-readonly LOG_LEVEL_WARN=2
-readonly LOG_LEVEL_ERROR=3
-readonly LOG_LEVEL_FATAL=4
+# 日志级别定义 - 防止重复定义
+if [[ -z "${LOG_LEVEL_DEBUG:-}" ]]; then
+    readonly LOG_LEVEL_DEBUG=0
+    readonly LOG_LEVEL_INFO=1
+    readonly LOG_LEVEL_WARN=2
+    readonly LOG_LEVEL_ERROR=3
+    readonly LOG_LEVEL_FATAL=4
+fi
 
 # 日志级别名称映射 (兼容macOS)
 LOG_LEVEL_NAMES_0="DEBUG"

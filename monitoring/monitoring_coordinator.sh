@@ -84,20 +84,23 @@ start_monitor() {
     
     echo "🚀 启动监控任务: $monitor_name ($script_name)"
     
+    # 获取当前脚本所在目录
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
     # 启动监控脚本
     case "$monitor_name" in
         "unified")
-            ./"$script_name" -d "$duration" -i "$MONITOR_INTERVAL" &
+            "${script_dir}/${script_name}" -d "$duration" -i "$MONITOR_INTERVAL" &
             ;;
         "slot")
-            ./"$script_name" -d "$duration" &
+            "${script_dir}/${script_name}" -d "$duration" &
             ;;
         "bottleneck")
-            ./"$script_name" -d "$duration" &
+            "${script_dir}/${script_name}" -d "$duration" &
             ;;
         "ebs_bottleneck")
             # ebs_bottleneck_detector.sh在tools目录下
-            ../tools/"$script_name" -d "$duration" &
+            "${script_dir}/../tools/${script_name}" -d "$duration" &
             ;;
         *)
             echo "❌ 不支持的监控任务: $monitor_name"
