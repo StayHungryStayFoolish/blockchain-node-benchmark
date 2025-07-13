@@ -97,12 +97,6 @@ trap cleanup_framework EXIT INT TERM
 prepare_test_data() {
     echo "📊 准备测试数据..."
     
-    # 临时调试信息 - 验证SCRIPT_DIR修复效果
-    echo "DEBUG: SCRIPT_DIR = $SCRIPT_DIR"
-    echo "DEBUG: PWD = $(pwd)"
-    echo "DEBUG: 检查文件: ${SCRIPT_DIR}/tools/fetch_active_accounts.py"
-    ls -la "${SCRIPT_DIR}/tools/fetch_active_accounts.py" 2>/dev/null && echo "✅ 文件存在" || echo "❌ 文件不存在"
-    
     # 检查账户文件是否存在
     if [[ ! -f "$ACCOUNTS_OUTPUT_FILE" ]]; then
         echo "🔍 获取活跃账户..."
@@ -188,6 +182,12 @@ start_monitoring_system() {
 # 停止监控系统
 stop_monitoring_system() {
     echo "🛑 停止监控系统..."
+    
+    # 检查是否有监控进程需要停止
+    if [[ ${#MONITORING_PIDS[@]} -eq 0 ]]; then
+        echo "ℹ️  没有监控进程需要停止"
+        return 0
+    fi
     
     # 停止监控协调器
     if [[ -f "${SCRIPT_DIR}/monitoring/monitoring_coordinator.sh" ]]; then

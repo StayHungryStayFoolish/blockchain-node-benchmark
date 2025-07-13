@@ -53,7 +53,7 @@ def parse_args():
                         help=f"Number of accounts to fetch (default: {DEFAULT_ACCOUNT_COUNT})")
     parser.add_argument("-o", "--output", type=str, default=DEFAULT_OUTPUT_FILE,
                         help=f"Output file (default: {DEFAULT_OUTPUT_FILE})")
-    parser.add_argument("-u", "--url", type=str, default=DEFAULT_RPC_URL,
+    parser.add_argument("-u", "--rpc-url", type=str, default=DEFAULT_RPC_URL,
                         help=f"Solana RPC URL (default: {DEFAULT_RPC_URL})")
     parser.add_argument("-t", "--target", type=str, default=DEFAULT_TARGET_ADDRESS,
                         help=f"Target address to analyze (default: {DEFAULT_TARGET_ADDRESS})")
@@ -168,11 +168,11 @@ async def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     print(f"Fetching {args.count} active Solana accounts...")
-    print(f"RPC URL: {args.url}")
+    print(f"RPC URL: {args.rpc_url}")
     print(f"Target address: {args.target}")
     
     # 创建 RPC 客户端
-    client = AsyncClient(args.url, timeout=30)
+    client = AsyncClient(args.rpc_url, timeout=30)
     
     try:
         # 解析目标地址

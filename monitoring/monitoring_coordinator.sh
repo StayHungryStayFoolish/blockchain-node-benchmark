@@ -219,12 +219,17 @@ update_monitor_status() {
     local status="$2"
     local pid="$3"
     
-    # 使用jq更新JSON状态文件（如果可用）
-    if command -v jq >/dev/null 2>&1; then
+    # 使用jq更新JSON状态文件（如果可用且文件存在）
+    if command -v jq >/dev/null 2>&1 && [[ -f "$MONITOR_STATUS_FILE" ]]; then
         local temp_file="${MONITOR_STATUS_FILE}.tmp"
-        jq --arg name "$monitor_name" --arg status "$status" --arg pid "$pid" --arg time "$(date -Iseconds)" \
+        if jq --arg name "$monitor_name" --arg status "$status" --arg pid "$pid" --arg time "$(date -Iseconds)" \
            '.active_monitors[$name] = {status: $status, pid: $pid, timestamp: $time}' \
-           "$MONITOR_STATUS_FILE" > "$temp_file" && mv "$temp_file" "$MONITOR_STATUS_FILE"
+           "$MONITOR_STATUS_FILE" > "$temp_file" 2>/dev/null; then
+            mv "$temp_file" "$MONITOR_STATUS_FILE"
+        else
+            # 如果jq操作失败，清理临时文件
+            rm -f "$temp_file" 2>/dev/null
+        fi
     fi
 }
 
