@@ -211,11 +211,6 @@ BOTTLENECK_NETWORK_THRESHOLD=$NETWORK_UTILIZATION_THRESHOLD
 # ----- 部署平台检测函数 -----
 # 自动检测部署平台并调整ENA监控配置
 detect_deployment_platform() {
-    # 防止重复执行
-    if [[ "${DEPLOYMENT_PLATFORM_DETECTED:-false}" == "true" ]]; then
-        return 0
-    fi
-    
     if [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]; then
         echo "🔍 自动检测部署平台..." >&2
         
@@ -260,11 +255,6 @@ detect_deployment_platform() {
 # ----- 路径检测和配置函数 -----
 # 检测部署环境并设置路径
 detect_deployment_paths() {
-    # 防止重复执行
-    if [[ "${DEPLOYMENT_PATHS_DETECTED:-false}" == "true" ]]; then
-        return 0
-    fi
-    
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local framework_dir="$(dirname "$script_dir")"
     local deployment_dir="$(dirname "$framework_dir")"
@@ -349,11 +339,6 @@ detect_deployment_paths() {
 
 # ----- 部署结构验证函数 -----
 validate_deployment_structure() {
-    # 防止重复执行
-    if [[ "${DEPLOYMENT_STRUCTURE_VALIDATED:-false}" == "true" ]]; then
-        return 0
-    fi
-    
     local framework_dir="$1"
     local data_dir="$2"
     
@@ -407,11 +392,6 @@ validate_deployment_structure() {
 # ----- 目录创建函数 -----
 # 安全创建目录函数 - 增强版
 create_directories_safely() {
-    # 防止重复执行
-    if [[ "${DIRECTORIES_CREATED:-false}" == "true" ]]; then
-        return 0
-    fi
-    
     local dirs=("$@")
     local created_dirs=()
     local failed_dirs=()
@@ -807,26 +787,43 @@ show_config() {
 # 系统初始化区域 - 自动执行的初始化代码
 # =====================================================================
 
-# 防止重复初始化 - 使用固定的标记文件
+# 检查是否需要静默执行（防止重复日志）
 CONFIG_INIT_FLAG_FILE="${TMPDIR:-/tmp}/blockchain-benchmark-config-initialized"
+SILENT_MODE=false
 
-if [[ ! -f "$CONFIG_INIT_FLAG_FILE" ]]; then
-    # 执行路径检测和配置
+if [[ -f "$CONFIG_INIT_FLAG_FILE" ]]; then
+    SILENT_MODE=true
+fi
+
+# 始终执行路径检测和配置（但可能静默）
+if [[ "$SILENT_MODE" == "true" ]]; then
+    detect_deployment_paths >/dev/null 2>&1
+else
     detect_deployment_paths
+fi
 
-    # 执行部署平台检测 (必须在路径检测之后)
+# 始终执行部署平台检测（但可能静默）
+if [[ "$SILENT_MODE" == "true" ]]; then
+    detect_deployment_platform >/dev/null 2>&1
+else
     detect_deployment_platform
+fi
 
-    # 设置网络接口
-    NETWORK_INTERFACE=$(detect_network_interface)
+# 设置网络接口
+NETWORK_INTERFACE=$(detect_network_interface)
 
-    # 创建必要的目录
+# 始终创建必要的目录（但可能静默）
+if [[ "$SILENT_MODE" == "true" ]]; then
+    create_directories_safely "${LOGS_DIR}" "${REPORTS_DIR}" "${VEGETA_RESULTS_DIR}" "${TMP_DIR}" "${ARCHIVES_DIR}" "${MEMORY_SHARE_DIR}" "${ERROR_LOG_DIR}" "${PYTHON_ERROR_LOG_DIR}" >/dev/null 2>&1
+else
     create_directories_safely "${LOGS_DIR}" "${REPORTS_DIR}" "${VEGETA_RESULTS_DIR}" "${TMP_DIR}" "${ARCHIVES_DIR}" "${MEMORY_SHARE_DIR}" "${ERROR_LOG_DIR}" "${PYTHON_ERROR_LOG_DIR}"
+fi
 
-    # 执行EBS性能基准计算
-    calculate_ebs_performance_baselines
+# 执行EBS性能基准计算
+calculate_ebs_performance_baselines
 
-    # 创建标记文件
+# 创建标记文件（如果不存在）
+if [[ ! -f "$CONFIG_INIT_FLAG_FILE" ]]; then
     touch "$CONFIG_INIT_FLAG_FILE"
 fi
 
