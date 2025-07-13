@@ -96,7 +96,8 @@ start_monitor() {
             ./"$script_name" -d "$duration" &
             ;;
         "ebs_bottleneck")
-            ./"$script_name" -d "$duration" &
+            # ebs_bottleneck_detector.sh在tools目录下
+            ../tools/"$script_name" -d "$duration" &
             ;;
         *)
             echo "❌ 不支持的监控任务: $monitor_name"

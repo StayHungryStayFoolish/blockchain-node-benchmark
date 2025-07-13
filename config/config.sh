@@ -211,6 +211,11 @@ BOTTLENECK_NETWORK_THRESHOLD=$NETWORK_UTILIZATION_THRESHOLD
 # ----- 部署平台检测函数 -----
 # 自动检测部署平台并调整ENA监控配置
 detect_deployment_platform() {
+    # 防止重复执行
+    if [[ "${DEPLOYMENT_PLATFORM_DETECTED:-false}" == "true" ]]; then
+        return 0
+    fi
+    
     if [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]; then
         echo "🔍 自动检测部署平台..." >&2
         
@@ -246,6 +251,10 @@ detect_deployment_platform() {
     echo "📊 部署平台配置:" >&2
     echo "   平台类型: $DEPLOYMENT_PLATFORM" >&2
     echo "   ENA监控: $ENA_MONITOR_ENABLED" >&2
+    
+    # 标记平台检测已完成并导出到子进程
+    DEPLOYMENT_PLATFORM_DETECTED=true
+    export DEPLOYMENT_PLATFORM_DETECTED
 }
 
 # ----- 路径检测和配置函数 -----
@@ -333,12 +342,18 @@ detect_deployment_paths() {
     echo "   数据目录: $BASE_DATA_DIR" >&2
     echo "   内存共享: $MEMORY_SHARE_DIR" >&2
     
-    # 标记路径检测已完成
+    # 标记路径检测已完成并导出到子进程
     DEPLOYMENT_PATHS_DETECTED=true
+    export DEPLOYMENT_PATHS_DETECTED
 }
 
 # ----- 部署结构验证函数 -----
 validate_deployment_structure() {
+    # 防止重复执行
+    if [[ "${DEPLOYMENT_STRUCTURE_VALIDATED:-false}" == "true" ]]; then
+        return 0
+    fi
+    
     local framework_dir="$1"
     local data_dir="$2"
     
@@ -381,12 +396,22 @@ validate_deployment_structure() {
     fi
     
     echo "✅ 部署结构验证通过" >&2
+    
+    # 标记部署结构验证已完成并导出到子进程
+    DEPLOYMENT_STRUCTURE_VALIDATED=true
+    export DEPLOYMENT_STRUCTURE_VALIDATED
+    
     return 0
 }
 
 # ----- 目录创建函数 -----
 # 安全创建目录函数 - 增强版
 create_directories_safely() {
+    # 防止重复执行
+    if [[ "${DIRECTORIES_CREATED:-false}" == "true" ]]; then
+        return 0
+    fi
+    
     local dirs=("$@")
     local created_dirs=()
     local failed_dirs=()
@@ -444,6 +469,10 @@ create_directories_safely() {
             echo "✅ 目录已存在: $dir" >&2
         fi
     done
+    
+    # 标记目录创建已完成并导出到子进程
+    DIRECTORIES_CREATED=true
+    export DIRECTORIES_CREATED
     
     # 返回结果摘要
     if [[ ${#failed_dirs[@]} -gt 0 ]]; then
@@ -778,8 +807,10 @@ show_config() {
 # 系统初始化区域 - 自动执行的初始化代码
 # =====================================================================
 
-# 防止重复初始化
-if [[ "${CONFIG_INITIALIZED:-false}" != "true" ]]; then
+# 防止重复初始化 - 使用固定的标记文件
+CONFIG_INIT_FLAG_FILE="${TMPDIR:-/tmp}/blockchain-benchmark-config-initialized"
+
+if [[ ! -f "$CONFIG_INIT_FLAG_FILE" ]]; then
     # 执行路径检测和配置
     detect_deployment_paths
 
@@ -795,8 +826,8 @@ if [[ "${CONFIG_INITIALIZED:-false}" != "true" ]]; then
     # 执行EBS性能基准计算
     calculate_ebs_performance_baselines
 
-    # 标记配置已初始化
-    CONFIG_INITIALIZED=true
+    # 创建标记文件
+    touch "$CONFIG_INIT_FLAG_FILE"
 fi
 
 # 自动验证配置 (如果直接执行此脚本)
