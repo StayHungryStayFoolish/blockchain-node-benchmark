@@ -6,6 +6,11 @@
 # 解决项目中日志配置不统一的问题
 # =====================================================================
 
+# 防止重复加载
+if [[ "${UNIFIED_LOGGER_LOADED:-false}" == "true" ]]; then
+    return 0
+fi
+
 # 引入配置
 source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 
@@ -13,14 +18,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 # 日志配置常量
 # =====================================================================
 
-# 日志级别定义 - 防止重复定义
-if [[ -z "${LOG_LEVEL_DEBUG:-}" ]]; then
-    readonly LOG_LEVEL_DEBUG=0
-    readonly LOG_LEVEL_INFO=1
-    readonly LOG_LEVEL_WARN=2
-    readonly LOG_LEVEL_ERROR=3
-    readonly LOG_LEVEL_FATAL=4
-fi
+# 日志级别定义
+readonly LOG_LEVEL_DEBUG=0
+readonly LOG_LEVEL_INFO=1
+readonly LOG_LEVEL_WARN=2
+readonly LOG_LEVEL_ERROR=3
+readonly LOG_LEVEL_FATAL=4
 
 # 日志级别名称映射 (兼容macOS)
 LOG_LEVEL_NAMES_0="DEBUG"
@@ -29,15 +32,22 @@ LOG_LEVEL_NAMES_2="WARN"
 LOG_LEVEL_NAMES_3="ERROR"
 LOG_LEVEL_NAMES_4="FATAL"
 
+# 颜色定义
+readonly COLOR_RESET='\033[0m'
+readonly COLOR_RED='\033[0;31m'
+readonly COLOR_GREEN='\033[0;32m'
+readonly COLOR_YELLOW='\033[0;33m'
+readonly COLOR_BLUE='\033[0;34m'
+readonly COLOR_PURPLE='\033[0;35m'
+readonly COLOR_CYAN='\033[0;36m'
+readonly COLOR_WHITE='\033[0;37m'
+
 # 日志级别颜色映射 (兼容macOS)
 LOG_LEVEL_COLORS_0="\033[0;36m"    # 青色 - DEBUG
 LOG_LEVEL_COLORS_1="\033[0;32m"    # 绿色 - INFO
 LOG_LEVEL_COLORS_2="\033[0;33m"    # 黄色 - WARN
 LOG_LEVEL_COLORS_3="\033[0;31m"    # 红色 - ERROR
 LOG_LEVEL_COLORS_4="\033[0;35m"    # 紫色 - FATAL
-
-# 重置颜色
-readonly COLOR_RESET="\033[0m"
 
 # 默认配置
 DEFAULT_LOG_LEVEL=${LOG_LEVEL:-$LOG_LEVEL_INFO}
@@ -380,3 +390,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             ;;
     esac
 fi
+
+# 标记已加载，防止重复加载
+UNIFIED_LOGGER_LOADED=true
+export UNIFIED_LOGGER_LOADED

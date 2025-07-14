@@ -13,9 +13,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 setup_error_handling "$(basename "$0")" "监控协调器"
 log_script_start "$(basename "$0")"
 
-# 监控状态文件
-readonly MONITOR_STATUS_FILE="${TMP_DIR}/monitoring_status.json"
-readonly MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
+# 监控状态文件 - 防止重复定义
+if [[ -z "${MONITOR_STATUS_FILE:-}" ]]; then
+    readonly MONITOR_STATUS_FILE="${TMP_DIR}/monitoring_status.json"
+    readonly MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
+fi
 
 # 监控任务定义
 declare -A MONITOR_TASKS=(
@@ -96,7 +98,8 @@ start_monitor() {
             "${script_dir}/${script_name}" -d "$duration" &
             ;;
         "bottleneck")
-            "${script_dir}/${script_name}" -d "$duration" &
+            # bottleneck_detector.sh使用命令模式，不支持-d参数
+            "${script_dir}/${script_name}" init &
             ;;
         "ebs_bottleneck")
             # ebs_bottleneck_detector.sh在tools目录下

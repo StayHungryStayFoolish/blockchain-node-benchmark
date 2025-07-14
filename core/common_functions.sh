@@ -202,6 +202,23 @@ flush_buffer() {
     
     return 0
 }
+
+# 获取统一时间戳（毫秒）
+get_unified_timestamp_ms() {
+    if command -v date >/dev/null 2>&1; then
+        # Linux/macOS兼容的毫秒时间戳
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+            # macOS
+            echo $(($(date +%s) * 1000))
+        else
+            # Linux
+            date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000))
+        fi
+    else
+        echo $(($(date +%s) * 1000))
+    fi
+}
+
 # 获取带缓存的 Slot 数据
 get_cached_slot_data() {
     local cache_file="$1"
