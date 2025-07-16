@@ -43,8 +43,13 @@ cleanup_monitor_processes() {
 source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/iostat_collector.sh"
 
-readonly UNIFIED_LOG="${LOGS_DIR}/performance_$(date +%Y%m%d_%H%M%S).csv"
-readonly OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_$(date +%Y%m%d_%H%M%S).csv"
+# 避免重复定义只读变量
+if [[ -z "${UNIFIED_LOG:-}" ]]; then
+    readonly UNIFIED_LOG="${LOGS_DIR}/performance_$(date +%Y%m%d_%H%M%S).csv"
+fi
+if [[ -z "${OVERHEAD_LOG:-}" ]]; then
+    readonly OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_$(date +%Y%m%d_%H%M%S).csv"
+fi
 
 MONITOR_PIDS=()
 START_TIME=""
@@ -98,9 +103,9 @@ init_monitoring() {
     return 0
 }
 
-# CPU 监控 - 支持mpstat和/proc/stat替代方案
+# CPU 监控 - 统一使用mpstat命令
 get_cpu_data() {
-    # 优先使用mpstat
+    # 统一使用mpstat命令采集CPU指标
     if command -v mpstat >/dev/null 2>&1; then
         local mpstat_output=$(mpstat 1 1 2>/dev/null)
         
@@ -137,18 +142,7 @@ get_cpu_data() {
         fi
     fi
     
-    # 替代方案：使用/proc/stat
-    if [[ -r "/proc/stat" ]]; then
-        local cpu_line=$(grep "^cpu " /proc/stat 2>/dev/null)
-        if [[ -n "$cpu_line" ]]; then
-            # 简化的CPU统计
-            local cpu_usage=$(awk '/^cpu / {usage=($2+$4)*100/($2+$3+$4+$5)} END {print usage}' /proc/stat 2>/dev/null || echo "0")
-            echo "$cpu_usage,0,0,0,0,0"
-            return
-        fi
-    fi
-    
-    # 最后的fallback
+    # 如果mpstat不可用或失败，返回默认值避免解析错误
     echo "0,0,0,0,0,100"
 }
 
