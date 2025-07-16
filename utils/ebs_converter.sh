@@ -8,8 +8,12 @@
 if [[ -z "${AWS_EBS_BASELINE_IO_SIZE_KIB:-}" ]]; then
     readonly AWS_EBS_BASELINE_IO_SIZE_KIB=16
 fi
-readonly IO2_THROUGHPUT_RATIO=0.256
-readonly IO2_MAX_THROUGHPUT=4000
+if [[ -z "${IO2_THROUGHPUT_RATIO:-}" ]]; then
+    readonly IO2_THROUGHPUT_RATIO=0.256
+fi
+if [[ -z "${IO2_MAX_THROUGHPUT:-}" ]]; then
+    readonly IO2_MAX_THROUGHPUT=4000
+fi
 
 # 注意: instance-store类型不使用AWS EBS标准转换
 # instance-store使用实际IOPS和throughput，不需要16KiB基准转换
