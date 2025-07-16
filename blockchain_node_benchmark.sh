@@ -284,10 +284,17 @@ process_test_results() {
             esac
         done
         
-        # 获取最大QPS (从QPS状态文件或默认值)
-        local max_qps="0"
+        # 获取最大QPS (从QPS状态文件或跳过归档)
+        local max_qps=""
         if [[ -f "${QPS_STATUS_FILE}" ]]; then
-            max_qps=$(jq -r '.max_successful_qps // 0' "${QPS_STATUS_FILE}" 2>/dev/null || echo "0")
+            max_qps=$(jq -r '.max_successful_qps // empty' "${QPS_STATUS_FILE}" 2>/dev/null || echo "")
+        fi
+        
+        # 如果无法获取有效的QPS值，跳过归档
+        if [[ -z "$max_qps" ]] || [[ "$max_qps" == "0" ]] || [[ "$max_qps" == "null" ]]; then
+            echo "⚠️ 无法获取有效的最大QPS值，跳过测试结果归档"
+            echo "💡 QPS状态文件: ${QPS_STATUS_FILE}"
+            return 0
         fi
         
         # 调用归档工具 (瓶颈信息将自动检测)
