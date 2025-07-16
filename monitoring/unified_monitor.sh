@@ -32,8 +32,10 @@ handle_monitor_error() {
     exit $exit_code
 }
 
-# 设置错误陷阱
-trap 'handle_monitor_error $LINENO' ERR
+# 设置错误陷阱 - 只在脚本直接执行时启用
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    trap 'handle_monitor_error $LINENO' ERR
+fi
 
 # 监控进程清理函数
 cleanup_monitor_processes() {
@@ -280,12 +282,6 @@ get_ena_allowance_data() {
     fi
     
     if ! command -v ethtool >/dev/null 2>&1; then
-        echo "0,0,0,0,0,0"
-        return
-    fi
-    
-    # 检查网络接口是否可用
-    if [[ -z "${NETWORK_INTERFACE:-}" ]]; then
         echo "0,0,0,0,0,0"
         return
     fi
