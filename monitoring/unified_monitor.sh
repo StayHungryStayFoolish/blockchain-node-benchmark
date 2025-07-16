@@ -452,6 +452,12 @@ log_performance_data() {
         local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data"
     fi
     
+    # 如果CSV文件不存在或为空，先写入头部
+    if [[ ! -f "$UNIFIED_LOG" ]] || [[ ! -s "$UNIFIED_LOG" ]]; then
+        local csv_header=$(generate_csv_header)
+        echo "$csv_header" > "$UNIFIED_LOG"
+    fi
+    
     # 写入CSV文件
     echo "$data_line" >> "$UNIFIED_LOG"
     
