@@ -92,16 +92,18 @@ start_monitor() {
     case "$monitor_name" in
         "unified")
             # QPS测试模式：不传递duration，无限运行
-            # 确保子进程能正确加载环境
-            bash -c "cd '${script_dir}' && ./${script_name} -i '$MONITOR_INTERVAL'" &
+            # 使用绝对路径确保子进程能正确加载环境
+            bash -c "'${script_dir}/${script_name}' -i '$MONITOR_INTERVAL'" &
             ;;
         "slot")
             # QPS测试模式：不传递duration，无限运行
-            bash -c "cd '${script_dir}' && ./${script_name} -b" &
+            # 使用绝对路径确保子进程能正确加载环境
+            bash -c "'${script_dir}/${script_name}' -b" &
             ;;
         "ebs_bottleneck")
             # QPS测试模式：不传递duration，无限运行
-            bash -c "cd '${script_dir}/../tools' && ./${script_name} -b" &
+            # 使用绝对路径确保子进程能正确加载环境
+            bash -c "'${script_dir}/../tools/${script_name}' -b" &
             ;;
         *)
             echo "❌ 不支持的监控任务: $monitor_name"
