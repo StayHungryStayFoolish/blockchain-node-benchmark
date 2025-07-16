@@ -8,8 +8,13 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 
-readonly EVENT_LOG="${MEMORY_SHARE_DIR}/unified_events.json"
-readonly EVENT_LOCK="${MEMORY_SHARE_DIR}/event_manager.lock"
+# 避免重复定义只读变量
+if [[ -z "${EVENT_LOG:-}" ]]; then
+    readonly EVENT_LOG="${MEMORY_SHARE_DIR}/unified_events.json"
+fi
+if [[ -z "${EVENT_LOCK:-}" ]]; then
+    readonly EVENT_LOCK="${MEMORY_SHARE_DIR}/event_manager.lock"
+fi
 
 # 初始化事件管理器
 init_event_manager() {

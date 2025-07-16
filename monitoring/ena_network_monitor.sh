@@ -7,7 +7,14 @@
 # 使用统一日志管理器
 # =====================================================================
 
-set -euo pipefail
+# 严格错误处理 - 但允许在交互式环境中安全使用
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # 脚本直接执行时使用严格模式
+    set -euo pipefail
+else
+    # 被source时使用宽松模式，避免退出shell
+    set -uo pipefail
+fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
@@ -15,8 +22,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 # 初始化统一日志管理器
 init_logger "ena_network_monitor" $LOG_LEVEL "${LOGS_DIR}/ena_network_monitor.log"
 
-# ENA监控日志文件
-readonly ENA_LOG="${LOGS_DIR}/ena_network_$(date +%Y%m%d_%H%M%S).csv"
+# ENA监控日志文件 - 避免重复定义只读变量
+if [[ -z "${ENA_LOG:-}" ]]; then
+    readonly ENA_LOG="${LOGS_DIR}/ena_network_$(date +%Y%m%d_%H%M%S).csv"
+fi
 
 # 初始化ENA监控
 init_ena_monitoring() {

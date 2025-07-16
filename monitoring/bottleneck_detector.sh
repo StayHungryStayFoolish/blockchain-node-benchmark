@@ -7,8 +7,14 @@
 # 使用统一日志管理器
 # =====================================================================
 
-# 严格错误处理
-set -euo pipefail
+# 严格错误处理 - 但允许在交互式环境中安全使用
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # 脚本直接执行时使用严格模式
+    set -euo pipefail
+else
+    # 被source时使用宽松模式，避免退出shell
+    set -uo pipefail
+fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
