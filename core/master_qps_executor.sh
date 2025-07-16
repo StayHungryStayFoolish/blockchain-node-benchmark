@@ -685,7 +685,9 @@ execute_single_qps_test() {
         echo "✅ QPS测试完成，结果保存到: $(basename "$result_file")"
         
         # 解析测试结果
-        local success_rate=$(jq -r '.success' "$result_file" 2>/dev/null || echo "0")
+        local total_requests=$(jq -r '.requests' "$result_file" 2>/dev/null || echo "1")
+        local success_requests=$(jq -r '.status_codes."200" // 0' "$result_file" 2>/dev/null || echo "0")
+        local success_rate=$(echo "scale=0; $success_requests * 100 / $total_requests" | bc 2>/dev/null || echo "0")
         local avg_latency=$(jq -r '.latencies.mean' "$result_file" 2>/dev/null || echo "0")
         
         # 转换延迟单位 (纳秒转毫秒)
