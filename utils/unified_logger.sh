@@ -6,8 +6,8 @@
 # 解决项目中日志配置不统一的问题
 # =====================================================================
 
-# 防止重复加载
-if [[ "${UNIFIED_LOGGER_LOADED:-false}" == "true" ]]; then
+# 防止重复加载 - 但在子进程中需要重新加载函数定义
+if [[ "${UNIFIED_LOGGER_LOADED:-false}" == "true" ]] && [[ "$(type -t init_logger)" == "function" ]]; then
     return 0
 fi
 
