@@ -320,6 +320,7 @@ detect_deployment_paths() {
     
     # 设置动态路径变量
     SLOT_CACHE_FILE="${MEMORY_SHARE_DIR}/slot_monitor_cache.json"
+    SLOT_DATA_FILE="${LOGS_DIR}/slot_monitor_$(date +%Y%m%d_%H%M%S).csv"
     ACCOUNTS_OUTPUT_FILE="${TMP_DIR}/${ACCOUNT_OUTPUT_FILE}"
     SINGLE_METHOD_TARGETS_FILE="${TMP_DIR}/targets_single.json"
     MIXED_METHOD_TARGETS_FILE="${TMP_DIR}/targets_mixed.json"
