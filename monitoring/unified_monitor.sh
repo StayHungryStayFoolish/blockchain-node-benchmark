@@ -314,11 +314,23 @@ get_monitoring_overhead() {
         if [[ -f "/proc/$pid/io" ]]; then
             local io_stats=$(cat "/proc/$pid/io" 2>/dev/null)
             if [[ -n "$io_stats" ]]; then
-                local read_bytes=$(echo "$io_stats" | grep "read_bytes" | awk '{print $2}')
-                local write_bytes=$(echo "$io_stats" | grep "write_bytes" | awk '{print $2}')
-                local syscr=$(echo "$io_stats" | grep "syscr" | awk '{print $2}')
-                local syscw=$(echo "$io_stats" | grep "syscw" | awk '{print $2}')
+                local read_bytes=$(echo "$io_stats" | grep "read_bytes" | awk '{print $2}' || echo "0")
+                local write_bytes=$(echo "$io_stats" | grep "write_bytes" | awk '{print $2}' || echo "0")
+                local syscr=$(echo "$io_stats" | grep "syscr" | awk '{print $2}' || echo "0")
+                local syscw=$(echo "$io_stats" | grep "syscw" | awk '{print $2}' || echo "0")
                 
+                # 确保变量为数值，如果为空则设为0
+                read_bytes=${read_bytes:-0}
+                write_bytes=${write_bytes:-0}
+                syscr=${syscr:-0}
+                syscw=${syscw:-0}
+
+                # 验证是否为数值
+                [[ "$read_bytes" =~ ^[0-9]+$ ]] || read_bytes=0
+                [[ "$write_bytes" =~ ^[0-9]+$ ]] || write_bytes=0
+                [[ "$syscr" =~ ^[0-9]+$ ]] || syscr=0
+                [[ "$syscw" =~ ^[0-9]+$ ]] || syscw=0
+
                 total_read_bytes=$((total_read_bytes + read_bytes))
                 total_write_bytes=$((total_write_bytes + write_bytes))
                 total_read_ops=$((total_read_ops + syscr))
