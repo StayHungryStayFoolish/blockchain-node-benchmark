@@ -4,7 +4,10 @@
 
 # AWS标准基准常量
 # AWS EBS基准配置 - 使用config.sh中的配置，如果不可用则使用默认值
-readonly AWS_EBS_BASELINE_IO_SIZE_KIB=${AWS_EBS_BASELINE_IO_SIZE_KIB:-16}
+# 注意：如果变量已经定义（如从config.sh加载），则不重新定义
+if [[ -z "${AWS_EBS_BASELINE_IO_SIZE_KIB:-}" ]]; then
+    readonly AWS_EBS_BASELINE_IO_SIZE_KIB=16
+fi
 readonly IO2_THROUGHPUT_RATIO=0.256
 readonly IO2_MAX_THROUGHPUT=4000
 

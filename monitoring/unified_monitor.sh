@@ -64,165 +64,213 @@ init_monitoring() {
         return 1
     fi
     
-    # 检查必要命令
+    # 检查必要命令 - 优雅处理缺失命令
     local missing_commands=()
+    local critical_missing=()
+    
+    # 检查各个命令的可用性
     for cmd in mpstat iostat sar free; do
         if ! command -v "$cmd" &> /dev/null; then
             missing_commands+=("$cmd")
+            # iostat是关键命令，其他可以用替代方案
+            if [[ "$cmd" == "iostat" ]]; then
+                critical_missing+=("$cmd")
+            fi
         fi
     done
     
     if [[ ${#missing_commands[@]} -gt 0 ]]; then
-        log_error "缺少必要命令: ${missing_commands[*]}"
-        echo "请安装: sudo apt-get install sysstat"
-        return 1
+        log_warn "缺少部分监控命令: ${missing_commands[*]}"
+        echo "⚠️  缺少监控命令: ${missing_commands[*]}"
+        echo "💡 建议安装: sudo apt-get install sysstat procps"
+        
+        # 如果缺少关键命令，则失败
+        if [[ ${#critical_missing[@]} -gt 0 ]]; then
+            log_error "缺少关键命令: ${critical_missing[*]}，无法继续"
+            echo "❌ 缺少关键命令: ${critical_missing[*]}，监控功能无法启动"
+            return 1
+        else
+            echo "🔄 将使用替代方案继续监控..."
+        fi
     fi
     
     log_info "统一监控环境初始化完成"
     return 0
 }
 
-# CPU 监控 (仅使用 mpstat) - 修复时间字段解析
+# CPU 监控 - 支持mpstat和/proc/stat替代方案
 get_cpu_data() {
-    local mpstat_output=$(mpstat 1 1 2>/dev/null)
-    
-    if [[ -z "$mpstat_output" ]]; then
-        echo "0,0,0,0,0,100"
-        return
-    fi
-    
-    # 提取 Average 行的 CPU 统计
-    local avg_line=$(echo "$mpstat_output" | grep "Average.*all" | tail -1)
-    if [[ -n "$avg_line" ]]; then
-        local fields=($avg_line)
+    # 优先使用mpstat
+    if command -v mpstat >/dev/null 2>&1; then
+        local mpstat_output=$(mpstat 1 1 2>/dev/null)
         
-        # 修复：正确处理时间字段
-        # mpstat输出格式: Time CPU %usr %nice %sys %iowait %irq %soft %steal %guest %gnice %idle
-        # Average行格式: Average all %usr %nice %sys %iowait %irq %soft %steal %guest %gnice %idle
-        
-        local start_idx=2  # 跳过 "Average" 和 "all"
-        
-        # 如果第一个字段是时间格式 (HH:MM:SS)，需要调整索引
-        if [[ "${fields[0]}" =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
-            # 格式: HH:MM:SS all %usr %nice %sys %iowait %irq %soft %steal %guest %gnice %idle
-            start_idx=2  # 跳过时间和"all"
-        elif [[ "${fields[0]}" == "Average" ]]; then
-            # 格式: Average all %usr %nice %sys %iowait %irq %soft %steal %guest %gnice %idle
-            start_idx=2  # 跳过"Average"和"all"
-        else
-            # 其他格式，尝试找到"all"的位置
-            for i in "${!fields[@]}"; do
-                if [[ "${fields[$i]}" == "all" ]]; then
-                    start_idx=$((i + 1))
-                    break
+        if [[ -n "$mpstat_output" ]]; then
+            # mpstat可用，使用原有逻辑
+            local avg_line=$(echo "$mpstat_output" | grep "Average.*all" | tail -1)
+            if [[ -n "$avg_line" ]]; then
+                local fields=($avg_line)
+                local start_idx=2
+                
+                if [[ "${fields[0]}" =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
+                    start_idx=2
+                elif [[ "${fields[0]}" == "Average" ]]; then
+                    start_idx=2
+                else
+                    for i in "${!fields[@]}"; do
+                        if [[ "${fields[$i]}" == "all" ]]; then
+                            start_idx=$((i + 1))
+                            break
+                        fi
+                    done
                 fi
-            done
+                
+                local cpu_usr=${fields[$start_idx]:-0}
+                local cpu_sys=${fields[$((start_idx + 2))]:-0}
+                local cpu_iowait=${fields[$((start_idx + 3))]:-0}
+                local cpu_soft=${fields[$((start_idx + 5))]:-0}
+                local cpu_idle=${fields[$((start_idx + 9))]:-0}
+                local cpu_usage=$(echo "scale=2; 100 - $cpu_idle" | bc 2>/dev/null || echo "0")
+                
+                echo "$cpu_usage,$cpu_usr,$cpu_sys,$cpu_iowait,$cpu_soft,$cpu_idle"
+                return
+            fi
         fi
-        
-        local cpu_usr=${fields[$start_idx]:-0}
-        local cpu_nice=${fields[$((start_idx + 1))]:-0}
-        local cpu_sys=${fields[$((start_idx + 2))]:-0}
-        local cpu_iowait=${fields[$((start_idx + 3))]:-0}
-        local cpu_irq=${fields[$((start_idx + 4))]:-0}
-        local cpu_soft=${fields[$((start_idx + 5))]:-0}
-        local cpu_steal=${fields[$((start_idx + 6))]:-0}
-        local cpu_guest=${fields[$((start_idx + 7))]:-0}
-        local cpu_gnice=${fields[$((start_idx + 8))]:-0}
-        local cpu_idle=${fields[$((start_idx + 9))]:-0}
-        local cpu_sys=${fields[$((start_idx + 2))]:-0}
-        local cpu_iowait=${fields[$((start_idx + 3))]:-0}
-        local cpu_soft=${fields[$((start_idx + 5))]:-0}
-        local cpu_idle=${fields[$((start_idx + 9))]:-0}
-        local cpu_usage=$(echo "scale=2; 100 - $cpu_idle" | bc 2>/dev/null || echo "0")
-        
-        echo "$cpu_usage,$cpu_usr,$cpu_sys,$cpu_iowait,$cpu_soft,$cpu_idle"
-    else
-        echo "0,0,0,0,0,100"
     fi
+    
+    # 替代方案：使用/proc/stat
+    if [[ -r "/proc/stat" ]]; then
+        local cpu_line=$(grep "^cpu " /proc/stat 2>/dev/null)
+        if [[ -n "$cpu_line" ]]; then
+            # 简化的CPU统计
+            local cpu_usage=$(awk '/^cpu / {usage=($2+$4)*100/($2+$3+$4+$5)} END {print usage}' /proc/stat 2>/dev/null || echo "0")
+            echo "$cpu_usage,0,0,0,0,0"
+            return
+        fi
+    fi
+    
+    # 最后的fallback
+    echo "0,0,0,0,0,100"
 }
 
-# 内存监控
+# 内存监控 - 支持free命令和/proc/meminfo替代方案
 get_memory_data() {
-    local mem_info=$(free -m 2>/dev/null)
-    if [[ -n "$mem_info" ]]; then
-        local mem_line=$(echo "$mem_info" | grep "^Mem:")
-        local mem_used=$(echo "$mem_line" | awk '{print $3}')
-        local mem_total=$(echo "$mem_line" | awk '{print $2}')
-        local mem_usage=$(echo "scale=2; $mem_used * 100 / $mem_total" | bc 2>/dev/null || echo "0")
-        echo "$mem_used,$mem_total,$mem_usage"
-    else
-        echo "0,0,0"
+    # 优先使用free命令
+    if command -v free >/dev/null 2>&1; then
+        local mem_info=$(free -m 2>/dev/null)
+        if [[ -n "$mem_info" ]]; then
+            local mem_line=$(echo "$mem_info" | grep "^Mem:")
+            local mem_used=$(echo "$mem_line" | awk '{print $3}')
+            local mem_total=$(echo "$mem_line" | awk '{print $2}')
+            local mem_usage=$(echo "scale=2; $mem_used * 100 / $mem_total" | bc 2>/dev/null || echo "0")
+            echo "$mem_used,$mem_total,$mem_usage"
+            return
+        fi
     fi
+    
+    # 替代方案：使用/proc/meminfo
+    if [[ -r "/proc/meminfo" ]]; then
+        local mem_total_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+        local mem_free_kb=$(grep "^MemFree:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+        local mem_available_kb=$(grep "^MemAvailable:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "$mem_free_kb")
+        
+        if [[ "$mem_total_kb" -gt 0 ]]; then
+            # 转换为MB
+            local mem_total_mb=$((mem_total_kb / 1024))
+            local mem_used_mb=$(((mem_total_kb - mem_available_kb) / 1024))
+            local mem_usage=$(echo "scale=2; $mem_used_mb * 100 / $mem_total_mb" | bc 2>/dev/null || echo "0")
+            echo "$mem_used_mb,$mem_total_mb,$mem_usage"
+            return
+        fi
+    fi
+    
+    # 最后的fallback
+    echo "0,0,0"
 }
 
-# 网络监控 (集成ENA监控，修复sar输出解析)
+# 网络监控 - 支持sar命令和/proc/net/dev替代方案
 get_network_data() {
     if [[ -z "$NETWORK_INTERFACE" ]]; then
         echo "unknown,0,0,0,0,0,0,0,0,0"
         return
     fi
     
-    # 使用 sar 获取网络统计
-    local sar_output=$(sar -n DEV 1 1 2>/dev/null | grep "$NETWORK_INTERFACE" | tail -1)
-    
-    if [[ -n "$sar_output" ]]; then
-        local fields=($sar_output)
+    # 优先使用 sar 获取网络统计
+    if command -v sar >/dev/null 2>&1; then
+        local sar_output=$(sar -n DEV 1 1 2>/dev/null | grep "$NETWORK_INTERFACE" | tail -1)
         
-        # 修复：正确处理sar输出格式
-        # sar -n DEV输出格式: Time IFACE rxpck/s txpck/s rxkB/s txkB/s rxcmp/s txcmp/s rxmcst/s
-        local start_idx=1  # 默认从接口名开始
-        
-        # 检查第一个字段是否是时间格式
-        if [[ "${fields[0]}" =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
-            start_idx=1  # 接口名在索引1
-        else
-            # 其他格式，查找接口名的位置
-            for i in "${!fields[@]}"; do
-                if [[ "${fields[$i]}" == "$NETWORK_INTERFACE" ]]; then
-                    start_idx=$i
-                    break
-                fi
-            done
+        if [[ -n "$sar_output" ]]; then
+            local fields=($sar_output)
+            
+            # 修复：正确处理sar输出格式
+            # sar -n DEV输出格式: Time IFACE rxpck/s txpck/s rxkB/s txkB/s rxcmp/s txcmp/s rxmcst/s
+            local start_idx=1  # 默认从接口名开始
+            
+            # 检查第一个字段是否是时间格式
+            if [[ "${fields[0]}" =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
+                start_idx=1  # 接口名在索引1
+            else
+                # 其他格式，查找接口名的位置
+                for i in "${!fields[@]}"; do
+                    if [[ "${fields[$i]}" == "$NETWORK_INTERFACE" ]]; then
+                        start_idx=$i
+                        break
+                    fi
+                done
+            fi
+            
+            # 确保接口名匹配
+            if [[ "${fields[$start_idx]}" != "$NETWORK_INTERFACE" ]]; then
+                echo "$NETWORK_INTERFACE,0,0,0,0,0,0,0,0,0"
+                return
+            fi
+            
+            # 提取网络统计数据
+            local rx_pps=${fields[$((start_idx + 1))]:-0}    # rxpck/s
+            local tx_pps=${fields[$((start_idx + 2))]:-0}    # txpck/s  
+            local rx_kbs=${fields[$((start_idx + 3))]:-0}    # rxkB/s
+            local tx_kbs=${fields[$((start_idx + 4))]:-0}    # txkB/s
+            
+            # 修复：正确转换为AWS标准的网络带宽单位
+            # sar输出的是kB/s (实际是KB/s，十进制)
+            # 转换步骤: kB/s -> bytes/s -> bits/s -> Mbps -> Gbps
+            local rx_mbps=$(echo "scale=3; $rx_kbs * 8 / 1000" | bc 2>/dev/null || echo "0")
+            local tx_mbps=$(echo "scale=3; $tx_kbs * 8 / 1000" | bc 2>/dev/null || echo "0")
+            local total_mbps=$(echo "scale=3; $rx_mbps + $tx_mbps" | bc 2>/dev/null || echo "0")
+            
+            # 转换为Gbps (AWS EC2网络带宽通常以Gbps计量)
+            local rx_gbps=$(echo "scale=6; $rx_mbps / 1000" | bc 2>/dev/null || echo "0")
+            local tx_gbps=$(echo "scale=6; $tx_mbps / 1000" | bc 2>/dev/null || echo "0")
+            local total_gbps=$(echo "scale=6; $total_mbps / 1000" | bc 2>/dev/null || echo "0")
+            
+            # 计算总PPS
+            local total_pps=$(echo "scale=0; $rx_pps + $tx_pps" | bc 2>/dev/null || echo "0")
+            
+            echo "$NETWORK_INTERFACE,$rx_mbps,$tx_mbps,$total_mbps,$rx_gbps,$tx_gbps,$total_gbps,$rx_pps,$tx_pps,$total_pps"
+            return
         fi
-        
-        # 确保接口名匹配
-        if [[ "${fields[$start_idx]}" != "$NETWORK_INTERFACE" ]]; then
+    fi
+    
+    # 替代方案：从/proc/net/dev读取
+    if [[ -r "/proc/net/dev" ]]; then
+        local net_stats=$(grep "$NETWORK_INTERFACE:" /proc/net/dev 2>/dev/null | head -1)
+        if [[ -n "$net_stats" ]]; then
+            # 解析/proc/net/dev格式
+            # 格式: interface: bytes packets errs drop fifo frame compressed multicast
+            local fields=($net_stats)
+            local rx_bytes=${fields[1]:-0}
+            local rx_packets=${fields[2]:-0}
+            local tx_bytes=${fields[9]:-0}
+            local tx_packets=${fields[10]:-0}
+            
+            # 简化计算 - 由于是瞬时读取，无法计算准确的速率
+            # 返回基础格式，实际速率为0
             echo "$NETWORK_INTERFACE,0,0,0,0,0,0,0,0,0"
             return
         fi
-        
-        # 提取网络统计数据
-        local rx_pps=${fields[$((start_idx + 1))]:-0}    # rxpck/s
-        local tx_pps=${fields[$((start_idx + 2))]:-0}    # txpck/s  
-        local rx_kbs=${fields[$((start_idx + 3))]:-0}    # rxkB/s
-        local tx_kbs=${fields[$((start_idx + 4))]:-0}    # txkB/s
-        
-        # 修复：正确转换为AWS标准的网络带宽单位
-        # sar输出的是kB/s (实际是KB/s，十进制)
-        # 转换步骤: kB/s -> bytes/s -> bits/s -> Mbps -> Gbps
-        local rx_mbps=$(echo "scale=3; $rx_kbs * 8 / 1000" | bc 2>/dev/null || echo "0")
-        local tx_mbps=$(echo "scale=3; $tx_kbs * 8 / 1000" | bc 2>/dev/null || echo "0")
-        local total_mbps=$(echo "scale=3; $rx_mbps + $tx_mbps" | bc 2>/dev/null || echo "0")
-        
-        # 转换为Gbps (AWS EC2网络带宽通常以Gbps计量)
-        local rx_gbps=$(echo "scale=6; $rx_mbps / 1000" | bc 2>/dev/null || echo "0")
-        local tx_gbps=$(echo "scale=6; $tx_mbps / 1000" | bc 2>/dev/null || echo "0")
-        local total_gbps=$(echo "scale=6; $total_mbps / 1000" | bc 2>/dev/null || echo "0")
-        
-        # 计算总PPS
-        local total_pps=$(echo "scale=0; $rx_pps + $tx_pps" | bc 2>/dev/null || echo "0")
-        
-        echo "$NETWORK_INTERFACE,$rx_mbps,$tx_mbps,$total_mbps,$rx_gbps,$tx_gbps,$total_gbps,$rx_pps,$tx_pps,$total_pps"
-    else
-        # 备用方案：从/proc/net/dev读取
-        local net_stats=$(grep "$NETWORK_INTERFACE:" /proc/net/dev 2>/dev/null | head -1)
-        if [[ -n "$net_stats" ]]; then
-            # 简化处理，返回基础数据
-            echo "$NETWORK_INTERFACE,0,0,0,0,0,0,0,0,0"
-        else
-            echo "$NETWORK_INTERFACE,0,0,0,0,0,0,0,0,0"
-        fi
     fi
+    
+    # 最后的fallback
+    echo "$NETWORK_INTERFACE,0,0,0,0,0,0,0,0,0"
 }
 
 get_ena_allowance_data() {
@@ -302,7 +350,7 @@ generate_csv_header() {
     fi
 }
 
-# 生成JSON格式的监控数据
+# 生成JSON格式的监控数据 - 原子写入版本
 generate_json_metrics() {
     local timestamp="$1"
     local cpu_data="$2"
@@ -333,8 +381,8 @@ generate_json_metrics() {
         ebs_latency=$(echo "$device_data" | cut -d',' -f4 2>/dev/null || echo "0")
     fi
     
-    # 生成latest_metrics.json (核心指标)
-    cat > "${MEMORY_SHARE_DIR}/latest_metrics.json" << EOF
+    # 原子写入latest_metrics.json (核心指标)
+    cat > "${MEMORY_SHARE_DIR}/latest_metrics.json.tmp" << EOF
 {
     "timestamp": "$timestamp",
     "cpu_usage": $cpu_usage,
@@ -345,9 +393,11 @@ generate_json_metrics() {
     "error_rate": 0
 }
 EOF
+    # 原子移动到最终位置
+    mv "${MEMORY_SHARE_DIR}/latest_metrics.json.tmp" "${MEMORY_SHARE_DIR}/latest_metrics.json"
 
-    # 生成unified_metrics.json (详细指标)
-    cat > "${MEMORY_SHARE_DIR}/unified_metrics.json" << EOF
+    # 原子写入unified_metrics.json (详细指标)
+    cat > "${MEMORY_SHARE_DIR}/unified_metrics.json.tmp" << EOF
 {
     "timestamp": "$timestamp",
     "cpu_usage": $cpu_usage,
@@ -366,6 +416,8 @@ EOF
     }
 }
 EOF
+    # 原子移动到最终位置
+    mv "${MEMORY_SHARE_DIR}/unified_metrics.json.tmp" "${MEMORY_SHARE_DIR}/unified_metrics.json"
 }
 
 # 记录性能数据 - 支持条件性ENA数据和JSON生成

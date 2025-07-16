@@ -96,12 +96,14 @@ export LOG_LEVEL LOG_FORMAT MAX_LOG_SIZE MAX_LOG_FILES
 export LOG_CONSOLE LOG_FILE LOG_JSON PYTHON_LOG_LEVEL
 
 # ----- 监控配置 -----
-# 统一监控间隔 (秒)
-MONITOR_INTERVAL=5
+# 统一监控间隔 (秒) - 可根据区块链节点需求调整
+MONITOR_INTERVAL=5              # 默认监控间隔 (适合大多数场景)
 # 默认监控时长 (秒) - 适合QPS测试
-DEFAULT_MONITOR_DURATION=1800  # 30分钟
-# 高频监控间隔 (秒)
-HIGH_FREQ_INTERVAL=1
+DEFAULT_MONITOR_DURATION=1800   # 30分钟
+# 高频监控间隔 (秒) - 适用于高TPS区块链节点
+HIGH_FREQ_INTERVAL=1            # 1秒高频监控
+# 超高频监控间隔 (秒) - 适用于极高TPS场景 (如Solana)
+ULTRA_HIGH_FREQ_INTERVAL=0.5    # 0.5秒超高频监控
 # 监控开销统计间隔 (秒)
 OVERHEAD_STAT_INTERVAL=60
 
