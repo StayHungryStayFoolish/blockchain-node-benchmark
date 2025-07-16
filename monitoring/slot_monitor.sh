@@ -55,7 +55,8 @@ show_help() {
     echo "Options:"
     echo "  -h, --help                 Show this help message"
     echo "  -i, --interval SECONDS     Set monitoring interval (default: ${SLOT_MONITOR_INTERVAL}s)"
-    echo "  -d, --diff SLOTS           Set slot difference threshold (default: ${SLOT_DIFF_THRESHOLD})"
+    echo "  -d, --duration SECONDS     Set monitoring duration (for standalone use)"
+    echo "  --diff SLOTS               Set slot difference threshold (default: ${SLOT_DIFF_THRESHOLD})"
     echo "  -t, --time SECONDS         Set time difference threshold (default: ${SLOT_TIME_THRESHOLD}s)"
     echo "  -o, --output FILE          Set output file (default: ${SLOT_DATA_FILE})"
     echo "  -v, --verbose              Enable verbose output"
@@ -77,7 +78,11 @@ parse_args() {
                 SLOT_MONITOR_INTERVAL="$2"
                 shift 2
                 ;;
-            -d|--diff)
+            -d|--duration)
+                SLOT_MONITOR_DURATION="$2"
+                shift 2
+                ;;
+            --diff)
                 SLOT_DIFF_THRESHOLD="$2"
                 shift 2
                 ;;
@@ -369,10 +374,22 @@ start_monitoring() {
             # 在后台进程中设置信号处理
             trap 'cleanup_and_exit' SIGTERM SIGINT SIGQUIT EXIT
             
-            while true; do
-                monitor_slot_diff
-                sleep "$SLOT_MONITOR_INTERVAL"
-            done
+            # 检查是否有duration参数（单独运行模式）
+            if [[ -n "$SLOT_MONITOR_DURATION" ]]; then
+                local start_time=$(date +%s)
+                local end_time=$((start_time + SLOT_MONITOR_DURATION))
+                
+                while [[ $(date +%s) -lt $end_time ]]; do
+                    monitor_slot_diff
+                    sleep "$SLOT_MONITOR_INTERVAL"
+                done
+            else
+                # QPS测试模式：无限运行
+                while true; do
+                    monitor_slot_diff
+                    sleep "$SLOT_MONITOR_INTERVAL"
+                done
+            fi
         ) &
         MONITOR_PID=$!
         echo "Monitor started in background with PID: $MONITOR_PID"
@@ -381,10 +398,22 @@ start_monitoring() {
         # 前台模式 - 设置信号处理
         trap 'cleanup_and_exit' SIGTERM SIGINT SIGQUIT
         
-        while true; do
-            monitor_slot_diff
-            sleep "$SLOT_MONITOR_INTERVAL"
-        done
+        # 检查是否有duration参数（单独运行模式）
+        if [[ -n "$SLOT_MONITOR_DURATION" ]]; then
+            local start_time=$(date +%s)
+            local end_time=$((start_time + SLOT_MONITOR_DURATION))
+            
+            while [[ $(date +%s) -lt $end_time ]]; do
+                monitor_slot_diff
+                sleep "$SLOT_MONITOR_INTERVAL"
+            done
+        else
+            # QPS测试模式：无限运行
+            while true; do
+                monitor_slot_diff
+                sleep "$SLOT_MONITOR_INTERVAL"
+            done
+        fi
     fi
 }
 

@@ -302,7 +302,73 @@ generate_csv_header() {
     fi
 }
 
-# 记录性能数据 - 支持条件性ENA数据
+# 生成JSON格式的监控数据
+generate_json_metrics() {
+    local timestamp="$1"
+    local cpu_data="$2"
+    local memory_data="$3"
+    local device_data="$4"
+    local network_data="$5"
+    local ena_data="$6"
+    local overhead_data="$7"
+    
+    # 解析CSV数据为JSON所需的字段
+    local cpu_usage=$(echo "$cpu_data" | cut -d',' -f1)
+    local mem_usage=$(echo "$memory_data" | cut -d',' -f3)
+    
+    # 解析网络数据获取总流量
+    local net_total_mbps=$(echo "$network_data" | cut -d',' -f4)
+    
+    # 计算网络利用率
+    local network_util=$(echo "scale=2; ($net_total_mbps / $NETWORK_MAX_BANDWIDTH_MBPS) * 100" | bc 2>/dev/null || echo "0")
+    # 限制在100%以内
+    network_util=$(echo "if ($network_util > 100) 100 else $network_util" | bc 2>/dev/null || echo "0")
+    
+    # 从设备数据中提取EBS信息 (简化处理，取第一个设备的数据)
+    local ebs_util=0
+    local ebs_latency=0
+    if [[ -n "$device_data" ]]; then
+        # 假设设备数据格式为: device1_util,device1_latency,device2_util,device2_latency...
+        ebs_util=$(echo "$device_data" | cut -d',' -f2 2>/dev/null || echo "0")
+        ebs_latency=$(echo "$device_data" | cut -d',' -f4 2>/dev/null || echo "0")
+    fi
+    
+    # 生成latest_metrics.json (核心指标)
+    cat > "${MEMORY_SHARE_DIR}/latest_metrics.json" << EOF
+{
+    "timestamp": "$timestamp",
+    "cpu_usage": $cpu_usage,
+    "memory_usage": $mem_usage,
+    "ebs_util": $ebs_util,
+    "ebs_latency": $ebs_latency,
+    "network_util": $network_util,
+    "error_rate": 0
+}
+EOF
+
+    # 生成unified_metrics.json (详细指标)
+    cat > "${MEMORY_SHARE_DIR}/unified_metrics.json" << EOF
+{
+    "timestamp": "$timestamp",
+    "cpu_usage": $cpu_usage,
+    "memory_usage": $mem_usage,
+    "ebs_util": $ebs_util,
+    "ebs_latency": $ebs_latency,
+    "network_util": $network_util,
+    "error_rate": 0,
+    "detailed_data": {
+        "cpu_data": "$cpu_data",
+        "memory_data": "$memory_data",
+        "device_data": "$device_data",
+        "network_data": "$network_data",
+        "ena_data": "$ena_data",
+        "overhead_data": "$overhead_data"
+    }
+}
+EOF
+}
+
+# 记录性能数据 - 支持条件性ENA数据和JSON生成
 log_performance_data() {
     local timestamp=$(get_unified_timestamp)
     local cpu_data=$(get_cpu_data)
@@ -312,14 +378,19 @@ log_performance_data() {
     local overhead_data=$(get_monitoring_overhead)
     
     # 条件性添加ENA数据
+    local ena_data=""
     if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
-        local ena_data=$(get_ena_allowance_data)
+        ena_data=$(get_ena_allowance_data)
         local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data"
     else
         local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data"
     fi
     
+    # 写入CSV文件
     echo "$data_line" >> "$UNIFIED_LOG"
+    
+    # 生成JSON文件
+    generate_json_metrics "$timestamp" "$cpu_data" "$memory_data" "$device_data" "$network_data" "$ena_data" "$overhead_data"
 }
 
 # 启动统一监控 - 修复：支持跟随QPS测试模式

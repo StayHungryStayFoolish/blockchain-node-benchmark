@@ -19,11 +19,10 @@ if [[ -z "${MONITOR_STATUS_FILE:-}" ]]; then
     readonly MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
 fi
 
-# 监控任务定义
+# 监控任务定义 (移除bottleneck，因为它只在intensive模式下使用)
 declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
     ["slot"]="slot_monitor.sh"
-    ["bottleneck"]="bottleneck_detector.sh"
     ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
 )
 
@@ -92,18 +91,16 @@ start_monitor() {
     # 启动监控脚本
     case "$monitor_name" in
         "unified")
-            "${script_dir}/${script_name}" -d "$duration" -i "$MONITOR_INTERVAL" &
+            # QPS测试模式：不传递duration，无限运行
+            "${script_dir}/${script_name}" -i "$MONITOR_INTERVAL" &
             ;;
         "slot")
-            "${script_dir}/${script_name}" -d "$duration" &
-            ;;
-        "bottleneck")
-            # bottleneck_detector.sh使用命令模式，不支持-d参数
-            "${script_dir}/${script_name}" init &
+            # QPS测试模式：不传递duration，无限运行
+            "${script_dir}/${script_name}" -b &
             ;;
         "ebs_bottleneck")
-            # ebs_bottleneck_detector.sh在tools目录下
-            "${script_dir}/../tools/${script_name}" -d "$duration" &
+            # QPS测试模式：不传递duration，无限运行
+            "${script_dir}/../tools/${script_name}" -b &
             ;;
         *)
             echo "❌ 不支持的监控任务: $monitor_name"
@@ -164,8 +161,8 @@ start_all_monitors() {
     
     echo "🚀 启动所有监控任务 (持续时间: ${duration}秒)"
     
-    # 按优先级启动监控任务
-    local monitors_to_start=("unified" "slot" "bottleneck" "ebs_bottleneck")
+    # 按优先级启动监控任务 (移除bottleneck，因为它只在intensive模式下使用)
+    local monitors_to_start=("unified" "slot" "ebs_bottleneck")
     
     for monitor in "${monitors_to_start[@]}"; do
         start_monitor "$monitor" "$duration"
@@ -326,6 +323,29 @@ main() {
         "start")
             init_coordinator
             start_all_monitors "${2:-$DEFAULT_MONITOR_DURATION}"
+            # 保持监控协调器运行，监控子进程状态
+            echo "🔄 监控协调器保持运行，监控子进程状态..."
+            while true; do
+                sleep 10
+                # 检查是否还有监控任务在运行
+                if [[ ! -f "$MONITOR_PIDS_FILE" ]] || [[ ! -s "$MONITOR_PIDS_FILE" ]]; then
+                    echo "ℹ️  没有活跃的监控任务，监控协调器退出"
+                    break
+                fi
+                
+                # 检查监控任务状态
+                local active_count=0
+                while IFS=':' read -r monitor_name pid; do
+                    if kill -0 "$pid" 2>/dev/null; then
+                        ((active_count++))
+                    fi
+                done < "$MONITOR_PIDS_FILE"
+                
+                if [[ $active_count -eq 0 ]]; then
+                    echo "ℹ️  所有监控任务已完成，监控协调器退出"
+                    break
+                fi
+            done
             ;;
         "start_all")
             # 新增：为QPS测试框架提供的统一启动入口

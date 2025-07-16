@@ -183,6 +183,8 @@ BOTTLENECK_EBS_UTIL_THRESHOLD=90    # EBS利用率超过90%视为瓶颈
 BOTTLENECK_EBS_LATENCY_THRESHOLD=50 # EBS延迟超过50ms视为瓶颈
 BOTTLENECK_ERROR_RATE_THRESHOLD=5   # 错误率超过5%视为瓶颈
 
+# 网络带宽配置 (用于计算网络利用率) - 由系统自动配置区域设置
+
 # 瓶颈检测连续次数 (避免偶发性波动)
 BOTTLENECK_CONSECUTIVE_COUNT=3      # 连续3次检测到瓶颈才停止
 

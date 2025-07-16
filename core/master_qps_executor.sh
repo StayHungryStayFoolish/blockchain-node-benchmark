@@ -477,13 +477,13 @@ trigger_immediate_bottleneck_analysis() {
     echo "🚨 触发瓶颈分析，QPS: $qps, 严重程度: $severity"
     
     # 调用瓶颈检测器进行实时分析
-    if [[ -f "${SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" ]]; then
+    if [[ -f "${QPS_SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" ]]; then
         echo "🔍 执行实时瓶颈分析..."
         
         # 获取最新的性能数据文件
         local performance_csv="${LOGS_DIR}/performance_latest.csv"
         if [[ -f "$performance_csv" ]]; then
-            "${SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" \
+            "${QPS_SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" \
                 detect "$qps" "$performance_csv" &
             
             local analysis_pid=$!
@@ -494,9 +494,9 @@ trigger_immediate_bottleneck_analysis() {
     fi
     
     # 调用EBS瓶颈检测器
-    if [[ -f "${SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" ]]; then
+    if [[ -f "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" ]]; then
         echo "💾 执行EBS瓶颈分析..."
-        "${SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" \
+        "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" \
             --background --duration 300 &
         
         local ebs_analysis_pid=$!
@@ -732,6 +732,22 @@ execute_qps_test() {
     BOTTLENECK_DETECTED=false
     BOTTLENECK_COUNT=0
     LAST_SUCCESSFUL_QPS=0
+    
+    # 如果是intensive模式，初始化瓶颈检测器
+    if [[ "$BENCHMARK_MODE" == "intensive" && "$INTENSIVE_AUTO_STOP" == "true" ]]; then
+        echo "🔍 初始化瓶颈检测器 (极限测试模式)..."
+        if [[ -f "${QPS_SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" ]]; then
+            "${QPS_SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" init
+            if [[ $? -eq 0 ]]; then
+                echo "✅ 瓶颈检测器初始化成功"
+            else
+                echo "⚠️  瓶颈检测器初始化失败，但不影响测试继续"
+            fi
+        else
+            echo "⚠️  瓶颈检测器脚本不存在，跳过初始化"
+        fi
+        echo ""
+    fi
     
     # QPS测试循环
     local current_qps=$INITIAL_QPS
