@@ -580,8 +580,15 @@ start_unified_monitoring() {
     echo "📁 文件大小: $(du -h "$UNIFIED_LOG" | cut -f1)"
 }
 
-# 停止监控
+# 停止监控 - 防止重复调用
+STOP_MONITORING_CALLED=false
 stop_unified_monitoring() {
+    # 防止重复调用
+    if [[ "$STOP_MONITORING_CALLED" == "true" ]]; then
+        return 0
+    fi
+    STOP_MONITORING_CALLED=true
+    
     echo "🛑 停止统一监控..."
     
     # 终止所有相关进程
