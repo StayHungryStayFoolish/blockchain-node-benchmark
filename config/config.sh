@@ -127,7 +127,7 @@ VALIDATOR_LOG_PATH="/data/data/log/validator.log"
 QUICK_INITIAL_QPS=1000
 QUICK_MAX_QPS=3000
 QUICK_QPS_STEP=500
-QUICK_DURATION=300  # 每个QPS级别测试5分钟
+QUICK_DURATION=60   # 每个QPS级别测试1分钟 (避免长时间测试导致的资源问题)
 
 # 标准基准测试模式 (标准性能测试)
 STANDARD_INITIAL_QPS=1000
