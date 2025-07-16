@@ -167,7 +167,7 @@ monitor_slot_diff() {
     
     # 使用缓冲写入减少磁盘 I/O
     local data_line="$timestamp,$local_slot,$mainnet_slot,$slot_diff,$local_health,$mainnet_health,$data_loss"
-    source "$(dirname "${BASH_SOURCE[0]}")/common_functions.sh" && buffered_write "$SLOT_DATA_FILE" "$data_line" 10
+    source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && buffered_write "$SLOT_DATA_FILE" "$data_line" 10
     
     # 检查 Slot 差异是否超过阈值
     if [[ "$slot_diff" != "null" && "$slot_diff" != "N/A" && $slot_diff -gt $SLOT_DIFF_THRESHOLD ]]; then
@@ -262,7 +262,7 @@ monitor_slot_diff() {
     fi
     
     # 清理旧的缓存数据
-    source "$(dirname "${BASH_SOURCE[0]}")/common_functions.sh" && cleanup_slot_cache "$MEMORY_SHARE_DIR" 5
+    source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && cleanup_slot_cache "$MEMORY_SHARE_DIR" 5
 }
 
 # 显示当前状态
@@ -271,7 +271,7 @@ show_status() {
     echo "===================="
     
     # 获取最新的 Slot 数据
-    local slot_data=$(source "$(dirname "${BASH_SOURCE[0]}")/common_functions.sh" && get_cached_slot_data "$SLOT_CACHE_FILE" "$CACHE_MAX_AGE" "$LOCAL_RPC_URL" "$MAINNET_RPC_URL")
+    local slot_data=$(source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && get_cached_slot_data "$SLOT_CACHE_FILE" "$CACHE_MAX_AGE" "$LOCAL_RPC_URL" "$MAINNET_RPC_URL")
     
     # 解析数据
     local timestamp=$(echo "$slot_data" | jq -r '.timestamp')
