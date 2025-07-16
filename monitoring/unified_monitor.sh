@@ -284,6 +284,12 @@ get_ena_allowance_data() {
         return
     fi
     
+    # 检查网络接口是否可用
+    if [[ -z "${NETWORK_INTERFACE:-}" ]]; then
+        echo "0,0,0,0,0,0"
+        return
+    fi
+    
     local ethtool_output=$(ethtool -S "$NETWORK_INTERFACE" 2>/dev/null || echo "")
     
     # 获取ENA allowance统计
