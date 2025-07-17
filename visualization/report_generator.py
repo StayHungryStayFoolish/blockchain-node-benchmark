@@ -912,7 +912,7 @@ class ReportGenerator:
                     'last_time': low_connection_records['timestamp'].max(),
                     'occurrences': len(low_connection_records),
                     'max_value': f"最少剩余 {low_connection_records['ena_conntrack_available'].min()} 个连接",
-                    'total_affected': f"平均剩余 {low_connection_records['ena_conntrack_available'].mean():.0f} 个连接"
+                    'total_affected': f"平均剩余 {low_connection_records['ena_conntrack_available'].mean():.0f} 个连接" if 'ena_conntrack_available' in low_connection_records.columns else "数据不可用"
                 })
         
         return limitations
@@ -2010,17 +2010,17 @@ class ReportGenerator:
         """生成性能摘要部分"""
         try:
             # 计算基本统计
-            cpu_avg = df['cpu_usage'].mean() if 'cpu_usage' in df.columns else 0
-            cpu_max = df['cpu_usage'].max() if 'cpu_usage' in df.columns else 0
-            mem_avg = df['mem_usage'].mean() if 'mem_usage' in df.columns else 0
+            cpu_avg = df['cpu_usage'].mean() if 'cpu_usage' in df.columns and len(df) > 0 else 0
+            cpu_max = df['cpu_usage'].max() if 'cpu_usage' in df.columns and len(df) > 0 else 0
+            mem_avg = df['mem_usage'].mean() if 'mem_usage' in df.columns and len(df) > 0 else 0
             
             # DATA设备统计 - 使用统一的字段格式匹配
             data_iops_cols = [col for col in df.columns if col.startswith('data_') and col.endswith('_total_iops')]
-            data_iops_avg = df[data_iops_cols[0]].mean() if data_iops_cols else 0
+            data_iops_avg = df[data_iops_cols[0]].mean() if data_iops_cols and len(df) > 0 else 0
             
             # ACCOUNTS设备统计 - 使用统一的字段格式匹配
             accounts_iops_cols = [col for col in df.columns if col.startswith('accounts_') and col.endswith('_total_iops')]
-            accounts_iops_avg = df[accounts_iops_cols[0]].mean() if accounts_iops_cols else 0
+            accounts_iops_avg = df[accounts_iops_cols[0]].mean() if accounts_iops_cols and len(df) > 0 else 0
             
             return f"""
             <div class="section">

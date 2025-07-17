@@ -851,9 +851,14 @@ class AdvancedChartGenerator(CSVDataProcessor):
             for field in ena_fields:
                 if field in self.df.columns:
                     if field == 'ena_conntrack_available':
-                        summary_data.append([field_labels.get(field, field), 
-                                           f'{self.df[field].mean():,.0f}', 
-                                           f'{self.df[field].min():,.0f}'])
+                        if field in self.df.columns:
+                            field_mean = self.df[field].mean()
+                            field_min = self.df[field].min()
+                            summary_data.append([field_labels.get(field, field), 
+                                               f'{field_mean:,.0f}', 
+                                               f'{field_min:,.0f}'])
+                        else:
+                            summary_data.append([field_labels.get(field, field), 'N/A', 'N/A'])
                     else:
                         max_val = self.df[field].max()
                         total_events = (self.df[field] > 0).sum()

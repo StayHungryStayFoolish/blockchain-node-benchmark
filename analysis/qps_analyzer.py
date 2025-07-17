@@ -483,10 +483,13 @@ class SolanaQPSAnalyzer:
         # 4. RPC延迟分布
         if len(df) > 0 and 'rpc_latency_ms' in df.columns:
             axes[1, 1].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
-            axes[1, 1].axvline(df['rpc_latency_ms'].mean(), color='red', linestyle='--',
-                               label=f'Mean: {df["rpc_latency_ms"].mean():.1f}ms')
-            axes[1, 1].axvline(df['rpc_latency_ms'].quantile(0.95), color='orange', linestyle='--',
-                               label=f'P95: {df["rpc_latency_ms"].quantile(0.95):.1f}ms')
+            if 'rpc_latency_ms' in df.columns:
+                mean_latency = df['rpc_latency_ms'].mean()
+                p95_latency = df['rpc_latency_ms'].quantile(0.95)
+                axes[1, 1].axvline(mean_latency, color='red', linestyle='--',
+                                   label=f'Mean: {mean_latency:.1f}ms')
+                axes[1, 1].axvline(p95_latency, color='orange', linestyle='--',
+                                   label=f'P95: {p95_latency:.1f}ms')
             axes[1, 1].set_title('RPC Latency Distribution')
             axes[1, 1].set_xlabel('Latency (ms)')
             axes[1, 1].set_ylabel('Frequency')
