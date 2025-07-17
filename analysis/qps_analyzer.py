@@ -728,9 +728,9 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - **Average CPU Usage**: {avg_cpu:.1f}%
 - **Average Memory Usage**: {avg_mem:.1f}%
 - **Average RPC Latency**: {avg_rpc:.1f}ms
-- **CPU Peak**: {df['cpu_usage'].max():.1f}% if len(df) > 0 and 'cpu_usage' in df.columns else "N/A"
-- **Memory Peak**: {df['mem_usage'].max():.1f}% if len(df) > 0 and 'mem_usage' in df.columns else "N/A"
-- **RPC Latency Peak**: {df['rpc_latency_ms'].max():.1f}ms if len(df) > 0 and 'rpc_latency_ms' in df.columns else "N/A"
+- **CPU Peak**: {(df['cpu_usage'].max() if len(df) > 0 and 'cpu_usage' in df.columns else 0):.1f}%
+- **Memory Peak**: {(df['mem_usage'].max() if len(df) > 0 and 'mem_usage' in df.columns else 0):.1f}%
+- **RPC Latency Peak**: {(df['rpc_latency_ms'].max() if len(df) > 0 and 'rpc_latency_ms' in df.columns else 0):.1f}ms
 
 ## Performance Bottlenecks Analysis
 """
