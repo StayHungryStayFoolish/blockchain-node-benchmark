@@ -89,8 +89,20 @@ class PerformanceVisualizer(CSVDataProcessor):
         self.overhead_file = overhead_file
         self.output_dir = os.path.dirname(data_file)
         
+        # 初始化字体设置标志
+        self.use_english_labels = False
+        
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
+        
+        # 设置中文字体支持
+        try:
+            plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'SimHei', 'Microsoft YaHei']
+            plt.rcParams['axes.unicode_minus'] = False
+        except Exception as e:
+            print(f"⚠️  字体设置警告: {e}")
+            # 使用英文标签作为备选方案
+            self.use_english_labels = True
         
         # 阈值配置 - 集成自await_util_analyzer
         self.await_thresholds = {
@@ -1267,7 +1279,7 @@ CPU开销:
             if 'net_rx_mbps' in self.df.columns:
                 ax4 = axes[1, 1]
                 ax4.plot(self.df['timestamp'], self.df['net_rx_mbps'], 
-                        color='lightorange', linewidth=1, alpha=0.5, label='网络接收(原始)')
+                        color='lightcoral', linewidth=1, alpha=0.5, label='网络接收(原始)')
                 
                 net_smooth = self.df['net_rx_mbps'].rolling(window=window_size, center=True).mean()
                 ax4.plot(self.df['timestamp'], net_smooth, 
