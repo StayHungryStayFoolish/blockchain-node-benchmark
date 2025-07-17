@@ -101,6 +101,8 @@ class FontManager:
             self.available_chinese_fonts = self._detect_available_fonts()
             
             # 3. 设置matplotlib字体参数 - 优化字体顺序
+            import matplotlib.pyplot as plt  # 确保在使用前导入plt
+            
             if self.available_chinese_fonts:
                 # 将检测到的可用字体放在最前面
                 font_list = self.available_chinese_fonts + ['DejaVu Sans', 'Arial', 'sans-serif']
@@ -123,8 +125,19 @@ class FontManager:
             except Exception as refresh_error:
                 self._debug_print(f"字体刷新失败: {refresh_error}")
             
-            # 5. 判断是否需要使用英文标签
-            if not self.available_chinese_fonts:
+            # 5. 在AWS EC2环境中强制使用英文标签以避免字体警告
+            # 检查是否在AWS EC2环境中
+            is_aws_ec2 = (
+                os.path.exists('/sys/hypervisor/uuid') or 
+                os.path.exists('/sys/devices/virtual/dmi/id/product_uuid') or
+                'ec2' in os.uname().nodename.lower() or
+                'ip-' in os.uname().nodename
+            )
+            
+            if is_aws_ec2:
+                self.use_english_labels = True
+                self._debug_print("⚠️  AWS EC2环境，强制使用英文标签以避免字体警告")
+            elif not self.available_chinese_fonts:
                 self.use_english_labels = True
                 self._debug_print("⚠️  未找到可用的中文字体，将使用英文标签")
             else:

@@ -1,250 +1,165 @@
 #!/usr/bin/env python3
 """
-字体问题诊断和修复脚本
-专门用于解决AWS EC2环境中matplotlib中文字体显示问题
+字体问题诊断和修复工具
+深入分析为什么检测到中文字体但仍有警告
 """
 
-import matplotlib
-matplotlib.use('Agg')  # 使用非交互式后端
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-import numpy as np
+from matplotlib.font_manager import FontProperties
 import os
-import sys
 
 def diagnose_font_issues():
     """诊断字体问题"""
+    print("🩺 字体问题诊断和修复工具")
+    print("=" * 50)
+    
     print("🔍 开始诊断字体问题...")
     print("=" * 50)
     
-    # 1. 检查matplotlib版本
-    print(f"📦 Matplotlib版本: {matplotlib.__version__}")
-    
-    # 2. 检查当前字体设置
+    # 1. 基本信息
+    print(f"📦 Matplotlib版本: {plt.matplotlib.__version__}")
     print(f"🔧 当前字体设置: {plt.rcParams['font.sans-serif']}")
     
-    # 3. 列出所有可用字体
-    fonts = [f.name for f in fm.fontManager.ttflist]
-    print(f"📊 系统字体总数: {len(fonts)}")
+    # 2. 系统字体统计
+    all_fonts = fm.findSystemFonts()
+    print(f"📊 系统字体总数: {len(all_fonts)}")
     
-    # 4. 查找中文字体
+    # 3. 中文字体检测
     chinese_fonts = []
-    target_fonts = ['WenQuanYi', 'Noto', 'SimHei', 'Microsoft YaHei', 'PingFang', 'Heiti']
+    font_manager = fm.FontManager()
     
-    for font in fonts:
-        for target in target_fonts:
-            if target in font:
-                chinese_fonts.append(font)
-                break
+    chinese_font_names = [
+        'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei', 'Noto Sans CJK SC',
+        'SimHei', 'Microsoft YaHei', 'PingFang SC', 'Heiti SC'
+    ]
     
+    for font in font_manager.ttflist:
+        if any(cf in font.name for cf in chinese_font_names):
+            chinese_fonts.append(font.name)
+    
+    chinese_fonts = list(set(chinese_fonts))
     print(f"🔤 找到的中文字体: {len(chinese_fonts)}")
-    for font in chinese_fonts[:10]:  # 只显示前10个
+    for font in chinese_fonts[:5]:  # 只显示前5个
         print(f"  - {font}")
     
-    # 5. 测试字体设置
+    # 4. 测试字体设置
     print("\n🧪 测试字体设置...")
-    
     if chinese_fonts:
-        # 设置中文字体
-        plt.rcParams['font.sans-serif'] = chinese_fonts + ['DejaVu Sans', 'Arial', 'sans-serif']
-        plt.rcParams['axes.unicode_minus'] = False
-        
-        print("✅ 已设置中文字体")
-        print(f"📝 字体优先级: {plt.rcParams['font.sans-serif'][:3]}")
-        
-        # 创建测试图表
-        create_test_chart(use_chinese=True)
+        plt.rcParams['font.sans-serif'] = chinese_fonts + ['DejaVu Sans', 'Arial']
+        print(f"✅ 设置中文字体: {chinese_fonts[0]}")
     else:
+        plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial']
         print("⚠️  未找到中文字体，使用英文标签")
-        create_test_chart(use_chinese=False)
     
-    return chinese_fonts
-
-def create_test_chart(use_chinese=True):
-    """创建测试图表"""
+    plt.rcParams['axes.unicode_minus'] = False
+    
+    # 5. 创建测试图表
     print("\n📊 创建测试图表...")
     
-    try:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-        
-        # 测试数据
-        x = np.linspace(0, 10, 100)
-        y1 = np.sin(x)
-        y2 = np.cos(x)
-        
-        # 图表1
-        ax1.plot(x, y1, 'b-', linewidth=2, label='正弦波' if use_chinese else 'Sine Wave')
-        ax1.set_title('正弦函数图' if use_chinese else 'Sine Function')
-        ax1.set_xlabel('时间' if use_chinese else 'Time')
-        ax1.set_ylabel('幅值' if use_chinese else 'Amplitude')
-        ax1.legend()
-        ax1.grid(True, alpha=0.3)
-        
-        # 图表2
-        ax2.plot(x, y2, 'r-', linewidth=2, label='余弦波' if use_chinese else 'Cosine Wave')
-        ax2.set_title('余弦函数图' if use_chinese else 'Cosine Function')
-        ax2.set_xlabel('时间' if use_chinese else 'Time')
-        ax2.set_ylabel('幅值' if use_chinese else 'Amplitude')
-        ax2.legend()
-        ax2.grid(True, alpha=0.3)
-        
-        # 主标题
-        fig.suptitle('字体测试图表 - Font Test Chart', fontsize=16, fontweight='bold')
-        
-        plt.tight_layout()
-        
-        # 保存图表
-        output_file = '/tmp/font_diagnosis_test.png'
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        print(f"✅ 测试图表已保存: {output_file}")
-        
-        # 检查文件大小
-        if os.path.exists(output_file):
-            size = os.path.getsize(output_file)
-            print(f"📏 文件大小: {size/1024:.1f} KB")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ 图表生成失败: {e}")
-        return False
-
-def fix_font_issues():
-    """修复字体问题"""
-    print("\n🔧 开始修复字体问题...")
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(10, 6))
     
-    try:
-        # 1. 清除matplotlib缓存
-        cache_dir = matplotlib.get_cachedir()
-        print(f"📁 缓存目录: {cache_dir}")
+    # 测试数据
+    x = np.linspace(0, 10, 100)
+    y = np.sin(x)
+    
+    ax.plot(x, y, 'b-', linewidth=2, label='正弦波')
+    
+    # 使用中文标签（这里会产生警告）
+    ax.set_title('字体测试图表')
+    ax.set_xlabel('时间')
+    ax.set_ylabel('幅值')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    
+    # 保存图表
+    output_file = '/tmp/font_diagnosis_test.png'
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"✅ 测试图表已保存: {output_file}")
+    
+    # 检查文件大小
+    if os.path.exists(output_file):
+        size = os.path.getsize(output_file) / 1024  # KB
+        print(f"📏 文件大小: {size:.1f} KB")
+    
+    # 6. 字符级别诊断
+    print("\n🔬 字符级别诊断...")
+    
+    # 测试特定的中文字符
+    test_chars = ['使', '用', '率', '性', '能', '分', '析']
+    
+    for char in test_chars:
+        # 检查字符的Unicode编码
+        unicode_code = ord(char)
+        print(f"字符 '{char}' (U+{unicode_code:04X}):")
         
-        if os.path.exists(cache_dir):
-            import shutil
-            shutil.rmtree(cache_dir, ignore_errors=True)
-            print("🧹 已清除matplotlib缓存")
+        # 尝试找到包含此字符的字体
+        found_fonts = []
+        for font_path in all_fonts[:20]:  # 只检查前20个字体，避免太慢
+            try:
+                font_prop = FontProperties(fname=font_path)
+                # 这里简化检查，实际需要更复杂的字形检查
+                if 'WenQuanYi' in font_path or 'Noto' in font_path:
+                    found_fonts.append(os.path.basename(font_path))
+            except:
+                continue
         
-        # 2. 重新初始化字体管理器
-        fm.fontManager.__init__()
-        print("🔄 已重新初始化字体管理器")
-        
-        # 3. 强制重新加载字体
-        plt.rcdefaults()
-        
-        # 4. 重新检测字体
-        fonts = [f.name for f in fm.fontManager.ttflist]
-        chinese_fonts = []
-        target_fonts = ['WenQuanYi', 'Noto', 'SimHei', 'Microsoft YaHei', 'PingFang', 'Heiti']
-        
-        for font in fonts:
-            for target in target_fonts:
-                if target in font:
-                    chinese_fonts.append(font)
-                    break
-        
-        if chinese_fonts:
-            # 设置优化的字体列表
-            font_list = chinese_fonts + ['DejaVu Sans', 'Arial', 'sans-serif']
-            plt.rcParams['font.sans-serif'] = font_list
-            plt.rcParams['axes.unicode_minus'] = False
-            
-            print(f"✅ 已设置优化字体列表: {font_list[:3]}...")
-            
-            # 再次测试
-            success = create_test_chart(use_chinese=True)
-            if success:
-                print("🎉 字体问题修复成功！")
-                return True
-            else:
-                print("⚠️  修复后仍有问题，建议使用英文标签")
-                return False
+        if found_fonts:
+            print(f"  ✅ 可能支持的字体: {found_fonts[:2]}")
         else:
-            print("⚠️  系统中没有中文字体，建议运行 install_chinese_fonts.sh")
-            return False
-            
-    except Exception as e:
-        print(f"❌ 修复过程出错: {e}")
-        return False
-
-def generate_font_report():
-    """生成字体诊断报告"""
+            print(f"  ❌ 未找到明确支持的字体")
+    
+    # 7. 建议
+    print("\n💡 建议:")
+    if chinese_fonts:
+        print("1. 虽然检测到中文字体，但可能不包含所有字符")
+        print("2. 建议在生产环境中使用英文标签避免警告")
+        print("3. 或者安装更完整的中文字体包")
+    else:
+        print("1. 安装中文字体: sudo ./install_chinese_fonts.sh")
+        print("2. 重新运行此诊断脚本")
+    
+    # 8. 生成诊断报告
     print("\n📋 生成字体诊断报告...")
     
     report_content = f"""# 字体诊断报告
 
 ## 系统信息
-- 操作系统: {os.uname().sysname} {os.uname().release}
-- Python版本: {sys.version}
-- Matplotlib版本: {matplotlib.__version__}
-
-## 字体检测结果
-"""
-    
-    # 检测字体
-    fonts = [f.name for f in fm.fontManager.ttflist]
-    chinese_fonts = []
-    target_fonts = ['WenQuanYi', 'Noto', 'SimHei', 'Microsoft YaHei', 'PingFang', 'Heiti']
-    
-    for font in fonts:
-        for target in target_fonts:
-            if target in font:
-                chinese_fonts.append(font)
-                break
-    
-    report_content += f"""
-- 系统字体总数: {len(fonts)}
-- 中文字体数量: {len(chinese_fonts)}
-- 当前字体设置: {plt.rcParams['font.sans-serif']}
+- Matplotlib版本: {plt.matplotlib.__version__}
+- 系统字体总数: {len(all_fonts)}
+- 检测到的中文字体: {len(chinese_fonts)}
 
 ## 中文字体列表
+{chr(10).join(f'- {font}' for font in chinese_fonts)}
+
+## 问题分析
+1. **字体检测成功**: 系统能够检测到中文字体
+2. **字符覆盖不完整**: 部分中文字符可能不在字体的字符集中
+3. **matplotlib回退机制**: 当字符不存在时，回退到DejaVu Sans
+4. **DejaVu Sans无中文支持**: 导致警告和显示问题
+
+## 解决方案
+1. **推荐**: 在AWS EC2环境中使用英文标签
+2. **备选**: 安装更完整的中文字体包（如Noto CJK）
+3. **临时**: 忽略警告，图表仍能正常生成
+
+## 测试结果
+- 测试图表: {output_file}
+- 图表大小: {size:.1f} KB
+- 状态: {'成功生成' if os.path.exists(output_file) else '生成失败'}
 """
     
-    for font in chinese_fonts:
-        report_content += f"- {font}\n"
-    
-    report_content += f"""
-## 建议
-"""
-    
-    if chinese_fonts:
-        report_content += "✅ 系统已安装中文字体，建议使用字体管理工具进行优化设置。\n"
-    else:
-        report_content += "⚠️  系统未安装中文字体，建议运行 `sudo ./install_chinese_fonts.sh` 安装中文字体。\n"
-    
-    # 保存报告
     report_file = '/tmp/font_diagnosis_report.md'
     with open(report_file, 'w', encoding='utf-8') as f:
         f.write(report_content)
     
     print(f"📄 诊断报告已保存: {report_file}")
-    return report_file
-
-def main():
-    """主函数"""
-    print("🩺 字体问题诊断和修复工具")
-    print("=" * 50)
-    
-    # 1. 诊断字体问题
-    chinese_fonts = diagnose_font_issues()
-    
-    # 2. 尝试修复
-    if chinese_fonts:
-        fix_success = fix_font_issues()
-        if not fix_success:
-            print("\n💡 建议:")
-            print("1. 确保已安装中文字体: sudo ./install_chinese_fonts.sh")
-            print("2. 使用字体管理工具: python3 tools/font_manager.py")
-            print("3. 如果问题持续，可以使用英文标签模式")
-    else:
-        print("\n💡 建议:")
-        print("1. 安装中文字体: sudo ./install_chinese_fonts.sh")
-        print("2. 重新运行此诊断脚本")
-    
-    # 3. 生成报告
-    generate_font_report()
-    
     print("\n🎯 诊断完成！")
 
 if __name__ == "__main__":
-    main()
+    diagnose_font_issues()

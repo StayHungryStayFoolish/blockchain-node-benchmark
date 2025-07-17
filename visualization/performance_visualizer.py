@@ -102,14 +102,14 @@ class PerformanceVisualizer(CSVDataProcessor):
             # 回退到简单的英文模式
             self.font_manager = None
             
-    def _get_localized_text(self, chinese_text: str, english_text: str) -> str:
-        """获取本地化文本"""
-        if self.font_manager:
-            return self.font_manager.get_label(chinese_text, english_text)
-        return english_text  # 回退到英文
-        
         # 阈值配置 - 集成自await_util_analyzer
         self.await_thresholds = {
+            'data_avg_await': 5.0,  # 默认I/O等待阈值 (ms)
+            'accounts_avg_await': 5.0,  # 默认I/O等待阈值 (ms)
+            'data_r_await': 5.0,  # 默认读延迟阈值 (ms)
+            'data_w_await': 10.0,  # 默认写延迟阈值 (ms)
+            'accounts_r_await': 5.0,  # 默认读延迟阈值 (ms)
+            'accounts_w_await': 10.0,  # 默认写延迟阈值 (ms)
             'normal': 10,      # 正常阈值 (ms)
             'warning': 20,     # 警告阈值 (ms)
             'critical': 50     # 危险阈值 (ms)
