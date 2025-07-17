@@ -414,9 +414,10 @@ class SolanaQPSAnalyzer:
         bottlenecks = {}
 
         # CPU瓶颈
-        cpu_bottleneck = df[df['cpu_usage'] > 85]['current_qps'].min()
-        if pd.notna(cpu_bottleneck):
-            bottlenecks['CPU'] = cpu_bottleneck
+        if 'cpu_usage' in df.columns and 'current_qps' in df.columns:
+            cpu_bottleneck = df[df['cpu_usage'] > 85]['current_qps'].min()
+            if pd.notna(cpu_bottleneck):
+                bottlenecks['CPU'] = cpu_bottleneck
 
         # 内存瓶颈
         mem_bottleneck = df[df['mem_usage'] > 90]['current_qps'].min()
@@ -700,9 +701,9 @@ class SolanaQPSAnalyzer:
         print("\n📄 Generating performance report...")
 
         # 基本性能指标
-        avg_cpu = df['cpu_usage'].mean() if len(df) > 0 else 0
-        avg_mem = df['mem_usage'].mean() if len(df) > 0 else 0
-        avg_rpc = df['rpc_latency_ms'].mean() if len(df) > 0 else 0
+        avg_cpu = df['cpu_usage'].mean() if len(df) > 0 and 'cpu_usage' in df.columns else 0
+        avg_mem = df['mem_usage'].mean() if len(df) > 0 and 'mem_usage' in df.columns else 0
+        avg_rpc = df['rpc_latency_ms'].mean() if len(df) > 0 and 'rpc_latency_ms' in df.columns else 0
 
         # 基于基准测试模式和瓶颈分析的性能评估
         performance_evaluation = self._evaluate_performance_by_bottleneck_analysis(
@@ -727,9 +728,9 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - **Average CPU Usage**: {avg_cpu:.1f}%
 - **Average Memory Usage**: {avg_mem:.1f}%
 - **Average RPC Latency**: {avg_rpc:.1f}ms
-- **CPU Peak**: {df['cpu_usage'].max():.1f}% if len(df) > 0 else "N/A"
-- **Memory Peak**: {df['mem_usage'].max():.1f}% if len(df) > 0 else "N/A"
-- **RPC Latency Peak**: {df['rpc_latency_ms'].max():.1f}ms if len(df) > 0 else "N/A"
+- **CPU Peak**: {df['cpu_usage'].max():.1f}% if len(df) > 0 and 'cpu_usage' in df.columns else "N/A"
+- **Memory Peak**: {df['mem_usage'].max():.1f}% if len(df) > 0 and 'mem_usage' in df.columns else "N/A"
+- **RPC Latency Peak**: {df['rpc_latency_ms'].max():.1f}ms if len(df) > 0 and 'rpc_latency_ms' in df.columns else "N/A"
 
 ## Performance Bottlenecks Analysis
 """

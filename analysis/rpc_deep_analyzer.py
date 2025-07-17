@@ -210,9 +210,9 @@ class RpcDeepAnalyzer:
 
             # 分析异常期间的系统状态
             anomaly_analysis['system_state_during_anomalies'] = {
-                'avg_cpu': float(high_latency['cpu_usage'].mean()),
-                'avg_memory': float(high_latency['mem_usage'].mean()),
-                'avg_qps': float(high_latency['current_qps'].mean()),
+                'avg_cpu': float(high_latency['cpu_usage'].mean()) if 'cpu_usage' in high_latency.columns else 0.0,
+                'avg_memory': float(high_latency['mem_usage'].mean()) if 'mem_usage' in high_latency.columns else 0.0,
+                'avg_qps': float(high_latency['current_qps'].mean()) if 'current_qps' in high_latency.columns else 0.0,
                 'most_affected_qps_ranges': high_latency['current_qps'].value_counts().head(3).to_dict()
             }
 
@@ -360,17 +360,17 @@ class RpcDeepAnalyzer:
         high_qps_data = df[df['current_qps'] >= high_qps_threshold]
 
         if len(high_qps_data) > 0:
-            avg_cpu = high_qps_data['cpu_usage'].mean()
-            avg_latency = high_qps_data['rpc_latency_ms'].mean()
-            avg_memory = high_qps_data['mem_usage'].mean()
+            avg_cpu = high_qps_data['cpu_usage'].mean() if 'cpu_usage' in high_qps_data.columns else 0.0
+            avg_latency = high_qps_data['rpc_latency_ms'].mean() if 'rpc_latency_ms' in high_qps_data.columns else 0.0
+            avg_memory = high_qps_data['mem_usage'].mean() if 'mem_usage' in high_qps_data.columns else 0.0
 
             print(f"\n🎯 Bottleneck type classification:")
 
             # 特殊分析配置的QPS阶段（如果存在）
-            qps_special = df[df['current_qps'] == self.config.SPECIAL_QPS_ANALYSIS]
+            qps_special = df[df['current_qps'] == self.config.SPECIAL_QPS_ANALYSIS] if 'current_qps' in df.columns else pd.DataFrame()
             if len(qps_special) > 0:
-                avg_cpu_special = qps_special['cpu_usage'].mean()
-                avg_latency_special = qps_special['rpc_latency_ms'].mean()
+                avg_cpu_special = qps_special['cpu_usage'].mean() if 'cpu_usage' in qps_special.columns else 0.0
+                avg_latency_special = qps_special['rpc_latency_ms'].mean() if 'rpc_latency_ms' in qps_special.columns else 0.0
                 print(f"{self.config.SPECIAL_QPS_ANALYSIS} QPS phase analysis:")
                 print(f"  Average CPU: {avg_cpu_special:.1f}%")
                 print(f"  Average latency: {avg_latency_special:.1f}ms")
