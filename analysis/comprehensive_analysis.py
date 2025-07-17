@@ -483,10 +483,13 @@ class ComprehensiveAnalyzer:
         # 7. RPC延迟分布
         if len(df) > 0 and 'rpc_latency_ms' in df.columns:
             axes[3, 0].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
-            axes[3, 0].axvline(df['rpc_latency_ms'].mean(), color='red', linestyle='--',
-                               label=f'Mean: {df["rpc_latency_ms"].mean():.1f}ms')
-            axes[3, 0].axvline(df['rpc_latency_ms'].quantile(0.95), color='orange', linestyle='--',
-                               label=f'P95: {df["rpc_latency_ms"].quantile(0.95):.1f}ms')
+            if 'rpc_latency_ms' in df.columns:
+                mean_latency = df['rpc_latency_ms'].mean()
+                p95_latency = df['rpc_latency_ms'].quantile(0.95)
+                axes[3, 0].axvline(mean_latency, color='red', linestyle='--',
+                                   label=f'Mean: {mean_latency:.1f}ms')
+                axes[3, 0].axvline(p95_latency, color='orange', linestyle='--',
+                                   label=f'P95: {p95_latency:.1f}ms')
             axes[3, 0].set_title('RPC Latency Distribution')
             axes[3, 0].set_xlabel('Latency (ms)')
             axes[3, 0].set_ylabel('Frequency')
@@ -685,7 +688,6 @@ class ComprehensiveAnalyzer:
         avg_cpu = DataProcessor.safe_calculate_mean(df, 'cpu_usage')
         avg_mem = DataProcessor.safe_calculate_mean(df, 'mem_usage')
         avg_rpc = DataProcessor.safe_calculate_mean(df, 'rpc_latency_ms')
-        avg_rpc = df['rpc_latency_ms'].mean() if len(df) > 0 and 'rpc_latency_ms' in df.columns else 0
 
         # 日志分析结果
         rpc_analysis = log_analysis.get('rpc_analysis', {})
