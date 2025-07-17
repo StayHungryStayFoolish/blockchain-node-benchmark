@@ -134,6 +134,8 @@ try:
     
     # 尝试生成一个简单的图表
     try:
+        # 关键步骤：先加载数据
+        visualizer.load_data()
         result = visualizer.create_performance_overview_chart()
         if result:
             print('✅ 图表生成测试成功')
@@ -177,13 +179,30 @@ echo "📈 7. 检查生成的文件"
 # 检查PNG图表文件
 echo "检查PNG图表文件:"
 PNG_COUNT=0
-for png_file in $(find . -name "*.png" -newer "$TEST_DATA_FILE" 2>/dev/null | head -10); do
-    if [ -f "$png_file" ]; then
-        SIZE=$(du -h "$png_file" | cut -f1)
-        echo "✅ $(basename "$png_file") ($SIZE)"
-        PNG_COUNT=$((PNG_COUNT + 1))
+
+# 扩展搜索范围，包括数据文件所在目录
+SEARCH_DIRS=(
+    "."
+    ".."
+    "$(dirname "$TEST_DATA_FILE")"
+    "../blockchain-node-benchmark-result"
+    "/data/data/blockchain-node-benchmark-result"
+)
+
+for search_dir in "${SEARCH_DIRS[@]}"; do
+    if [ -d "$search_dir" ]; then
+        for png_file in $(find "$search_dir" -name "*.png" -newer "$TEST_DATA_FILE" 2>/dev/null | head -5); do
+            if [ -f "$png_file" ]; then
+                SIZE=$(du -h "$png_file" | cut -f1)
+                echo "✅ $(basename "$png_file") ($SIZE)"
+                PNG_COUNT=$((PNG_COUNT + 1))
+            fi
+        done
     fi
 done
+
+# 去重计数（如果同一文件被多次找到）
+PNG_COUNT=$(find "${SEARCH_DIRS[@]}" -name "*.png" -newer "$TEST_DATA_FILE" 2>/dev/null | sort -u | wc -l)
 
 # 检查HTML报告文件
 echo ""
