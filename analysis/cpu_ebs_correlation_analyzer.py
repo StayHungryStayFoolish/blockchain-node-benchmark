@@ -32,6 +32,52 @@ class CPUEBSCorrelationAnalyzer:
         self.df = None
         self.analysis_results = {}
         
+        # 初始化字体设置标志
+        self.use_english_labels = False
+        
+        # 设置中文字体支持
+        self._setup_fonts()
+    
+    def _setup_fonts(self):
+        """增强的字体设置函数，处理AWS EC2环境中的中文字体问题"""
+        try:
+            # 1. 清除字体缓存，强制重新检测
+            from matplotlib.font_manager import _rebuild
+            _rebuild()
+            
+            # 2. 尝试多种中文字体，包括AWS EC2常见字体
+            chinese_fonts = [
+                'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei',  # AWS上常用的中文字体
+                'Noto Sans CJK SC', 'Noto Sans CJK TC',      # Google Noto字体
+                'SimHei', 'Microsoft YaHei',                  # Windows中文字体
+                'PingFang SC', 'Heiti SC',                    # macOS中文字体
+                'DejaVu Sans', 'Arial Unicode MS',            # 通用字体
+                'sans-serif'                                  # 最后的回退
+            ]
+            
+            # 3. 设置字体
+            plt.rcParams['font.sans-serif'] = chinese_fonts
+            plt.rcParams['axes.unicode_minus'] = False
+            
+            # 4. 验证字体是否可用
+            from matplotlib.font_manager import FontManager
+            fm = FontManager()
+            font_names = set([f.name for f in fm.ttflist])
+            
+            # 检查是否有任何中文字体可用
+            available_chinese_fonts = [f for f in chinese_fonts if f in font_names]
+            
+            if not available_chinese_fonts:
+                print("⚠️  未找到可用的中文字体，将使用英文标签")
+                self.use_english_labels = True
+            else:
+                print(f"✅ 找到可用的中文字体: {available_chinese_fonts[0]}")
+                
+        except Exception as e:
+            print(f"⚠️  字体设置警告: {e}")
+            # 使用英文标签作为备选方案
+            self.use_english_labels = True
+        
     def _check_device_configured(self, logical_name: str) -> bool:
         """检查设备是否配置并且有数据"""
         if self.df is None:

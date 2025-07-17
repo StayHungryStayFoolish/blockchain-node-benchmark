@@ -78,9 +78,55 @@ class SolanaQPSAnalyzer:
             # 使用直接字段访问
             pass
         
+        # 初始化字体设置标志
+        self.use_english_labels = False
+        
+        # 设置中文字体支持
+        self._setup_fonts()
+        
         logger.info(f"🔍 QPS分析器初始化完成，输出目录: {output_dir}, 基准测试模式: {benchmark_mode}")
         if bottleneck_mode:
             logger.info("🚨 瓶颈分析模式已启用")
+    
+    def _setup_fonts(self):
+        """增强的字体设置函数，处理AWS EC2环境中的中文字体问题"""
+        try:
+            # 1. 清除字体缓存，强制重新检测
+            from matplotlib.font_manager import _rebuild
+            _rebuild()
+            
+            # 2. 尝试多种中文字体，包括AWS EC2常见字体
+            chinese_fonts = [
+                'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei',  # AWS上常用的中文字体
+                'Noto Sans CJK SC', 'Noto Sans CJK TC',      # Google Noto字体
+                'SimHei', 'Microsoft YaHei',                  # Windows中文字体
+                'PingFang SC', 'Heiti SC',                    # macOS中文字体
+                'DejaVu Sans', 'Arial Unicode MS',            # 通用字体
+                'sans-serif'                                  # 最后的回退
+            ]
+            
+            # 3. 设置字体
+            plt.rcParams['font.sans-serif'] = chinese_fonts
+            plt.rcParams['axes.unicode_minus'] = False
+            
+            # 4. 验证字体是否可用
+            from matplotlib.font_manager import FontManager
+            fm = FontManager()
+            font_names = set([f.name for f in fm.ttflist])
+            
+            # 检查是否有任何中文字体可用
+            available_chinese_fonts = [f for f in chinese_fonts if f in font_names]
+            
+            if not available_chinese_fonts:
+                print("⚠️  未找到可用的中文字体，将使用英文标签")
+                self.use_english_labels = True
+            else:
+                print(f"✅ 找到可用的中文字体: {available_chinese_fonts[0]}")
+                
+        except Exception as e:
+            print(f"⚠️  字体设置警告: {e}")
+            # 使用英文标签作为备选方案
+            self.use_english_labels = True
 
     def analyze_performance_cliff(self, df: pd.DataFrame, max_qps: int, bottleneck_qps: int) -> Dict[str, Any]:
         """分析性能悬崖 - 识别性能急剧下降的点"""
@@ -229,7 +275,11 @@ class SolanaQPSAnalyzer:
                 return None
             
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle('📉 Performance Cliff Analysis', fontsize=16, fontweight='bold', color='red')
+            # 根据字体支持情况选择标题语言
+            if self.use_english_labels:
+                fig.suptitle('📉 Performance Cliff Analysis', fontsize=16, fontweight='bold', color='red')
+            else:
+                fig.suptitle('📉 性能悬崖分析', fontsize=16, fontweight='bold', color='red')
             
             # 1. QPS性能曲线
             qps_column = None
@@ -448,7 +498,11 @@ class SolanaQPSAnalyzer:
 
         plt.style.use('default')
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('Solana QPS Performance Analysis Dashboard', fontsize=16, fontweight='bold')
+        # 根据字体支持情况选择标题语言
+        if self.use_english_labels:
+            fig.suptitle('Solana QPS Performance Analysis Dashboard', fontsize=16, fontweight='bold')
+        else:
+            fig.suptitle('Solana QPS 性能分析仪表板', fontsize=16, fontweight='bold')
 
         # 1. CPU使用率 vs QPS
         if len(df) > 0:

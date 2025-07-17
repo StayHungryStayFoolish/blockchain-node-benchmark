@@ -80,6 +80,22 @@ class AdvancedChartGenerator(CSVDataProcessor):
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
         
+        # 使用统一的字体管理工具
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tools'))
+        try:
+            from font_manager import get_font_manager
+            self.font_manager = get_font_manager(enable_debug=True)
+        except ImportError as e:
+            print(f"⚠️  字体管理工具导入失败: {e}")
+            # 回退到简单的英文模式
+            self.font_manager = None
+            
+    def _get_localized_text(self, chinese_text: str, english_text: str) -> str:
+        """获取本地化文本"""
+        if self.font_manager:
+            return self.font_manager.get_label(chinese_text, english_text)
+        return english_text  # 回退到英文
+        
     def _check_device_configured(self, logical_name: str) -> bool:
         """检查设备是否配置并且有数据"""
         if self.df is None:
@@ -213,7 +229,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
         elif cols == 1:
             axes = axes.reshape(-1, 1)
         
-        fig.suptitle('CPU-EBS Pearson相关性分析', fontsize=16, fontweight='bold')
+        # 根据字体支持情况选择标题语言
+        if self.use_english_labels:
+            fig.suptitle('CPU-EBS Pearson Correlation Analysis', fontsize=16, fontweight='bold')
+        else:
+            fig.suptitle('CPU-EBS Pearson相关性分析', fontsize=16, fontweight='bold')
         
         # 生成每个子图
         plot_idx = 0
@@ -320,7 +340,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
         elif cols == 1:
             axes = axes.reshape(-1, 1)
         
-        fig.suptitle('线性回归分析', fontsize=16, fontweight='bold')
+        # 根据字体支持情况选择标题语言
+        if self.use_english_labels:
+            fig.suptitle('Linear Regression Analysis', fontsize=16, fontweight='bold')
+        else:
+            fig.suptitle('线性回归分析', fontsize=16, fontweight='bold')
         
         for idx, (x_col, y_col, title) in enumerate(regression_configs):
             row, col = divmod(idx, cols)
@@ -402,7 +426,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
         if total_plots == 1:
             axes = [axes]
         
-        fig.suptitle('负相关分析', fontsize=16, fontweight='bold')
+        # 根据字体支持情况选择标题语言
+        if self.use_english_labels:
+            fig.suptitle('Negative Correlation Analysis', fontsize=16, fontweight='bold')
+        else:
+            fig.suptitle('负相关分析', fontsize=16, fontweight='bold')
         
         for idx, (x_col, y_col, title) in enumerate(negative_configs):
             ax: Axes = axes[idx]  # 类型注解：明确指定为 matplotlib Axes 对象
@@ -498,7 +526,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
                    fmt='.3f',
                    cbar_kws={"shrink": .8})
         
-        plt.title('CPU-EBS性能指标相关性矩阵', fontsize=16, fontweight='bold', pad=20)
+        # 根据字体支持情况选择标题语言
+        if self.use_english_labels:
+            plt.title('CPU-EBS Performance Metrics Correlation Matrix', fontsize=16, fontweight='bold', pad=20)
+        else:
+            plt.title('CPU-EBS性能指标相关性矩阵', fontsize=16, fontweight='bold', pad=20)
         plt.xticks(rotation=45, ha='right')
         plt.yticks(rotation=0)
         
@@ -529,7 +561,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
         self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         
         fig, axes = plt.subplots(3, 2, figsize=(18, 15))
-        fig.suptitle('CPU-EBS性能趋势分析', fontsize=16, fontweight='bold')
+        # 根据字体支持情况选择标题语言
+        if self.use_english_labels:
+            fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=16, fontweight='bold')
+        else:
+            fig.suptitle('CPU-EBS性能趋势分析', fontsize=16, fontweight='bold')
         
         # CPU使用率趋势
         if 'cpu_iowait' in self.df.columns:
@@ -693,9 +729,15 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 return None
             
             # 图表美化
-            ax.set_title('🚨 ENA网络限制趋势分析', fontsize=16, fontweight='bold')
-            ax.set_xlabel('时间', fontsize=12)
-            ax.set_ylabel('限制触发次数 (累计)', fontsize=12)
+            # 根据字体支持情况选择标签语言
+            if self.use_english_labels:
+                ax.set_title('🚨 ENA Network Limitation Trend Analysis', fontsize=16, fontweight='bold')
+                ax.set_xlabel('Time', fontsize=12)
+                ax.set_ylabel('Limitation Triggers (Cumulative)', fontsize=12)
+            else:
+                ax.set_title('🚨 ENA网络限制趋势分析', fontsize=16, fontweight='bold')
+                ax.set_xlabel('时间', fontsize=12)
+                ax.set_ylabel('限制触发次数 (累计)', fontsize=12)
             ax.legend(loc='upper left')
             ax.grid(True, alpha=0.3)
             
@@ -739,9 +781,15 @@ class AdvancedChartGenerator(CSVDataProcessor):
                       label=f'警告阈值 ({warning_threshold:,})')
             
             # 图表美化
-            ax.set_title('🔗 ENA连接容量监控', fontsize=16, fontweight='bold')
-            ax.set_xlabel('时间', fontsize=12)
-            ax.set_ylabel('可用连接数', fontsize=12)
+            # 根据字体支持情况选择标签语言
+            if self.use_english_labels:
+                ax.set_title('🔗 ENA Connection Capacity Monitoring', fontsize=16, fontweight='bold')
+                ax.set_xlabel('Time', fontsize=12)
+                ax.set_ylabel('Available Connections', fontsize=12)
+            else:
+                ax.set_title('🔗 ENA连接容量监控', fontsize=16, fontweight='bold')
+                ax.set_xlabel('时间', fontsize=12)
+                ax.set_ylabel('可用连接数', fontsize=12)
             ax.legend()
             ax.grid(True, alpha=0.3)
             
@@ -777,7 +825,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # 创建2x2子图布局
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle('🌐 ENA网络综合分析', fontsize=16, fontweight='bold')
+            # 根据字体支持情况选择标题语言
+            if self.use_english_labels:
+                fig.suptitle('🌐 ENA Network Comprehensive Analysis', fontsize=16, fontweight='bold')
+            else:
+                fig.suptitle('🌐 ENA网络综合分析', fontsize=16, fontweight='bold')
             
             # 1. 限制类型分布 (左上)
             ax1 = axes[0, 0]
@@ -972,10 +1024,17 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 annot_kws={'size': 8}
             )
             
-            plt.title('性能指标相关性热力图\nPerformance Metrics Correlation Heatmap', 
-                     fontsize=16, fontweight='bold', pad=20)
-            plt.xlabel('性能指标 Performance Metrics', fontsize=12)
-            plt.ylabel('性能指标 Performance Metrics', fontsize=12)
+            # 根据字体支持情况选择标签语言
+            if self.use_english_labels:
+                plt.title('Performance Metrics Correlation Heatmap', 
+                         fontsize=16, fontweight='bold', pad=20)
+                plt.xlabel('Performance Metrics', fontsize=12)
+                plt.ylabel('Performance Metrics', fontsize=12)
+            else:
+                plt.title('性能指标相关性热力图\nPerformance Metrics Correlation Heatmap', 
+                         fontsize=16, fontweight='bold', pad=20)
+                plt.xlabel('性能指标 Performance Metrics', fontsize=12)
+                plt.ylabel('性能指标 Performance Metrics', fontsize=12)
             
             # 旋转标签以提高可读性
             plt.xticks(rotation=45, ha='right')

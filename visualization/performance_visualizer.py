@@ -89,20 +89,24 @@ class PerformanceVisualizer(CSVDataProcessor):
         self.overhead_file = overhead_file
         self.output_dir = os.path.dirname(data_file)
         
-        # 初始化字体设置标志
-        self.use_english_labels = False
-        
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
         
-        # 设置中文字体支持
+        # 使用统一的字体管理工具
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tools'))
         try:
-            plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'SimHei', 'Microsoft YaHei']
-            plt.rcParams['axes.unicode_minus'] = False
-        except Exception as e:
-            print(f"⚠️  字体设置警告: {e}")
-            # 使用英文标签作为备选方案
-            self.use_english_labels = True
+            from font_manager import get_font_manager
+            self.font_manager = get_font_manager(enable_debug=True)
+        except ImportError as e:
+            print(f"⚠️  字体管理工具导入失败: {e}")
+            # 回退到简单的英文模式
+            self.font_manager = None
+            
+    def _get_localized_text(self, chinese_text: str, english_text: str) -> str:
+        """获取本地化文本"""
+        if self.font_manager:
+            return self.font_manager.get_label(chinese_text, english_text)
+        return english_text  # 回退到英文
         
         # 阈值配置 - 集成自await_util_analyzer
         self.await_thresholds = {
