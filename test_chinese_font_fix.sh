@@ -181,28 +181,42 @@ echo "检查PNG图表文件:"
 PNG_COUNT=0
 
 # 扩展搜索范围，包括数据文件所在目录
+DATA_DIR=$(dirname "$TEST_DATA_FILE")
 SEARCH_DIRS=(
     "."
     ".."
-    "$(dirname "$TEST_DATA_FILE")"
+    "$DATA_DIR"
     "../blockchain-node-benchmark-result"
     "/data/data/blockchain-node-benchmark-result"
 )
 
+echo "搜索目录: ${SEARCH_DIRS[@]}"
+
 for search_dir in "${SEARCH_DIRS[@]}"; do
     if [ -d "$search_dir" ]; then
-        for png_file in $(find "$search_dir" -name "*.png" -newer "$TEST_DATA_FILE" 2>/dev/null | head -5); do
+        echo "检查目录: $search_dir"
+        # 查找最近生成的PNG文件（不限制时间）
+        for png_file in $(find "$search_dir" -name "*.png" -type f 2>/dev/null | head -10); do
             if [ -f "$png_file" ]; then
                 SIZE=$(du -h "$png_file" | cut -f1)
-                echo "✅ $(basename "$png_file") ($SIZE)"
+                echo "✅ $(basename "$png_file") ($SIZE) - $png_file"
                 PNG_COUNT=$((PNG_COUNT + 1))
             fi
         done
     fi
 done
 
-# 去重计数（如果同一文件被多次找到）
-PNG_COUNT=$(find "${SEARCH_DIRS[@]}" -name "*.png" -newer "$TEST_DATA_FILE" 2>/dev/null | sort -u | wc -l)
+# 如果没有找到，尝试更宽泛的搜索
+if [ "$PNG_COUNT" -eq 0 ]; then
+    echo "尝试更宽泛的搜索..."
+    for png_file in $(find .. -name "performance_*.png" -type f 2>/dev/null | head -5); do
+        if [ -f "$png_file" ]; then
+            SIZE=$(du -h "$png_file" | cut -f1)
+            echo "✅ $(basename "$png_file") ($SIZE) - $png_file"
+            PNG_COUNT=$((PNG_COUNT + 1))
+        fi
+    done
+fi
 
 # 检查HTML报告文件
 echo ""
