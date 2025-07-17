@@ -581,33 +581,6 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file
 
     def create_await_threshold_analysis_chart(self):
-        """创建await延迟阈值分析图表 - 集成自await_util_analyzer"""
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('I/O延迟(await)阈值分析', fontsize=16, fontweight='bold')
-        
-        # 获取await相关列
-        data_await_cols = [col for col in self.df.columns if col.startswith('data_') and 'avg_await' in col]
-        accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'avg_await' in col]
-        
-        # 平均等待时间趋势
-        ax1 = axes[0, 0]
-        ax1.set_title('平均I/O等待时间趋势')
-        
-        threshold_violations = {}
-        
-        # 处理data设备
-        if data_await_cols:
-            col = data_await_cols[0]
-            ax1.plot(self.df['timestamp'], self.df[col], 
-                    label='DATA 平均等待时间', linewidth=2)
-            
-            # 分析阈值违规
-            violations = self._analyze_threshold_violations(
-                self.df[col], self.await_thresholds, 'data_avg_await'
-            )
-            threshold_violations['data_avg_await'] = violations
-        
-    def create_await_threshold_analysis_chart(self):
         """创建await延迟阈值分析图表 - 优化版本
         
         根据 ACCOUNTS 设备配置状态动态调整分析内容：
@@ -761,33 +734,6 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         return output_file, threshold_violations
 
-    def create_util_threshold_analysis_chart(self):
-        """创建利用率阈值分析图表 - 集成自await_util_analyzer"""
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('设备利用率阈值分析', fontsize=16, fontweight='bold')
-        
-        # 获取利用率相关列
-        data_util_cols = [col for col in self.df.columns if col.startswith('data_') and '_util' in col]
-        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and '_util' in col]
-        
-        # 利用率时间序列
-        ax1 = axes[0, 0]
-        ax1.set_title('设备利用率时间序列')
-        
-        threshold_violations = {}
-        
-        # 处理data设备
-        if data_util_cols:
-            col = data_util_cols[0]
-            ax1.plot(self.df['timestamp'], self.df[col], 
-                    label='DATA 利用率', linewidth=2)
-            
-            # 分析阈值违规
-            violations = self._analyze_threshold_violations(
-                self.df[col], self.util_thresholds, 'data_util'
-            )
-            threshold_violations['data_util'] = violations
-        
     def create_util_threshold_analysis_chart(self):
         """创建利用率阈值分析图表 - 优化版本
         

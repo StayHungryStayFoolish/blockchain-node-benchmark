@@ -134,7 +134,7 @@ try:
     
     # 尝试生成一个简单的图表
     try:
-        result = visualizer.create_overview_chart()
+        result = visualizer.create_performance_overview_chart()
         if result:
             print('✅ 图表生成测试成功')
         else:
