@@ -49,11 +49,28 @@ class FontManager:
     def _rebuild_font_cache(self):
         """重建matplotlib字体缓存"""
         try:
-            from matplotlib.font_manager import _rebuild
-            _rebuild()
-            self._debug_print("字体缓存重建完成")
-        except Exception as e:
-            self._debug_print(f"字体缓存重建失败: {e}")
+            # 尝试新版本的方法
+            from matplotlib.font_manager import fontManager
+            fontManager.__init__()
+            self._debug_print("字体缓存重建完成（新版本方法）")
+        except Exception:
+            try:
+                # 尝试旧版本的方法
+                from matplotlib.font_manager import _rebuild
+                _rebuild()
+                self._debug_print("字体缓存重建完成（旧版本方法）")
+            except Exception as e:
+                # 如果都失败，尝试手动清除缓存
+                try:
+                    import matplotlib as mpl
+                    cache_dir = mpl.get_cachedir()
+                    import shutil
+                    import os
+                    if os.path.exists(cache_dir):
+                        shutil.rmtree(cache_dir, ignore_errors=True)
+                    self._debug_print("字体缓存手动清除完成")
+                except Exception as e2:
+                    self._debug_print(f"字体缓存重建失败: {e}, 手动清除也失败: {e2}")
     
     def _detect_available_fonts(self) -> List[str]:
         """检测系统中可用的中文字体"""
@@ -83,11 +100,30 @@ class FontManager:
             # 2. 检测可用字体
             self.available_chinese_fonts = self._detect_available_fonts()
             
-            # 3. 设置matplotlib字体参数
-            plt.rcParams['font.sans-serif'] = self.chinese_fonts
+            # 3. 设置matplotlib字体参数 - 优化字体顺序
+            if self.available_chinese_fonts:
+                # 将检测到的可用字体放在最前面
+                font_list = self.available_chinese_fonts + ['DejaVu Sans', 'Arial', 'sans-serif']
+                plt.rcParams['font.sans-serif'] = font_list
+                self._debug_print(f"设置字体列表: {font_list[:3]}...")
+            else:
+                # 如果没有中文字体，使用默认字体
+                plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
+                
             plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
             
-            # 4. 判断是否需要使用英文标签
+            # 4. 强制刷新matplotlib的字体设置
+            try:
+                import matplotlib.pyplot as plt
+                plt.rcdefaults()  # 重置为默认设置
+                if self.available_chinese_fonts:
+                    font_list = self.available_chinese_fonts + ['DejaVu Sans', 'Arial', 'sans-serif']
+                    plt.rcParams['font.sans-serif'] = font_list
+                plt.rcParams['axes.unicode_minus'] = False
+            except Exception as refresh_error:
+                self._debug_print(f"字体刷新失败: {refresh_error}")
+            
+            # 5. 判断是否需要使用英文标签
             if not self.available_chinese_fonts:
                 self.use_english_labels = True
                 self._debug_print("⚠️  未找到可用的中文字体，将使用英文标签")

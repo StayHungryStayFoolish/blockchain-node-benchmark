@@ -36,9 +36,25 @@ print(f'numpy: {numpy.__version__}')
 
 # 2. 收集生成的图表文件
 echo "收集生成的图表文件..."
-DATA_DIR=${DATA_DIR:-~/blockchain-node-benchmark-result}
-find "$DATA_DIR" -name "*.png" -mtime -1 -exec cp {} "$TEST_RESULTS_DIR/" \; 2>/dev/null
-find "$DATA_DIR" -name "*.html" -mtime -1 -exec cp {} "$TEST_RESULTS_DIR/" \; 2>/dev/null
+# 尝试多个可能的数据目录路径
+POSSIBLE_DATA_DIRS=(
+    "${DATA_DIR}"
+    "/data/data/blockchain-node-benchmark-result"
+    "~/blockchain-node-benchmark-result"
+    "../blockchain-node-benchmark-result"
+    "./blockchain-node-benchmark-result"
+)
+
+for dir in "${POSSIBLE_DATA_DIRS[@]}"; do
+    # 展开波浪号
+    expanded_dir=$(eval echo "$dir")
+    if [ -d "$expanded_dir" ]; then
+        echo "📁 从 $expanded_dir 收集文件..."
+        find "$expanded_dir" -name "*.png" -mtime -1 -exec cp {} "$TEST_RESULTS_DIR/" \; 2>/dev/null
+        find "$expanded_dir" -name "*.html" -mtime -1 -exec cp {} "$TEST_RESULTS_DIR/" \; 2>/dev/null
+        break
+    fi
+done
 
 # 3. 收集日志文件
 echo "收集日志文件..."

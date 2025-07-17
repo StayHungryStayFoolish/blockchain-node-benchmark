@@ -38,8 +38,36 @@ fi
 
 # 4. 查找测试数据
 echo -e "\n📊 4. 查找测试数据"
-DATA_DIR=${DATA_DIR:-~/blockchain-node-benchmark-result}
-latest_csv=$(find "$DATA_DIR" -name "*.csv" -type f -exec ls -t {} + 2>/dev/null | head -n 1)
+# 尝试多个可能的数据目录路径
+POSSIBLE_DATA_DIRS=(
+    "${DATA_DIR}"
+    "/data/data/blockchain-node-benchmark-result"
+    "~/blockchain-node-benchmark-result"
+    "../blockchain-node-benchmark-result"
+    "./blockchain-node-benchmark-result"
+)
+
+DATA_DIR=""
+latest_csv=""
+
+for dir in "${POSSIBLE_DATA_DIRS[@]}"; do
+    # 展开波浪号
+    expanded_dir=$(eval echo "$dir")
+    if [ -d "$expanded_dir" ]; then
+        echo "🔍 检查目录: $expanded_dir"
+        csv_files=$(find "$expanded_dir" -name "*.csv" -type f 2>/dev/null)
+        if [ -n "$csv_files" ]; then
+            DATA_DIR="$expanded_dir"
+            latest_csv=$(find "$DATA_DIR" -name "*.csv" -type f -exec ls -t {} + 2>/dev/null | head -n 1)
+            echo "✅ 在 $DATA_DIR 中找到CSV文件"
+            break
+        else
+            echo "⚠️  目录 $expanded_dir 存在但无CSV文件"
+        fi
+    else
+        echo "⚠️  目录不存在: $expanded_dir"
+    fi
+done
 
 if [ -z "$latest_csv" ]; then
     echo "❌ 未找到CSV测试数据文件"
