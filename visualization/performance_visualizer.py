@@ -92,33 +92,27 @@ class PerformanceVisualizer(CSVDataProcessor):
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
         
-        # 使用统一的字体管理工具
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tools'))
-        try:
-            from font_manager import get_font_manager
-            self.font_manager = get_font_manager(enable_debug=True)
-        except ImportError as e:
-            print(f"⚠️  字体管理工具导入失败: {e}")
-            # 回退到简单的英文模式
-            self.font_manager = None
+        # 使用英文标签系统，移除复杂的字体管理
+        self.use_english_labels = True
+        self.font_manager = None
             
         # 阈值配置 - 集成自await_util_analyzer
         self.await_thresholds = {
             'data_avg_await': 5.0,  # 默认I/O等待阈值 (ms)
-            'accounts_avg_await': 5.0,  # 默认I/O等待阈值 (ms)
-            'data_r_await': 5.0,  # 默认读延迟阈值 (ms)
-            'data_w_await': 10.0,  # 默认写延迟阈值 (ms)
-            'accounts_r_await': 5.0,  # 默认读延迟阈值 (ms)
-            'accounts_w_await': 10.0,  # 默认写延迟阈值 (ms)
-            'normal': 10,      # 正常阈值 (ms)
-            'warning': 20,     # 警告阈值 (ms)
-            'critical': 50     # 危险阈值 (ms)
+            'data_r_await': 5.0,  # 默认读Latency阈值 (ms)
+            'data_w_await': 10.0,  # 默认写Latency阈值 (ms)
+            'normal': 10,      # Normal Threshold (ms)
+            'warning': 20,     # Warning Threshold (ms)
+            'critical': 50     # Critical Threshold (ms)
         }
         
+        # ACCOUNTS设备阈值将在数据加载后动态添加
+        self._accounts_thresholds_added = False
+        
         self.util_thresholds = {
-            'normal': 70,      # 正常阈值 (%)
-            'warning': 85,     # 警告阈值 (%)
-            'critical': 95     # 危险阈值 (%)
+            'normal': 70,      # Normal Threshold (%)
+            'warning': 85,     # Warning Threshold (%)
+            'critical': 95     # Critical Threshold (%)
         }
         
         # 初始化新工具
@@ -145,22 +139,25 @@ class PerformanceVisualizer(CSVDataProcessor):
             if success:
                 self.clean_data()  # 清洗数据
                 
-                # 安全的时间戳处理
+                # 安全的Time戳处理
                 if 'timestamp' in self.df.columns:
                     try:
                         self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
-                        print(f"✅ 时间戳字段 'self.df['timestamp']' 转换成功")
+                        print(f"✅ Time戳字段 'self.df['timestamp']' 转换成功")
                     except Exception as e:
-                        print(f"⚠️  时间戳转换失败: {e}")
-                        # 创建默认时间戳
+                        print(f"⚠️  Time戳转换失败: {e}")
+                        # 创建默认Time戳
                         self.df['timestamp'] = pd.date_range(start='2024-01-01', periods=len(self.df), freq='1min')
                 else:
-                    print("⚠️  未找到时间戳字段，创建默认时间戳")
+                    print("⚠️  未找到Time戳字段，创建默认Time戳")
                     self.df['timestamp'] = pd.date_range(start='2024-01-01', periods=len(self.df), freq='1min')
                 
                 print(f"✅ 加载了 {len(self.df)} 条性能数据")
                 print(f"📊 CSV列数: {len(self.df.columns)}")
                 self.print_field_info()  # 打印字段信息用于调试
+                
+                # 动态添加ACCOUNTS设备阈值（仅在ACCOUNTS设备配置时）
+                self._add_accounts_thresholds_if_configured()
                 
             return success
             
@@ -172,10 +169,21 @@ class PerformanceVisualizer(CSVDataProcessor):
         """打印字段信息用于调试"""
         pass
     
+    def _add_accounts_thresholds_if_configured(self):
+        """动态添加ACCOUNTS设备阈值（仅在ACCOUNTS设备配置时）"""
+        if not self._accounts_thresholds_added and self._is_accounts_configured():
+            self.await_thresholds.update({
+                'accounts_avg_await': 5.0,  # ACCOUNTS I/O等待阈值 (ms)
+                'accounts_r_await': 5.0,    # ACCOUNTS 读Latency阈值 (ms)
+                'accounts_w_await': 10.0,   # ACCOUNTS 写Latency阈值 (ms)
+            })
+            self._accounts_thresholds_added = True
+            print("✅ 已添加ACCOUNTS设备阈值配置")
+    
     def _is_accounts_configured(self):
-        """检查 ACCOUNTS 设备是否配置和可用
+        """检查 ACCOUNTS Device是否配置和可用
         
-        根据 config.sh 的逻辑，ACCOUNTS 设备是可选的：
+        根据 config.sh 的逻辑，ACCOUNTS Device是可选的：
         1. 检查环境变量配置
         2. 检查实际数据列是否存在
         3. 返回配置状态
@@ -187,13 +195,13 @@ class PerformanceVisualizer(CSVDataProcessor):
         # 方法2: 检查数据列是否存在（更可靠的方法）
         accounts_cols = [col for col in self.df.columns if col.startswith('accounts_')]
         
-        # 如果有数据列，说明 ACCOUNTS 设备已配置且正在监控
+        # 如果有数据列，说明 ACCOUNTS Device已配置且正在监控
         if accounts_cols:
             return True
             
         # 如果环境变量配置了但没有数据列，说明配置有问题
         if accounts_device and accounts_vol_type:
-            print(f"⚠️  ACCOUNTS 设备已配置 ({accounts_device}) 但未找到监控数据")
+            print(f"⚠️  ACCOUNTS Device已配置 ({accounts_device}) 但未找到监控数据")
             return False
             
         # 完全未配置，这是正常情况
@@ -251,19 +259,19 @@ class PerformanceVisualizer(CSVDataProcessor):
     def create_performance_overview_chart(self):
         """✅ 改进的性能总览图生成"""
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
-        fig.suptitle('系统性能总览', fontsize=16, fontweight='bold')
+        fig.suptitle('System Performance Overview', fontsize=16, fontweight='bold')
         
         # ✅ 安全获取字段名 - 直接访问
         cpu_usage_col = 'cpu_usage' if 'cpu_usage' in self.df.columns else None
         cpu_iowait_col = 'cpu_iowait' if 'cpu_iowait' in self.df.columns else None
         mem_usage_col = 'memory_usage' if 'memory_usage' in self.df.columns else None
         
-        # 查找DATA设备列
+        # 查找DATA Device列
         data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_total_iops')]
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         
         if not data_iops_cols:
-            print("❌ 未找到DATA设备数据")
+            print("❌ 未找到DATA Device数据")
             return None
         
         data_iops_col = data_iops_cols[0]
@@ -278,25 +286,25 @@ class PerformanceVisualizer(CSVDataProcessor):
             
             if len(cpu_usage_data) > 0 and len(cpu_iowait_data) > 0:
                 # 原始数据
-                ax1.plot(self.df['timestamp'], self.df[cpu_usage_col], color='blue', linewidth=1, alpha=0.6, label='CPU使用率(原始)')
-                ax1.plot(self.df['timestamp'], self.df[cpu_iowait_col], color='red', linewidth=1, alpha=0.6, label='CPU I/O等待(原始)')
+                ax1.plot(self.df['timestamp'], self.df[cpu_usage_col], color='blue', linewidth=1, alpha=0.6, label='CPU Usage(原始)')
+                ax1.plot(self.df['timestamp'], self.df[cpu_iowait_col], color='red', linewidth=1, alpha=0.6, label='CPU I/O Wait (Raw)')
                 
                 # ✅ 安全的移动平均计算
                 if len(cpu_usage_data) >= 10:
                     cpu_smooth = self.df[cpu_usage_col].rolling(window=10, center=True, min_periods=1).mean()
-                    ax1.plot(self.df['timestamp'], cpu_smooth, color='blue', linewidth=2, label='CPU使用率(平滑)')
+                    ax1.plot(self.df['timestamp'], cpu_smooth, color='blue', linewidth=2, label='CPU Usage(平滑)')
                 
                 if len(cpu_iowait_data) >= 10:
                     iowait_smooth = self.df[cpu_iowait_col].rolling(window=10, center=True, min_periods=1).mean()
-                    ax1.plot(self.df['timestamp'], iowait_smooth, color='red', linewidth=2, label='CPU I/O等待(平滑)')
+                    ax1.plot(self.df['timestamp'], iowait_smooth, color='red', linewidth=2, label='CPU I/O Wait (Smoothed)')
                 
                 ax1.set_title('CPU性能指标 (含移动平均)')
-                ax1.set_ylabel('使用率 (%)')
+                ax1.set_ylabel('Usage (%)')
                 ax1.legend()
                 ax1.grid(True, alpha=0.3)
             else:
-                ax1.text(0.5, 0.5, 'CPU数据不可用', ha='center', va='center', transform=ax1.transAxes)
-                ax1.set_title('CPU性能指标 (数据不可用)')
+                ax1.text(0.5, 0.5, 'CPUData Not Available', ha='center', va='center', transform=ax1.transAxes)
+                ax1.set_title('CPU性能指标 (Data Not Available)')
         else:
             missing_fields = []
             if not cpu_usage_col:
@@ -304,55 +312,55 @@ class PerformanceVisualizer(CSVDataProcessor):
             if not cpu_iowait_col:
                 missing_fields.append('cpu_iowait')
             ax1.text(0.5, 0.5, f'缺少字段: {", ".join(missing_fields)}', ha='center', va='center', transform=ax1.transAxes)
-            ax1.set_title('CPU性能指标 (字段缺失)')
+            ax1.set_title('CPU性能指标 (Field Missing)')
         
-        # ✅ DATA设备IOPS (改进的数据检查)
+        # ✅ DATA DeviceIOPS (改进的数据检查)
         ax2 = axes[0, 1]
         iops_data = self.df[data_iops_col].dropna()
         if len(iops_data) > 0:
             ax2.plot(self.df['timestamp'], self.df[data_iops_col], color='green', linewidth=2, label='DATA IOPS')
-            ax2.set_title('DATA设备IOPS')
+            ax2.set_title('DATA DeviceIOPS')
             ax2.set_ylabel('IOPS')
             ax2.legend()
             ax2.grid(True, alpha=0.3)
         else:
-            ax2.text(0.5, 0.5, 'DATA IOPS数据不可用', ha='center', va='center', transform=ax2.transAxes)
-            ax2.set_title('DATA设备IOPS (数据不可用)')
+            ax2.text(0.5, 0.5, 'DATA IOPSData Not Available', ha='center', va='center', transform=ax2.transAxes)
+            ax2.set_title('DATA DeviceIOPS (Data Not Available)')
         
-        # ✅ 内存使用率 (改进的字段处理)
+        # ✅ Memory Usage (改进的字段处理)
         ax3 = axes[1, 0]
         if mem_usage_col:
             mem_data = self.df[mem_usage_col].dropna()
             if len(mem_data) > 0:
-                ax3.plot(self.df['timestamp'], self.df[mem_usage_col], color='purple', linewidth=2, label='内存使用率')
-                ax3.set_title('内存使用率')
-                ax3.set_ylabel('使用率 (%)')
+                ax3.plot(self.df['timestamp'], self.df[mem_usage_col], color='purple', linewidth=2, label='Memory Usage')
+                ax3.set_title('Memory Usage')
+                ax3.set_ylabel('Usage (%)')
                 ax3.legend()
                 ax3.grid(True, alpha=0.3)
             else:
-                ax3.text(0.5, 0.5, '内存数据不可用', ha='center', va='center', transform=ax3.transAxes)
-                ax3.set_title('内存使用率 (数据不可用)')
+                ax3.text(0.5, 0.5, '内存Data Not Available', ha='center', va='center', transform=ax3.transAxes)
+                ax3.set_title('Memory Usage (Data Not Available)')
         else:
-            ax3.text(0.5, 0.5, '缺少内存使用率字段', ha='center', va='center', transform=ax3.transAxes)
-            ax3.set_title('内存使用率 (字段缺失)')
+            ax3.text(0.5, 0.5, '缺少Memory Usage字段', ha='center', va='center', transform=ax3.transAxes)
+            ax3.set_title('Memory Usage (Field Missing)')
         
-        # ✅ 设备利用率 (改进的数据检查)
+        # ✅ Device Utilization (改进的数据检查)
         ax4 = axes[1, 1]
         if data_util_col:
             util_data = self.df[data_util_col].dropna()
             if len(util_data) > 0:
-                ax4.plot(self.df['timestamp'], self.df[data_util_col], color='orange', linewidth=2, label='DATA设备利用率')
-                ax4.axhline(y=80, color='red', linestyle='--', alpha=0.7, label='80%警告线')
-                ax4.set_title('设备利用率')
-                ax4.set_ylabel('利用率 (%)')
+                ax4.plot(self.df['timestamp'], self.df[data_util_col], color='orange', linewidth=2, label='DATADevice Utilization')
+                ax4.axhline(y=80, color='red', linestyle='--', alpha=0.7, label='80% Warning Line')
+                ax4.set_title('Device Utilization')
+                ax4.set_ylabel('Utilization (%)')
                 ax4.legend()
                 ax4.grid(True, alpha=0.3)
             else:
-                ax4.text(0.5, 0.5, '设备利用率数据不可用', ha='center', va='center', transform=ax4.transAxes)
-                ax4.set_title('设备利用率 (数据不可用)')
+                ax4.text(0.5, 0.5, 'Device UtilizationData Not Available', ha='center', va='center', transform=ax4.transAxes)
+                ax4.set_title('Device Utilization (Data Not Available)')
         else:
-            ax4.text(0.5, 0.5, '缺少设备利用率字段', ha='center', va='center', transform=ax4.transAxes)
-            ax4.set_title('设备利用率 (字段缺失)')
+            ax4.text(0.5, 0.5, '缺少Device Utilization字段', ha='center', va='center', transform=ax4.transAxes)
+            ax4.set_title('Device Utilization (Field Missing)')
         
         plt.tight_layout()
         
@@ -363,9 +371,9 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file
     
     def create_correlation_visualization_chart(self):
-        """✅ 改进的CPU与EBS性能相关性可视化"""
+        """✅ 改进的CPU-EBS Performance Correlation Analysis"""
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('CPU与EBS性能相关性可视化', fontsize=16, fontweight='bold')
+        fig.suptitle('CPU-EBS Performance Correlation Analysis', fontsize=16, fontweight='bold')
         
         # ✅ 安全获取相关字段
         cpu_iowait_col = 'cpu_iowait' if 'cpu_iowait' in self.df.columns else None
@@ -390,7 +398,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             for i, ax in enumerate(axes.flat):
                 ax.text(0.5, 0.5, f'缺少字段:\n{chr(10).join(missing_fields)}', 
                        ha='center', va='center', transform=ax.transAxes, fontsize=12)
-                ax.set_title(f'相关性分析 {i+1} (字段缺失)')
+                ax.set_title(f'相关性分析 {i+1} (Field Missing)')
             plt.tight_layout()
             output_file = os.path.join(self.output_dir, 'cpu_ebs_correlation_visualization.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
@@ -409,7 +417,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 # 数据有效性检查
                 if x_data.empty or y_data.empty:
                     ax.text(0.5, 0.5, '数据为空', ha='center', va='center', transform=ax.transAxes)
-                    ax.set_title(f'{title_prefix}\n数据不可用')
+                    ax.set_title(f'{title_prefix}\nData Not Available')
                     return
                 
                 # 移除NaN值并对齐数据
@@ -459,20 +467,20 @@ class PerformanceVisualizer(CSVDataProcessor):
         # 执行各项相关性分析
         safe_correlation_analysis(
             self.df[cpu_iowait_col], self.df[data_util_col], axes[0, 0],
-            'CPU I/O等待 (%)', '设备利用率 (%)', 'CPU I/O等待 vs 设备利用率'
+            'CPU I/O Wait (%)', 'Device Utilization (%)', 'CPU I/O Wait vs Device Utilization'
         )
         
         safe_correlation_analysis(
             self.df[cpu_iowait_col], self.df[data_await_col], axes[0, 1],
-            'CPU I/O等待 (%)', 'I/O延迟 (ms)', 'CPU I/O等待 vs I/O延迟'
+            'CPU I/O Wait (%)', 'I/O Latency (ms)', 'CPU I/O Wait vs I/O Latency'
         )
         
         safe_correlation_analysis(
             self.df[cpu_iowait_col], self.df[data_aqu_col], axes[1, 0],
-            'CPU I/O等待 (%)', 'I/O队列长度', 'CPU I/O等待 vs I/O队列长度'
+            'CPU I/O Wait (%)', 'I/O队列长度', 'CPU I/O Wait vs I/O队列长度'
         )
         
-        # ✅ 时间序列对比 (改进的处理)
+        # ✅ Time序列对比 (改进的处理)
         ax4 = axes[1, 1]
         try:
             cpu_data = self.df[cpu_iowait_col].dropna()
@@ -481,20 +489,20 @@ class PerformanceVisualizer(CSVDataProcessor):
             if len(cpu_data) > 0 and len(util_data) > 0:
                 ax4_twin = ax4.twinx()
                 
-                ax4.plot(self.df['timestamp'], self.df[cpu_iowait_col], color='blue', linewidth=2, label='CPU I/O等待')
-                ax4_twin.plot(self.df['timestamp'], self.df[data_util_col], color='red', linewidth=2, linestyle='--', alpha=0.7, label='设备利用率')
+                ax4.plot(self.df['timestamp'], self.df[cpu_iowait_col], color='blue', linewidth=2, label='CPU I/O Wait')
+                ax4_twin.plot(self.df['timestamp'], self.df[data_util_col], color='red', linewidth=2, linestyle='--', alpha=0.7, label='Device Utilization')
                 
-                ax4.set_xlabel('时间')
-                ax4.set_ylabel('CPU I/O等待 (%)', color='blue')
-                ax4_twin.set_ylabel('设备利用率 (%)', color='red')
-                ax4.set_title('CPU I/O等待 vs 设备利用率时间序列')
+                ax4.set_xlabel('Time')
+                ax4.set_ylabel('CPU I/O Wait (%)', color='blue')
+                ax4_twin.set_ylabel('Device Utilization (%)', color='red')
+                ax4.set_title('CPU I/O Wait vs Device UtilizationTime序列')
                 ax4.grid(True, alpha=0.3)
             else:
-                ax4.text(0.5, 0.5, '时间序列数据不可用', ha='center', va='center', transform=ax4.transAxes)
-                ax4.set_title('时间序列对比 (数据不可用)')
+                ax4.text(0.5, 0.5, 'Time序列Data Not Available', ha='center', va='center', transform=ax4.transAxes)
+                ax4.set_title('Time序列对比 (Data Not Available)')
         except Exception as e:
-            ax4.text(0.5, 0.5, f'时间序列分析失败:\n{str(e)[:50]}', ha='center', va='center', transform=ax4.transAxes)
-            ax4.set_title('时间序列对比 (分析失败)')
+            ax4.text(0.5, 0.5, f'Time序列分析失败:\n{str(e)[:50]}', ha='center', va='center', transform=ax4.transAxes)
+            ax4.set_title('Time序列对比 (分析失败)')
         
         plt.tight_layout()
         
@@ -505,29 +513,29 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file
     
     def create_device_comparison_chart(self):
-        """创建设备对比图表（DATA vs ACCOUNTS）- 优化版本
+        """创建Device对比图表（DATA vs ACCOUNTS）- 优化版本
         
-        根据 ACCOUNTS 设备配置状态动态调整图表内容：
-        - 如果 ACCOUNTS 未配置：只显示 DATA 设备分析
+        根据 ACCOUNTS Device配置状态动态调整图表内容：
+        - 如果 ACCOUNTS 未配置：只显示 DATA Device分析
         - 如果 ACCOUNTS 已配置：显示 DATA vs ACCOUNTS 对比
         """
-        # 检查 ACCOUNTS 设备配置状态
+        # 检查 ACCOUNTS Device配置状态
         accounts_configured = self._is_accounts_configured()
         
         fig, axes = plt.subplots(2, 1, figsize=(15, 10))
         
         # 根据配置状态设置标题
         if accounts_configured:
-            fig.suptitle('设备性能对比分析 (DATA vs ACCOUNTS)', fontsize=16, fontweight='bold')
+            fig.suptitle('Device性能对比分析 (DATA vs ACCOUNTS)', fontsize=16, fontweight='bold')
         else:
-            fig.suptitle('设备性能分析 (DATA)', fontsize=16, fontweight='bold')
+            fig.suptitle('Device性能分析 (DATA)', fontsize=16, fontweight='bold')
         
-        # 查找设备列
+        # 查找Device列
         data_cols = [col for col in self.df.columns if col.startswith('data_')]
         accounts_cols = [col for col in self.df.columns if col.startswith('accounts_')] if accounts_configured else []
         
         if not data_cols:
-            print("❌ 未找到DATA设备数据")
+            print("❌ 未找到DATA Device数据")
             return None
         
         # 上图：IOPS对比
@@ -544,7 +552,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax1.plot(self.df['timestamp'], self.df[accounts_iops_col[0]], 
                         label='ACCOUNTS IOPS', linewidth=2, color='green')
         
-        ax1.set_title('设备IOPS对比' if accounts_configured else 'DATA设备IOPS')
+        ax1.set_title('DeviceIOPS对比' if accounts_configured else 'DATA DeviceIOPS')
         ax1.set_ylabel('IOPS')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
@@ -563,12 +571,12 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax2.plot(self.df['timestamp'], self.df[accounts_util_col[0]], 
                         label='ACCOUNTS 利用率', linewidth=2, color='green')
         
-        ax2.axhline(y=80, color='orange', linestyle='--', alpha=0.7, label='80%警告线')
-        ax2.axhline(y=95, color='red', linestyle='--', alpha=0.7, label='95%危险线')
+        ax2.axhline(y=80, color='orange', linestyle='--', alpha=0.7, label='80% Warning Line')
+        ax2.axhline(y=95, color='red', linestyle='--', alpha=0.7, label='95% Critical Line')
         
-        ax2.set_title('设备利用率对比' if accounts_configured else 'DATA设备利用率')
-        ax2.set_xlabel('时间')
-        ax2.set_ylabel('利用率 (%)')
+        ax2.set_title('Device Utilization对比' if accounts_configured else 'DATADevice Utilization')
+        ax2.set_xlabel('Time')
+        ax2.set_ylabel('Utilization (%)')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
@@ -576,43 +584,43 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         output_file = os.path.join(self.output_dir, 'device_performance_comparison.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 设备性能对比图已保存: {output_file}")
+        print(f"📊 Device性能对比图已保存: {output_file}")
         
         return output_file
 
     def create_await_threshold_analysis_chart(self):
-        """创建await延迟阈值分析图表 - 优化版本
+        """创建awaitLatency阈值分析图表 - 优化版本
         
-        根据 ACCOUNTS 设备配置状态动态调整分析内容：
-        - 如果 ACCOUNTS 未配置：只分析 DATA 设备
-        - 如果 ACCOUNTS 已配置：分析 DATA 和 ACCOUNTS 设备
+        根据 ACCOUNTS Device配置状态动态调整分析内容：
+        - 如果 ACCOUNTS 未配置：只分析 DATA Device
+        - 如果 ACCOUNTS 已配置：分析 DATA 和 ACCOUNTS Device
         """
-        # 检查 ACCOUNTS 设备配置状态
+        # 检查 ACCOUNTS Device配置状态
         accounts_configured = self._is_accounts_configured()
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         
         # 根据配置状态设置标题
         if accounts_configured:
-            fig.suptitle('I/O延迟(await)阈值分析 - DATA & ACCOUNTS', fontsize=16, fontweight='bold')
+            fig.suptitle('I/O Latency(await)阈值分析 - DATA & ACCOUNTS', fontsize=16, fontweight='bold')
         else:
-            fig.suptitle('I/O延迟(await)阈值分析 - DATA', fontsize=16, fontweight='bold')
+            fig.suptitle('I/O Latency(await)阈值分析 - DATA', fontsize=16, fontweight='bold')
         
         # 获取await相关列
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and 'avg_await' in col]
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'avg_await' in col] if accounts_configured else []
         
-        # 平均等待时间趋势
+        # 平均等待Time趋势
         ax1 = axes[0, 0]
-        ax1.set_title('平均I/O等待时间趋势')
+        ax1.set_title('平均I/O等待Time趋势')
         
         threshold_violations = {}
         
-        # 处理data设备
+        # 处理dataDevice
         if data_await_cols:
             col = data_await_cols[0]
             ax1.plot(self.df['timestamp'], self.df[col], 
-                    label='DATA 平均等待时间', linewidth=2)
+                    label='DATA 平均等待Time', linewidth=2)
             
             # 分析阈值违规
             violations = self._analyze_threshold_violations(
@@ -624,7 +632,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         if accounts_configured and accounts_await_cols:
             col = accounts_await_cols[0]
             ax1.plot(self.df['timestamp'], self.df[col], 
-                    label='ACCOUNTS 平均等待时间', linewidth=2)
+                    label='ACCOUNTS 平均等待Time', linewidth=2)
             
             # 分析阈值违规
             violations = self._analyze_threshold_violations(
@@ -633,72 +641,72 @@ class PerformanceVisualizer(CSVDataProcessor):
             threshold_violations['accounts_avg_await'] = violations
         elif not accounts_configured:
             # 添加说明文本
-            ax1.text(0.02, 0.98, 'ACCOUNTS 设备未配置', transform=ax1.transAxes, 
+            ax1.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax1.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax1.axhline(y=self.await_thresholds['warning'], color='orange', 
-                   linestyle='--', alpha=0.7, label='警告阈值 (20ms)')
+                   linestyle='--', alpha=0.7, label='Warning Threshold (20ms)')
         ax1.axhline(y=self.await_thresholds['critical'], color='red', 
-                   linestyle='--', alpha=0.7, label='危险阈值 (50ms)')
-        ax1.set_ylabel('等待时间 (ms)')
+                   linestyle='--', alpha=0.7, label='Critical Threshold (50ms)')
+        ax1.set_ylabel('等待Time (ms)')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
-        # 读等待时间
+        # 读等待Time
         ax2 = axes[0, 1]
-        ax2.set_title('读操作等待时间')
+        ax2.set_title('读操作等待Time')
         
-        # 获取读等待时间列
+        # 获取读等待Time列
         data_r_await_cols = [col for col in self.df.columns if col.startswith('data_') and 'r_await' in col]
         accounts_r_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'r_await' in col] if accounts_configured else []
         
         if data_r_await_cols:
             col = data_r_await_cols[0]
             ax2.plot(self.df['timestamp'], self.df[col], 
-                    label='DATA 读等待时间', linewidth=2)
+                    label='DATA 读等待Time', linewidth=2)
         
         if accounts_configured and accounts_r_await_cols:
             col = accounts_r_await_cols[0]
             ax2.plot(self.df['timestamp'], self.df[col], 
-                    label='ACCOUNTS 读等待时间', linewidth=2)
+                    label='ACCOUNTS 读等待Time', linewidth=2)
         elif not accounts_configured:
-            ax2.text(0.02, 0.98, 'ACCOUNTS 设备未配置', transform=ax2.transAxes, 
+            ax2.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax2.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax2.axhline(y=self.await_thresholds['warning'], color='orange', 
                    linestyle='--', alpha=0.7)
         ax2.axhline(y=self.await_thresholds['critical'], color='red', 
                    linestyle='--', alpha=0.7)
-        ax2.set_ylabel('读等待时间 (ms)')
+        ax2.set_ylabel('读等待Time (ms)')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
-        # 写等待时间
+        # 写等待Time
         ax3 = axes[1, 0]
-        ax3.set_title('写操作等待时间')
+        ax3.set_title('写操作等待Time')
         
-        # 获取写等待时间列
+        # 获取写等待Time列
         data_w_await_cols = [col for col in self.df.columns if col.startswith('data_') and 'w_await' in col]
         accounts_w_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'w_await' in col] if accounts_configured else []
         
         if data_w_await_cols:
             col = data_w_await_cols[0]
             ax3.plot(self.df['timestamp'], self.df[col], 
-                    label='DATA 写等待时间', linewidth=2)
+                    label='DATA 写等待Time', linewidth=2)
         
         if accounts_configured and accounts_w_await_cols:
             col = accounts_w_await_cols[0]
             ax3.plot(self.df['timestamp'], self.df[col], 
-                    label='ACCOUNTS 写等待时间', linewidth=2)
+                    label='ACCOUNTS 写等待Time', linewidth=2)
         elif not accounts_configured:
-            ax3.text(0.02, 0.98, 'ACCOUNTS 设备未配置', transform=ax3.transAxes, 
+            ax3.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax3.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax3.axhline(y=self.await_thresholds['warning'], color='orange', 
                    linestyle='--', alpha=0.7)
         ax3.axhline(y=self.await_thresholds['critical'], color='red', 
                    linestyle='--', alpha=0.7)
-        ax3.set_ylabel('写等待时间 (ms)')
+        ax3.set_ylabel('写等待Time (ms)')
         ax3.legend()
         ax3.grid(True, alpha=0.3)
         
@@ -717,7 +725,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax4.bar(x - width/2, warning_pcts, width, label='警告违规%', color='orange', alpha=0.7)
             ax4.bar(x + width/2, critical_pcts, width, label='危险违规%', color='red', alpha=0.7)
             
-            ax4.set_xlabel('设备')
+            ax4.set_xlabel('Device')
             ax4.set_ylabel('违规百分比 (%)')
             ax4.set_xticks(x)
             ax4.set_xticklabels([dev.replace('_avg_await', '') for dev in devices])
@@ -730,39 +738,39 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         output_file = os.path.join(self.output_dir, 'await_threshold_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 I/O延迟阈值分析图已保存: {output_file}")
+        print(f"📊 I/O Latency阈值分析图已保存: {output_file}")
         
         return output_file, threshold_violations
 
     def create_util_threshold_analysis_chart(self):
         """创建利用率阈值分析图表 - 优化版本
         
-        根据 ACCOUNTS 设备配置状态动态调整分析内容：
-        - 如果 ACCOUNTS 未配置：只分析 DATA 设备
-        - 如果 ACCOUNTS 已配置：分析 DATA 和 ACCOUNTS 设备
+        根据 ACCOUNTS Device配置状态动态调整分析内容：
+        - 如果 ACCOUNTS 未配置：只分析 DATA Device
+        - 如果 ACCOUNTS 已配置：分析 DATA 和 ACCOUNTS Device
         """
-        # 检查 ACCOUNTS 设备配置状态
+        # 检查 ACCOUNTS Device配置状态
         accounts_configured = self._is_accounts_configured()
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         
         # 根据配置状态设置标题
         if accounts_configured:
-            fig.suptitle('设备利用率阈值分析 - DATA & ACCOUNTS', fontsize=16, fontweight='bold')
+            fig.suptitle('Device Utilization阈值分析 - DATA & ACCOUNTS', fontsize=16, fontweight='bold')
         else:
-            fig.suptitle('设备利用率阈值分析 - DATA', fontsize=16, fontweight='bold')
+            fig.suptitle('Device Utilization阈值分析 - DATA', fontsize=16, fontweight='bold')
         
         # 获取利用率相关列
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and '_util' in col]
         accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and '_util' in col] if accounts_configured else []
         
-        # 利用率时间序列
+        # 利用率Time序列
         ax1 = axes[0, 0]
-        ax1.set_title('设备利用率时间序列')
+        ax1.set_title('Device UtilizationTime序列')
         
         threshold_violations = {}
         
-        # 处理data设备
+        # 处理dataDevice
         if data_util_cols:
             col = data_util_cols[0]
             ax1.plot(self.df['timestamp'], self.df[col], 
@@ -787,14 +795,14 @@ class PerformanceVisualizer(CSVDataProcessor):
             threshold_violations['accounts_util'] = violations
         elif not accounts_configured:
             # 添加说明文本
-            ax1.text(0.02, 0.98, 'ACCOUNTS 设备未配置', transform=ax1.transAxes, 
+            ax1.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax1.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax1.axhline(y=self.util_thresholds['warning'], color='orange', 
-                   linestyle='--', alpha=0.7, label='警告阈值 (85%)')
+                   linestyle='--', alpha=0.7, label='Warning Threshold (85%)')
         ax1.axhline(y=self.util_thresholds['critical'], color='red', 
-                   linestyle='--', alpha=0.7, label='危险阈值 (95%)')
-        ax1.set_ylabel('利用率 (%)')
+                   linestyle='--', alpha=0.7, label='Critical Threshold (95%)')
+        ax1.set_ylabel('Utilization (%)')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
@@ -802,7 +810,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         ax2 = axes[0, 1]
         ax2.set_title('利用率分布')
         
-        # 处理data设备分布
+        # 处理dataDevice分布
         if data_util_cols:
             col = data_util_cols[0]
             ax2.hist(self.df[col], bins=30, alpha=0.7, 
@@ -814,21 +822,21 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax2.hist(self.df[col], bins=30, alpha=0.7, 
                     label='ACCOUNTS 利用率分布')
         elif not accounts_configured:
-            ax2.text(0.02, 0.98, 'ACCOUNTS 设备未配置', transform=ax2.transAxes, 
+            ax2.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax2.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax2.axvline(x=self.util_thresholds['warning'], color='orange', 
                    linestyle='--', alpha=0.7)
         ax2.axvline(x=self.util_thresholds['critical'], color='red', 
                    linestyle='--', alpha=0.7)
-        ax2.set_xlabel('利用率 (%)')
+        ax2.set_xlabel('Utilization (%)')
         ax2.set_ylabel('频次')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
-        # 高利用率时间统计
+        # 高利用率Time统计
         ax3 = axes[1, 0]
-        ax3.set_title('高利用率时间统计')
+        ax3.set_title('高利用率Time统计')
         
         if threshold_violations:
             devices = list(threshold_violations.keys())
@@ -841,7 +849,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax3.bar(x - width/2, warning_times, width, label='警告次数', color='orange', alpha=0.7)
             ax3.bar(x + width/2, critical_times, width, label='危险次数', color='red', alpha=0.7)
             
-            ax3.set_xlabel('设备')
+            ax3.set_xlabel('Device')
             ax3.set_ylabel('违规次数')
             ax3.set_xticks(x)
             ax3.set_xticklabels([dev.replace('_util', '') for dev in devices])
@@ -865,7 +873,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax4.bar(x - width/2, warning_pcts, width, label='警告违规%', color='orange', alpha=0.7)
             ax4.bar(x + width/2, critical_pcts, width, label='危险违规%', color='red', alpha=0.7)
             
-            ax4.set_xlabel('设备')
+            ax4.set_xlabel('Device')
             ax4.set_ylabel('违规百分比 (%)')
             ax4.set_xticks(x)
             ax4.set_xticklabels([dev.replace('_util', '') for dev in devices])
@@ -878,7 +886,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         output_file = os.path.join(self.output_dir, 'util_threshold_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 设备利用率阈值分析图已保存: {output_file}")
+        print(f"📊 Device Utilization阈值分析图已保存: {output_file}")
         
         return output_file, threshold_violations
         
@@ -886,7 +894,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         output_file = os.path.join(self.output_dir, 'util_threshold_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 设备利用率阈值分析图已保存: {output_file}")
+        print(f"📊 Device Utilization阈值分析图已保存: {output_file}")
         
         return output_file, threshold_violations
 
@@ -923,7 +931,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 node_cpu = max(0, total_cpu - monitor_cpu)
                 node_mem = max(0, total_mem - monitor_mem)
                 
-                categories = ['CPU使用率 (%)', '内存使用率 (%)']
+                categories = ['CPU Usage (%)', 'Memory Usage (%)']
                 total_values = [total_cpu, total_mem]
                 node_values = [node_cpu, node_mem]
                 monitor_values = [monitor_cpu, monitor_mem]
@@ -942,7 +950,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # 2. 监控开销趋势
         ax2 = axes[0, 1]
-        ax2.set_title('监控开销时间趋势')
+        ax2.set_title('监控开销Time趋势')
         
         if 'timestamp' in overhead_df.columns and 'monitoring_cpu_percent' in overhead_df.columns:
             ax2.plot(overhead_df['timestamp'], overhead_df['monitoring_cpu_percent'], 
@@ -1112,7 +1120,7 @@ CPU开销:
         print("=" * 60)
         
         if 'await_violations' in results:
-            print("\n🕐 I/O延迟阈值分析:")
+            print("\n🕐 I/O Latency阈值分析:")
             for device, violations in results['await_violations'].items():
                 print(f"  {device}:")
                 print(f"    平均值: {violations['avg_value']:.2f}ms")
@@ -1121,7 +1129,7 @@ CPU开销:
                 print(f"    危险违规: {violations['critical_violations']}/{violations['total_points']} ({violations['critical_percentage']:.1f}%)")
         
         if 'util_violations' in results:
-            print("\n📈 设备利用率阈值分析:")
+            print("\n📈 Device Utilization阈值分析:")
             for device, violations in results['util_violations'].items():
                 print(f"  {device}:")
                 print(f"    平均值: {violations['avg_value']:.1f}%")
@@ -1176,54 +1184,54 @@ CPU开销:
             if window_size < 3:
                 window_size = 3
             
-            # 1. CPU使用率趋势
+            # 1. CPU Usage趋势
             ax1 = axes[0, 0]
             ax1.plot(self.df['timestamp'], self.df['cpu_usage'], 
-                    color='lightblue', linewidth=1, alpha=0.5, label='CPU使用率(原始)')
+                    color='lightblue', linewidth=1, alpha=0.5, label='CPU Usage(原始)')
             
             cpu_smooth = self.df['cpu_usage'].rolling(window=window_size, center=True).mean()
             ax1.plot(self.df['timestamp'], cpu_smooth, 
-                    color='blue', linewidth=2, label=f'CPU使用率({window_size}点平滑)')
+                    color='blue', linewidth=2, label=f'CPU Usage({window_size}点平滑)')
             
-            ax1.set_title('CPU使用率趋势')
-            ax1.set_ylabel('使用率 (%)')
+            ax1.set_title('CPU Usage趋势')
+            ax1.set_ylabel('Usage (%)')
             ax1.legend()
             ax1.grid(True, alpha=0.3)
             
-            # 2. 内存使用率趋势
+            # 2. Memory Usage趋势
             ax2 = axes[0, 1]
             ax2.plot(self.df['timestamp'], self.df['mem_usage'], 
-                    color='lightcoral', linewidth=1, alpha=0.5, label='内存使用率(原始)')
+                    color='lightcoral', linewidth=1, alpha=0.5, label='Memory Usage(原始)')
             
             mem_smooth = self.df['mem_usage'].rolling(window=window_size, center=True).mean()
             ax2.plot(self.df['timestamp'], mem_smooth, 
-                    color='red', linewidth=2, label=f'内存使用率({window_size}点平滑)')
+                    color='red', linewidth=2, label=f'Memory Usage({window_size}点平滑)')
             
-            ax2.set_title('内存使用率趋势')
-            ax2.set_ylabel('使用率 (%)')
+            ax2.set_title('Memory Usage趋势')
+            ax2.set_ylabel('Usage (%)')
             ax2.legend()
             ax2.grid(True, alpha=0.3)
             
-            # 3. EBS延迟趋势
+            # 3. EBSLatency趋势
             data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
             if data_await_cols:
                 ax3 = axes[1, 0]
                 await_col = data_await_cols[0]
                 
                 ax3.plot(self.df['timestamp'], self.df[await_col], 
-                        color='lightgreen', linewidth=1, alpha=0.5, label='EBS延迟(原始)')
+                        color='lightgreen', linewidth=1, alpha=0.5, label='EBSLatency(原始)')
                 
                 await_smooth = self.df[await_col].rolling(window=window_size, center=True).mean()
                 ax3.plot(self.df['timestamp'], await_smooth, 
-                        color='green', linewidth=2, label=f'EBS延迟({window_size}点平滑)')
+                        color='green', linewidth=2, label=f'EBSLatency({window_size}点平滑)')
                 
-                ax3.set_title('EBS延迟趋势')
-                ax3.set_ylabel('延迟 (ms)')
+                ax3.set_title('EBSLatency趋势')
+                ax3.set_ylabel('Latency (ms)')
                 ax3.legend()
                 ax3.grid(True, alpha=0.3)
             else:
-                axes[1, 0].text(0.5, 0.5, '未找到EBS延迟数据', ha='center', va='center', transform=axes[1, 0].transAxes)
-                axes[1, 0].set_title('EBS延迟趋势 (无数据)')
+                axes[1, 0].text(0.5, 0.5, '未找到EBSLatency数据', ha='center', va='center', transform=axes[1, 0].transAxes)
+                axes[1, 0].set_title('EBSLatency趋势 (无数据)')
             
             # 4. 网络带宽趋势
             if 'net_rx_mbps' in self.df.columns:
@@ -1243,7 +1251,7 @@ CPU开销:
                 axes[1, 1].text(0.5, 0.5, '未找到网络带宽数据', ha='center', va='center', transform=axes[1, 1].transAxes)
                 axes[1, 1].set_title('网络带宽趋势 (无数据)')
             
-            # 格式化时间轴
+            # 格式化Time轴
             for ax in axes.flat:
                 ax.tick_params(axis='x', rotation=45)
             
@@ -1276,11 +1284,11 @@ CPU开销:
                 plt.close()
                 return None
             
-            # 1. QPS时间序列
+            # 1. QPSTime序列
             ax1 = axes[0, 0]
             for qps_col in qps_cols[:3]:  # 最多显示3个QPS指标
                 ax1.plot(self.df['timestamp'], self.df[qps_col], label=qps_col, linewidth=2)
-            ax1.set_title('QPS时间序列')
+            ax1.set_title('QPSTime序列')
             ax1.set_ylabel('QPS')
             ax1.legend()
             ax1.grid(True, alpha=0.3)
@@ -1298,8 +1306,8 @@ CPU开销:
             ax3 = axes[1, 0]
             if 'cpu_usage' in self.df.columns and qps_cols:
                 ax3.scatter(self.df['cpu_usage'], self.df[qps_cols[0]], alpha=0.6)
-                ax3.set_title('QPS vs CPU使用率')
-                ax3.set_xlabel('CPU使用率 (%)')
+                ax3.set_title('QPS vs CPU Usage')
+                ax3.set_xlabel('CPU Usage (%)')
                 ax3.set_ylabel('QPS')
                 ax3.grid(True, alpha=0.3)
             
@@ -1375,7 +1383,7 @@ CPU开销:
                 ax3.hist(util_data, bins=20, alpha=0.7, color='green')
                 ax3.axvline(util_data.mean(), color='red', linestyle='--', label=f'平均: {util_data.mean():.1f}%')
                 ax3.set_title('I/O利用率分布')
-                ax3.set_xlabel('利用率 (%)')
+                ax3.set_xlabel('Utilization (%)')
                 ax3.set_ylabel('频次')
                 ax3.legend()
             
@@ -1416,7 +1424,7 @@ CPU开销:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
             fig.suptitle('系统瓶颈识别分析', fontsize=16, fontweight='bold')
             
-            # 1. 瓶颈时间序列
+            # 1. 瓶颈Time序列
             ax1 = axes[0, 0]
             bottleneck_data = []
             
@@ -1436,7 +1444,7 @@ CPU开销:
                 ax1.plot(self.df['timestamp'], io_bottleneck, label='I/O瓶颈(>80%)', linewidth=2)
                 bottleneck_data.append(('I/O', io_bottleneck.sum()))
             
-            ax1.set_title('瓶颈时间序列')
+            ax1.set_title('瓶颈Time序列')
             ax1.set_ylabel('瓶颈状态')
             ax1.legend()
             ax1.grid(True, alpha=0.3)

@@ -107,6 +107,128 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 0.5秒超高频监控
 # 监控开销统计间隔 (秒)
 OVERHEAD_STAT_INTERVAL=60
 
+# ----- 监控开销优化配置 -----
+# 监控开销统计开关 (true/false) - 启用后会统计监控系统本身的资源开销
+MONITORING_OVERHEAD_ENABLED=${MONITORING_OVERHEAD_ENABLED:-true}
+
+# 监控开销日志配置
+MONITORING_OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_$(date +%Y%m%d_%H%M%S).csv"
+
+# 监控开销CSV表头
+OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu_percent,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu_percent,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage"
+
+# 监控开销统计间隔 (秒) - 独立于主监控间隔
+OVERHEAD_COLLECTION_INTERVAL=${OVERHEAD_COLLECTION_INTERVAL:-10}
+
+# 监控开销阈值配置 - 用于警告和自动调整
+OVERHEAD_CPU_WARNING_THRESHOLD=${OVERHEAD_CPU_WARNING_THRESHOLD:-3.0}      # 监控CPU使用率警告阈值 (%)
+OVERHEAD_CPU_CRITICAL_THRESHOLD=${OVERHEAD_CPU_CRITICAL_THRESHOLD:-5.0}    # 监控CPU使用率严重阈值 (%)
+OVERHEAD_MEMORY_WARNING_THRESHOLD=${OVERHEAD_MEMORY_WARNING_THRESHOLD:-2.0} # 监控内存使用率警告阈值 (%)
+OVERHEAD_MEMORY_CRITICAL_THRESHOLD=${OVERHEAD_MEMORY_CRITICAL_THRESHOLD:-3.0} # 监控内存使用率严重阈值 (%)
+
+# ----- 性能影响监控配置 -----
+# 性能监控开关 (true/false) - 启用后会监控监控系统本身的性能影响
+PERFORMANCE_MONITORING_ENABLED=${PERFORMANCE_MONITORING_ENABLED:-true}
+
+# 性能阈值配置
+MAX_COLLECTION_TIME_MS=${MAX_COLLECTION_TIME_MS:-1000}     # 最大数据收集时间 (毫秒)
+CPU_THRESHOLD_PERCENT=${CPU_THRESHOLD_PERCENT:-5.0}        # CPU使用率阈值 (%)
+MEMORY_THRESHOLD_MB=${MEMORY_THRESHOLD_MB:-100}            # 内存使用阈值 (MB)
+
+# 性能监控详细级别 (basic/detailed/full)
+PERFORMANCE_MONITORING_LEVEL=${PERFORMANCE_MONITORING_LEVEL:-"basic"}
+
+# 性能日志配置
+PERFORMANCE_LOG="${LOGS_DIR}/monitoring_performance_$(date +%Y%m%d_%H%M%S).log"
+
+# 性能数据保留策略
+PERFORMANCE_DATA_RETENTION_DAYS=${PERFORMANCE_DATA_RETENTION_DAYS:-7}      # 性能数据保留天数
+
+# ----- 自适应频率调整配置 -----
+# 自适应频率调整开关 (true/false) - 启用后会根据系统负载自动调整监控频率
+ADAPTIVE_FREQUENCY_ENABLED=${ADAPTIVE_FREQUENCY_ENABLED:-true}
+
+# 频率调整范围
+MIN_MONITOR_INTERVAL=${MIN_MONITOR_INTERVAL:-2}            # 最小监控间隔 (秒)
+MAX_MONITOR_INTERVAL=${MAX_MONITOR_INTERVAL:-30}           # 最大监控间隔 (秒)
+
+# 系统负载阈值配置
+SYSTEM_LOAD_THRESHOLD=${SYSTEM_LOAD_THRESHOLD:-80}         # 系统负载阈值 (%) - 超过此值将降低监控频率
+SYSTEM_LOAD_HIGH_THRESHOLD=${SYSTEM_LOAD_HIGH_THRESHOLD:-90} # 高负载阈值 (%) - 超过此值将大幅降低监控频率
+SYSTEM_LOAD_CRITICAL_THRESHOLD=${SYSTEM_LOAD_CRITICAL_THRESHOLD:-95} # 严重负载阈值 (%) - 超过此值将最小化监控
+
+# 频率调整策略配置
+FREQUENCY_ADJUSTMENT_FACTOR=${FREQUENCY_ADJUSTMENT_FACTOR:-1.5}            # 频率调整因子
+FREQUENCY_ADJUSTMENT_AGGRESSIVE=${FREQUENCY_ADJUSTMENT_AGGRESSIVE:-false}   # 激进调整模式
+
+# 频率调整日志
+FREQUENCY_ADJUSTMENT_LOG="${LOGS_DIR}/frequency_adjustment_$(date +%Y%m%d_%H%M%S).log"
+
+# ----- 优雅降级配置 -----
+# 优雅降级开关 (true/false) - 启用后会在高负载时自动降级监控功能
+GRACEFUL_DEGRADATION_ENABLED=${GRACEFUL_DEGRADATION_ENABLED:-true}
+
+# 降级级别配置
+DEGRADATION_LEVEL_1_THRESHOLD=${DEGRADATION_LEVEL_1_THRESHOLD:-75}         # 轻度降级阈值 (%)
+DEGRADATION_LEVEL_2_THRESHOLD=${DEGRADATION_LEVEL_2_THRESHOLD:-85}         # 中度降级阈值 (%)
+DEGRADATION_LEVEL_3_THRESHOLD=${DEGRADATION_LEVEL_3_THRESHOLD:-95}         # 严重降级阈值 (%)
+
+# 降级策略配置
+DEGRADATION_DISABLE_DETAILED_METRICS=${DEGRADATION_DISABLE_DETAILED_METRICS:-true}    # 降级时禁用详细指标
+DEGRADATION_REDUCE_LOGGING=${DEGRADATION_REDUCE_LOGGING:-true}                        # 降级时减少日志记录
+DEGRADATION_SKIP_NON_CRITICAL=${DEGRADATION_SKIP_NON_CRITICAL:-true}                  # 降级时跳过非关键监控
+
+# ----- 错误处理和恢复配置 -----
+# 错误恢复开关 (true/false) - 启用后会自动处理和恢复监控系统错误
+ERROR_RECOVERY_ENABLED=${ERROR_RECOVERY_ENABLED:-true}
+
+# 错误处理阈值
+MAX_CONSECUTIVE_ERRORS=${MAX_CONSECUTIVE_ERRORS:-5}        # 最大连续错误次数
+ERROR_RECOVERY_DELAY=${ERROR_RECOVERY_DELAY:-10}          # 错误恢复延迟 (秒)
+ERROR_RECOVERY_MAX_ATTEMPTS=${ERROR_RECOVERY_MAX_ATTEMPTS:-3}  # 最大恢复尝试次数
+
+# 错误类型配置
+ERROR_TYPES_TO_RECOVER=(                                  # 需要自动恢复的错误类型
+    "process_not_found"
+    "permission_denied"
+    "disk_full"
+    "network_timeout"
+    "resource_unavailable"
+)
+
+# 错误日志配置
+ERROR_LOG="${LOGS_DIR}/monitoring_errors_$(date +%Y%m%d_%H%M%S).log"
+
+# 错误统计配置
+ERROR_STATISTICS_ENABLED=${ERROR_STATISTICS_ENABLED:-true}                 # 启用错误统计
+ERROR_STATISTICS_WINDOW=${ERROR_STATISTICS_WINDOW:-300}                    # 错误统计时间窗口 (秒)
+
+# ----- 监控系统健康检查配置 -----
+# 健康检查开关 (true/false) - 启用后会定期检查监控系统健康状态
+HEALTH_CHECK_ENABLED=${HEALTH_CHECK_ENABLED:-true}
+
+# 健康检查间隔配置
+HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-60}        # 健康检查间隔 (秒)
+HEALTH_CHECK_TIMEOUT=${HEALTH_CHECK_TIMEOUT:-10}          # 健康检查超时 (秒)
+
+# 健康检查项目配置
+HEALTH_CHECK_ITEMS=(                                      # 健康检查项目列表
+    "disk_space"
+    "memory_usage"
+    "cpu_usage"
+    "process_status"
+    "log_file_size"
+    "network_connectivity"
+)
+
+# 健康检查阈值
+HEALTH_CHECK_DISK_THRESHOLD=${HEALTH_CHECK_DISK_THRESHOLD:-90}             # 磁盘使用率健康阈值 (%)
+HEALTH_CHECK_MEMORY_THRESHOLD=${HEALTH_CHECK_MEMORY_THRESHOLD:-85}         # 内存使用率健康阈值 (%)
+HEALTH_CHECK_CPU_THRESHOLD=${HEALTH_CHECK_CPU_THRESHOLD:-80}               # CPU使用率健康阈值 (%)
+
+# 健康检查日志
+HEALTH_CHECK_LOG="${LOGS_DIR}/health_check_$(date +%Y%m%d_%H%M%S).log"
+
 # 时间格式标准
 TIMESTAMP_FORMAT="%Y-%m-%d %H:%M:%S"
 
@@ -176,6 +298,59 @@ AWS_EBS_BASELINE_IO_SIZE_KIB=16                               # AWS EBS基准IO�
 AWS_METADATA_ENDPOINT="http://169.254.169.254"                # AWS实例元数据端点
 AWS_METADATA_TOKEN_TTL=21600                                  # 元数据令牌TTL (6小时)
 AWS_METADATA_API_VERSION="latest"                             # API版本
+
+# ----- 监控进程配置 -----
+# 监控进程名配置（用于监控开销计算）
+MONITORING_PROCESS_NAMES=(
+    "iostat"
+    "mpstat"
+    "sar"
+    "vmstat"
+    "netstat"
+    "unified_monitor"
+    "bottleneck_detector"
+    "ena_network_monitor"
+    "slot_monitor"
+    "performance_visualizer"
+    "overhead_monitor"
+    "adaptive_frequency"
+    "health_checker"
+    "error_recovery"
+    "report_generator"
+)
+
+# 区块链节点进程名配置（用于资源使用统计）
+BLOCKCHAIN_PROCESS_NAMES=(
+    "solana-validator"
+    "solana"
+    "blockchain"
+    "validator"
+    "node"
+)
+
+# 监控进程优先级配置（用于资源分配优化）
+MONITORING_PROCESS_PRIORITY=(
+    "unified_monitor:high"          # 核心监控进程，高优先级
+    "overhead_monitor:medium"       # 开销监控，中等优先级
+    "health_checker:medium"         # 健康检查，中等优先级
+    "adaptive_frequency:low"        # 自适应调整，低优先级
+    "error_recovery:high"           # 错误恢复，高优先级
+    "report_generator:low"          # 报告生成，低优先级
+)
+
+# 关键监控进程配置（这些进程不能被降级或停止）
+CRITICAL_MONITORING_PROCESSES=(
+    "unified_monitor"
+    "error_recovery"
+    "health_checker"
+)
+
+# 可选监控进程配置（在资源紧张时可以暂停的进程）
+OPTIONAL_MONITORING_PROCESSES=(
+    "performance_visualizer"
+    "report_generator"
+    "adaptive_frequency"
+)
 
 # ----- 瓶颈检测配置 -----
 # 瓶颈检测阈值 (极限测试用)
@@ -643,6 +818,230 @@ get_time_ranges() {
     fi
 }
 
+# ----- 监控开销优化配置管理函数 -----
+# 动态调整监控间隔
+adjust_monitor_interval() {
+    local new_interval="$1"
+    local reason="${2:-"manual adjustment"}"
+    
+    # 验证新间隔是否在允许范围内
+    if (( $(echo "$new_interval < $MIN_MONITOR_INTERVAL" | bc -l) )); then
+        echo "⚠️  调整后的监控间隔 ($new_interval) 小于最小值 ($MIN_MONITOR_INTERVAL)，使用最小值"
+        new_interval=$MIN_MONITOR_INTERVAL
+    elif (( $(echo "$new_interval > $MAX_MONITOR_INTERVAL" | bc -l) )); then
+        echo "⚠️  调整后的监控间隔 ($new_interval) 大于最大值 ($MAX_MONITOR_INTERVAL)，使用最大值"
+        new_interval=$MAX_MONITOR_INTERVAL
+    fi
+    
+    local old_interval=${CURRENT_MONITOR_INTERVAL:-$MONITOR_INTERVAL}
+    CURRENT_MONITOR_INTERVAL=$new_interval
+    
+    # 记录调整日志
+    local timestamp=$(get_unified_timestamp)
+    echo "$timestamp: 监控间隔调整: $old_interval -> $new_interval (原因: $reason)" >> "$FREQUENCY_ADJUSTMENT_LOG"
+    
+    echo "✅ 监控间隔已调整: $old_interval -> $new_interval 秒"
+    return 0
+}
+
+# 获取当前有效的监控间隔
+get_current_monitor_interval() {
+    echo "${CURRENT_MONITOR_INTERVAL:-$MONITOR_INTERVAL}"
+}
+
+# 重置监控间隔到默认值
+reset_monitor_interval() {
+    local reason="${1:-"manual reset"}"
+    adjust_monitor_interval "$MONITOR_INTERVAL" "$reason"
+}
+
+# 启用/禁用监控开销统计
+toggle_monitoring_overhead() {
+    local action="$1"  # enable/disable
+    
+    case "$action" in
+        "enable")
+            MONITORING_OVERHEAD_ENABLED=true
+            echo "✅ 监控开销统计已启用"
+            ;;
+        "disable")
+            MONITORING_OVERHEAD_ENABLED=false
+            echo "✅ 监控开销统计已禁用"
+            ;;
+        *)
+            echo "❌ 无效操作: $action (使用 enable 或 disable)"
+            return 1
+            ;;
+    esac
+    
+    # 记录状态变更
+    local timestamp=$(get_unified_timestamp)
+    echo "$timestamp: 监控开销统计状态变更: $action" >> "$ERROR_LOG"
+    
+    return 0
+}
+
+# 启用/禁用自适应频率调整
+toggle_adaptive_frequency() {
+    local action="$1"  # enable/disable
+    
+    case "$action" in
+        "enable")
+            ADAPTIVE_FREQUENCY_ENABLED=true
+            echo "✅ 自适应频率调整已启用"
+            ;;
+        "disable")
+            ADAPTIVE_FREQUENCY_ENABLED=false
+            echo "✅ 自适应频率调整已禁用"
+            ;;
+        *)
+            echo "❌ 无效操作: $action (使用 enable 或 disable)"
+            return 1
+            ;;
+    esac
+    
+    # 记录状态变更
+    local timestamp=$(get_unified_timestamp)
+    echo "$timestamp: 自适应频率调整状态变更: $action" >> "$FREQUENCY_ADJUSTMENT_LOG"
+    
+    return 0
+}
+
+# 启用/禁用优雅降级
+toggle_graceful_degradation() {
+    local action="$1"  # enable/disable
+    
+    case "$action" in
+        "enable")
+            GRACEFUL_DEGRADATION_ENABLED=true
+            echo "✅ 优雅降级已启用"
+            ;;
+        "disable")
+            GRACEFUL_DEGRADATION_ENABLED=false
+            echo "✅ 优雅降级已禁用"
+            ;;
+        *)
+            echo "❌ 无效操作: $action (使用 enable 或 disable)"
+            return 1
+            ;;
+    esac
+    
+    # 记录状态变更
+    local timestamp=$(get_unified_timestamp)
+    echo "$timestamp: 优雅降级状态变更: $action" >> "$ERROR_LOG"
+    
+    return 0
+}
+
+# 设置监控开销阈值
+set_overhead_threshold() {
+    local threshold_type="$1"  # cpu_warning/cpu_critical/memory_warning/memory_critical
+    local threshold_value="$2"
+    
+    # 验证阈值值
+    if ! [[ "$threshold_value" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+        echo "❌ 阈值必须是数字: $threshold_value"
+        return 1
+    fi
+    
+    case "$threshold_type" in
+        "cpu_warning")
+            OVERHEAD_CPU_WARNING_THRESHOLD="$threshold_value"
+            echo "✅ CPU开销警告阈值已设置为: $threshold_value%"
+            ;;
+        "cpu_critical")
+            OVERHEAD_CPU_CRITICAL_THRESHOLD="$threshold_value"
+            echo "✅ CPU开销严重阈值已设置为: $threshold_value%"
+            ;;
+        "memory_warning")
+            OVERHEAD_MEMORY_WARNING_THRESHOLD="$threshold_value"
+            echo "✅ 内存开销警告阈值已设置为: $threshold_value%"
+            ;;
+        "memory_critical")
+            OVERHEAD_MEMORY_CRITICAL_THRESHOLD="$threshold_value"
+            echo "✅ 内存开销严重阈值已设置为: $threshold_value%"
+            ;;
+        *)
+            echo "❌ 无效的阈值类型: $threshold_type"
+            echo "   支持的类型: cpu_warning, cpu_critical, memory_warning, memory_critical"
+            return 1
+            ;;
+    esac
+    
+    # 记录阈值变更
+    local timestamp=$(get_unified_timestamp)
+    echo "$timestamp: 监控开销阈值变更: $threshold_type = $threshold_value%" >> "$ERROR_LOG"
+    
+    return 0
+}
+
+# 获取监控开销配置摘要
+get_monitoring_overhead_summary() {
+    echo "📊 监控开销优化配置摘要"
+    echo "========================"
+    echo "状态: ${MONITORING_OVERHEAD_ENABLED:-"未设置"}"
+    echo "当前监控间隔: $(get_current_monitor_interval)秒"
+    echo "自适应调整: ${ADAPTIVE_FREQUENCY_ENABLED:-"未设置"}"
+    echo "优雅降级: ${GRACEFUL_DEGRADATION_ENABLED:-"未设置"}"
+    echo "错误恢复: ${ERROR_RECOVERY_ENABLED:-"未设置"}"
+    echo "健康检查: ${HEALTH_CHECK_ENABLED:-"未设置"}"
+    echo "CPU阈值: 警告=${OVERHEAD_CPU_WARNING_THRESHOLD:-"未设置"}%, 严重=${OVERHEAD_CPU_CRITICAL_THRESHOLD:-"未设置"}%"
+    echo "内存阈值: 警告=${OVERHEAD_MEMORY_WARNING_THRESHOLD:-"未设置"}%, 严重=${OVERHEAD_MEMORY_CRITICAL_THRESHOLD:-"未设置"}%"
+    echo "========================"
+}
+
+# 导出监控开销配置到文件
+export_monitoring_overhead_config() {
+    local output_file="${1:-"${LOGS_DIR}/monitoring_overhead_config_$(date +%Y%m%d_%H%M%S).conf"}"
+    
+    cat > "$output_file" << EOF
+# 监控开销优化配置导出
+# 导出时间: $(get_unified_timestamp)
+# ========================================
+
+# 基础配置
+MONITORING_OVERHEAD_ENABLED=${MONITORING_OVERHEAD_ENABLED:-"true"}
+PERFORMANCE_MONITORING_ENABLED=${PERFORMANCE_MONITORING_ENABLED:-"true"}
+PERFORMANCE_MONITORING_LEVEL=${PERFORMANCE_MONITORING_LEVEL:-"basic"}
+
+# 时间间隔配置
+MONITOR_INTERVAL=${MONITOR_INTERVAL:-"5"}
+OVERHEAD_COLLECTION_INTERVAL=${OVERHEAD_COLLECTION_INTERVAL:-"10"}
+MIN_MONITOR_INTERVAL=${MIN_MONITOR_INTERVAL:-"2"}
+MAX_MONITOR_INTERVAL=${MAX_MONITOR_INTERVAL:-"30"}
+CURRENT_MONITOR_INTERVAL=${CURRENT_MONITOR_INTERVAL:-$MONITOR_INTERVAL}
+
+# 阈值配置
+OVERHEAD_CPU_WARNING_THRESHOLD=${OVERHEAD_CPU_WARNING_THRESHOLD:-"3.0"}
+OVERHEAD_CPU_CRITICAL_THRESHOLD=${OVERHEAD_CPU_CRITICAL_THRESHOLD:-"5.0"}
+OVERHEAD_MEMORY_WARNING_THRESHOLD=${OVERHEAD_MEMORY_WARNING_THRESHOLD:-"2.0"}
+OVERHEAD_MEMORY_CRITICAL_THRESHOLD=${OVERHEAD_MEMORY_CRITICAL_THRESHOLD:-"3.0"}
+
+# 系统负载阈值
+SYSTEM_LOAD_THRESHOLD=${SYSTEM_LOAD_THRESHOLD:-"80"}
+SYSTEM_LOAD_HIGH_THRESHOLD=${SYSTEM_LOAD_HIGH_THRESHOLD:-"90"}
+SYSTEM_LOAD_CRITICAL_THRESHOLD=${SYSTEM_LOAD_CRITICAL_THRESHOLD:-"95"}
+
+# 功能开关
+ADAPTIVE_FREQUENCY_ENABLED=${ADAPTIVE_FREQUENCY_ENABLED:-"true"}
+GRACEFUL_DEGRADATION_ENABLED=${GRACEFUL_DEGRADATION_ENABLED:-"true"}
+ERROR_RECOVERY_ENABLED=${ERROR_RECOVERY_ENABLED:-"true"}
+HEALTH_CHECK_ENABLED=${HEALTH_CHECK_ENABLED:-"true"}
+
+# 错误处理配置
+MAX_CONSECUTIVE_ERRORS=${MAX_CONSECUTIVE_ERRORS:-"5"}
+ERROR_RECOVERY_DELAY=${ERROR_RECOVERY_DELAY:-"10"}
+ERROR_RECOVERY_MAX_ATTEMPTS=${ERROR_RECOVERY_MAX_ATTEMPTS:-"3"}
+
+# 健康检查配置
+HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-"60"}
+HEALTH_CHECK_TIMEOUT=${HEALTH_CHECK_TIMEOUT:-"10"}
+EOF
+    
+    echo "✅ 监控开销配置已导出到: $output_file"
+    return 0
+}
+
 # ----- EBS设备配置验证函数 -----
 # 验证单个EBS设备配置
 validate_ebs_device_config() {
@@ -707,6 +1106,122 @@ get_logical_name() {
     esac
 }
 
+# ----- 监控开销优化配置验证函数 -----
+# 验证监控开销优化配置
+validate_monitoring_overhead_config() {
+    local errors=()
+    local warnings=()
+    
+    # 验证监控开销阈值配置
+    if [[ -n "$OVERHEAD_CPU_WARNING_THRESHOLD" ]]; then
+        if ! [[ "$OVERHEAD_CPU_WARNING_THRESHOLD" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            errors+=("OVERHEAD_CPU_WARNING_THRESHOLD must be a number: $OVERHEAD_CPU_WARNING_THRESHOLD")
+        elif (( $(echo "$OVERHEAD_CPU_WARNING_THRESHOLD > 10" | bc -l) )); then
+            warnings+=("OVERHEAD_CPU_WARNING_THRESHOLD is very high (>10%): $OVERHEAD_CPU_WARNING_THRESHOLD")
+        fi
+    fi
+    
+    if [[ -n "$OVERHEAD_CPU_CRITICAL_THRESHOLD" ]]; then
+        if ! [[ "$OVERHEAD_CPU_CRITICAL_THRESHOLD" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            errors+=("OVERHEAD_CPU_CRITICAL_THRESHOLD must be a number: $OVERHEAD_CPU_CRITICAL_THRESHOLD")
+        elif (( $(echo "$OVERHEAD_CPU_CRITICAL_THRESHOLD <= $OVERHEAD_CPU_WARNING_THRESHOLD" | bc -l) )); then
+            errors+=("OVERHEAD_CPU_CRITICAL_THRESHOLD must be greater than WARNING_THRESHOLD")
+        fi
+    fi
+    
+    # 验证频率调整配置
+    if [[ -n "$MIN_MONITOR_INTERVAL" && -n "$MAX_MONITOR_INTERVAL" ]]; then
+        if (( MIN_MONITOR_INTERVAL >= MAX_MONITOR_INTERVAL )); then
+            errors+=("MIN_MONITOR_INTERVAL must be less than MAX_MONITOR_INTERVAL")
+        fi
+        if (( MIN_MONITOR_INTERVAL < 1 )); then
+            warnings+=("MIN_MONITOR_INTERVAL is very low (<1s): $MIN_MONITOR_INTERVAL")
+        fi
+        if (( MAX_MONITOR_INTERVAL > 60 )); then
+            warnings+=("MAX_MONITOR_INTERVAL is very high (>60s): $MAX_MONITOR_INTERVAL")
+        fi
+    fi
+    
+    # 验证系统负载阈值配置
+    local load_thresholds=("$SYSTEM_LOAD_THRESHOLD" "$SYSTEM_LOAD_HIGH_THRESHOLD" "$SYSTEM_LOAD_CRITICAL_THRESHOLD")
+    local prev_threshold=0
+    for threshold in "${load_thresholds[@]}"; do
+        if [[ -n "$threshold" ]]; then
+            if ! [[ "$threshold" =~ ^[0-9]+$ ]]; then
+                errors+=("Load threshold must be an integer: $threshold")
+            elif (( threshold <= prev_threshold )); then
+                errors+=("Load thresholds must be in ascending order")
+            elif (( threshold > 100 )); then
+                errors+=("Load threshold cannot exceed 100%: $threshold")
+            fi
+            prev_threshold=$threshold
+        fi
+    done
+    
+    # 验证错误处理配置
+    if [[ -n "$MAX_CONSECUTIVE_ERRORS" ]]; then
+        if ! [[ "$MAX_CONSECUTIVE_ERRORS" =~ ^[0-9]+$ ]]; then
+            errors+=("MAX_CONSECUTIVE_ERRORS must be an integer: $MAX_CONSECUTIVE_ERRORS")
+        elif (( MAX_CONSECUTIVE_ERRORS < 1 )); then
+            errors+=("MAX_CONSECUTIVE_ERRORS must be at least 1")
+        elif (( MAX_CONSECUTIVE_ERRORS > 20 )); then
+            warnings+=("MAX_CONSECUTIVE_ERRORS is very high (>20): $MAX_CONSECUTIVE_ERRORS")
+        fi
+    fi
+    
+    # 验证健康检查配置
+    if [[ -n "$HEALTH_CHECK_INTERVAL" ]]; then
+        if ! [[ "$HEALTH_CHECK_INTERVAL" =~ ^[0-9]+$ ]]; then
+            errors+=("HEALTH_CHECK_INTERVAL must be an integer: $HEALTH_CHECK_INTERVAL")
+        elif (( HEALTH_CHECK_INTERVAL < 10 )); then
+            warnings+=("HEALTH_CHECK_INTERVAL is very low (<10s): $HEALTH_CHECK_INTERVAL")
+        fi
+    fi
+    
+    # 验证监控进程配置
+    if [[ ${#MONITORING_PROCESS_NAMES[@]} -eq 0 ]]; then
+        errors+=("MONITORING_PROCESS_NAMES array is empty")
+    fi
+    
+    if [[ ${#BLOCKCHAIN_PROCESS_NAMES[@]} -eq 0 ]]; then
+        warnings+=("BLOCKCHAIN_PROCESS_NAMES array is empty - blockchain process monitoring disabled")
+    fi
+    
+    # 验证关键进程配置
+    for critical_process in "${CRITICAL_MONITORING_PROCESSES[@]}"; do
+        local found=false
+        for process in "${MONITORING_PROCESS_NAMES[@]}"; do
+            if [[ "$process" == "$critical_process" ]]; then
+                found=true
+                break
+            fi
+        done
+        if [[ "$found" == "false" ]]; then
+            warnings+=("Critical process not in monitoring list: $critical_process")
+        fi
+    done
+    
+    # 输出结果
+    local has_errors=false
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        echo "❌ 监控开销优化配置验证失败:"
+        printf '  - %s\n' "${errors[@]}"
+        has_errors=true
+    fi
+    
+    if [[ ${#warnings[@]} -gt 0 ]]; then
+        echo "⚠️  监控开销优化配置警告:"
+        printf '  - %s\n' "${warnings[@]}"
+    fi
+    
+    if [[ "$has_errors" == "false" ]]; then
+        echo "✅ 监控开销优化配置验证通过"
+        return 0
+    else
+        return 1
+    fi
+}
+
 # ----- 配置验证函数 -----
 validate_config() {
     local errors=()
@@ -758,10 +1273,17 @@ validate_config() {
         errors+=("Cannot detect network interface")
     fi
     
+    # 验证监控开销优化配置
+    validate_monitoring_overhead_config
+    local overhead_validation_result=$?
+    
     # 输出错误
     if [[ ${#errors[@]} -gt 0 ]]; then
         echo "❌ Configuration validation failed:"
         printf '  - %s\n' "${errors[@]}"
+        return 1
+    elif [[ $overhead_validation_result -ne 0 ]]; then
+        echo "❌ Configuration validation failed due to monitoring overhead config errors"
         return 1
     else
         echo "✅ Configuration validation passed"
@@ -785,6 +1307,96 @@ show_config() {
     echo "ACCOUNTS Device: ${ACCOUNTS_DEVICE:-"Not configured"} (${ACCOUNTS_VOL_TYPE:-"N/A"})"
     echo "Validator Log: $VALIDATOR_LOG_PATH"
     echo "Deployment Environment: $DEPLOYMENT_ENV"
+    echo ""
+    echo "📊 Monitoring Overhead Optimization Configuration"
+    echo "=================================================="
+    echo "Monitoring Overhead Enabled: ${MONITORING_OVERHEAD_ENABLED:-"false"}"
+    echo "Performance Monitoring Enabled: ${PERFORMANCE_MONITORING_ENABLED:-"false"}"
+    echo "Adaptive Frequency Enabled: ${ADAPTIVE_FREQUENCY_ENABLED:-"false"}"
+    echo "Graceful Degradation Enabled: ${GRACEFUL_DEGRADATION_ENABLED:-"false"}"
+    echo "Error Recovery Enabled: ${ERROR_RECOVERY_ENABLED:-"false"}"
+    echo "Health Check Enabled: ${HEALTH_CHECK_ENABLED:-"false"}"
+    echo ""
+    echo "Monitor Interval Range: ${MIN_MONITOR_INTERVAL:-"N/A"}s - ${MAX_MONITOR_INTERVAL:-"N/A"}s"
+    echo "Current Monitor Interval: ${MONITOR_INTERVAL:-"N/A"}s"
+    echo "Overhead Collection Interval: ${OVERHEAD_COLLECTION_INTERVAL:-"N/A"}s"
+    echo "Health Check Interval: ${HEALTH_CHECK_INTERVAL:-"N/A"}s"
+    echo ""
+    echo "CPU Overhead Thresholds: Warning=${OVERHEAD_CPU_WARNING_THRESHOLD:-"N/A"}%, Critical=${OVERHEAD_CPU_CRITICAL_THRESHOLD:-"N/A"}%"
+    echo "Memory Overhead Thresholds: Warning=${OVERHEAD_MEMORY_WARNING_THRESHOLD:-"N/A"}%, Critical=${OVERHEAD_MEMORY_CRITICAL_THRESHOLD:-"N/A"}%"
+    echo "System Load Thresholds: Normal=${SYSTEM_LOAD_THRESHOLD:-"N/A"}%, High=${SYSTEM_LOAD_HIGH_THRESHOLD:-"N/A"}%, Critical=${SYSTEM_LOAD_CRITICAL_THRESHOLD:-"N/A"}%"
+    echo ""
+    echo "Monitoring Processes: ${#MONITORING_PROCESS_NAMES[@]} configured"
+    echo "Blockchain Processes: ${#BLOCKCHAIN_PROCESS_NAMES[@]} configured"
+    echo "Critical Processes: ${#CRITICAL_MONITORING_PROCESSES[@]} configured"
+    echo "Optional Processes: ${#OPTIONAL_MONITORING_PROCESSES[@]} configured"
+    echo "=================================================="
+}
+
+# 显示监控开销优化配置详情
+show_monitoring_overhead_config() {
+    echo "📊 监控开销优化详细配置"
+    echo "=================================================="
+    echo ""
+    echo "🔧 基础配置:"
+    echo "  监控开销统计: ${MONITORING_OVERHEAD_ENABLED:-"未设置"}"
+    echo "  性能监控: ${PERFORMANCE_MONITORING_ENABLED:-"未设置"}"
+    echo "  监控级别: ${PERFORMANCE_MONITORING_LEVEL:-"未设置"}"
+    echo "  数据保留天数: ${PERFORMANCE_DATA_RETENTION_DAYS:-"未设置"}"
+    echo ""
+    echo "⏱️  时间间隔配置:"
+    echo "  基础监控间隔: ${MONITOR_INTERVAL:-"未设置"}秒"
+    echo "  开销收集间隔: ${OVERHEAD_COLLECTION_INTERVAL:-"未设置"}秒"
+    echo "  健康检查间隔: ${HEALTH_CHECK_INTERVAL:-"未设置"}秒"
+    echo "  最小监控间隔: ${MIN_MONITOR_INTERVAL:-"未设置"}秒"
+    echo "  最大监控间隔: ${MAX_MONITOR_INTERVAL:-"未设置"}秒"
+    echo ""
+    echo "🚨 阈值配置:"
+    echo "  CPU开销警告阈值: ${OVERHEAD_CPU_WARNING_THRESHOLD:-"未设置"}%"
+    echo "  CPU开销严重阈值: ${OVERHEAD_CPU_CRITICAL_THRESHOLD:-"未设置"}%"
+    echo "  内存开销警告阈值: ${OVERHEAD_MEMORY_WARNING_THRESHOLD:-"未设置"}%"
+    echo "  内存开销严重阈值: ${OVERHEAD_MEMORY_CRITICAL_THRESHOLD:-"未设置"}%"
+    echo "  系统负载阈值: ${SYSTEM_LOAD_THRESHOLD:-"未设置"}%"
+    echo "  高负载阈值: ${SYSTEM_LOAD_HIGH_THRESHOLD:-"未设置"}%"
+    echo "  严重负载阈值: ${SYSTEM_LOAD_CRITICAL_THRESHOLD:-"未设置"}%"
+    echo ""
+    echo "🔄 自适应调整配置:"
+    echo "  自适应频率调整: ${ADAPTIVE_FREQUENCY_ENABLED:-"未设置"}"
+    echo "  调整因子: ${FREQUENCY_ADJUSTMENT_FACTOR:-"未设置"}"
+    echo "  激进调整模式: ${FREQUENCY_ADJUSTMENT_AGGRESSIVE:-"未设置"}"
+    echo ""
+    echo "📉 优雅降级配置:"
+    echo "  优雅降级: ${GRACEFUL_DEGRADATION_ENABLED:-"未设置"}"
+    echo "  轻度降级阈值: ${DEGRADATION_LEVEL_1_THRESHOLD:-"未设置"}%"
+    echo "  中度降级阈值: ${DEGRADATION_LEVEL_2_THRESHOLD:-"未设置"}%"
+    echo "  严重降级阈值: ${DEGRADATION_LEVEL_3_THRESHOLD:-"未设置"}%"
+    echo ""
+    echo "🛠️  错误处理配置:"
+    echo "  错误恢复: ${ERROR_RECOVERY_ENABLED:-"未设置"}"
+    echo "  最大连续错误: ${MAX_CONSECUTIVE_ERRORS:-"未设置"}"
+    echo "  恢复延迟: ${ERROR_RECOVERY_DELAY:-"未设置"}秒"
+    echo "  最大恢复尝试: ${ERROR_RECOVERY_MAX_ATTEMPTS:-"未设置"}"
+    echo "  错误统计: ${ERROR_STATISTICS_ENABLED:-"未设置"}"
+    echo ""
+    echo "💊 健康检查配置:"
+    echo "  健康检查: ${HEALTH_CHECK_ENABLED:-"未设置"}"
+    echo "  检查超时: ${HEALTH_CHECK_TIMEOUT:-"未设置"}秒"
+    echo "  磁盘阈值: ${HEALTH_CHECK_DISK_THRESHOLD:-"未设置"}%"
+    echo "  内存阈值: ${HEALTH_CHECK_MEMORY_THRESHOLD:-"未设置"}%"
+    echo "  CPU阈值: ${HEALTH_CHECK_CPU_THRESHOLD:-"未设置"}%"
+    echo ""
+    echo "📋 进程配置:"
+    echo "  监控进程数量: ${#MONITORING_PROCESS_NAMES[@]}"
+    echo "  区块链进程数量: ${#BLOCKCHAIN_PROCESS_NAMES[@]}"
+    echo "  关键进程数量: ${#CRITICAL_MONITORING_PROCESSES[@]}"
+    echo "  可选进程数量: ${#OPTIONAL_MONITORING_PROCESSES[@]}"
+    echo ""
+    echo "📁 日志文件配置:"
+    echo "  监控开销日志: ${MONITORING_OVERHEAD_LOG:-"未设置"}"
+    echo "  性能监控日志: ${PERFORMANCE_LOG:-"未设置"}"
+    echo "  频率调整日志: ${FREQUENCY_ADJUSTMENT_LOG:-"未设置"}"
+    echo "  错误日志: ${ERROR_LOG:-"未设置"}"
+    echo "  健康检查日志: ${HEALTH_CHECK_LOG:-"未设置"}"
     echo "=================================================="
 }
 

@@ -80,15 +80,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
         
-        # 使用统一的字体管理工具
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tools'))
-        try:
-            from font_manager import get_font_manager
-            self.font_manager = get_font_manager(enable_debug=True)
-        except ImportError as e:
-            print(f"⚠️  字体管理工具导入失败: {e}")
-            # 回退到简单的英文模式
-            self.font_manager = None
+        # 使用英文标签系统，移除复杂的字体管理
+        self.use_english_labels = True
+        self.font_manager = None
             
     def _get_localized_text(self, chinese_text: str, english_text: str) -> str:
         """获取本地化文本"""
@@ -97,23 +91,23 @@ class AdvancedChartGenerator(CSVDataProcessor):
         return english_text  # 回退到英文
         
     def _check_device_configured(self, logical_name: str) -> bool:
-        """检查设备是否配置并且有数据"""
+        """检查Device是否配置并且有数据"""
         if self.df is None:
             return False
         
-        # 通过列名前缀检查设备是否存在
+        # 通过列名前缀检查Device是否存在
         device_cols = [col for col in self.df.columns if col.startswith(f'{logical_name}_')]
         return len(device_cols) > 0
     
     def _get_device_columns_safe(self, logical_name: str, metric_suffix: str) -> List[str]:
-        """安全获取设备列，只返回存在的列"""
+        """安全获取Device列，只返回存在的列"""
         if not self._check_device_configured(logical_name):
             return []
         
         return self.get_device_columns_safe(logical_name, metric_suffix)
     
     def _get_configured_devices(self) -> List[str]:
-        """获取已配置的设备列表"""
+        """获取已配置的Device列表"""
         devices = []
         if self._check_device_configured('data'):
             devices.append('data')
@@ -166,17 +160,17 @@ class AdvancedChartGenerator(CSVDataProcessor):
         print("📊 生成Pearson相关性图表...")
         chart_files = []
         
-        # 检查设备配置
+        # 检查Device配置
         data_configured = self._check_device_configured('data')
         accounts_configured = self._check_device_configured('accounts')
         
         # 使用安全的字段获取方法
         cpu_iowait_field = self.get_field_name_safe('cpu_iowait')
         if not cpu_iowait_field:
-            print("⚠️ 未找到CPU I/O等待字段，跳过相关性分析")
+            print("⚠️ 未找到CPU I/O Wait字段，跳过相关性分析")
             return []
         
-        # 获取设备字段
+        # 获取Device字段
         device_util_cols = []
         device_aqu_cols = []
         device_await_cols = []
@@ -196,18 +190,18 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         for util_col in device_util_cols:
             device_name = util_col.split('_')[0].upper()
-            plot_configs.append((cpu_iowait_field, util_col, f'CPU I/O等待 vs {device_name}设备利用率'))
+            plot_configs.append((cpu_iowait_field, util_col, f'CPU I/O Wait vs {device_name}Device Utilization'))
         
         for aqu_col in device_aqu_cols:
             device_name = aqu_col.split('_')[0].upper()
-            plot_configs.append((cpu_iowait_field, aqu_col, f'CPU I/O等待 vs {device_name}设备队列长度'))
+            plot_configs.append((cpu_iowait_field, aqu_col, f'CPU I/O Wait vs {device_name}Device队列长度'))
         
         for await_col in device_await_cols:
             device_name = await_col.split('_')[0].upper()
-            plot_configs.append((cpu_iowait_field, await_col, f'CPU I/O等待 vs {device_name}设备延迟'))
+            plot_configs.append((cpu_iowait_field, await_col, f'CPU I/O Wait vs {device_name}DeviceLatency'))
         
         if not plot_configs:
-            print("  ⚠️ 没有配置的设备，跳过Pearson相关性图表生成")
+            print("  ⚠️ 没有配置的Device，跳过Pearson相关性图表生成")
             return []
         
         # 动态创建子图布局
@@ -260,7 +254,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                             p = np.poly1d(z)
                             ax.plot(cpu_data, p(cpu_data), "r--", alpha=0.8)
                             
-                            ax.set_xlabel('CPU I/O等待 (%)')
+                            ax.set_xlabel('CPU I/O Wait (%)')
                             ax.set_ylabel(ebs_col.replace('_', ' ').title())
                             ax.set_title(f'{title}\nr={corr:.3f}, p={p_value:.3f}')
                             ax.grid(True, alpha=0.3)
@@ -298,7 +292,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         print("📈 生成回归分析图表...")
         chart_files = []
         
-        # 检查设备配置
+        # 检查Device配置
         data_configured = self._check_device_configured('data')
         accounts_configured = self._check_device_configured('accounts')
         
@@ -320,7 +314,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             regression_configs.append(('cpu_sys', accounts_w_cols[0], 'System CPU vs ACCOUNTS写请求'))
         
         if not regression_configs:
-            print("  ⚠️ 没有配置的设备，跳过回归分析图表生成")
+            print("  ⚠️ 没有配置的Device，跳过回归分析图表生成")
             return []
         
         # 动态创建子图布局
@@ -378,7 +372,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax.text(0.05, 0.95, equation, transform=ax.transAxes,
                        bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7))
             else:
-                ax.text(0.5, 0.5, '数据不可用', ha='center', va='center', transform=ax.transAxes)
+                ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes)
                 ax.set_title(title, fontsize=12)
         
         plt.tight_layout()
@@ -399,7 +393,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         print("📉 生成负相关分析图表...")
         chart_files = []
         
-        # 检查设备配置
+        # 检查Device配置
         data_configured = self._check_device_configured('data')
         accounts_configured = self._check_device_configured('accounts')
         
@@ -415,7 +409,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             negative_configs.append(('cpu_idle', accounts_aqu_cols[0], 'CPU空闲 vs ACCOUNTS队列长度'))
         
         if not negative_configs:
-            print("  ⚠️ 没有配置的设备，跳过负相关分析图表生成")
+            print("  ⚠️ 没有配置的Device，跳过负相关分析图表生成")
             return []
         
         # 动态创建子图布局
@@ -462,7 +456,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                     ax.text(0.05, 0.95, '⚠ 非负相关', transform=ax.transAxes,
                            bbox=dict(boxstyle="round,pad=0.3", facecolor="orange", alpha=0.7))
             else:
-                ax.text(0.5, 0.5, '数据不可用', ha='center', va='center', transform=ax.transAxes)
+                ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes)
                 ax.set_title(title, fontsize=12)
         
         plt.tight_layout()
@@ -552,12 +546,12 @@ class AdvancedChartGenerator(CSVDataProcessor):
         print("📈 生成性能趋势分析...")
         chart_files = []
         
-        # 确保有时间戳列
+        # 确保有Time戳列
         if 'timestamp' not in self.df.columns:
-            print("  ⚠️ 缺少时间戳列，跳过趋势分析")
+            print("  ⚠️ 缺少Time戳列，跳过趋势分析")
             return []
         
-        # 转换时间戳
+        # 转换Time戳
         self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         
         fig, axes = plt.subplots(3, 2, figsize=(18, 15))
@@ -565,12 +559,12 @@ class AdvancedChartGenerator(CSVDataProcessor):
         if self.use_english_labels:
             fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=16, fontweight='bold')
         else:
-            fig.suptitle('CPU-EBS性能趋势分析', fontsize=16, fontweight='bold')
+            fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=16, fontweight='bold')
         
-        # CPU使用率趋势
+        # CPU Usage趋势
         if 'cpu_iowait' in self.df.columns:
             axes[0, 0].plot(self.df['timestamp'], self.df['cpu_iowait'], 'b-', alpha=0.7)
-            axes[0, 0].set_title('CPU I/O等待时间趋势')
+            axes[0, 0].set_title('CPU I/O WaitTime趋势')
             axes[0, 0].set_ylabel('I/O Wait (%)')
             axes[0, 0].grid(True, alpha=0.3)
         
@@ -580,7 +574,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                     (col.startswith('accounts_') and col.endswith('_util'))]
         if util_cols:
             axes[0, 1].plot(self.df['timestamp'], self.df[util_cols[0]], 'r-', alpha=0.7)
-            axes[0, 1].set_title('EBS设备利用率趋势')
+            axes[0, 1].set_title('EBSDevice Utilization趋势')
             axes[0, 1].set_ylabel('Utilization (%)')
             axes[0, 1].grid(True, alpha=0.3)
         
@@ -592,19 +586,19 @@ class AdvancedChartGenerator(CSVDataProcessor):
             axes[1, 0].set_ylabel('IOPS')
             axes[1, 0].grid(True, alpha=0.3)
         
-        # 吞吐量趋势
+        # Throughput趋势
         throughput_cols = [col for col in self.df.columns if 'throughput' in col and 'mibs' in col]
         if throughput_cols:
             axes[1, 1].plot(self.df['timestamp'], self.df[throughput_cols[0]], 'm-', alpha=0.7)
-            axes[1, 1].set_title('吞吐量趋势')
+            axes[1, 1].set_title('Throughput趋势')
             axes[1, 1].set_ylabel('Throughput (MiB/s)')
             axes[1, 1].grid(True, alpha=0.3)
         
-        # 延迟趋势
+        # Latency趋势
         await_cols = [col for col in self.df.columns if 'avg_await' in col]
         if await_cols:
             axes[2, 0].plot(self.df['timestamp'], self.df[await_cols[0]], 'orange', alpha=0.7)
-            axes[2, 0].set_title('I/O延迟趋势')
+            axes[2, 0].set_title('I/O Latency趋势')
             axes[2, 0].set_ylabel('Latency (ms)')
             axes[2, 0].grid(True, alpha=0.3)
         
@@ -658,12 +652,12 @@ class AdvancedChartGenerator(CSVDataProcessor):
             print("  ⚠️ 没有ENA网络数据，跳过ENA分析图表")
             return []
         
-        # 检查时间戳列
+        # 检查Time戳列
         if 'timestamp' not in self.df.columns:
-            print("  ⚠️ 缺少时间戳列，跳过ENA趋势分析")
+            print("  ⚠️ 缺少Time戳列，跳过ENA趋势分析")
             return []
         
-        # 转换时间戳
+        # 转换Time戳
         self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         
         # 生成ENA限制趋势图
@@ -736,12 +730,12 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax.set_ylabel('Limitation Triggers (Cumulative)', fontsize=12)
             else:
                 ax.set_title('🚨 ENA网络限制趋势分析', fontsize=16, fontweight='bold')
-                ax.set_xlabel('时间', fontsize=12)
+                ax.set_xlabel('Time', fontsize=12)
                 ax.set_ylabel('限制触发次数 (累计)', fontsize=12)
             ax.legend(loc='upper left')
             ax.grid(True, alpha=0.3)
             
-            # 时间轴格式化
+            # Time轴格式化
             plt.xticks(rotation=45)
             plt.tight_layout()
             
@@ -778,7 +772,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 添加警告线 (连接容量不足阈值)
             warning_threshold = 10000
             ax.axhline(y=warning_threshold, color='red', linestyle='--', alpha=0.7, 
-                      label=f'警告阈值 ({warning_threshold:,})')
+                      label=f'Warning Threshold ({warning_threshold:,})')
             
             # 图表美化
             # 根据字体支持情况选择标签语言
@@ -788,7 +782,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax.set_ylabel('Available Connections', fontsize=12)
             else:
                 ax.set_title('🔗 ENA连接容量监控', fontsize=16, fontweight='bold')
-                ax.set_xlabel('时间', fontsize=12)
+                ax.set_xlabel('Time', fontsize=12)
                 ax.set_ylabel('可用连接数', fontsize=12)
             ax.legend()
             ax.grid(True, alpha=0.3)
@@ -796,7 +790,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 格式化Y轴数值
             ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
             
-            # 时间轴格式化
+            # Time轴格式化
             plt.xticks(rotation=45)
             plt.tight_layout()
             
@@ -873,9 +867,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
                         transform=ax2.transAxes, fontsize=12)
                 ax2.set_title('连接容量分布')
             
-            # 3. 限制严重程度时间线 (左下)
+            # 3. 限制严重程度Time线 (左下)
             ax3 = axes[1, 0]
-            # 计算每个时间点的总限制严重程度
+            # 计算每个Time点的总限制严重程度
             severity_fields = ['ena_pps_exceeded', 'ena_bw_in_exceeded', 'ena_bw_out_exceeded', 
                               'ena_conntrack_exceeded', 'ena_linklocal_exceeded']
             
@@ -888,7 +882,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax3.plot(self.df['timestamp'], severity_score, color='red', linewidth=2)
                 ax3.fill_between(self.df['timestamp'], severity_score, alpha=0.3, color='red')
                 ax3.set_title('网络限制严重程度')
-                ax3.set_xlabel('时间')
+                ax3.set_xlabel('Time')
                 ax3.set_ylabel('同时限制类型数')
                 plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45)
             else:
@@ -955,13 +949,13 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         all_charts = []
         
-        # 1. Pearson相关性图表 (6-8种，根据配置设备动态调整)
+        # 1. Pearson相关性图表 (6-8种，根据配置Device动态调整)
         all_charts.extend(self.generate_pearson_correlation_charts())
         
-        # 2. 回归分析图表 (4种，根据配置设备动态调整)
+        # 2. 回归分析图表 (4种，根据配置Device动态调整)
         all_charts.extend(self.generate_regression_analysis_charts())
         
-        # 3. 负相关分析图表 (2种，根据配置设备动态调整)
+        # 3. 负相关分析图表 (2种，根据配置Device动态调整)
         all_charts.extend(self.generate_negative_correlation_charts())
         
         # 4. ENA网络限制分析图表 (新增)
@@ -993,7 +987,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 选择数值型字段进行相关性分析
             numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
             
-            # 排除时间戳和一些不适合相关性分析的字段
+            # 排除Time戳和一些不适合相关性分析的字段
             exclude_cols = ['timestamp', 'current_qps', 'test_duration']
             numeric_cols = [col for col in numeric_cols if col not in exclude_cols]
             
@@ -1086,7 +1080,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             with open(insights_file, 'w', encoding='utf-8') as f:
                 f.write("性能指标相关性分析洞察报告\n")
                 f.write("=" * 50 + "\n\n")
-                f.write(f"分析时间: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"分析Time: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"分析指标数量: {len(correlation_matrix.columns)}\n")
                 f.write(f"强相关性对数: {len(strong_correlations)}\n\n")
                 

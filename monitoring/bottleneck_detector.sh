@@ -22,6 +22,37 @@ source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 # 初始化统一日志管理器
 init_logger "bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/bottleneck_detector.log"
 
+# 动态构建设备字段匹配模式 - 修复硬编码设备名问题
+build_device_field_patterns() {
+    local field_type="$1"  # util, r_await, avg_await, aws_standard_iops, throughput_mibs
+    local patterns=()
+    
+    # DATA设备模式（必须存在）
+    patterns+=("data_${LEDGER_DEVICE}_${field_type}")
+    
+    # ACCOUNTS设备模式（可选）
+    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
+        patterns+=("accounts_${ACCOUNTS_DEVICE}_${field_type}")
+    fi
+    
+    # 注意：移除了无效的data_device_和简化模式，因为它们从未被实际生成过
+    
+    # 返回用|分隔的模式字符串
+    local IFS='|'
+    echo "${patterns[*]}"
+}
+
+# 构建所有需要的字段模式
+EBS_UTIL_PATTERNS=$(build_device_field_patterns "util")
+EBS_R_AWAIT_PATTERNS=$(build_device_field_patterns "r_await")
+EBS_AVG_AWAIT_PATTERNS=$(build_device_field_patterns "avg_await")
+EBS_AWS_IOPS_PATTERNS=$(build_device_field_patterns "aws_standard_iops")
+EBS_THROUGHPUT_PATTERNS=$(build_device_field_patterns "throughput_mibs")
+
+log_info "🔧 动态字段模式构建完成:"
+log_info "   EBS利用率模式: $EBS_UTIL_PATTERNS"
+log_info "   EBS延迟模式: $EBS_R_AWAIT_PATTERNS"
+
 # 错误处理函数
 handle_detector_error() {
     local exit_code=$?
@@ -37,22 +68,43 @@ trap 'handle_detector_error $LINENO' ERR
 
 readonly BOTTLENECK_STATUS_FILE="${MEMORY_SHARE_DIR}/bottleneck_status.json"
 
-# 瓶颈检测计数器
-declare -A BOTTLENECK_COUNTERS=(
-    ["cpu"]=0
-    ["memory"]=0
-    ["ebs_util"]=0
-    ["ebs_latency"]=0
-    ["ebs_aws_iops"]=0        # 新增: AWS基准IOPS瓶颈计数器
-    ["ebs_aws_throughput"]=0  # 新增: AWS基准吞吐量瓶颈计数器
-    ["network"]=0
-    ["error_rate"]=0
-    ["rpc_latency"]=0
-)
+# 瓶颈检测计数器 (动态初始化)
+declare -A BOTTLENECK_COUNTERS
+
+# 初始化瓶颈检测计数器
+initialize_bottleneck_counters() {
+    # 基础计数器
+    BOTTLENECK_COUNTERS["cpu"]=0
+    BOTTLENECK_COUNTERS["memory"]=0
+    BOTTLENECK_COUNTERS["network"]=0
+    BOTTLENECK_COUNTERS["error_rate"]=0
+    BOTTLENECK_COUNTERS["rpc_latency"]=0
+    BOTTLENECK_COUNTERS["ena_limit"]=0
+    
+    # DATA设备计数器
+    BOTTLENECK_COUNTERS["ebs_util"]=0
+    BOTTLENECK_COUNTERS["ebs_latency"]=0
+    BOTTLENECK_COUNTERS["ebs_aws_iops"]=0
+    BOTTLENECK_COUNTERS["ebs_aws_throughput"]=0
+    
+    # ACCOUNTS设备计数器 (如果配置了ACCOUNTS设备)
+    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
+        BOTTLENECK_COUNTERS["accounts_ebs_util"]=0
+        BOTTLENECK_COUNTERS["accounts_ebs_latency"]=0
+        BOTTLENECK_COUNTERS["accounts_ebs_aws_iops"]=0
+        BOTTLENECK_COUNTERS["accounts_ebs_aws_throughput"]=0
+        log_debug "已初始化ACCOUNTS设备瓶颈计数器"
+    fi
+    
+    log_debug "瓶颈检测计数器初始化完成"
+}
 
 # 初始化瓶颈检测
 init_bottleneck_detection() {
     echo "🔍 初始化智能瓶颈检测器..." | tee -a "$BOTTLENECK_LOG"
+    
+    # 初始化计数器
+    initialize_bottleneck_counters
     
     # 计算EBS性能基准值
     calculate_ebs_performance_baselines
@@ -137,66 +189,93 @@ check_memory_bottleneck() {
 check_ebs_bottleneck() {
     local ebs_util="$1"
     local ebs_latency="$2"
-    local ebs_aws_iops="$3"      # 新增: AWS标准IOPS
-    local ebs_throughput="$4"    # 新增: 实际吞吐量
+    local ebs_aws_iops="$3"      # AWS标准IOPS
+    local ebs_throughput="$4"    # 实际吞吐量
+    local device_type="${5:-data}" # 设备类型: "data" 或 "accounts"，默认为 "data"
     
     local bottleneck_detected=false
     
+    # 根据设备类型选择正确的基准值和计数器前缀
+    local baseline_iops="$DATA_BASELINE_IOPS"
+    local baseline_throughput="$DATA_BASELINE_THROUGHPUT"
+    local counter_prefix="ebs"
+    
+    if [[ "$device_type" == "accounts" ]]; then
+        # 检查ACCOUNTS设备的基准值是否已配置
+        if [[ -n "$ACCOUNTS_BASELINE_IOPS" && -n "$ACCOUNTS_BASELINE_THROUGHPUT" ]]; then
+            baseline_iops="$ACCOUNTS_BASELINE_IOPS"
+            baseline_throughput="$ACCOUNTS_BASELINE_THROUGHPUT"
+            counter_prefix="accounts_ebs"
+            log_debug "使用ACCOUNTS设备基准: IOPS=$baseline_iops, 吞吐量=$baseline_throughput"
+        else
+            log_debug "ACCOUNTS设备基准值未配置，使用DATA设备基准值"
+        fi
+    else
+        log_debug "使用DATA设备基准: IOPS=$baseline_iops, 吞吐量=$baseline_throughput"
+    fi
+    
+    # 验证基准值有效性
+    if [[ -z "$baseline_iops" || -z "$baseline_throughput" ]]; then
+        log_debug "基准值无效，跳过AWS基准瓶颈检测"
+        baseline_iops=""
+        baseline_throughput=""
+    fi
+    
     # 检测EBS利用率瓶颈 (传统方法)
     if (( $(echo "$ebs_util > $BOTTLENECK_EBS_UTIL_THRESHOLD" | bc -l 2>/dev/null || echo 0) )); then
-        BOTTLENECK_COUNTERS["ebs_util"]=$((${BOTTLENECK_COUNTERS["ebs_util"]} + 1))
-        echo "⚠️  EBS利用率瓶颈检测: ${ebs_util}% > ${BOTTLENECK_EBS_UTIL_THRESHOLD}% (${BOTTLENECK_COUNTERS["ebs_util"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        BOTTLENECK_COUNTERS["${counter_prefix}_util"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_util"]:-0} + 1))
+        echo "⚠️  EBS利用率瓶颈检测 (${device_type}): ${ebs_util}% > ${BOTTLENECK_EBS_UTIL_THRESHOLD}% (${BOTTLENECK_COUNTERS["${counter_prefix}_util"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
-        if [[ ${BOTTLENECK_COUNTERS["ebs_util"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_util"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             bottleneck_detected=true
         fi
     else
-        BOTTLENECK_COUNTERS["ebs_util"]=0  # 重置计数器
+        BOTTLENECK_COUNTERS["${counter_prefix}_util"]=0  # 重置计数器
     fi
     
     # 检测EBS延迟瓶颈
     if (( $(echo "$ebs_latency > $BOTTLENECK_EBS_LATENCY_THRESHOLD" | bc -l 2>/dev/null || echo 0) )); then
-        BOTTLENECK_COUNTERS["ebs_latency"]=$((${BOTTLENECK_COUNTERS["ebs_latency"]} + 1))
-        echo "⚠️  EBS延迟瓶颈检测: ${ebs_latency}ms > ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms (${BOTTLENECK_COUNTERS["ebs_latency"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        BOTTLENECK_COUNTERS["${counter_prefix}_latency"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_latency"]:-0} + 1))
+        echo "⚠️  EBS延迟瓶颈检测 (${device_type}): ${ebs_latency}ms > ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms (${BOTTLENECK_COUNTERS["${counter_prefix}_latency"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
-        if [[ ${BOTTLENECK_COUNTERS["ebs_latency"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_latency"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             bottleneck_detected=true
         fi
     else
-        BOTTLENECK_COUNTERS["ebs_latency"]=0  # 重置计数器
+        BOTTLENECK_COUNTERS["${counter_prefix}_latency"]=0  # 重置计数器
     fi
     
-    # 新增: AWS基准IOPS瓶颈检测
-    if [[ -n "$ebs_aws_iops" && -n "$DATA_BASELINE_IOPS" ]]; then
-        local aws_iops_utilization=$(echo "scale=4; $ebs_aws_iops / $DATA_BASELINE_IOPS" | bc 2>/dev/null || echo "0")
+    # AWS基准IOPS瓶颈检测 (使用设备特定的基准值)
+    if [[ -n "$ebs_aws_iops" && -n "$baseline_iops" ]]; then
+        local aws_iops_utilization=$(echo "scale=4; $ebs_aws_iops / $baseline_iops" | bc 2>/dev/null || echo "0")
         local aws_iops_threshold=0.85  # 85%阈值
         
         if (( $(echo "$aws_iops_utilization > $aws_iops_threshold" | bc -l 2>/dev/null || echo 0) )); then
-            BOTTLENECK_COUNTERS["ebs_aws_iops"]=$((${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0} + 1))
-            echo "⚠️  EBS AWS基准IOPS瓶颈: ${ebs_aws_iops}/${DATA_BASELINE_IOPS} (${aws_iops_utilization%.*}%) > ${aws_iops_threshold%.*}% (${BOTTLENECK_COUNTERS["ebs_aws_iops"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+            BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0} + 1))
+            echo "⚠️  EBS AWS基准IOPS瓶颈 (${device_type}): ${ebs_aws_iops}/${baseline_iops} (${aws_iops_utilization%.*}%) > ${aws_iops_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
             
-            if [[ ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+            if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_detected=true
             fi
         else
-            BOTTLENECK_COUNTERS["ebs_aws_iops"]=0
+            BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]=0
         fi
     fi
     
-    # 新增: AWS基准吞吐量瓶颈检测
-    if [[ -n "$ebs_throughput" && -n "$DATA_BASELINE_THROUGHPUT" ]]; then
-        local aws_throughput_utilization=$(echo "scale=4; $ebs_throughput / $DATA_BASELINE_THROUGHPUT" | bc 2>/dev/null || echo "0")
+    # AWS基准吞吐量瓶颈检测 (使用设备特定的基准值)
+    if [[ -n "$ebs_throughput" && -n "$baseline_throughput" ]]; then
+        local aws_throughput_utilization=$(echo "scale=4; $ebs_throughput / $baseline_throughput" | bc 2>/dev/null || echo "0")
         local aws_throughput_threshold=0.85  # 85%阈值
         
         if (( $(echo "$aws_throughput_utilization > $aws_throughput_threshold" | bc -l 2>/dev/null || echo 0) )); then
-            BOTTLENECK_COUNTERS["ebs_aws_throughput"]=$((${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0} + 1))
-            echo "⚠️  EBS AWS基准吞吐量瓶颈: ${ebs_throughput}/${DATA_BASELINE_THROUGHPUT} MiB/s (${aws_throughput_utilization%.*}%) > ${aws_throughput_threshold%.*}% (${BOTTLENECK_COUNTERS["ebs_aws_throughput"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+            BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0} + 1))
+            echo "⚠️  EBS AWS基准吞吐量瓶颈 (${device_type}): ${ebs_throughput}/${baseline_throughput} MiB/s (${aws_throughput_utilization%.*}%) > ${aws_throughput_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
             
-            if [[ ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+            if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_detected=true
             fi
         else
-            BOTTLENECK_COUNTERS["ebs_aws_throughput"]=0
+            BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]=0
         fi
     fi
     
@@ -420,76 +499,50 @@ extract_performance_metrics() {
     local network_util=0
     local error_rate=0
     
-    # 查找CPU使用率字段
+    # 使用动态字段匹配替代硬编码
     for i in "${!field_names[@]}"; do
-        case "${field_names[i]}" in
+        local field_name="${field_names[i]}"
+        
+        case "$field_name" in
+            # CPU和内存字段（保持不变）
             "cpu_usage"|"cpu_percent"|"cpu_total")
                 cpu_usage=${data_values[i]:-0}
                 ;;
             "mem_usage"|"memory_usage"|"mem_percent")
                 memory_usage=${data_values[i]:-0}
                 ;;
-            # DATA设备利用率字段
-            "data_nvme1n1_util"|"ledger_nvme1n1_util"|"data_device_util"|"nvme1n1_util")
-                ebs_util=${data_values[i]:-0}
-                ;;
-            # DATA设备延迟字段 (优先使用读延迟，如果没有则使用平均延迟)
-            "data_nvme1n1_r_await"|"ledger_nvme1n1_r_await"|"data_device_r_await"|"nvme1n1_r_await")
-                ebs_latency=${data_values[i]:-0}
-                ;;
-            "data_nvme1n1_avg_await"|"ledger_nvme1n1_avg_await"|"data_device_avg_await"|"nvme1n1_avg_await")
-                # 如果还没有设置延迟值，使用平均延迟
-                if [[ "$ebs_latency" == "0" ]]; then
-                    ebs_latency=${data_values[i]:-0}
-                fi
-                ;;
-            # ACCOUNTS设备延迟字段 (如果DATA设备延迟为0，使用ACCOUNTS设备)
-            "accounts_nvme2n1_r_await"|"accounts_device_r_await"|"nvme2n1_r_await")
-                if [[ "$ebs_latency" == "0" ]]; then
-                    ebs_latency=${data_values[i]:-0}
-                fi
-                ;;
-            "accounts_nvme2n1_avg_await"|"accounts_device_avg_await"|"nvme2n1_avg_await")
-                # 如果还没有设置延迟值，使用ACCOUNTS设备平均延迟
-                if [[ "$ebs_latency" == "0" ]]; then
-                    ebs_latency=${data_values[i]:-0}
-                fi
-                ;;
-            # ACCOUNTS设备利用率字段 (如果DATA设备利用率为0，使用ACCOUNTS设备)
-            "accounts_nvme2n1_util"|"nvme2n1_util"|"accounts_device_util")
-                if [[ "$ebs_util" == "0" ]]; then
-                    ebs_util=${data_values[i]:-0}
-                fi
-                ;;
-            # DATA设备AWS标准IOPS字段
-            "data_nvme1n1_aws_standard_iops"|"ledger_nvme1n1_aws_standard_iops"|"data_device_aws_standard_iops"|"nvme1n1_aws_standard_iops")
-                ebs_aws_iops=${data_values[i]:-0}
-                ;;
-            # DATA设备吞吐量字段
-            "data_nvme1n1_throughput_mibs"|"ledger_nvme1n1_throughput_mibs"|"data_device_throughput_mibs"|"nvme1n1_throughput_mibs")
-                ebs_throughput=${data_values[i]:-0}
-                ;;
-            # ACCOUNTS设备AWS标准IOPS字段 (如果DATA设备IOPS为0，使用ACCOUNTS设备)
-            "accounts_nvme2n1_aws_standard_iops"|"nvme2n1_aws_standard_iops"|"accounts_device_aws_standard_iops")
-                if [[ "$ebs_aws_iops" == "0" ]]; then
-                    ebs_aws_iops=${data_values[i]:-0}
-                fi
-                ;;
-            # ACCOUNTS设备吞吐量字段
-            "accounts_nvme2n1_throughput_mibs"|"nvme2n1_throughput_mibs"|"accounts_device_throughput_mibs")
-                if [[ "$ebs_throughput" == "0" ]]; then
-                    ebs_throughput=${data_values[i]:-0}
-                fi
-                ;;
-            # 网络总流量字段
+            # 网络总流量字段（保持不变）
             "net_total_mbps"|"network_total_mbps"|"total_mbps")
-                # 计算网络利用率百分比
                 local current_mbps=${data_values[i]:-0}
                 network_util=$(echo "scale=2; ($current_mbps / $NETWORK_MAX_BANDWIDTH_MBPS) * 100" | bc 2>/dev/null || echo "0")
-                # 限制在100%以内
                 network_util=$(echo "if ($network_util > 100) 100 else $network_util" | bc 2>/dev/null || echo "0")
                 ;;
         esac
+        
+        # 使用动态模式匹配EBS字段
+        if [[ "$EBS_UTIL_PATTERNS" == *"$field_name"* ]]; then
+            ebs_util=${data_values[i]:-0}
+            log_debug "匹配到EBS利用率字段: $field_name = $ebs_util"
+        fi
+        
+        if [[ "$EBS_R_AWAIT_PATTERNS" == *"$field_name"* ]]; then
+            ebs_latency=${data_values[i]:-0}
+            log_debug "匹配到EBS读延迟字段: $field_name = $ebs_latency"
+        elif [[ "$EBS_AVG_AWAIT_PATTERNS" == *"$field_name"* ]] && [[ "$ebs_latency" == "0" ]]; then
+            # 如果还没有设置延迟值，使用平均延迟
+            ebs_latency=${data_values[i]:-0}
+            log_debug "匹配到EBS平均延迟字段: $field_name = $ebs_latency"
+        fi
+        
+        if [[ "$EBS_AWS_IOPS_PATTERNS" == *"$field_name"* ]]; then
+            ebs_aws_iops=${data_values[i]:-0}
+            log_debug "匹配到EBS AWS IOPS字段: $field_name = $ebs_aws_iops"
+        fi
+        
+        if [[ "$EBS_THROUGHPUT_PATTERNS" == *"$field_name"* ]]; then
+            ebs_throughput=${data_values[i]:-0}
+            log_debug "匹配到EBS吞吐量字段: $field_name = $ebs_throughput"
+        fi
     done
     
     # TODO: 从QPS测试结果获取错误率
@@ -497,6 +550,96 @@ extract_performance_metrics() {
     error_rate=$(get_latest_qps_error_rate)
     
     echo "$cpu_usage,$memory_usage,$ebs_util,$ebs_latency,$ebs_aws_iops,$ebs_throughput,$network_util,$error_rate"
+}
+
+# 多设备EBS瓶颈检测协调器
+detect_all_ebs_bottlenecks() {
+    local performance_csv="$1"
+    local bottleneck_detected=false
+    local bottleneck_info=()
+    
+    # 读取CSV数据
+    if [[ ! -f "$performance_csv" ]]; then
+        log_debug "性能数据文件不存在: $performance_csv"
+        return 1
+    fi
+    
+    local latest_line=$(tail -n 1 "$performance_csv")
+    if [[ -z "$latest_line" ]]; then
+        log_debug "性能数据文件为空"
+        return 1
+    fi
+    
+    # 解析CSV表头和数据
+    local header_line=$(head -n 1 "$performance_csv")
+    IFS=',' read -ra field_names <<< "$header_line"
+    IFS=',' read -ra data_values <<< "$latest_line"
+    
+    # 检测DATA设备
+    local data_util=0 data_latency=0 data_aws_iops=0 data_throughput=0
+    
+    for i in "${!field_names[@]}"; do
+        local field_name="${field_names[i]}"
+        
+        # DATA设备字段匹配
+        if [[ "$field_name" == data_${LEDGER_DEVICE}_util ]]; then
+            data_util=${data_values[i]:-0}
+        elif [[ "$field_name" == data_${LEDGER_DEVICE}_r_await ]]; then
+            data_latency=${data_values[i]:-0}
+        elif [[ "$field_name" == data_${LEDGER_DEVICE}_avg_await ]] && [[ "$data_latency" == "0" ]]; then
+            data_latency=${data_values[i]:-0}
+        elif [[ "$field_name" == data_${LEDGER_DEVICE}_aws_standard_iops ]]; then
+            data_aws_iops=${data_values[i]:-0}
+        elif [[ "$field_name" == data_${LEDGER_DEVICE}_throughput_mibs ]]; then
+            data_throughput=${data_values[i]:-0}
+        fi
+    done
+    
+    # 检测DATA设备瓶颈
+    if check_ebs_bottleneck "$data_util" "$data_latency" "$data_aws_iops" "$data_throughput" "data"; then
+        bottleneck_detected=true
+        bottleneck_info+=("DATA设备瓶颈: 利用率=${data_util}%, 延迟=${data_latency}ms, AWS_IOPS=${data_aws_iops}, 吞吐量=${data_throughput}MiB/s")
+    fi
+    
+    # 检测ACCOUNTS设备 (如果配置了)
+    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
+        local accounts_util=0 accounts_latency=0 accounts_aws_iops=0 accounts_throughput=0
+        
+        for i in "${!field_names[@]}"; do
+            local field_name="${field_names[i]}"
+            
+            # ACCOUNTS设备字段匹配
+            if [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_util ]]; then
+                accounts_util=${data_values[i]:-0}
+            elif [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_r_await ]]; then
+                accounts_latency=${data_values[i]:-0}
+            elif [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_avg_await ]] && [[ "$accounts_latency" == "0" ]]; then
+                accounts_latency=${data_values[i]:-0}
+            elif [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_aws_standard_iops ]]; then
+                accounts_aws_iops=${data_values[i]:-0}
+            elif [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_throughput_mibs ]]; then
+                accounts_throughput=${data_values[i]:-0}
+            fi
+        done
+        
+        # 检测ACCOUNTS设备瓶颈
+        if check_ebs_bottleneck "$accounts_util" "$accounts_latency" "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
+            bottleneck_detected=true
+            bottleneck_info+=("ACCOUNTS设备瓶颈: 利用率=${accounts_util}%, 延迟=${accounts_latency}ms, AWS_IOPS=${accounts_aws_iops}, 吞吐量=${accounts_throughput}MiB/s")
+        fi
+    fi
+    
+    # 输出检测结果
+    if [[ "$bottleneck_detected" == "true" ]]; then
+        echo "🚨 检测到EBS瓶颈:" | tee -a "$BOTTLENECK_LOG"
+        for info in "${bottleneck_info[@]}"; do
+            echo "   - $info" | tee -a "$BOTTLENECK_LOG"
+        done
+        return 0
+    else
+        log_debug "未检测到EBS瓶颈"
+        return 1
+    fi
 }
 
 # 综合瓶颈检测
@@ -534,14 +677,15 @@ detect_bottleneck() {
         bottleneck_values+=("${memory_usage}%")
     fi
     
-    if check_ebs_bottleneck "$ebs_util" "$ebs_latency" "$ebs_aws_iops" "$ebs_throughput"; then
+    # 检测DATA设备EBS瓶颈
+    if check_ebs_bottleneck "$ebs_util" "$ebs_latency" "$ebs_aws_iops" "$ebs_throughput" "data"; then
         bottleneck_detected=true
-        if [[ ${BOTTLENECK_COUNTERS["ebs_util"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            bottleneck_types+=("EBS_Utilization")
+        if [[ ${BOTTLENECK_COUNTERS["ebs_util"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+            bottleneck_types+=("DATA_EBS_Utilization")
             bottleneck_values+=("${ebs_util}%")
         fi
-        if [[ ${BOTTLENECK_COUNTERS["ebs_latency"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            bottleneck_types+=("EBS_Latency")
+        if [[ ${BOTTLENECK_COUNTERS["ebs_latency"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+            bottleneck_types+=("DATA_EBS_Latency")
             bottleneck_values+=("${ebs_latency}ms")
         fi
         if [[ ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
@@ -551,6 +695,61 @@ detect_bottleneck() {
         if [[ ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             bottleneck_types+=("EBS_AWS_Throughput")
             bottleneck_values+=("${ebs_throughput}/${DATA_BASELINE_THROUGHPUT}MiB/s")
+        fi
+    fi
+    
+    # 检测ACCOUNTS设备EBS瓶颈 (如果配置了)
+    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
+        # 获取ACCOUNTS设备的性能指标
+        local accounts_util=0
+        local accounts_latency=0
+        local accounts_aws_iops=0
+        local accounts_throughput=0
+        
+        # 从CSV数据中提取ACCOUNTS设备指标
+        for i in "${!field_names[@]}"; do
+            local field_name="${field_names[i]}"
+            
+            # 匹配ACCOUNTS设备字段
+            if [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_util ]]; then
+                accounts_util=${data_values[i]:-0}
+            fi
+            
+            if [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_r_await ]]; then
+                accounts_latency=${data_values[i]:-0}
+            elif [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_avg_await ]] && [[ "$accounts_latency" == "0" ]]; then
+                accounts_latency=${data_values[i]:-0}
+            fi
+            
+            if [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_aws_standard_iops ]]; then
+                accounts_aws_iops=${data_values[i]:-0}
+            fi
+            
+            if [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_throughput_mibs ]]; then
+                accounts_throughput=${data_values[i]:-0}
+            fi
+        done
+        
+        log_debug "ACCOUNTS设备指标: 利用率=${accounts_util}%, 延迟=${accounts_latency}ms, AWS_IOPS=${accounts_aws_iops}, 吞吐量=${accounts_throughput}MiB/s"
+        
+        if check_ebs_bottleneck "$accounts_util" "$accounts_latency" "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
+            bottleneck_detected=true
+            if [[ ${BOTTLENECK_COUNTERS["accounts_ebs_util"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+                bottleneck_types+=("ACCOUNTS_EBS_Utilization")
+                bottleneck_values+=("${accounts_util}%")
+            fi
+            if [[ ${BOTTLENECK_COUNTERS["accounts_ebs_latency"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+                bottleneck_types+=("ACCOUNTS_EBS_Latency")
+                bottleneck_values+=("${accounts_latency}ms")
+            fi
+            if [[ ${BOTTLENECK_COUNTERS["accounts_ebs_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+                bottleneck_types+=("ACCOUNTS_EBS_AWS_IOPS")
+                bottleneck_values+=("${accounts_aws_iops}/${ACCOUNTS_BASELINE_IOPS}")
+            fi
+            if [[ ${BOTTLENECK_COUNTERS["accounts_ebs_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+                bottleneck_types+=("ACCOUNTS_EBS_AWS_Throughput")
+                bottleneck_values+=("${accounts_throughput}/${ACCOUNTS_BASELINE_THROUGHPUT}MiB/s")
+            fi
         fi
     fi
     

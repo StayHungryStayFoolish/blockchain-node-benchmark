@@ -78,55 +78,128 @@ class SolanaQPSAnalyzer:
             # 使用直接字段访问
             pass
         
-        # 初始化字体设置标志
-        self.use_english_labels = False
-        
-        # 设置中文字体支持
-        self._setup_fonts()
+        # 使用英文标签系统，移除复杂的字体管理
+        self.use_english_labels = True
         
         logger.info(f"🔍 QPS分析器初始化完成，输出目录: {output_dir}, 基准测试模式: {benchmark_mode}")
         if bottleneck_mode:
             logger.info("🚨 瓶颈分析模式已启用")
+
+    def _get_dynamic_key_metrics(self, df: pd.DataFrame) -> list:
+        """动态获取关键指标字段，替代硬编码设备名 - 完整版本"""
+        base_metrics = ['cpu_usage', 'mem_usage']
+        
+        # 动态查找EBS利用率字段（优先DATA设备，然后ACCOUNTS设备）
+        ebs_util_field = None
+        # 首先查找DATA设备字段（必须存在）
+        for col in df.columns:
+            if col.startswith('data_') and col.endswith('_util'):
+                ebs_util_field = col
+                break
+        
+        # 如果没有DATA设备字段，查找ACCOUNTS设备字段（可选）
+        if not ebs_util_field:
+            for col in df.columns:
+                if col.startswith('accounts_') and col.endswith('_util'):
+                    ebs_util_field = col
+                    break
+        
+        # 动态查找EBS延迟字段（优先DATA设备的r_await）
+        ebs_latency_field = None
+        # 首先查找DATA设备的r_await字段
+        for col in df.columns:
+            if col.startswith('data_') and col.endswith('_r_await'):
+                ebs_latency_field = col
+                break
+        
+        # 如果没有DATA设备的r_await，查找DATA设备的avg_await
+        if not ebs_latency_field:
+            for col in df.columns:
+                if col.startswith('data_') and col.endswith('_avg_await'):
+                    ebs_latency_field = col
+                    break
+        
+        # 如果DATA设备都没有，查找ACCOUNTS设备的延迟字段（可选）
+        if not ebs_latency_field:
+            for col in df.columns:
+                if col.startswith('accounts_') and col.endswith('_r_await'):
+                    ebs_latency_field = col
+                    break
+        
+        if not ebs_latency_field:
+            for col in df.columns:
+                if col.startswith('accounts_') and col.endswith('_avg_await'):
+                    ebs_latency_field = col
+                    break
+        
+        # 动态查找其他重要EBS指标（优先DATA设备）
+        ebs_iops_field = None
+        # 首先查找DATA设备字段
+        for col in df.columns:
+            if col.startswith('data_') and col.endswith('_total_iops'):
+                ebs_iops_field = col
+                break
+        # 如果没有DATA设备字段，查找ACCOUNTS设备字段（可选）
+        if not ebs_iops_field:
+            for col in df.columns:
+                if col.startswith('accounts_') and col.endswith('_total_iops'):
+                    ebs_iops_field = col
+                    break
+        
+        ebs_throughput_field = None
+        # 首先查找DATA设备字段
+        for col in df.columns:
+            if col.startswith('data_') and col.endswith('_throughput_mibs'):
+                ebs_throughput_field = col
+                break
+        # 如果没有DATA设备字段，查找ACCOUNTS设备字段（可选）
+        if not ebs_throughput_field:
+            for col in df.columns:
+                if col.startswith('accounts_') and col.endswith('_throughput_mibs'):
+                    ebs_throughput_field = col
+                    break
+        
+        ebs_queue_field = None
+        # 首先查找DATA设备字段
+        for col in df.columns:
+            if col.startswith('data_') and col.endswith('_aqu_sz'):
+                ebs_queue_field = col
+                break
+        # 如果没有DATA设备字段，查找ACCOUNTS设备字段（可选）
+        if not ebs_queue_field:
+            for col in df.columns:
+                if col.startswith('accounts_') and col.endswith('_aqu_sz'):
+                    ebs_queue_field = col
+                    break
+        
+        # 添加找到的字段
+        if ebs_util_field:
+            base_metrics.append(ebs_util_field)
+            logger.info(f"✅ 动态发现EBS利用率字段: {ebs_util_field}")
+        
+        if ebs_latency_field:
+            base_metrics.append(ebs_latency_field)
+            logger.info(f"✅ 动态发现EBS延迟字段: {ebs_latency_field}")
+        
+        if ebs_iops_field:
+            base_metrics.append(ebs_iops_field)
+            logger.info(f"✅ 动态发现EBS IOPS字段: {ebs_iops_field}")
+        
+        if ebs_throughput_field:
+            base_metrics.append(ebs_throughput_field)
+            logger.info(f"✅ 动态发现EBS吞吐量字段: {ebs_throughput_field}")
+        
+        if ebs_queue_field:
+            base_metrics.append(ebs_queue_field)
+            logger.info(f"✅ 动态发现EBS队列深度字段: {ebs_queue_field}")
+        
+        if not any([ebs_util_field, ebs_latency_field, ebs_iops_field]):
+            logger.warning("⚠️ 未发现EBS相关字段，可能影响瓶颈分析准确性")
+        
+        logger.info(f"📊 动态指标字段总数: {len(base_metrics)}")
+        return base_metrics
     
-    def _setup_fonts(self):
-        """增强的字体设置函数，处理AWS EC2环境中的中文字体问题"""
-        try:
-            # 1. 清除字体缓存，强制重新检测
-            from matplotlib.font_manager import _rebuild
-            _rebuild()
-            
-            # 2. 尝试多种中文字体，包括AWS EC2常见字体
-            chinese_fonts = [
-                'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei',  # AWS上常用的中文字体
-                'Noto Sans CJK SC', 'Noto Sans CJK TC',      # Google Noto字体
-                'SimHei', 'Microsoft YaHei',                  # Windows中文字体
-                'PingFang SC', 'Heiti SC',                    # macOS中文字体
-                'DejaVu Sans', 'Arial Unicode MS',            # 通用字体
-                'sans-serif'                                  # 最后的回退
-            ]
-            
-            # 3. 设置字体
-            plt.rcParams['font.sans-serif'] = chinese_fonts
-            plt.rcParams['axes.unicode_minus'] = False
-            
-            # 4. 验证字体是否可用
-            from matplotlib.font_manager import FontManager
-            fm = FontManager()
-            font_names = set([f.name for f in fm.ttflist])
-            
-            # 检查是否有任何中文字体可用
-            available_chinese_fonts = [f for f in chinese_fonts if f in font_names]
-            
-            if not available_chinese_fonts:
-                print("⚠️  未找到可用的中文字体，将使用英文标签")
-                self.use_english_labels = True
-            else:
-                print(f"✅ 找到可用的中文字体: {available_chinese_fonts[0]}")
-                
-        except Exception as e:
-            print(f"⚠️  字体设置警告: {e}")
-            # 使用英文标签作为备选方案
-            self.use_english_labels = True
+
 
     def analyze_performance_cliff(self, df: pd.DataFrame, max_qps: int, bottleneck_qps: int) -> Dict[str, Any]:
         """分析性能悬崖 - 识别性能急剧下降的点"""
@@ -189,8 +262,8 @@ class SolanaQPSAnalyzer:
             if len(max_qps_data) == 0 or len(bottleneck_qps_data) == 0:
                 return cliff_factors
             
-            # 比较关键指标的变化
-            key_metrics = ['cpu_usage', 'mem_usage', 'data_nvme1n1_util', 'data_nvme1n1_await']
+            # 比较关键指标的变化 - 使用动态字段查找替代硬编码
+            key_metrics = self._get_dynamic_key_metrics(df)
             
             for metric in key_metrics:
                 if metric in df.columns:
@@ -683,9 +756,9 @@ class SolanaQPSAnalyzer:
         
         # 瓶颈类型权重
         bottleneck_weights = {
-            'CPU': 0.3,
+            'CPU': 0.2,
             'Memory': 0.25,
-            'EBS': 0.2,
+            'EBS': 0.3,
             'Network': 0.15,
             'RPC': 0.1
         }

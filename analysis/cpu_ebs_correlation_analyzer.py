@@ -32,51 +32,10 @@ class CPUEBSCorrelationAnalyzer:
         self.df = None
         self.analysis_results = {}
         
-        # 初始化字体设置标志
-        self.use_english_labels = False
-        
-        # 设置中文字体支持
-        self._setup_fonts()
+        # 使用英文标签系统，移除复杂的字体管理
+        self.use_english_labels = True
     
-    def _setup_fonts(self):
-        """增强的字体设置函数，处理AWS EC2环境中的中文字体问题"""
-        try:
-            # 1. 清除字体缓存，强制重新检测
-            from matplotlib.font_manager import _rebuild
-            _rebuild()
-            
-            # 2. 尝试多种中文字体，包括AWS EC2常见字体
-            chinese_fonts = [
-                'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei',  # AWS上常用的中文字体
-                'Noto Sans CJK SC', 'Noto Sans CJK TC',      # Google Noto字体
-                'SimHei', 'Microsoft YaHei',                  # Windows中文字体
-                'PingFang SC', 'Heiti SC',                    # macOS中文字体
-                'DejaVu Sans', 'Arial Unicode MS',            # 通用字体
-                'sans-serif'                                  # 最后的回退
-            ]
-            
-            # 3. 设置字体
-            plt.rcParams['font.sans-serif'] = chinese_fonts
-            plt.rcParams['axes.unicode_minus'] = False
-            
-            # 4. 验证字体是否可用
-            from matplotlib.font_manager import FontManager
-            fm = FontManager()
-            font_names = set([f.name for f in fm.ttflist])
-            
-            # 检查是否有任何中文字体可用
-            available_chinese_fonts = [f for f in chinese_fonts if f in font_names]
-            
-            if not available_chinese_fonts:
-                print("⚠️  未找到可用的中文字体，将使用英文标签")
-                self.use_english_labels = True
-            else:
-                print(f"✅ 找到可用的中文字体: {available_chinese_fonts[0]}")
-                
-        except Exception as e:
-            print(f"⚠️  字体设置警告: {e}")
-            # 使用英文标签作为备选方案
-            self.use_english_labels = True
+
         
     def _check_device_configured(self, logical_name: str) -> bool:
         """检查设备是否配置并且有数据"""
@@ -162,13 +121,19 @@ class CPUEBSCorrelationAnalyzer:
         
         # 找到设备列 - 使用统一的字段格式匹配
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
-        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
-        
         data_aqu_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_aqu_sz')]
-        accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_aqu_sz')]
-        
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
-        accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')]
+        
+        # ACCOUNTS设备列 - 仅在ACCOUNTS设备配置时查找
+        accounts_configured = self._check_device_configured('accounts')
+        accounts_util_cols = []
+        accounts_aqu_cols = []
+        accounts_await_cols = []
+        
+        if accounts_configured:
+            accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
+            accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_aqu_sz')]
+            accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')]
         
         # 1-4: CPU I/O wait vs 设备利用率/队列长度/延迟 (DATA设备)
         if data_util_cols and 'cpu_iowait' in self.df.columns:
@@ -255,8 +220,15 @@ class CPUEBSCorrelationAnalyzer:
         # 找到读写请求列 - 使用统一的字段格式匹配
         data_r_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_r_s')]
         data_w_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_w_s')]
-        accounts_r_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_r_s')]
-        accounts_w_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_w_s')]
+        
+        # ACCOUNTS设备列 - 仅在ACCOUNTS设备配置时查找
+        accounts_configured = self._check_device_configured('accounts')
+        accounts_r_cols = []
+        accounts_w_cols = []
+        
+        if accounts_configured:
+            accounts_r_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_r_s')]
+            accounts_w_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_w_s')]
         
         # 1-2: User CPU vs 读请求, System CPU vs 写请求 (DATA设备)
         if data_r_cols and 'cpu_usr' in self.df.columns:
@@ -343,7 +315,13 @@ class CPUEBSCorrelationAnalyzer:
         
         # 找到队列长度列 - 使用统一的字段格式匹配
         data_aqu_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_aqu_sz')]
-        accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_aqu_sz')]
+        
+        # ACCOUNTS设备列 - 仅在ACCOUNTS设备配置时查找
+        accounts_configured = self._check_device_configured('accounts')
+        accounts_aqu_cols = []
+        
+        if accounts_configured:
+            accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_aqu_sz')]
         
         # 1: CPU空闲 vs DATA设备I/O队列长度
         if data_aqu_cols and 'cpu_idle' in self.df.columns:
@@ -389,11 +367,20 @@ class CPUEBSCorrelationAnalyzer:
         data_rareq_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_rareq_sz')]
         data_wareq_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_wareq_sz')]
         
-        # ACCOUNTS设备相关列 - 使用统一的字段格式匹配
-        accounts_rrqm_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_rrqm_s')]
-        accounts_wrqm_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_wrqm_s')]
-        accounts_rareq_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_rareq_sz')]
-        accounts_wareq_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_wareq_sz')]
+        # 检查ACCOUNTS设备是否配置
+        accounts_configured = self._check_device_configured('accounts')
+        
+        # ACCOUNTS设备相关列 - 仅在ACCOUNTS设备配置时查找
+        accounts_rrqm_cols = []
+        accounts_wrqm_cols = []
+        accounts_rareq_cols = []
+        accounts_wareq_cols = []
+        
+        if accounts_configured:
+            accounts_rrqm_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_rrqm_s')]
+            accounts_wrqm_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_wrqm_s')]
+            accounts_rareq_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_rareq_sz')]
+            accounts_wareq_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_wareq_sz')]
         
         # 1: 软中断 vs I/O请求合并 (DATA设备)
         if data_rrqm_cols and data_wrqm_cols and 'cpu_soft' in self.df.columns:

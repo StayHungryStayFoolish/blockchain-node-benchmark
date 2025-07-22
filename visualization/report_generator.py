@@ -49,67 +49,75 @@ class ReportGenerator:
         return None
 
     def _load_overhead_data(self):
-        """加载实际的监控开销数据 - 使用安全的字段访问"""
-        if self.overhead_csv and os.path.exists(self.overhead_csv):
-            try:
-                df = pd.read_csv(self.overhead_csv)
-                if len(df) > 0:
-                    # 定义需要的字段和它们的可能变体
-                    field_mappings = {
-                        'monitoring_iops': ['monitoring_iops', 'monitor_iops', 'overhead_iops'],
-                        'monitoring_throughput_mibs': ['monitoring_throughput_mibs', 'monitor_throughput', 'overhead_throughput'],
-                        'monitoring_cpu_percent': ['monitoring_cpu_percent', 'monitor_cpu', 'overhead_cpu'],
-                        'monitoring_memory_mb': ['monitoring_memory_mb', 'monitor_memory', 'overhead_memory'],
-                        'process_count': ['process_count', 'proc_count', 'monitor_processes']
-                    }
-                    
-                    # 安全获取字段数据
-                    def get_field_safe(logical_name):
-                        if logical_name in field_mappings:
-                            for field_name in field_mappings[logical_name]:
-                                if field_name in df.columns:
-                                    return df[field_name]
-                        # 如果字段不存在，返回默认值
-                        return pd.Series([0] * len(df))
-                    
-                    # 检查必需字段是否存在
-                    required_fields = ['monitoring_iops', 'monitoring_throughput_mibs', 'monitoring_cpu_percent', 'monitoring_memory_mb']
-                    missing_fields = []
-                    for field in required_fields:
-                        found = False
-                        for variant in field_mappings.get(field, [field]):
-                            if variant in df.columns:
-                                found = True
-                                break
-                        if not found:
-                            missing_fields.append(field)
-                    
-                    if missing_fields:
-                        print(f"⚠️ 缺少监控开销字段: {missing_fields}")
-                        print("  将使用默认值进行计算")
-                    
-                    # 安全获取数据并计算统计信息
-                    monitoring_iops = get_field_safe('monitoring_iops')
-                    monitoring_throughput = get_field_safe('monitoring_throughput_mibs')
-                    monitoring_cpu = get_field_safe('monitoring_cpu_percent')
-                    monitoring_memory = get_field_safe('monitoring_memory_mb')
-                    process_count = get_field_safe('process_count')
-                    
-                    return {
-                        'avg_iops': monitoring_iops.mean(),
-                        'max_iops': monitoring_iops.max(),
-                        'avg_throughput_mibs': monitoring_throughput.mean(),
-                        'max_throughput_mibs': monitoring_throughput.max(),
-                        'avg_cpu_percent': monitoring_cpu.mean(),
-                        'max_cpu_percent': monitoring_cpu.max(),
-                        'avg_memory_mb': monitoring_memory.mean(),
-                        'max_memory_mb': monitoring_memory.max(),
-                        'sample_count': len(df),
-                        'avg_process_count': process_count.mean()
-                    }
-            except Exception as e:
-                print(f"⚠️ 加载监控开销数据失败: {e}")
-        return None
+        """加载监控开销数据 - 增强版支持完整资源分析"""
+        try:
+            if not self.overhead_csv or not os.path.exists(self.overhead_csv):
+                return None
+                
+            df = pd.read_csv(self.overhead_csv)
+            if df.empty:
+                return None
+                
+            # 定义需要的字段和它们的可能变体
+            field_mappings = {
+                # 监控进程资源
+                'monitoring_cpu_percent': ['monitoring_cpu_percent', 'monitor_cpu', 'overhead_cpu'],
+                'monitoring_memory_percent': ['monitoring_memory_percent', 'monitor_memory_percent'],
+                'monitoring_memory_mb': ['monitoring_memory_mb', 'monitor_memory', 'overhead_memory'],
+                'monitoring_process_count': ['monitoring_process_count', 'process_count', 'monitor_processes'],
+                
+                # 区块链节点资源
+                'blockchain_cpu_percent': ['blockchain_cpu_percent', 'blockchain_cpu'],
+                'blockchain_memory_percent': ['blockchain_memory_percent'],
+                'blockchain_memory_mb': ['blockchain_memory_mb', 'blockchain_memory'],
+                'blockchain_process_count': ['blockchain_process_count'],
+                
+                # 系统静态资源
+                'system_cpu_cores': ['system_cpu_cores', 'cpu_cores'],
+                'system_memory_gb': ['system_memory_gb', 'memory_gb'],
+                'system_disk_gb': ['system_disk_gb', 'disk_gb'],
+                
+                # 系统动态资源
+                'system_cpu_usage': ['system_cpu_usage', 'cpu_usage'],
+                'system_memory_usage': ['system_memory_usage', 'memory_usage'],
+                'system_disk_usage': ['system_disk_usage', 'disk_usage'],
+                
+                # 兼容旧版字段
+                'monitoring_iops': ['monitoring_iops', 'monitor_iops', 'overhead_iops'],
+                'monitoring_throughput_mibs': ['monitoring_throughput_mibs', 'monitor_throughput', 'overhead_throughput']
+            }
+            
+            # 尝试找到匹配的字段
+            data = {}
+            for target_field, possible_fields in field_mappings.items():
+                for field in possible_fields:
+                    if field in df.columns:
+                        # 计算平均值和最大值
+                        data[f'{target_field}_avg'] = df[field].mean()
+                        data[f'{target_field}_max'] = df[field].max()
+                        # 对于百分比字段，计算占比
+                        if 'percent' in target_field or 'usage' in target_field:
+                            data[f'{target_field}_p90'] = df[field].quantile(0.9)
+                        break
+            
+            # 计算监控开销占比
+            if 'monitoring_cpu_percent_avg' in data and 'system_cpu_usage_avg' in data and data['system_cpu_usage_avg'] > 0:
+                data['monitoring_cpu_ratio'] = data['monitoring_cpu_percent_avg'] / data['system_cpu_usage_avg']
+            
+            if 'monitoring_memory_percent_avg' in data and 'system_memory_usage_avg' in data and data['system_memory_usage_avg'] > 0:
+                data['monitoring_memory_ratio'] = data['monitoring_memory_percent_avg'] / data['system_memory_usage_avg']
+            
+            # 计算区块链节点占比
+            if 'blockchain_cpu_percent_avg' in data and 'system_cpu_usage_avg' in data and data['system_cpu_usage_avg'] > 0:
+                data['blockchain_cpu_ratio'] = data['blockchain_cpu_percent_avg'] / data['system_cpu_usage_avg']
+            
+            if 'blockchain_memory_percent_avg' in data and 'system_memory_usage_avg' in data and data['system_memory_usage_avg'] > 0:
+                data['blockchain_memory_ratio'] = data['blockchain_memory_percent_avg'] / data['system_memory_usage_avg']
+                        
+            return data
+        except Exception as e:
+            print(f"Error loading overhead data: {e}")
+            return None
     
     def generate_html_report(self):
         """生成HTML报告 - 使用安全的字段访问"""
@@ -153,7 +161,7 @@ class ReportGenerator:
         
         accounts_note = ""
         if not self.config.get('ACCOUNTS_DEVICE'):
-            accounts_note = '<div class="warning"><strong>提示:</strong> ACCOUNTS设备未配置，仅监控DATA设备性能。建议配置ACCOUNTS_DEVICE以获得完整的存储性能分析。</div>'
+            accounts_note = '<div class="warning"><strong>提示:</strong> ACCOUNTS Device未配置，仅监控DATA Device性能。建议配置ACCOUNTS_DEVICE以获得完整的存储性能分析。</div>'
         
         return f"""
         <div class="section">
@@ -168,8 +176,8 @@ class ReportGenerator:
                 </thead>
                 <tbody>
                     <tr><td style="padding: 10px; border: 1px solid #ddd;">区块链节点类型</td><td style="padding: 10px; border: 1px solid #ddd;">✅ 已配置</td><td style="padding: 10px; border: 1px solid #ddd;">{blockchain_node}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">DATA设备</td><td style="padding: 10px; border: 1px solid #ddd;">{ledger_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('LEDGER_DEVICE', 'N/A')}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">ACCOUNTS设备</td><td style="padding: 10px; border: 1px solid #ddd;">{accounts_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('ACCOUNTS_DEVICE', 'N/A')}</td></tr>
+                    <tr><td style="padding: 10px; border: 1px solid #ddd;">DATA Device</td><td style="padding: 10px; border: 1px solid #ddd;">{ledger_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('LEDGER_DEVICE', 'N/A')}</td></tr>
+                    <tr><td style="padding: 10px; border: 1px solid #ddd;">ACCOUNTS Device</td><td style="padding: 10px; border: 1px solid #ddd;">{accounts_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('ACCOUNTS_DEVICE', 'N/A')}</td></tr>
                     <tr><td style="padding: 10px; border: 1px solid #ddd;">DATA卷类型</td><td style="padding: 10px; border: 1px solid #ddd;">{'✅ 已配置' if self.config.get('DATA_VOL_TYPE') else '⚠️ 未配置'}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('DATA_VOL_TYPE', 'N/A')}</td></tr>
                 </tbody>
             </table>
@@ -178,88 +186,186 @@ class ReportGenerator:
         """
     
     def _generate_monitoring_overhead_section(self):
-        """生成监控开销部分 - 基于实际数据"""
+        """生成监控开销部分 - 增强版支持完整资源分析"""
         overhead_data = self._load_overhead_data()
         
         if overhead_data:
-            return self._generate_real_overhead_section(overhead_data)
+            # 监控进程资源
+            monitoring_cpu_avg = overhead_data.get('monitoring_cpu_percent_avg', 0)
+            monitoring_cpu_max = overhead_data.get('monitoring_cpu_percent_max', 0)
+            monitoring_memory_percent_avg = overhead_data.get('monitoring_memory_percent_avg', 0)
+            monitoring_memory_percent_max = overhead_data.get('monitoring_memory_percent_max', 0)
+            monitoring_memory_mb_avg = overhead_data.get('monitoring_memory_mb_avg', 0)
+            monitoring_memory_mb_max = overhead_data.get('monitoring_memory_mb_max', 0)
+            monitoring_process_count = overhead_data.get('monitoring_process_count_avg', 0)
+            
+            # 区块链节点资源
+            blockchain_cpu_avg = overhead_data.get('blockchain_cpu_percent_avg', 0)
+            blockchain_cpu_max = overhead_data.get('blockchain_cpu_percent_max', 0)
+            blockchain_memory_percent_avg = overhead_data.get('blockchain_memory_percent_avg', 0)
+            blockchain_memory_percent_max = overhead_data.get('blockchain_memory_percent_max', 0)
+            blockchain_memory_mb_avg = overhead_data.get('blockchain_memory_mb_avg', 0)
+            blockchain_memory_mb_max = overhead_data.get('blockchain_memory_mb_max', 0)
+            blockchain_process_count = overhead_data.get('blockchain_process_count_avg', 0)
+            
+            # 系统资源
+            system_cpu_cores = overhead_data.get('system_cpu_cores_avg', 0)
+            system_memory_gb = overhead_data.get('system_memory_gb_avg', 0)
+            system_cpu_usage_avg = overhead_data.get('system_cpu_usage_avg', 0)
+            system_cpu_usage_max = overhead_data.get('system_cpu_usage_max', 0)
+            system_memory_usage_avg = overhead_data.get('system_memory_usage_avg', 0)
+            system_memory_usage_max = overhead_data.get('system_memory_usage_max', 0)
+            
+            # 资源占比
+            monitoring_cpu_ratio = overhead_data.get('monitoring_cpu_ratio', 0) * 100
+            monitoring_memory_ratio = overhead_data.get('monitoring_memory_ratio', 0) * 100
+            blockchain_cpu_ratio = overhead_data.get('blockchain_cpu_ratio', 0) * 100
+            blockchain_memory_ratio = overhead_data.get('blockchain_memory_ratio', 0) * 100
+            
+            # 兼容旧版字段
+            monitoring_iops_avg = overhead_data.get('monitoring_iops_avg', 0)
+            monitoring_iops_max = overhead_data.get('monitoring_iops_max', 0)
+            monitoring_throughput_avg = overhead_data.get('monitoring_throughput_mibs_avg', 0)
+            monitoring_throughput_max = overhead_data.get('monitoring_throughput_mibs_max', 0)
+            
+            # 格式化为两位小数
+            format_num = lambda x: f"{x:.2f}"
+            
+            section_html = f"""
+            <div class="section">
+                <h2>📊 监控开销综合分析</h2>
+                
+                <div class="info-card">
+                    <h3>系统资源概览</h3>
+                    <table class="data-table">
+                        <tr>
+                            <th>指标</th>
+                            <th>值</th>
+                        </tr>
+                        <tr>
+                            <td>CPU核数</td>
+                            <td>{int(system_cpu_cores)}</td>
+                        </tr>
+                        <tr>
+                            <td>内存总量</td>
+                            <td>{format_num(system_memory_gb)} GB</td>
+                        </tr>
+                        <tr>
+                            <td>CPU平均使用率</td>
+                            <td>{format_num(system_cpu_usage_avg)}%</td>
+                        </tr>
+                        <tr>
+                            <td>内存平均使用率</td>
+                            <td>{format_num(system_memory_usage_avg)}%</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="info-card">
+                    <h3>资源使用对比分析</h3>
+                    <table class="data-table">
+                        <tr>
+                            <th>资源类型</th>
+                            <th>监控系统</th>
+                            <th>区块链节点</th>
+                            <th>其他进程</th>
+                        </tr>
+                        <tr>
+                            <td>CPU使用率</td>
+                            <td>{format_num(monitoring_cpu_avg)}% ({format_num(monitoring_cpu_ratio)}%)</td>
+                            <td>{format_num(blockchain_cpu_avg)}% ({format_num(blockchain_cpu_ratio)}%)</td>
+                            <td>{format_num(system_cpu_usage_avg - monitoring_cpu_avg - blockchain_cpu_avg)}%</td>
+                        </tr>
+                        <tr>
+                            <td>内存使用率</td>
+                            <td>{format_num(monitoring_memory_percent_avg)}% ({format_num(monitoring_memory_ratio)}%)</td>
+                            <td>{format_num(blockchain_memory_percent_avg)}% ({format_num(blockchain_memory_ratio)}%)</td>
+                            <td>{format_num(system_memory_usage_avg - monitoring_memory_percent_avg - blockchain_memory_percent_avg)}%</td>
+                        </tr>
+                        <tr>
+                            <td>内存使用量</td>
+                            <td>{format_num(monitoring_memory_mb_avg)} MB</td>
+                            <td>{format_num(blockchain_memory_mb_avg)} MB</td>
+                            <td>{format_num(system_memory_gb*1024 - monitoring_memory_mb_avg - blockchain_memory_mb_avg)} MB</td>
+                        </tr>
+                        <tr>
+                            <td>进程数量</td>
+                            <td>{int(monitoring_process_count)}</td>
+                            <td>{int(blockchain_process_count)}</td>
+                            <td>N/A</td>
+                        </tr>
+                    </table>
+                    <p class="note">括号内百分比表示占系统总资源的比例</p>
+                </div>
+                
+                <div class="info-card">
+                    <h3>监控系统I/O开销</h3>
+                    <table class="data-table">
+                        <tr>
+                            <th>指标</th>
+                            <th>平均值</th>
+                            <th>最大值</th>
+                        </tr>
+                        <tr>
+                            <td>IOPS</td>
+                            <td>{format_num(monitoring_iops_avg)}</td>
+                            <td>{format_num(monitoring_iops_max)}</td>
+                        </tr>
+                        <tr>
+                            <td>吞吐量 (MiB/s)</td>
+                            <td>{format_num(monitoring_throughput_avg)}</td>
+                            <td>{format_num(monitoring_throughput_max)}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="conclusion">
+                    <h3>📝 监控开销结论</h3>
+                    <p>监控系统资源消耗分析:</p>
+                    <ul>
+                        <li>CPU开销: 系统总CPU的 <strong>{format_num(monitoring_cpu_ratio)}%</strong></li>
+                        <li>内存开销: 系统总内存的 <strong>{format_num(monitoring_memory_ratio)}%</strong></li>
+                        <li>I/O开销: 平均 <strong>{format_num(monitoring_iops_avg)}</strong> IOPS</li>
+                    </ul>
+                    
+                    <p>区块链节点资源消耗分析:</p>
+                    <ul>
+                        <li>CPU使用: 系统总CPU的 <strong>{format_num(blockchain_cpu_ratio)}%</strong></li>
+                        <li>内存使用: 系统总内存的 <strong>{format_num(blockchain_memory_ratio)}%</strong></li>
+                    </ul>
+                    
+                    <p class="{'warning' if monitoring_cpu_ratio > 5 else 'success'}">
+                        监控系统对测试结果的影响: 
+                        {'<strong>显著</strong> (监控CPU开销超过5%)' if monitoring_cpu_ratio > 5 else '<strong>较小</strong> (监控CPU开销低于5%)'}
+                    </p>
+                </div>
+            </div>
+            """
         else:
-            return self._generate_estimated_overhead_section()
+            section_html = f"""
+            <div class="section">
+                <h2>📊 监控开销分析</h2>
+                <div class="warning">
+                    <h4>⚠️  监控开销数据不可用</h4>
+                    <p>监控开销数据文件未找到或为空。请确保在性能测试期间启用了监控开销统计。</p>
+                    <p><strong>预期文件</strong>: <code>logs/monitoring_overhead_YYYYMMDD_HHMMSS.csv</code></p>
+                </div>
+                <div class="info">
+                    <h4>💡 如何启用监控开销统计</h4>
+                    <p>监控开销统计功能已集成到统一监控系统中，默认启用。</p>
+                    <p>如果未生成监控开销数据，请检查以下配置:</p>
+                    <ul>
+                        <li>确保 <code>config.sh</code> 中的 <code>MONITORING_OVERHEAD_LOG</code> 变量已正确设置</li>
+                        <li>确保 <code>log_performance_data</code> 函数中调用了 <code>write_monitoring_overhead_log</code></li>
+                        <li>检查日志目录权限是否正确</li>
+                    </ul>
+                </div>
+            </div>
+            """
+            
+        return section_html
     
-    def _generate_real_overhead_section(self, overhead_data):
-        """生成基于实际数据的监控开销部分"""
-        return f"""
-        <div class="section">
-            <h2>📊 监控系统资源开销 (实测数据)</h2>
-            <div class="info-grid">
-                <div class="info-card">
-                    <h4>实测监控IOPS</h4>
-                    <div style="font-size: 1.5em; font-weight: bold;">{overhead_data['avg_iops']:.2f} IOPS/秒</div>
-                    <p>峰值: {overhead_data['max_iops']:.2f} IOPS/秒</p>
-                </div>
-                <div class="info-card">
-                    <h4>实测监控吞吐量</h4>
-                    <div style="font-size: 1.5em; font-weight: bold;">{overhead_data['avg_throughput_mibs']:.4f} MiB/s</div>
-                    <p>峰值: {overhead_data['max_throughput_mibs']:.4f} MiB/s</p>
-                </div>
-                <div class="info-card">
-                    <h4>实测CPU开销</h4>
-                    <div style="font-size: 1.5em; font-weight: bold;">{overhead_data['avg_cpu_percent']:.2f}%</div>
-                    <p>峰值: {overhead_data['max_cpu_percent']:.2f}%</p>
-                </div>
-                <div class="info-card">
-                    <h4>实测内存开销</h4>
-                    <div style="font-size: 1.5em; font-weight: bold;">{overhead_data['avg_memory_mb']:.1f} MB</div>
-                    <p>峰值: {overhead_data['max_memory_mb']:.1f} MB</p>
-                </div>
-                <div class="info-card">
-                    <h4>监控进程数</h4>
-                    <div style="font-size: 1.5em; font-weight: bold;">{overhead_data['avg_process_count']:.0f}</div>
-                    <p>采样次数: {overhead_data['sample_count']}</p>
-                </div>
-            </div>
-            <div class="success">
-                <h4>💡 净可用性能计算 (基于实测数据)</h4>
-                <p><strong>生产环境净可用IOPS</strong> = 测试IOPS - {overhead_data['avg_iops']:.2f}</p>
-                <p><strong>生产环境净可用吞吐量</strong> = 测试吞吐量 - {overhead_data['avg_throughput_mibs']:.4f} MiB/s</p>
-                <p><strong>生产环境净可用CPU</strong> = 测试CPU - {overhead_data['avg_cpu_percent']:.2f}%</p>
-                <p>✅ 基于 {overhead_data['sample_count']} 次实际采样的准确数据</p>
-            </div>
-        </div>
-        """
-    
-    def _generate_estimated_overhead_section(self):
-        """生成估算的监控开销部分（当没有实测数据时）"""
-        return """
-        <div class="section">
-            <h2>📊 监控系统资源开销 (估算数据)</h2>
-            <div class="info-grid">
-                <div class="info-card">
-                    <h4>估算监控IOPS</h4>
-                    <div style="font-size: 1.5em; font-weight: bold;">~2 IOPS/秒</div>
-                </div>
-                <div class="info-card">
-                    <h4>估算监控吞吐量</h4>
-                    <div style="font-size: 1.5em; font-weight: bold;">~0.002 MiB/s</div>
-                </div>
-                <div class="info-card">
-                    <h4>开销占比</h4>
-                    <div style="font-size: 1.5em; font-weight: bold;">< 0.1%</div>
-                </div>
-            </div>
-            <div class="warning">
-                <h4>⚠️ 注意</h4>
-                <p>当前显示的是估算数据。建议运行监控开销计算器获得准确的实测数据：</p>
-                <p><code>python3 monitoring_overhead_calculator.py ./logs 5</code></p>
-            </div>
-            <div class="success">
-                <h4>💡 净可用性能计算</h4>
-                <p><strong>生产环境净可用IOPS</strong> = 测试IOPS - 监控开销IOPS</p>
-                <p><strong>生产环境净可用吞吐量</strong> = 测试吞吐量 - 监控开销吞吐量</p>
-                <p>监控开销极小，对生产环境性能影响可忽略不计。</p>
-            </div>
-        </div>
-        """
+
     
     def _generate_solana_specific_section(self, df):
         """✅ 生成完整的Solana特定分析部分"""
@@ -271,7 +377,7 @@ class ReportGenerator:
                 'sync_fields': [col for col in df.columns if 'sync' in col or 'lag' in col]
             }
             
-            # ✅ CPU使用率分析（保留原有逻辑）
+            # ✅ CPU Usage分析（保留原有逻辑）
             cpu_avg = df['cpu_usage'].mean() if 'cpu_usage' in df.columns and len(df) > 0 else 0
             
             if cpu_avg > 90:
@@ -336,9 +442,9 @@ class ReportGenerator:
                     <h4>🎯 Solana性能优化建议</h4>
                     <ul>
                         <li><strong>Central Scheduler优化</strong>: 确保CPU0有足够资源处理调度任务</li>
-                        <li><strong>Slot处理优化</strong>: 监控Slot处理延迟，确保及时跟上网络节奏</li>
+                        <li><strong>Slot处理优化</strong>: 监控Slot处理Latency，确保及时跟上网络节奏</li>
                         <li><strong>RPC优化</strong>: 优化RPC服务配置，提高响应速度和成功率</li>
-                        <li><strong>同步优化</strong>: 保持良好的网络连接，减少同步延迟</li>
+                        <li><strong>同步优化</strong>: 保持良好的网络连接，减少同步Latency</li>
                     </ul>
                 </div>
             </div>
@@ -350,7 +456,7 @@ class ReportGenerator:
             <div class="section">
                 <h2>🔗 Solana特定性能分析</h2>
                 <div class="warning">
-                    <h4>⚠️  Solana分析数据不可用</h4>
+                    <h4>⚠️  Solana分析Data Not Available</h4>
                     <p>错误信息: {str(e)[:100]}</p>
                     <p>可能的原因：</p>
                     <ul>
@@ -365,50 +471,690 @@ class ReportGenerator:
     
     def _generate_monitoring_overhead_detailed_section(self):
         """生成详细的监控开销分析部分"""
-        section_html = f"""
-        <div class="section">
-            <h2>💻 监控开销详细分析</h2>
-            <div class="info">
-                <p>监控开销分析帮助您了解测试期间监控系统本身消耗的资源，从而准确评估区块链节点在生产环境中的真实资源需求。</p>
-            </div>
+        overhead_data = self._load_overhead_data()
+        
+        if overhead_data and os.path.exists(os.path.join(self.output_dir, "monitoring_overhead_analysis.png")):
+            # 生成资源使用趋势图表
+            self._generate_resource_usage_charts()
             
-            <div class="subsection">
-                <h3>📊 监控开销图表</h3>
-                <div class="chart-info">
-                    <p><strong>monitoring_overhead_analysis.png</strong> - 监控开销综合分析图表</p>
-                    <ul>
-                        <li><strong>资源消耗对比</strong>: 总系统资源 vs 区块链节点资源 vs 监控开销</li>
-                        <li><strong>监控开销趋势</strong>: CPU和内存开销随时间的变化</li>
-                        <li><strong>进程资源分布</strong>: 各监控进程的资源占用分布</li>
-                        <li><strong>开销统计摘要</strong>: 详细的监控开销统计信息</li>
-                    </ul>
+            section_html = f"""
+            <div class="section">
+                <h2>📈 监控开销详细分析</h2>
+                
+                <div class="info-card">
+                    <h3>📊 资源使用趋势</h3>
+                    <div class="chart-container">
+                        <img src="monitoring_overhead_analysis.png" alt="监控开销分析" class="chart">
+                    </div>
+                    <div class="chart-info">
+                        <p>此图表展示了测试过程中系统资源使用的趋势变化，包括:</p>
+                        <ul>
+                            <li><strong>监控系统资源使用</strong>: CPU、内存、I/O开销随时间的变化</li>
+                            <li><strong>区块链节点资源使用</strong>: 区块链进程的CPU和内存使用趋势</li>
+                            <li><strong>系统总资源使用</strong>: 整个系统的CPU和内存使用率</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <h3>📊 资源占比分析</h3>
+                    <div class="chart-container">
+                        <img src="resource_distribution_chart.png" alt="资源分布图" class="chart">
+                    </div>
+                    <div class="chart-info">
+                        <p>此图表展示了不同组件对系统资源的占用比例:</p>
+                        <ul>
+                            <li><strong>监控系统</strong>: 所有监控进程的资源占比</li>
+                            <li><strong>区块链节点</strong>: 区块链相关进程的资源占比</li>
+                            <li><strong>其他进程</strong>: 系统中其他进程的资源占比</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <h3>📊 监控开销与性能关系</h3>
+                    <div class="chart-container">
+                        <img src="monitoring_impact_chart.png" alt="监控影响分析" class="chart">
+                    </div>
+                    <div class="chart-info">
+                        <p>此图表分析了监控开销与系统性能指标之间的相关性:</p>
+                        <ul>
+                            <li><strong>监控CPU开销 vs QPS</strong>: 监控CPU使用与系统吞吐量的关系</li>
+                            <li><strong>监控I/O开销 vs EBS性能</strong>: 监控I/O与存储性能的关系</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <h3>📝 生产环境资源规划建议</h3>
+                    <p>基于监控开销分析，对生产环境的资源规划建议:</p>
+                    <table class="data-table">
+                        <tr>
+                            <th>资源类型</th>
+                            <th>测试环境使用</th>
+                            <th>监控开销</th>
+                            <th>生产环境建议</th>
+                        </tr>
+                        <tr>
+                            <td>CPU</td>
+                            <td>{overhead_data.get('system_cpu_usage_avg', 0):.2f}%</td>
+                            <td>{overhead_data.get('monitoring_cpu_percent_avg', 0):.2f}%</td>
+                            <td>至少 {int(overhead_data.get('system_cpu_cores_avg', 1))} 核心</td>
+                        </tr>
+                        <tr>
+                            <td>内存</td>
+                            <td>{overhead_data.get('system_memory_usage_avg', 0):.2f}%</td>
+                            <td>{overhead_data.get('monitoring_memory_mb_avg', 0):.2f} MB</td>
+                            <td>至少 {max(4, int(overhead_data.get('system_memory_gb_avg', 4)))} GB</td>
+                        </tr>
+                        <tr>
+                            <td>EBS IOPS</td>
+                            <td>N/A</td>
+                            <td>{overhead_data.get('monitoring_iops_avg', 0):.2f}</td>
+                            <td>预留 {int(overhead_data.get('monitoring_iops_max', 0) * 1.5)} IOPS 余量</td>
+                        </tr>
+                    </table>
                 </div>
             </div>
+            """
+        else:
+            section_html = f"""
+            <div class="section">
+                <h2>📈 监控开销详细分析</h2>
+                <div class="warning">
+                    <h4>⚠️  监控开销详细数据不可用</h4>
+                    <p>监控开销数据文件未找到或图表生成失败。请确保:</p>
+                    <ul>
+                        <li>监控开销CSV文件已正确生成</li>
+                        <li>图表生成脚本已正确执行</li>
+                        <li>输出目录有正确的写入权限</li>
+                    </ul>
+                </div>
+                <div class="info">
+                    <h4>💡 如何生成监控开销图表</h4>
+                    <p>可以使用以下命令生成监控开销分析图表:</p>
+                    <pre><code>python3 visualization/performance_visualizer.py --performance-csv logs/performance_data.csv --overhead-csv logs/monitoring_overhead.csv --output-dir reports</code></pre>
+                </div>
+            </div>
+            """
             
-            <div class="subsection">
-                <h3>📋 监控开销数据列表</h3>
-                {self._generate_overhead_data_table()}
+        return section_html
+        
+    def _generate_resource_usage_charts(self):
+        """生成资源使用趋势图表"""
+        try:
+            if not self.overhead_csv or not os.path.exists(self.overhead_csv):
+                return
+                
+            df = pd.read_csv(self.overhead_csv)
+            if df.empty:
+                return
+                
+            # 资源分布饼图
+            self._generate_resource_distribution_chart(df)
+            
+            # 监控影响分析图
+            if self.performance_csv and os.path.exists(self.performance_csv):
+                self._generate_monitoring_impact_chart(df)
+                
+        except Exception as e:
+            print(f"Error generating resource usage charts: {e}")
+            
+    def _generate_resource_distribution_chart(self, df):
+        """生成资源分布饼图"""
+        try:
+            import matplotlib.pyplot as plt
+            
+            # 计算平均值
+            monitoring_cpu = df['monitoring_cpu_percent'].mean() if 'monitoring_cpu_percent' in df.columns else 0
+            blockchain_cpu = df['blockchain_cpu_percent'].mean() if 'blockchain_cpu_percent' in df.columns else 0
+            system_cpu = df['system_cpu_usage'].mean() if 'system_cpu_usage' in df.columns else 100
+            other_cpu = max(0, system_cpu - monitoring_cpu - blockchain_cpu)
+            
+            monitoring_mem = df['monitoring_memory_percent'].mean() if 'monitoring_memory_percent' in df.columns else 0
+            blockchain_mem = df['blockchain_memory_percent'].mean() if 'blockchain_memory_percent' in df.columns else 0
+            system_mem = df['system_memory_usage'].mean() if 'system_memory_usage' in df.columns else 100
+            other_mem = max(0, system_mem - monitoring_mem - blockchain_mem)
+            
+            # 创建图表
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+            
+            # CPU分布饼图
+            cpu_sizes = [monitoring_cpu, blockchain_cpu, other_cpu]
+            cpu_labels = ['监控系统', '区块链节点', '其他进程']
+            cpu_colors = ['#ff9999', '#66b3ff', '#99ff99']
+            ax1.pie(cpu_sizes, labels=cpu_labels, colors=cpu_colors, autopct='%1.1f%%', startangle=90)
+            ax1.axis('equal')
+            ax1.set_title('CPU使用分布')
+            
+            # 内存分布饼图
+            mem_sizes = [monitoring_mem, blockchain_mem, other_mem]
+            mem_labels = ['监控系统', '区块链节点', '其他进程']
+            mem_colors = ['#ff9999', '#66b3ff', '#99ff99']
+            ax2.pie(mem_sizes, labels=mem_labels, colors=mem_colors, autopct='%1.1f%%', startangle=90)
+            ax2.axis('equal')
+            ax2.set_title('内存使用分布')
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(self.output_dir, 'resource_distribution_chart.png'), dpi=300, bbox_inches='tight')
+            plt.close()
+            
+        except Exception as e:
+            print(f"Error generating resource distribution chart: {e}")
+            
+    def _generate_monitoring_impact_chart(self, overhead_df):
+        """生成监控影响分析图"""
+        try:
+            import matplotlib.pyplot as plt
+            import numpy as np
+            
+            # 加载性能数据
+            perf_df = pd.read_csv(self.performance_csv)
+            if perf_df.empty:
+                return
+                
+            # 确保两个数据帧有相同的时间索引
+            overhead_df['timestamp'] = pd.to_datetime(overhead_df['timestamp'])
+            perf_df['timestamp'] = pd.to_datetime(perf_df['timestamp'])
+            
+            # 合并数据
+            merged_df = pd.merge_asof(perf_df.sort_values('timestamp'), 
+                                     overhead_df.sort_values('timestamp'), 
+                                     on='timestamp', 
+                                     direction='nearest')
+            
+            if merged_df.empty:
+                return
+                
+            # 创建图表
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+            
+            # 查找QPS列
+            qps_col = None
+            for col in merged_df.columns:
+                if 'qps' in col.lower() or 'tps' in col.lower() or 'throughput' in col.lower():
+                    qps_col = col
+                    break
+            
+            # 监控CPU vs QPS
+            if qps_col and 'monitoring_cpu_percent' in merged_df.columns:
+                ax1.scatter(merged_df['monitoring_cpu_percent'], merged_df[qps_col], alpha=0.5)
+                ax1.set_xlabel('监控CPU使用率 (%)')
+                ax1.set_ylabel('系统吞吐量 (QPS)')
+                ax1.set_title('监控CPU开销与系统吞吐量关系')
+                ax1.grid(True, linestyle='--', alpha=0.7)
+                
+                # 添加趋势线
+                z = np.polyfit(merged_df['monitoring_cpu_percent'], merged_df[qps_col], 1)
+                p = np.poly1d(z)
+                ax1.plot(merged_df['monitoring_cpu_percent'], p(merged_df['monitoring_cpu_percent']), "r--")
+                
+                # 计算相关系数
+                corr = merged_df['monitoring_cpu_percent'].corr(merged_df[qps_col])
+                ax1.annotate(f'相关系数: {corr:.2f}', xy=(0.05, 0.95), xycoords='axes fraction')
+            
+            # 监控IOPS vs EBS性能
+            ebs_col = None
+            for col in merged_df.columns:
+                if 'ebs' in col.lower() and ('util' in col.lower() or 'iops' in col.lower()):
+                    ebs_col = col
+                    break
+                    
+            if ebs_col and 'monitoring_iops' in merged_df.columns:
+                ax2.scatter(merged_df['monitoring_iops'], merged_df[ebs_col], alpha=0.5)
+                ax2.set_xlabel('监控IOPS')
+                ax2.set_ylabel('EBS性能指标')
+                ax2.set_title('监控I/O开销与EBS性能关系')
+                ax2.grid(True, linestyle='--', alpha=0.7)
+                
+                # 添加趋势线
+                z = np.polyfit(merged_df['monitoring_iops'], merged_df[ebs_col], 1)
+                p = np.poly1d(z)
+                ax2.plot(merged_df['monitoring_iops'], p(merged_df['monitoring_iops']), "r--")
+                
+                # 计算相关系数
+                corr = merged_df['monitoring_iops'].corr(merged_df[ebs_col])
+                ax2.annotate(f'相关系数: {corr:.2f}', xy=(0.05, 0.95), xycoords='axes fraction')
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(self.output_dir, 'monitoring_impact_chart.png'), dpi=300, bbox_inches='tight')
+            plt.close()
+            
+        except Exception as e:
+            print(f"Error generating monitoring impact chart: {e}")
+    
+    def _generate_ebs_bottleneck_section(self):
+        """生成EBS瓶颈分析部分 - 增强版支持多设备和根因分析"""
+        bottleneck_info = self._load_bottleneck_info()
+        overhead_data = self._load_overhead_data()
+        
+        # 设备类型列表
+        device_types = ['data', 'accounts']
+        device_labels = {'data': 'DATA', 'accounts': 'ACCOUNTS'}
+        
+        if bottleneck_info and 'ebs_bottlenecks' in bottleneck_info:
+            ebs_bottlenecks = bottleneck_info['ebs_bottlenecks']
+            
+            # 按设备类型分组瓶颈
+            device_bottlenecks = {}
+            for bottleneck in ebs_bottlenecks:
+                device_type = bottleneck.get('device_type', 'data').lower()
+                if device_type not in device_bottlenecks:
+                    device_bottlenecks[device_type] = []
+                device_bottlenecks[device_type].append(bottleneck)
+            
+            # 生成设备瓶颈HTML
+            devices_html = ""
+            for device_type in device_types:
+                if device_type in device_bottlenecks and device_bottlenecks[device_type]:
+                    # 该设备有瓶颈
+                    bottlenecks = device_bottlenecks[device_type]
+                    
+                    # 格式化瓶颈信息
+                    bottleneck_html = ""
+                    for bottleneck in bottlenecks:
+                        bottleneck_type = bottleneck.get('type', 'Unknown')
+                        severity = bottleneck.get('severity', 'Medium')
+                        details = bottleneck.get('details', {})
+                        
+                        # 格式化详情
+                        details_html = ""
+                        for key, value in details.items():
+                            details_html += f"<li><strong>{key}:</strong> {value}</li>"
+                        
+                        bottleneck_html += f"""
+                        <div class="bottleneck-item severity-{severity.lower()}">
+                            <h4>{bottleneck_type} <span class="severity">{severity}</span></h4>
+                            <ul>
+                                {details_html}
+                            </ul>
+                        </div>
+                        """
+                    
+                    # 获取监控开销数据进行根因分析
+                    root_cause_html = self._generate_bottleneck_root_cause_analysis(device_type, overhead_data)
+                    
+                    devices_html += f"""
+                    <div class="device-bottleneck">
+                        <h3>📀 {device_labels[device_type]}设备瓶颈</h3>
+                        <div class="bottleneck-container">
+                            {bottleneck_html}
+                        </div>
+                        {root_cause_html}
+                    </div>
+                    """
+                elif device_type == 'data':
+                    # DATA设备必须显示，即使没有瓶颈
+                    devices_html += f"""
+                    <div class="device-bottleneck">
+                        <h3>📀 {device_labels[device_type]}设备</h3>
+                        <div class="success">
+                            <h4>✅ 未检测到瓶颈</h4>
+                            <p>{device_labels[device_type]}设备性能良好，未发现瓶颈。</p>
+                        </div>
+                    </div>
+                    """
+            
+            section_html = f"""
+            <div class="section">
+                <h2>📀 EBS瓶颈分析</h2>
+                {devices_html}
+                <div class="note">
+                    <p>EBS瓶颈分析基于AWS推荐的性能指标，包括利用率、延迟、AWS标准IOPS和吞吐量。</p>
+                    <p>根因分析基于监控开销与EBS性能指标的相关性分析。</p>
+                </div>
+            </div>
+            """
+        else:
+            section_html = f"""
+            <div class="section">
+                <h2>📀 EBS瓶颈分析</h2>
+                <div class="success">
+                    <h4>✅ 未检测到EBS瓶颈</h4>
+                    <p>在测试期间未发现EBS性能瓶颈。存储性能良好，不会限制系统整体性能。</p>
+                </div>
+            </div>
+            """
+            
+        return section_html
+        
+    def _generate_bottleneck_root_cause_analysis(self, device_type, overhead_data):
+        """生成瓶颈根因分析HTML"""
+        if not overhead_data:
+            return """
+            <div class="warning">
+                <h4>⚠️ 无法进行根因分析</h4>
+                <p>缺少监控开销数据，无法确定瓶颈是否由监控系统引起。</p>
+            </div>
+            """
+        
+        # 获取监控开销数据
+        monitoring_iops_avg = overhead_data.get('monitoring_iops_avg', 0)
+        monitoring_throughput_avg = overhead_data.get('monitoring_throughput_mibs_avg', 0)
+        
+        # 估算监控开销对EBS的影响
+        # 这里使用简化的估算，实际应该基于更复杂的相关性分析
+        impact_level = "低"
+        impact_percent = 0
+        
+        if monitoring_iops_avg > 100:
+            impact_level = "高"
+            impact_percent = min(90, monitoring_iops_avg / 200 * 100)
+        elif monitoring_iops_avg > 50:
+            impact_level = "中"
+            impact_percent = min(50, monitoring_iops_avg / 100 * 100)
+        else:
+            impact_percent = min(20, monitoring_iops_avg / 50 * 100)
+        
+        # 根据影响程度生成不同的HTML
+        if impact_level == "高":
+            return f"""
+            <div class="root-cause-analysis warning">
+                <h4>🔍 根因分析: 监控系统影响显著</h4>
+                <p>监控系统对EBS性能的影响程度: <strong>{impact_level} (约{impact_percent:.1f}%)</strong></p>
+                <ul>
+                    <li>监控系统平均IOPS: <strong>{monitoring_iops_avg:.2f}</strong></li>
+                    <li>监控系统平均吞吐量: <strong>{monitoring_throughput_avg:.2f} MiB/s</strong></li>
+                </ul>
+                <p class="recommendation">建议: 考虑减少监控频率或优化监控系统I/O操作，以降低对{device_type.upper()}设备的影响。</p>
+            </div>
+            """
+        elif impact_level == "中":
+            return f"""
+            <div class="root-cause-analysis info">
+                <h4>🔍 根因分析: 监控系统有一定影响</h4>
+                <p>监控系统对EBS性能的影响程度: <strong>{impact_level} (约{impact_percent:.1f}%)</strong></p>
+                <ul>
+                    <li>监控系统平均IOPS: <strong>{monitoring_iops_avg:.2f}</strong></li>
+                    <li>监控系统平均吞吐量: <strong>{monitoring_throughput_avg:.2f} MiB/s</strong></li>
+                </ul>
+                <p class="recommendation">建议: 监控系统对{device_type.upper()}设备有一定影响，但不是主要瓶颈来源。应同时优化业务逻辑和监控系统。</p>
+            </div>
+            """
+        else:
+            return f"""
+            <div class="root-cause-analysis success">
+                <h4>🔍 根因分析: 监控系统影响较小</h4>
+                <p>监控系统对EBS性能的影响程度: <strong>{impact_level} (约{impact_percent:.1f}%)</strong></p>
+                <ul>
+                    <li>监控系统平均IOPS: <strong>{monitoring_iops_avg:.2f}</strong></li>
+                    <li>监控系统平均吞吐量: <strong>{monitoring_throughput_avg:.2f} MiB/s</strong></li>
+                </ul>
+                <p class="recommendation">建议: {device_type.upper()}设备瓶颈主要由业务负载引起，监控系统影响可忽略。应优化业务逻辑或提升EBS配置。</p>
+            </div>
+            """
+    
+    def _load_bottleneck_info(self):
+        """加载瓶颈检测信息"""
+        if self.bottleneck_info and os.path.exists(self.bottleneck_info):
+            try:
+                with open(self.bottleneck_info, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"⚠️ 瓶颈信息加载失败: {e}")
+        return None
+    
+    def _generate_production_resource_planning_section(self):
+        """生成生产环境资源规划建议部分"""
+        overhead_data = self._load_overhead_data()
+        bottleneck_info = self._load_bottleneck_info()
+        
+        # 确定主要瓶颈
+        main_bottleneck = "未发现明显瓶颈"
+        bottleneck_component = "无"
+        if bottleneck_info:
+            if bottleneck_info.get('cpu_bottleneck', False):
+                main_bottleneck = "CPU资源不足"
+                bottleneck_component = "CPU"
+            elif bottleneck_info.get('memory_bottleneck', False):
+                main_bottleneck = "内存资源不足"
+                bottleneck_component = "内存"
+            elif bottleneck_info.get('ebs_bottlenecks', []):
+                for bottleneck in bottleneck_info.get('ebs_bottlenecks', []):
+                    if bottleneck.get('device_type') == 'data':
+                        main_bottleneck = f"DATA设备{bottleneck.get('type', 'EBS')}瓶颈"
+                        bottleneck_component = "存储I/O"
+                        break
+        
+        # 生成资源规划建议
+        resource_recommendations = self._generate_resource_recommendations(overhead_data, bottleneck_component)
+        
+        section_html = f"""
+        <div class="section">
+            <h2>🎯 生产环境资源规划建议</h2>
+            
+            <div class="conclusion">
+                <h3>📝 测试结论摘要</h3>
+                <p>基于性能测试结果，我们得出以下结论:</p>
+                <ul>
+                    <li>主要瓶颈: <strong>{main_bottleneck}</strong></li>
+                    <li>监控系统资源占用: {'显著' if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else '较小'}</li>
+                    <li>区块链节点资源需求: {'高' if overhead_data and overhead_data.get('blockchain_cpu_percent_avg', 0) > 50 else '中等' if overhead_data and overhead_data.get('blockchain_cpu_percent_avg', 0) > 20 else '低'}</li>
+                </ul>
             </div>
             
-            <div class="subsection">
-                <h3>🎯 生产环境资源评估</h3>
-                {self._generate_production_resource_estimation()}
+            <div class="info-card">
+                <h3>💻 生产环境资源配置建议</h3>
+                {resource_recommendations}
             </div>
             
-            <div class="subsection">
-                <h3>⚙️ 独立分析工具结果</h3>
-                {self._generate_independent_tools_results()}
+            <div class="info-card">
+                <h3>💡 性能优化建议</h3>
+                <table class="data-table">
+                    <tr>
+                        <th>组件</th>
+                        <th>优化建议</th>
+                        <th>预期效果</th>
+                    </tr>
+                    <tr>
+                        <td>监控系统</td>
+                        <td>
+                            <ul>
+                                <li>{'降低监控频率' if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else '保持当前配置'}</li>
+                                <li>使用独立的监控开销日志</li>
+                                <li>定期清理历史监控数据</li>
+                            </ul>
+                        </td>
+                        <td>{'显著降低监控开销' if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else '维持低监控开销'}</td>
+                    </tr>
+                    <tr>
+                        <td>EBS存储</td>
+                        <td>
+                            <ul>
+                                <li>{'提高IOPS配置' if bottleneck_component == '存储I/O' else '当前配置适合负载'}</li>
+                                <li>{'考虑使用IO2而非GP3' if bottleneck_component == '存储I/O' else '保持当前存储类型'}</li>
+                                <li>{'分离DATA和ACCOUNTS设备' if bottleneck_component == '存储I/O' else '当前设备配置合理'}</li>
+                            </ul>
+                        </td>
+                        <td>{'消除存储瓶颈，提升整体性能' if bottleneck_component == '存储I/O' else '维持良好存储性能'}</td>
+                    </tr>
+                    <tr>
+                        <td>区块链节点</td>
+                        <td>
+                            <ul>
+                                <li>{'增加CPU核心数' if bottleneck_component == 'CPU' else '当前CPU配置适合负载'}</li>
+                                <li>{'增加内存配置' if bottleneck_component == '内存' else '当前内存配置适合负载'}</li>
+                                <li>优化区块链节点配置参数</li>
+                            </ul>
+                        </td>
+                        <td>{'提升节点处理能力，消除性能瓶颈' if bottleneck_component in ['CPU', '内存'] else '维持稳定节点性能'}</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="info-card">
+                <h3>💰 成本优化建议</h3>
+                {self._generate_cost_optimization_recommendations(overhead_data, bottleneck_component)}
             </div>
         </div>
         """
         return section_html
+        
+    def _generate_resource_recommendations(self, overhead_data, bottleneck_component):
+        """生成资源规划建议HTML"""
+        if not overhead_data:
+            return """
+            <div class="warning">
+                <p>缺少监控开销数据，无法生成准确的资源规划建议。</p>
+            </div>
+            """
+        
+        # 提取数据
+        system_cpu_cores = max(1, int(overhead_data.get('system_cpu_cores_avg', 1)))
+        system_memory_gb = max(4, int(overhead_data.get('system_memory_gb_avg', 4)))
+        
+        blockchain_cpu = overhead_data.get('blockchain_cpu_percent_avg', 0)
+        blockchain_memory_mb = overhead_data.get('blockchain_memory_mb_avg', 0)
+        
+        monitoring_cpu = overhead_data.get('monitoring_cpu_percent_avg', 0)
+        monitoring_memory_mb = overhead_data.get('monitoring_memory_mb_avg', 0)
+        monitoring_iops = overhead_data.get('monitoring_iops_avg', 0)
+        
+        # 计算生产环境建议
+        # CPU建议: 区块链CPU + 10% 余量，至少4核
+        if blockchain_cpu > 0:
+            cpu_per_core = 100 / system_cpu_cores
+            blockchain_cores_needed = max(1, blockchain_cpu / cpu_per_core)
+            recommended_cores = max(4, int(blockchain_cores_needed * 1.1))
+            if bottleneck_component == 'CPU':
+                recommended_cores = max(recommended_cores, int(blockchain_cores_needed * 1.5))
+        else:
+            recommended_cores = 4
+        
+        # 内存建议: 区块链内存 + 监控内存 + 2GB系统 + 20% 余量，至少8GB
+        if blockchain_memory_mb > 0:
+            total_memory_needed_mb = blockchain_memory_mb + monitoring_memory_mb + 2048  # 2GB系统内存
+            recommended_memory_gb = max(8, int((total_memory_needed_mb * 1.2) / 1024))
+            if bottleneck_component == '内存':
+                recommended_memory_gb = max(recommended_memory_gb, int((total_memory_needed_mb * 1.5) / 1024))
+        else:
+            recommended_memory_gb = 8
+        
+        # EBS IOPS建议: 区块链需求 + 监控开销 + 50% 余量
+        if monitoring_iops > 0:
+            # 估算区块链节点的IOPS需求（基于CPU使用率推算）
+            estimated_blockchain_iops = max(100, blockchain_cpu * 10)  # 简化估算
+            recommended_iops = int((estimated_blockchain_iops + monitoring_iops) * 1.5)
+            if bottleneck_component == '存储I/O':
+                recommended_iops = int((estimated_blockchain_iops + monitoring_iops) * 2.0)
+        else:
+            recommended_iops = 3000  # 默认GP3基准
+        
+        # 网络带宽建议
+        recommended_network_gbps = 10 if blockchain_cpu > 70 else 5
+        
+        return f"""
+        <table class="data-table">
+            <tr>
+                <th>资源类型</th>
+                <th>测试环境配置</th>
+                <th>实际使用</th>
+                <th>生产环境建议</th>
+                <th>建议理由</th>
+            </tr>
+            <tr>
+                <td>CPU</td>
+                <td>{system_cpu_cores} 核心</td>
+                <td>区块链: {blockchain_cpu:.1f}%<br>监控: {monitoring_cpu:.1f}%</td>
+                <td><strong>{recommended_cores} 核心</strong></td>
+                <td>{'消除CPU瓶颈' if bottleneck_component == 'CPU' else '预留10%性能余量'}</td>
+            </tr>
+            <tr>
+                <td>内存</td>
+                <td>{system_memory_gb} GB</td>
+                <td>区块链: {blockchain_memory_mb:.0f} MB<br>监控: {monitoring_memory_mb:.0f} MB</td>
+                <td><strong>{recommended_memory_gb} GB</strong></td>
+                <td>{'消除内存瓶颈' if bottleneck_component == '内存' else '预留20%内存余量'}</td>
+            </tr>
+            <tr>
+                <td>EBS IOPS</td>
+                <td>当前配置</td>
+                <td>监控开销: {monitoring_iops:.0f} IOPS</td>
+                <td><strong>{recommended_iops} IOPS</strong></td>
+                <td>{'消除存储瓶颈' if bottleneck_component == '存储I/O' else '预留50%IOPS余量'}</td>
+            </tr>
+            <tr>
+                <td>网络带宽</td>
+                <td>当前配置</td>
+                <td>基于CPU负载推算</td>
+                <td><strong>{recommended_network_gbps} Gbps</strong></td>
+                <td>满足高负载时的网络需求</td>
+            </tr>
+        </table>
+        
+        <div class="info">
+            <h4>📋 配置建议摘要</h4>
+            <p>基于测试数据分析，生产环境建议配置:</p>
+            <ul>
+                <li><strong>实例类型</strong>: 至少 {recommended_cores} vCPU, {recommended_memory_gb} GB 内存</li>
+                <li><strong>EBS配置</strong>: {recommended_iops} IOPS, 建议使用 {'IO2' if recommended_iops > 16000 else 'GP3'} 类型</li>
+                <li><strong>网络配置</strong>: {recommended_network_gbps} Gbps 网络带宽</li>
+                <li><strong>监控开销</strong>: 预留 {monitoring_cpu:.1f}% CPU 和 {monitoring_memory_mb:.0f} MB 内存用于监控</li>
+            </ul>
+        </div>
+        """
+        
+    def _generate_cost_optimization_recommendations(self, overhead_data, bottleneck_component):
+        """生成成本优化建议"""
+        if not overhead_data:
+            return "<p>缺少数据，无法生成成本优化建议。</p>"
+        
+        # 基于瓶颈类型生成不同的成本优化建议
+        if bottleneck_component == "CPU":
+            return """
+            <div class="cost-optimization">
+                <h4>💰 CPU瓶颈的成本优化策略</h4>
+                <ul>
+                    <li><strong>垂直扩展</strong>: 升级到更高CPU配置的实例类型</li>
+                    <li><strong>计算优化实例</strong>: 考虑使用C5/C6i系列实例，CPU性价比更高</li>
+                    <li><strong>Spot实例</strong>: 对于非关键环境，使用Spot实例可节省60-90%成本</li>
+                    <li><strong>预留实例</strong>: 长期使用可考虑1-3年预留实例，节省30-60%成本</li>
+                </ul>
+            </div>
+            """
+        elif bottleneck_component == "内存":
+            return """
+            <div class="cost-optimization">
+                <h4>💰 内存瓶颈的成本优化策略</h4>
+                <ul>
+                    <li><strong>内存优化实例</strong>: 使用R5/R6i系列实例，内存性价比更高</li>
+                    <li><strong>数据压缩</strong>: 优化区块链节点配置，减少内存占用</li>
+                    <li><strong>分层存储</strong>: 将部分数据迁移到EBS，减少内存需求</li>
+                    <li><strong>监控优化</strong>: 减少监控数据在内存中的缓存时间</li>
+                </ul>
+            </div>
+            """
+        elif bottleneck_component == "存储I/O":
+            return """
+            <div class="cost-optimization">
+                <h4>💰 存储I/O瓶颈的成本优化策略</h4>
+                <ul>
+                    <li><strong>EBS类型优化</strong>: GP3比IO2成本更低，优先考虑GP3</li>
+                    <li><strong>Instance Store</strong>: 对于临时数据，使用Instance Store可显著降低成本</li>
+                    <li><strong>数据分层</strong>: 热数据使用高IOPS EBS，冷数据使用标准EBS</li>
+                    <li><strong>压缩和去重</strong>: 减少存储空间需求，降低EBS成本</li>
+                </ul>
+            </div>
+            """
+        else:
+            return """
+            <div class="cost-optimization">
+                <h4>💰 通用成本优化策略</h4>
+                <ul>
+                    <li><strong>右配置</strong>: 当前配置已较为合理，避免过度配置</li>
+                    <li><strong>监控优化</strong>: 适当降低监控频率，减少监控开销</li>
+                    <li><strong>自动扩缩容</strong>: 根据负载自动调整资源，避免资源浪费</li>
+                    <li><strong>预留实例</strong>: 对于稳定负载，使用预留实例节省成本</li>
+                </ul>
+            </div>
+            """
     
     def _generate_overhead_data_table(self):
         """✅ 生成完整的监控开销数据表格"""
         if not self.overhead_data:
             return """
             <div class="warning">
-                <h4>⚠️  监控开销数据不可用</h4>
+                <h4>⚠️  监控开销Data Not Available</h4>
                 <p>监控开销数据文件未找到或为空。请确保在QPS测试期间运行了监控开销计算器。</p>
                 <p><strong>运行命令</strong>: <code>python3 tools/monitoring_overhead_calculator.py ./logs 5</code></p>
                 <p><strong>预期文件</strong>: <code>logs/monitoring_overhead_YYYYMMDD_HHMMSS.csv</code></p>
@@ -427,13 +1173,13 @@ class ReportGenerator:
                 <thead>
                     <tr>
                         <th style="background: #007bff; color: white; padding: 12px;">监控组件</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">平均CPU使用率</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">峰值CPU使用率</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">平均CPU Usage</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">峰值CPU Usage</th>
                         <th style="background: #007bff; color: white; padding: 12px;">平均内存使用</th>
                         <th style="background: #007bff; color: white; padding: 12px;">峰值内存使用</th>
                         <th style="background: #007bff; color: white; padding: 12px;">平均IOPS</th>
                         <th style="background: #007bff; color: white; padding: 12px;">峰值IOPS</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">平均吞吐量</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">平均Throughput</th>
                         <th style="background: #007bff; color: white; padding: 12px;">数据完整性</th>
                     </tr>
                 </thead>
@@ -531,10 +1277,10 @@ class ReportGenerator:
                 <h4>📊 监控开销分析说明</h4>
                 <ul>
                     <li><strong>监控组件</strong>: 各个系统监控工具的资源消耗分解</li>
-                    <li><strong>CPU使用率</strong>: 监控工具占用的CPU百分比</li>
+                    <li><strong>CPU Usage</strong>: 监控工具占用的CPU百分比</li>
                     <li><strong>内存使用</strong>: 监控工具占用的内存大小(MB)</li>
                     <li><strong>IOPS</strong>: 监控工具产生的磁盘I/O操作数</li>
-                    <li><strong>吞吐量</strong>: 监控工具产生的磁盘吞吐量(MiB/s)</li>
+                    <li><strong>Throughput</strong>: 监控工具产生的磁盘Throughput(MiB/s)</li>
                     <li><strong>数据完整性</strong>: 监控数据的完整性百分比</li>
                 </ul>
                 <p><strong>生产环境建议</strong>: 总监控开销通常占系统资源的1-3%，可以忽略不计。</p>
@@ -590,7 +1336,7 @@ class ReportGenerator:
             <div class="info-card">
                 <h4>🔄 EBS IOPS转换分析</h4>
                 <p><strong>报告文件</strong>: ebs_iops_conversion.json</p>
-                <p>将iostat指标转换为AWS EBS标准IOPS和吞吐量指标</p>
+                <p>将iostat指标转换为AWS EBS标准IOPS和Throughput指标</p>
             </div>
             <div class="info-card">
                 <h4>📊 EBS综合分析</h4>
@@ -669,19 +1415,19 @@ class ReportGenerator:
                     print(f"⚠️  {metric_name} 数据提取失败: {e}")
                     return None
             
-            # 计算DATA设备指标
+            # 计算DATA Device指标
             data_actual_iops = safe_get_metric_average(df, ['data_', 'aws_standard_iops'], 'DATA AWS标准IOPS')
-            data_actual_throughput = safe_get_metric_average(df, ['data_', 'throughput_mibs'], 'DATA吞吐量')
+            data_actual_throughput = safe_get_metric_average(df, ['data_', 'throughput_mibs'], 'DATAThroughput')
             
-            # 计算ACCOUNTS设备指标
+            # 计算ACCOUNTS Device指标
             accounts_actual_iops = safe_get_metric_average(df, ['accounts_', 'aws_standard_iops'], 'ACCOUNTS AWS标准IOPS')
-            accounts_actual_throughput = safe_get_metric_average(df, ['accounts_', 'throughput_mibs'], 'ACCOUNTS吞吐量')
+            accounts_actual_throughput = safe_get_metric_average(df, ['accounts_', 'throughput_mibs'], 'ACCOUNTSThroughput')
             
             # 计算利用率
             data_iops_utilization = safe_calculate_utilization(data_actual_iops, data_baseline_iops, 'DATA IOPS')
-            data_throughput_utilization = safe_calculate_utilization(data_actual_throughput, data_baseline_throughput, 'DATA吞吐量')
+            data_throughput_utilization = safe_calculate_utilization(data_actual_throughput, data_baseline_throughput, 'DATAThroughput')
             accounts_iops_utilization = safe_calculate_utilization(accounts_actual_iops, accounts_baseline_iops, 'ACCOUNTS IOPS')
-            accounts_throughput_utilization = safe_calculate_utilization(accounts_actual_throughput, accounts_baseline_throughput, 'ACCOUNTS吞吐量')
+            accounts_throughput_utilization = safe_calculate_utilization(accounts_actual_throughput, accounts_baseline_throughput, 'ACCOUNTSThroughput')
             
             # ✅ 智能警告判断
             def check_utilization_warning(utilization_str):
@@ -697,13 +1443,13 @@ class ReportGenerator:
             
             warnings = []
             if check_utilization_warning(data_iops_utilization):
-                warnings.append(f"DATA设备IOPS利用率过高: {data_iops_utilization}")
+                warnings.append(f"DATA DeviceIOPS利用率过高: {data_iops_utilization}")
             if check_utilization_warning(data_throughput_utilization):
-                warnings.append(f"DATA设备吞吐量利用率过高: {data_throughput_utilization}")
+                warnings.append(f"DATA DeviceThroughput利用率过高: {data_throughput_utilization}")
             if check_utilization_warning(accounts_iops_utilization):
-                warnings.append(f"ACCOUNTS设备IOPS利用率过高: {accounts_iops_utilization}")
+                warnings.append(f"ACCOUNTS DeviceIOPS利用率过高: {accounts_iops_utilization}")
             if check_utilization_warning(accounts_throughput_utilization):
-                warnings.append(f"ACCOUNTS设备吞吐量利用率过高: {accounts_throughput_utilization}")
+                warnings.append(f"ACCOUNTS DeviceThroughput利用率过高: {accounts_throughput_utilization}")
             
             # 生成HTML报告
             warning_section = ""
@@ -720,10 +1466,10 @@ class ReportGenerator:
             
             
             # 预处理显示值以避免格式化错误
-            data_actual_iops_display = f"{data_actual_iops:.0f}" if data_actual_iops is not None and data_actual_iops > 0 else "数据不可用"
-            data_actual_throughput_display = f"{data_actual_throughput:.1f}" if data_actual_throughput is not None and data_actual_throughput > 0 else "数据不可用"
-            accounts_actual_iops_display = f"{accounts_actual_iops:.0f}" if accounts_actual_iops is not None and accounts_actual_iops > 0 else "数据不可用"
-            accounts_actual_throughput_display = f"{accounts_actual_throughput:.1f}" if accounts_actual_throughput is not None and accounts_actual_throughput > 0 else "数据不可用"
+            data_actual_iops_display = f"{data_actual_iops:.0f}" if data_actual_iops is not None and data_actual_iops > 0 else "Data Not Available"
+            data_actual_throughput_display = f"{data_actual_throughput:.1f}" if data_actual_throughput is not None and data_actual_throughput > 0 else "Data Not Available"
+            accounts_actual_iops_display = f"{accounts_actual_iops:.0f}" if accounts_actual_iops is not None and accounts_actual_iops > 0 else "Data Not Available"
+            accounts_actual_throughput_display = f"{accounts_actual_throughput:.1f}" if accounts_actual_throughput is not None and accounts_actual_throughput > 0 else "Data Not Available"
             
             return f"""
             <div class="section">
@@ -731,14 +1477,14 @@ class ReportGenerator:
                 
                 {warning_section}
                 
-                <h3>💾 DATA设备 (LEDGER存储)</h3>
+                <h3>💾 DATA Device (LEDGER存储)</h3>
                 <div class="info-grid">
                     <div class="info-card">
-                        <h4>DATA设备基准IOPS</h4>
+                        <h4>DATA Device基准IOPS</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{data_baseline_iops or '未配置'}</div>
                     </div>
                     <div class="info-card">
-                        <h4>DATA设备基准吞吐量</h4>
+                        <h4>DATA Device基准Throughput</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{data_baseline_throughput or '未配置'} MiB/s</div>
                     </div>
                     <div class="info-card">
@@ -750,23 +1496,23 @@ class ReportGenerator:
                         <div style="font-size: 1.5em; font-weight: bold; color: {'red' if check_utilization_warning(data_iops_utilization) else 'green'};">{data_iops_utilization}</div>
                     </div>
                     <div class="info-card">
-                        <h4>DATA实际平均吞吐量</h4>
+                        <h4>DATA实际平均Throughput</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{data_actual_throughput_display} MiB/s</div>
                     </div>
                     <div class="info-card">
-                        <h4>DATA AWS基准吞吐量利用率</h4>
+                        <h4>DATA AWS基准Throughput利用率</h4>
                         <div style="font-size: 1.5em; font-weight: bold; color: {'red' if check_utilization_warning(data_throughput_utilization) else 'green'};">{data_throughput_utilization}</div>
                     </div>
                 </div>
                 
-                <h3>🗂️ ACCOUNTS设备 (账户存储)</h3>
+                <h3>🗂️ ACCOUNTS Device (账户存储)</h3>
                 <div class="info-grid">
                     <div class="info-card">
-                        <h4>ACCOUNTS设备基准IOPS</h4>
+                        <h4>ACCOUNTS Device基准IOPS</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{accounts_baseline_iops or '未配置'}</div>
                     </div>
                     <div class="info-card">
-                        <h4>ACCOUNTS设备基准吞吐量</h4>
+                        <h4>ACCOUNTS Device基准Throughput</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{accounts_baseline_throughput or '未配置'} MiB/s</div>
                     </div>
                     <div class="info-card">
@@ -778,11 +1524,11 @@ class ReportGenerator:
                         <div style="font-size: 1.5em; font-weight: bold; color: {'red' if check_utilization_warning(accounts_iops_utilization) else 'green'};">{accounts_iops_utilization}</div>
                     </div>
                     <div class="info-card">
-                        <h4>ACCOUNTS实际平均吞吐量</h4>
+                        <h4>ACCOUNTS实际平均Throughput</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{accounts_actual_throughput_display} MiB/s</div>
                     </div>
                     <div class="info-card">
-                        <h4>ACCOUNTS AWS基准吞吐量利用率</h4>
+                        <h4>ACCOUNTS AWS基准Throughput利用率</h4>
                         <div style="font-size: 1.5em; font-weight: bold; color: {'red' if check_utilization_warning(accounts_throughput_utilization) else 'green'};">{accounts_throughput_utilization}</div>
                     </div>
                 </div>
@@ -790,10 +1536,10 @@ class ReportGenerator:
                 <div class="info">
                     <h4>📊 EBS基准分析说明</h4>
                     <ul>
-                        <li><strong>基准IOPS/吞吐量</strong>: 通过环境变量配置的EBS性能基准</li>
+                        <li><strong>基准IOPS/Throughput</strong>: 通过环境变量配置的EBS性能基准</li>
                         <li><strong>实际平均值</strong>: 测试期间的平均性能表现</li>
                         <li><strong>利用率</strong>: 实际性能占基准性能的百分比</li>
-                        <li><strong>警告阈值</strong>: 利用率超过85%时显示警告</li>
+                        <li><strong>Warning Threshold</strong>: 利用率超过85%时显示警告</li>
                     </ul>
                     <p><strong>配置方法</strong>: 设置环境变量 DATA_BASELINE_IOPS, DATA_BASELINE_THROUGHPUT, ACCOUNTS_BASELINE_IOPS, ACCOUNTS_BASELINE_THROUGHPUT</p>
                 </div>
@@ -848,7 +1594,7 @@ class ReportGenerator:
             for limit in limitations:
                 duration = ""
                 if limit['first_time'] != limit['last_time']:
-                    duration = f" (持续时间: {limit['first_time']} 至 {limit['last_time']})"
+                    duration = f" (持续Time: {limit['first_time']} 至 {limit['last_time']})"
                 
                 html += f"""
                 <li>
@@ -912,7 +1658,7 @@ class ReportGenerator:
                     'last_time': low_connection_records['timestamp'].max(),
                     'occurrences': len(low_connection_records),
                     'max_value': f"最少剩余 {low_connection_records['ena_conntrack_available'].min()} 个连接",
-                    'total_affected': f"平均剩余 {low_connection_records['ena_conntrack_available'].mean():.0f} 个连接" if 'ena_conntrack_available' in low_connection_records.columns else "数据不可用"
+                    'total_affected': f"平均剩余 {low_connection_records['ena_conntrack_available'].mean():.0f} 个连接" if 'ena_conntrack_available' in low_connection_records.columns else "Data Not Available"
                 })
         
         return limitations
@@ -1025,10 +1771,10 @@ class ReportGenerator:
     def _generate_cpu_ebs_correlation_table(self, df):
         """✅ 改进的CPU与EBS关联分析表格生成"""
         key_correlations = [
-            ('cpu_iowait', 'util', 'CPU I/O等待 vs 设备利用率'),
-            ('cpu_iowait', 'aqu_sz', 'CPU I/O等待 vs I/O队列长度'),
-            ('cpu_iowait', 'r_await', 'CPU I/O等待 vs 读延迟'),
-            ('cpu_iowait', 'w_await', 'CPU I/O等待 vs 写延迟'),
+            ('cpu_iowait', 'util', 'CPU I/O Wait vs Device Utilization'),
+            ('cpu_iowait', 'aqu_sz', 'CPU I/O Wait vs I/O队列长度'),
+            ('cpu_iowait', 'r_await', 'CPU I/O Wait vs 读Latency'),
+            ('cpu_iowait', 'w_await', 'CPU I/O Wait vs 写Latency'),
             ('cpu_usr', 'r_s', '用户态CPU vs 读请求数'),
             ('cpu_sys', 'w_s', '系统态CPU vs 写请求数'),
         ]
@@ -1093,7 +1839,7 @@ class ReportGenerator:
                     significant = "不显著"
                 
                 return {
-                    '设备类型': device_type,
+                    'Device类型': device_type,
                     '分析项目': description,
                     'CPU指标': cpu_col,
                     'EBS指标': iostat_col,
@@ -1123,7 +1869,7 @@ class ReportGenerator:
             
             return None
         
-        # 分析DATA设备
+        # 分析DATA Device
         for cpu_field, iostat_field, description in key_correlations:
             iostat_col = find_matching_column(iostat_field, data_cols)
             
@@ -1132,24 +1878,24 @@ class ReportGenerator:
                 if result:
                     correlation_data.append(result)
                 else:
-                    print(f"⚠️  DATA设备 {description}: {error}")
+                    print(f"⚠️  DATA Device {description}: {error}")
         
-        # 分析ACCOUNTS设备
+        # 分析ACCOUNTS Device
         if accounts_cols:
             for cpu_field, iostat_field, description in key_correlations:
                 iostat_col = find_matching_column(iostat_field, accounts_cols)
                 
                 if iostat_col:
-                    result, error = safe_correlation_analysis(cpu_field, iostat_col, description.replace('设备', 'ACCOUNTS设备'), 'ACCOUNTS')
+                    result, error = safe_correlation_analysis(cpu_field, iostat_col, description.replace('Device', 'ACCOUNTS Device'), 'ACCOUNTS')
                     if result:
                         correlation_data.append(result)
                     else:
-                        print(f"⚠️  ACCOUNTS设备 {description}: {error}")
+                        print(f"⚠️  ACCOUNTS Device {description}: {error}")
         
         if not correlation_data:
             return """
             <div class="warning">
-                <h4>⚠️  相关性分析数据不可用</h4>
+                <h4>⚠️  相关性分析Data Not Available</h4>
                 <p>可能的原因：</p>
                 <ul>
                     <li>缺少必要的CPU或EBS性能字段</li>
@@ -1164,7 +1910,7 @@ class ReportGenerator:
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
             <thead>
                 <tr>
-                    <th style="background: #007bff; color: white; padding: 12px;">设备类型</th>
+                    <th style="background: #007bff; color: white; padding: 12px;">Device类型</th>
                     <th style="background: #007bff; color: white; padding: 12px;">分析项目</th>
                     <th style="background: #007bff; color: white; padding: 12px;">相关系数</th>
                     <th style="background: #007bff; color: white; padding: 12px;">P值</th>
@@ -1190,7 +1936,7 @@ class ReportGenerator:
             
             table_html += f"""
                 <tr style="background: {row_color};">
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data['设备类型']}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">{data['Device类型']}</td>
                     <td style="padding: 10px; border: 1px solid #ddd;">{data['分析项目']}</td>
                     <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{data['相关系数']}</td>
                     <td style="padding: 10px; border: 1px solid #ddd;">{data['P值']}</td>
@@ -1271,7 +2017,7 @@ class ReportGenerator:
                 <p>未找到RPC相关数据字段。建议监控以下指标：</p>
                 <ul>
                     <li>rpc_requests - RPC请求数</li>
-                    <li>rpc_latency - RPC延迟</li>
+                    <li>rpc_latency - RPCLatency</li>
                 </ul>
             </div>
             """
@@ -1314,7 +2060,7 @@ class ReportGenerator:
             <div class="info">
                 <p>未找到同步状态相关数据字段。建议监控以下指标：</p>
                 <ul>
-                    <li>sync_lag - 同步延迟</li>
+                    <li>sync_lag - 同步Latency</li>
                     <li>peer_count - 连接节点数</li>
                     <li>sync_status - 同步状态</li>
                 </ul>
@@ -1332,7 +2078,7 @@ class ReportGenerator:
                         avg_value = data.mean()
                         
                         if 'lag' in field.lower() or 'delay' in field.lower():
-                            # 延迟类指标
+                            # Latency类指标
                             status = "良好" if avg_value < 1000 else "一般" if avg_value < 5000 else "需要关注"
                             sync_details.append(f"<li><strong>{field}</strong>: 当前 {current_value:.1f}ms, 平均 {avg_value:.1f}ms - {status}</li>")
                         elif 'peer' in field.lower() or 'connection' in field.lower():
@@ -1363,6 +2109,10 @@ class ReportGenerator:
         try:
             # 生成各个部分 - 使用实际存在的方法
             ebs_analysis = self._generate_ebs_baseline_analysis_section(df)
+            ebs_bottleneck_analysis = self._generate_ebs_bottleneck_section()  # 新增EBS瓶颈根因分析
+            monitoring_overhead_analysis = self._generate_monitoring_overhead_section()  # 新增监控开销分析
+            monitoring_overhead_detailed = self._generate_monitoring_overhead_detailed_section()  # 详细监控开销分析
+            production_resource_planning = self._generate_production_resource_planning_section()  # 生产环境资源规划
             ena_warnings = self._generate_ena_warnings_section(df)  # 新增ENA警告
             ena_data_table = self._generate_ena_data_table(df)     # 新增ENA数据表
             solana_analysis = self._generate_solana_specific_section(df)
@@ -1391,13 +2141,17 @@ class ReportGenerator:
             <body>
                 <div class="container">
                     <h1>🚀 Solana QPS 性能分析报告 - 增强版</h1>
-                    <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    <p>✅ 统一字段命名 | 完整设备支持 | 监控开销分析 | Solana特定分析 | 瓶颈检测分析</p>
+                    <p>生成Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                    <p>✅ 统一字段命名 | 完整Device支持 | 监控开销分析 | Solana特定分析 | 瓶颈检测分析</p>
                     
                     {bottleneck_section}
                     {performance_summary}
                     {charts_section}
+                    {monitoring_overhead_analysis}
+                    {monitoring_overhead_detailed}
                     {ebs_analysis}
+                    {ebs_bottleneck_analysis}
+                    {production_resource_planning}
                     {ena_warnings}
                     {ena_data_table}
                     {solana_analysis}
@@ -1419,27 +2173,27 @@ class ReportGenerator:
                 {
                     'filename': 'performance_overview.png',
                     'title': '📈 性能概览图表',
-                    'description': '系统整体性能概览，包括CPU、内存、EBS等关键指标的时间序列展示'
+                    'description': '系统整体性能概览，包括CPU、内存、EBS等关键指标的Time序列展示'
                 },
                 {
                     'filename': 'cpu_ebs_correlation_visualization.png',
                     'title': '🔗 CPU-EBS关联可视化',
-                    'description': 'CPU使用率与EBS性能指标的关联性分析，帮助识别I/O瓶颈'
+                    'description': 'CPU Usage与EBS性能指标的关联性分析，帮助识别I/O瓶颈'
                 },
                 {
                     'filename': 'device_performance_comparison.png',
-                    'title': '💾 设备性能对比',
-                    'description': 'DATA设备和ACCOUNTS设备的性能对比分析'
+                    'title': '💾 Device性能对比',
+                    'description': 'DATA Device和ACCOUNTS Device的性能对比分析'
                 },
                 {
                     'filename': 'await_threshold_analysis.png',
-                    'title': '⏱️ 等待时间阈值分析',
-                    'description': 'I/O等待时间的阈值分析，识别存储性能瓶颈'
+                    'title': '⏱️ 等待Time阈值分析',
+                    'description': 'I/O等待Time的阈值分析，识别存储性能瓶颈'
                 },
                 {
                     'filename': 'util_threshold_analysis.png',
                     'title': '📊 利用率阈值分析',
-                    'description': '设备利用率的阈值分析，评估资源使用效率'
+                    'description': 'Device Utilization的阈值分析，评估资源使用效率'
                 },
                 {
                     'filename': 'monitoring_overhead_analysis.png',
@@ -1496,7 +2250,7 @@ class ReportGenerator:
                 {
                     'filename': 'ena_limitation_trends.png',
                     'title': '🚨 ENA网络限制趋势',
-                    'description': 'AWS ENA网络限制趋势分析，显示PPS、带宽、连接跟踪等限制的时间变化'
+                    'description': 'AWS ENA网络限制趋势分析，显示PPS、带宽、连接跟踪等限制的Time变化'
                 },
                 {
                     'filename': 'ena_connection_capacity.png',
@@ -1706,7 +2460,7 @@ class ReportGenerator:
                 <div class="bottleneck-details">
                     <h3>🔍 瓶颈详情</h3>
                     <div class="info">
-                        <p><strong>检测时间:</strong> {detection_time}</p>
+                        <p><strong>检测Time:</strong> {detection_time}</p>
                         <p><strong>严重程度:</strong> <span style="color: {severity_color}; font-weight: bold;">{severity.upper()}</span></p>
                         <p><strong>瓶颈原因:</strong> {reasons}</p>
                     </div>
@@ -2014,11 +2768,11 @@ class ReportGenerator:
             cpu_max = df['cpu_usage'].max() if 'cpu_usage' in df.columns and len(df) > 0 else 0
             mem_avg = df['mem_usage'].mean() if 'mem_usage' in df.columns and len(df) > 0 else 0
             
-            # DATA设备统计 - 使用统一的字段格式匹配
+            # DATA Device统计 - 使用统一的字段格式匹配
             data_iops_cols = [col for col in df.columns if col.startswith('data_') and col.endswith('_total_iops')]
             data_iops_avg = df[data_iops_cols[0]].mean() if data_iops_cols and len(df) > 0 else 0
             
-            # ACCOUNTS设备统计 - 使用统一的字段格式匹配
+            # ACCOUNTS Device统计 - 使用统一的字段格式匹配
             accounts_iops_cols = [col for col in df.columns if col.startswith('accounts_') and col.endswith('_total_iops')]
             accounts_iops_avg = df[accounts_iops_cols[0]].mean() if accounts_iops_cols and len(df) > 0 else 0
             
@@ -2027,23 +2781,23 @@ class ReportGenerator:
                 <h2>📊 性能摘要</h2>
                 <div class="info-grid">
                     <div class="info-card">
-                        <h4>平均CPU使用率</h4>
+                        <h4>平均CPU Usage</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{cpu_avg:.1f}%</div>
                     </div>
                     <div class="info-card">
-                        <h4>峰值CPU使用率</h4>
+                        <h4>峰值CPU Usage</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{cpu_max:.1f}%</div>
                     </div>
                     <div class="info-card">
-                        <h4>平均内存使用率</h4>
+                        <h4>平均Memory Usage</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{mem_avg:.1f}%</div>
                     </div>
                     <div class="info-card">
-                        <h4>DATA设备平均IOPS</h4>
+                        <h4>DATA Device平均IOPS</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{data_iops_avg:.0f}</div>
                     </div>
                     <div class="info-card">
-                        <h4>ACCOUNTS设备平均IOPS</h4>
+                        <h4>ACCOUNTS Device平均IOPS</h4>
                         <div style="font-size: 1.5em; font-weight: bold;">{accounts_iops_avg:.0f}</div>
                     </div>
                     <div class="info-card">

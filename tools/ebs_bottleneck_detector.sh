@@ -27,8 +27,8 @@ declare -A PEAK_VALUES
 init_ebs_limits() {
     echo "🔧 Initializing EBS limits configuration..."
     
-    # DATA卷限制
-    if [[ -n "$DATA_VOL_TYPE" && -n "$DATA_VOL_MAX_IOPS" ]]; then
+    # DATA卷限制（必须存在）
+    if [[ -n "$DATA_VOL_MAX_IOPS" ]]; then
         case "$DATA_VOL_TYPE" in
             "gp3")
                 DEVICE_LIMITS["${LEDGER_DEVICE}_max_iops"]="$DATA_VOL_MAX_IOPS"

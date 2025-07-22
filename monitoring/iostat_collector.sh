@@ -92,10 +92,13 @@ generate_device_header() {
 get_all_devices_data() {
     local device_data=""
     
-    # DATA 设备 - 使用data作为逻辑名前缀
-    if [[ -n "$LEDGER_DEVICE" && -n "$DATA_VOL_TYPE" ]]; then
+    # DATA 设备 - 使用data作为逻辑名前缀（必须存在）
+    if [[ -n "$DATA_VOL_TYPE" ]]; then
         local data_stats=$(get_iostat_data "$LEDGER_DEVICE" "data")
         device_data="$data_stats"
+    else
+        log_error "DATA_VOL_TYPE not configured - this is required"
+        return 1
     fi
     
     # ACCOUNTS 设备 - 使用accounts作为逻辑名前缀
@@ -115,9 +118,12 @@ get_all_devices_data() {
 generate_all_devices_header() {
     local device_header=""
     
-    # DATA 设备表头 - 使用data作为逻辑名前缀
-    if [[ -n "$LEDGER_DEVICE" && -n "$DATA_VOL_TYPE" ]]; then
+    # DATA 设备表头 - 使用data作为逻辑名前缀（必须存在）
+    if [[ -n "$DATA_VOL_TYPE" ]]; then
         device_header=$(generate_device_header "$LEDGER_DEVICE" "data")
+    else
+        log_error "DATA_VOL_TYPE not configured - this is required"
+        return 1
     fi
     
     # ACCOUNTS 设备表头 - 使用accounts作为逻辑名前缀
@@ -137,7 +143,10 @@ generate_all_devices_header() {
 validate_devices() {
     local errors=()
     
-    if [[ -n "$LEDGER_DEVICE" && ! -b "/dev/$LEDGER_DEVICE" ]]; then
+    # DATA设备验证（必须存在）
+    if [[ -z "$LEDGER_DEVICE" ]]; then
+        errors+=("LEDGER_DEVICE is required but not configured")
+    elif [[ ! -b "/dev/$LEDGER_DEVICE" ]]; then
         errors+=("LEDGER_DEVICE /dev/$LEDGER_DEVICE does not exist")
     fi
     
