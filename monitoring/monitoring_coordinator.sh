@@ -8,7 +8,12 @@
 
 # 加载错误处理和配置
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/error_handler.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+# 安全加载配置文件，避免readonly变量冲突
+if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh" 2>/dev/null; then
+    echo "警告: 配置文件加载失败，使用默认配置"
+    MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
+    LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
+fi
 
 setup_error_handling "$(basename "$0")" "监控协调器"
 log_script_start "$(basename "$0")"

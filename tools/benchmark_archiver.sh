@@ -4,7 +4,11 @@
 # QPS测试归档工具 - 按执行次数归档测试数据
 # =====================================================================
 
-source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+# 安全加载配置文件，避免readonly变量冲突
+if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh" 2>/dev/null; then
+    echo "警告: 配置文件加载失败，使用默认配置"
+    DATA_DIR=${DATA_DIR:-"/tmp/blockchain-node-benchmark"}
+fi
 
 # 全局变量
 ARCHIVES_DIR="${DATA_DIR}/archives"

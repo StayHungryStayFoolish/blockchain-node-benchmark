@@ -4,9 +4,16 @@
 专门负责Solana验证器日志的分析，包括RPC性能、错误模式、瓶颈检测等
 """
 
+import sys
+import os
+
+# 添加项目根目录到Python路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+
 import pandas as pd
 import numpy as np
-import os
 import re
 import subprocess
 from utils.unified_logger import get_logger

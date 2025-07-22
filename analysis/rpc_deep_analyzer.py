@@ -4,10 +4,17 @@ RPC深度分析器 - 从comprehensive_analysis.py拆分出来的独立模块
 专门负责RPC性能的深度分析，包括延迟趋势、异常检测、性能悬崖检测等
 """
 
+import sys
+import os
+
+# 添加项目根目录到Python路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+
 import pandas as pd
 import numpy as np
 from utils.unified_logger import get_logger
-import sys
 import traceback
 from typing import Dict, Any, Optional
 

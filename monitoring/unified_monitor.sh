@@ -16,7 +16,15 @@ else
     set -uo pipefail
 fi
 
-source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+# 安全加载配置文件，避免readonly变量冲突
+if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh" 2>/dev/null; then
+    echo "警告: 配置文件加载失败，使用默认配置"
+    # 设置基本的默认配置
+    MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
+    LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
+    LOG_LEVEL=${LOG_LEVEL:-"INFO"}
+fi
+
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
@@ -51,16 +59,14 @@ cleanup_monitor_processes() {
 source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/iostat_collector.sh"
 
-# 避免重复定义只读变量
+# 避免重复定义只读变量 - 使用config.sh中的定义
 if [[ -z "${UNIFIED_LOG:-}" ]]; then
-    readonly UNIFIED_LOG="${LOGS_DIR}/performance_$(date +%Y%m%d_%H%M%S).csv"
+    UNIFIED_LOG="${LOGS_DIR}/performance_$(date +%Y%m%d_%H%M%S).csv"
 fi
-if [[ -z "${MONITORING_OVERHEAD_LOG:-}" ]]; then
-    readonly MONITORING_OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_$(date +%Y%m%d_%H%M%S).csv"
-fi
+# MONITORING_OVERHEAD_LOG 已在 config.sh 的 detect_deployment_paths() 函数中设置
 
-# 监控开销CSV表头定义
-readonly OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu_percent,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu_percent,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage"
+# 监控开销CSV表头定义 - 从 config.sh 中加载
+# OVERHEAD_CSV_HEADER 已在 config.sh 中定义
 
 MONITOR_PIDS=()
 START_TIME=""
@@ -767,12 +773,9 @@ get_blockchain_node_resources() {
     echo "$blockchain_cpu,$blockchain_memory_percent,$blockchain_memory_mb,$process_count"
 }
 
-# 性能影响监控配置
-readonly PERFORMANCE_MONITORING_ENABLED=${PERFORMANCE_MONITORING_ENABLED:-true}
-readonly MAX_COLLECTION_TIME_MS=${MAX_COLLECTION_TIME_MS:-1000}  # 最大收集时间1秒
-readonly CPU_THRESHOLD_PERCENT=${CPU_THRESHOLD_PERCENT:-5.0}     # CPU使用率阈值5%
-readonly MEMORY_THRESHOLD_MB=${MEMORY_THRESHOLD_MB:-100}         # 内存使用阈值100MB
-readonly PERFORMANCE_LOG="${LOGS_DIR}/monitoring_performance_$(date +%Y%m%d_%H%M%S).log"
+# 性能影响监控配置 - 使用config.sh中的配置，避免重复定义
+# PERFORMANCE_MONITORING_ENABLED, MAX_COLLECTION_TIME_MS, CPU_THRESHOLD_PERCENT, MEMORY_THRESHOLD_MB 已在config.sh中定义
+# PERFORMANCE_LOG 将在config.sh的detect_deployment_paths()函数中设置
 
 # 性能影响监控函数
 monitor_performance_impact() {
@@ -1029,12 +1032,9 @@ auto_performance_optimization_advisor() {
     log_info "  - MEMORY_THRESHOLD_MB: ${MEMORY_THRESHOLD_MB}MB (当前) -> 建议范围: 50-200MB"
 }
 
-# 自适应频率调整配置
-readonly ADAPTIVE_FREQUENCY_ENABLED=${ADAPTIVE_FREQUENCY_ENABLED:-true}
-readonly MIN_MONITOR_INTERVAL=${MIN_MONITOR_INTERVAL:-2}      # 最小监控间隔2秒
-readonly MAX_MONITOR_INTERVAL=${MAX_MONITOR_INTERVAL:-30}     # 最大监控间隔30秒
-readonly SYSTEM_LOAD_THRESHOLD=${SYSTEM_LOAD_THRESHOLD:-80}  # 系统负载阈值80%
-readonly FREQUENCY_ADJUSTMENT_LOG="${LOGS_DIR}/frequency_adjustment_$(date +%Y%m%d_%H%M%S).log"
+# 自适应频率调整配置 - 使用config.sh中的配置，避免重复定义
+# ADAPTIVE_FREQUENCY_ENABLED, MIN_MONITOR_INTERVAL, MAX_MONITOR_INTERVAL, SYSTEM_LOAD_THRESHOLD 已在config.sh中定义
+# FREQUENCY_ADJUSTMENT_LOG 将在config.sh的detect_deployment_paths()函数中设置
 
 # 当前动态监控间隔（全局变量）
 CURRENT_MONITOR_INTERVAL=${MONITOR_INTERVAL}
@@ -1234,11 +1234,9 @@ graceful_degradation() {
     return $degradation_level
 }
 
-# 错误处理和恢复机制配置
-readonly ERROR_RECOVERY_ENABLED=${ERROR_RECOVERY_ENABLED:-true}
-readonly MAX_CONSECUTIVE_ERRORS=${MAX_CONSECUTIVE_ERRORS:-5}
-readonly ERROR_RECOVERY_DELAY=${ERROR_RECOVERY_DELAY:-10}  # 错误恢复延迟10秒
-readonly ERROR_LOG="${LOGS_DIR}/monitoring_errors_$(date +%Y%m%d_%H%M%S).log"
+# 错误处理和恢复机制配置 - 使用config.sh中的配置，避免重复定义
+# ERROR_RECOVERY_ENABLED, MAX_CONSECUTIVE_ERRORS, ERROR_RECOVERY_DELAY 已在config.sh中定义
+# ERROR_LOG 将在config.sh的detect_deployment_paths()函数中设置
 
 # 错误计数器（全局变量）
 declare -A ERROR_COUNTERS
@@ -2085,8 +2083,8 @@ start_unified_monitoring() {
             if (( sample_count % 12 == 0 )); then
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))
-                echo "📈 已收集 $sample_count 个样本，已运行 ${elapsed}s 跟随QPS测试中"
-                echo "   当前监控间隔: ${adjusted_interval}s (系统负载: ${current_system_load}%)"
+                echo "📈 Collected $sample_count samples, running ${elapsed}s following QPS test"
+                echo "   Current monitor interval: ${adjusted_interval}s (system load: ${current_system_load}%)"
             fi
             
             sleep "$adjusted_interval"
@@ -2114,8 +2112,8 @@ start_unified_monitoring() {
             if (( sample_count % 12 == 0 )); then
                 local elapsed=$((current_time - start_time))
                 local remaining=$((end_time - current_time))
-                echo "📈 已收集 $sample_count 个样本，已运行 ${elapsed}s，剩余 ${remaining}s"
-                echo "   当前监控间隔: ${adjusted_interval}s (系统负载: ${current_system_load}%)"
+                echo "📈 Collected $sample_count samples, running ${elapsed}s, remaining ${remaining}s"
+                echo "   Current monitor interval: ${adjusted_interval}s (system load: ${current_system_load}%)"
             fi
             
             sleep "$adjusted_interval"

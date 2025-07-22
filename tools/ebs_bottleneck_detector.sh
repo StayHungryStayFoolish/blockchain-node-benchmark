@@ -3,7 +3,11 @@
 # 高频监控EBS性能，检测IOPS和Throughput瓶颈
 
 # 引入依赖
-source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+# 安全加载配置文件，避免readonly变量冲突
+if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh" 2>/dev/null; then
+    echo "警告: 配置文件加载失败，使用默认配置"
+    LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
+fi
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器

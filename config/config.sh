@@ -5,6 +5,12 @@
 # 版本: 2.0 - 生产级配置管理
 # =====================================================================
 
+# 防止重复加载配置文件
+if [[ -n "${CONFIG_LOADED:-}" ]]; then
+    return 0
+fi
+CONFIG_LOADED=true
+
 # =====================================================================
 # 用户配置区域 - 请根据您的环境修改以下配置
 # =====================================================================
@@ -114,8 +120,11 @@ MONITORING_OVERHEAD_ENABLED=${MONITORING_OVERHEAD_ENABLED:-true}
 # 监控开销日志配置 - 将在路径检测完成后设置
 # MONITORING_OVERHEAD_LOG 将在 detect_deployment_paths() 函数中设置
 
-# 监控开销CSV表头
-OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu_percent,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu_percent,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage"
+# 监控开销CSV表头 - 防止重复定义和readonly冲突
+if [[ -z "${OVERHEAD_CSV_HEADER:-}" ]]; then
+    OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu_percent,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu_percent,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage"
+    export OVERHEAD_CSV_HEADER
+fi
 
 # 监控开销统计间隔 (秒) - 独立于主监控间隔
 OVERHEAD_COLLECTION_INTERVAL=${OVERHEAD_COLLECTION_INTERVAL:-10}

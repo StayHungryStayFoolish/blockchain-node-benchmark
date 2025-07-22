@@ -4,6 +4,14 @@ CPU-EBS相关性分析器 - 严格按照文档实现18种统计分析方法
 基于 CPU和EBS性能相关性的分析.md 文档的要求实现完整的相关性分析
 """
 
+import sys
+import os
+
+# 添加项目根目录到Python路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
