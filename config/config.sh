@@ -111,8 +111,8 @@ OVERHEAD_STAT_INTERVAL=60
 # 监控开销统计开关 (true/false) - 启用后会统计监控系统本身的资源开销
 MONITORING_OVERHEAD_ENABLED=${MONITORING_OVERHEAD_ENABLED:-true}
 
-# 监控开销日志配置
-MONITORING_OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_$(date +%Y%m%d_%H%M%S).csv"
+# 监控开销日志配置 - 将在路径检测完成后设置
+# MONITORING_OVERHEAD_LOG 将在 detect_deployment_paths() 函数中设置
 
 # 监控开销CSV表头
 OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu_percent,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu_percent,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage"
@@ -138,8 +138,8 @@ MEMORY_THRESHOLD_MB=${MEMORY_THRESHOLD_MB:-100}            # 内存使用阈值 
 # 性能监控详细级别 (basic/detailed/full)
 PERFORMANCE_MONITORING_LEVEL=${PERFORMANCE_MONITORING_LEVEL:-"basic"}
 
-# 性能日志配置
-PERFORMANCE_LOG="${LOGS_DIR}/monitoring_performance_$(date +%Y%m%d_%H%M%S).log"
+# 性能日志配置 - 将在路径检测完成后设置
+# PERFORMANCE_LOG 将在 detect_deployment_paths() 函数中设置
 
 # 性能数据保留策略
 PERFORMANCE_DATA_RETENTION_DAYS=${PERFORMANCE_DATA_RETENTION_DAYS:-7}      # 性能数据保留天数
@@ -161,8 +161,8 @@ SYSTEM_LOAD_CRITICAL_THRESHOLD=${SYSTEM_LOAD_CRITICAL_THRESHOLD:-95} # 严重负
 FREQUENCY_ADJUSTMENT_FACTOR=${FREQUENCY_ADJUSTMENT_FACTOR:-1.5}            # 频率调整因子
 FREQUENCY_ADJUSTMENT_AGGRESSIVE=${FREQUENCY_ADJUSTMENT_AGGRESSIVE:-false}   # 激进调整模式
 
-# 频率调整日志
-FREQUENCY_ADJUSTMENT_LOG="${LOGS_DIR}/frequency_adjustment_$(date +%Y%m%d_%H%M%S).log"
+# 频率调整日志 - 将在路径检测完成后设置
+# FREQUENCY_ADJUSTMENT_LOG 将在 detect_deployment_paths() 函数中设置
 
 # ----- 优雅降级配置 -----
 # 优雅降级开关 (true/false) - 启用后会在高负载时自动降级监控功能
@@ -196,8 +196,8 @@ ERROR_TYPES_TO_RECOVER=(                                  # 需要自动恢复�
     "resource_unavailable"
 )
 
-# 错误日志配置
-ERROR_LOG="${LOGS_DIR}/monitoring_errors_$(date +%Y%m%d_%H%M%S).log"
+# 错误日志配置 - 将在路径检测完成后设置
+# ERROR_LOG 将在 detect_deployment_paths() 函数中设置
 
 # 错误统计配置
 ERROR_STATISTICS_ENABLED=${ERROR_STATISTICS_ENABLED:-true}                 # 启用错误统计
@@ -226,8 +226,8 @@ HEALTH_CHECK_DISK_THRESHOLD=${HEALTH_CHECK_DISK_THRESHOLD:-90}             # 磁
 HEALTH_CHECK_MEMORY_THRESHOLD=${HEALTH_CHECK_MEMORY_THRESHOLD:-85}         # 内存使用率健康阈值 (%)
 HEALTH_CHECK_CPU_THRESHOLD=${HEALTH_CHECK_CPU_THRESHOLD:-80}               # CPU使用率健康阈值 (%)
 
-# 健康检查日志
-HEALTH_CHECK_LOG="${LOGS_DIR}/health_check_$(date +%Y%m%d_%H%M%S).log"
+# 健康检查日志 - 将在路径检测完成后设置
+# HEALTH_CHECK_LOG 将在 detect_deployment_paths() 函数中设置
 
 # 时间格式标准
 TIMESTAMP_FORMAT="%Y-%m-%d %H:%M:%S"
@@ -501,6 +501,13 @@ detect_deployment_paths() {
     MIXED_METHOD_TARGETS_FILE="${TMP_DIR}/targets_mixed.json"
     QPS_STATUS_FILE="${MEMORY_SHARE_DIR}/qps_status.json"
     TEST_SESSION_DIR="${TMP_DIR}/session_$(date +%Y%m%d_%H%M%S)"
+    
+    # 设置监控开销优化相关的日志文件路径
+    MONITORING_OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_$(date +%Y%m%d_%H%M%S).csv"
+    PERFORMANCE_LOG="${LOGS_DIR}/monitoring_performance_$(date +%Y%m%d_%H%M%S).log"
+    FREQUENCY_ADJUSTMENT_LOG="${LOGS_DIR}/frequency_adjustment_$(date +%Y%m%d_%H%M%S).log"
+    ERROR_LOG="${LOGS_DIR}/monitoring_errors_$(date +%Y%m%d_%H%M%S).log"
+    HEALTH_CHECK_LOG="${LOGS_DIR}/health_check_$(date +%Y%m%d_%H%M%S).log"
     
     # 临时文件模式 (用于清理)
     TEMP_FILE_PATTERN="${TMP_DIR}/${TEMP_FILE_PREFIX}-*"
@@ -992,7 +999,9 @@ get_monitoring_overhead_summary() {
 
 # 导出监控开销配置到文件
 export_monitoring_overhead_config() {
-    local output_file="${1:-"${LOGS_DIR}/monitoring_overhead_config_$(date +%Y%m%d_%H%M%S).conf"}"
+    # 确保 LOGS_DIR 已定义，否则使用当前目录
+    local logs_dir="${LOGS_DIR:-./logs}"
+    local output_file="${1:-"${logs_dir}/monitoring_overhead_config_$(date +%Y%m%d_%H%M%S).conf"}"
     
     cat > "$output_file" << EOF
 # 监控开销优化配置导出
