@@ -256,7 +256,7 @@ VALIDATOR_LOG_PATH="/data/data/log/validator.log"
 # ----- QPS 基准测试配置 -----
 # 快速基准测试模式 (验证基本QPS能力)
 QUICK_INITIAL_QPS=1000
-QUICK_MAX_QPS=2000
+QUICK_MAX_QPS=1500
 QUICK_QPS_STEP=500
 QUICK_DURATION=60   # 每个QPS级别测试1分钟 (避免长时间测试导致的资源问题)
 

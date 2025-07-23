@@ -331,15 +331,26 @@ process_test_results() {
 execute_data_analysis() {
     echo "🔍 执行数据分析..."
     
-    # 查找最新的性能数据文件
-    local latest_csv=$(find "$LOGS_DIR" -name "performance_*.csv" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+    # 查找最新的性能数据文件 - 修复文件名模式 (跨平台兼容)
+    local latest_csv
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # macOS版本 - 使用stat命令
+        latest_csv=$(find "$LOGS_DIR" -name "unified_monitor_*.csv" -type f -exec stat -f "%m %N" {} \; 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+    else
+        # Linux版本 - 使用printf
+        latest_csv=$(find "$LOGS_DIR" -name "unified_monitor_*.csv" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+    fi
     
     if [[ -z "$latest_csv" ]]; then
-        echo "⚠️ 警告: 没有找到性能数据文件"
+        echo "[ERROR] No unified_monitor CSV file found in $LOGS_DIR"
+        echo "[DEBUG] Available CSV files:"
+        ls -la "$LOGS_DIR"/*.csv 2>/dev/null || echo "  No CSV files found"
+        echo "[DEBUG] LOGS_DIR = $LOGS_DIR"
         return 1
     fi
     
-    echo "📈 使用数据文件: $(basename "$latest_csv")"
+    echo "[INFO] Using monitoring data file: $(basename "$latest_csv")"
+    echo "[INFO] File size: $(wc -l < "$latest_csv") lines"
     
     # 如果检测到瓶颈，执行瓶颈专项分析
     if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
