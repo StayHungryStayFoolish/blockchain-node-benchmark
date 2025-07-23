@@ -6,6 +6,7 @@
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import seaborn as sns
 import numpy as np
 from datetime import datetime
@@ -13,6 +14,83 @@ import argparse
 import os
 import sys
 from pathlib import Path
+
+# 配置中文字体支持
+def setup_chinese_font():
+    """配置matplotlib的中文字体支持"""
+    # 尝试常见的中文字体
+    chinese_fonts = [
+        'Noto Sans CJK SC',      # Linux推荐
+        'SimHei',                # Windows
+        'Microsoft YaHei',       # Windows
+        'PingFang SC',           # macOS
+        'STHeiti',               # macOS
+        'WenQuanYi Micro Hei',   # Linux
+        'DejaVu Sans'            # 后备字体
+    ]
+    
+    # 获取系统可用字体
+    available_fonts = [f.name for f in fm.fontManager.ttflist]
+    
+    # 查找第一个可用的中文字体
+    selected_font = None
+    for font in chinese_fonts:
+        if font in available_fonts:
+            selected_font = font
+            break
+    
+    if selected_font:
+        plt.rcParams['font.sans-serif'] = [selected_font]
+        plt.rcParams['axes.unicode_minus'] = False
+        print(f"✅ 使用字体: {selected_font}")
+        return True
+    else:
+        # 如果没有找到中文字体，使用英文标签
+        plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
+        print("⚠️  未找到中文字体，将使用英文标签")
+        return False
+
+# 初始化字体配置
+HAS_CHINESE_FONT = setup_chinese_font()
+
+# 多语言标签配置
+def get_labels():
+    """获取适合当前字体环境的标签"""
+    if HAS_CHINESE_FONT:
+        return {
+            'performance_analysis': '性能分析',
+            'time': '时间',
+            'cpu_usage': 'CPU使用率 (%)',
+            'memory_usage': '内存使用率 (%)',
+            'disk_usage': '磁盘使用率 (%)',
+            'network_usage': '网络使用率 (%)',
+            'qps': 'QPS',
+            'latency': '延迟 (ms)',
+            'throughput': '吞吐量',
+            'bottleneck_analysis': '瓶颈分析',
+            'trend_analysis': '趋势分析',
+            'correlation_analysis': '关联分析',
+            'performance_summary': '性能摘要'
+        }
+    else:
+        return {
+            'performance_analysis': 'Performance Analysis',
+            'time': 'Time',
+            'cpu_usage': 'CPU Usage (%)',
+            'memory_usage': 'Memory Usage (%)',
+            'disk_usage': 'Disk Usage (%)',
+            'network_usage': 'Network Usage (%)',
+            'qps': 'QPS',
+            'latency': 'Latency (ms)',
+            'throughput': 'Throughput',
+            'bottleneck_analysis': 'Bottleneck Analysis',
+            'trend_analysis': 'Trend Analysis',
+            'correlation_analysis': 'Correlation Analysis',
+            'performance_summary': 'Performance Summary'
+        }
+
+# 获取当前环境的标签
+LABELS = get_labels()
 
 # 导入统一的CSV数据处理器
 current_dir = Path(__file__).parent
@@ -298,21 +376,21 @@ class PerformanceVisualizer(CSVDataProcessor):
                     iowait_smooth = self.df[cpu_iowait_col].rolling(window=10, center=True, min_periods=1).mean()
                     ax1.plot(self.df['timestamp'], iowait_smooth, color='red', linewidth=2, label='CPU I/O Wait (Smoothed)')
                 
-                ax1.set_title('CPU性能指标 (含移动平均)')
+                ax1.set_title(f'{LABELS["cpu_usage"]} (with Moving Average)')
                 ax1.set_ylabel('Usage (%)')
                 ax1.legend()
                 ax1.grid(True, alpha=0.3)
             else:
                 ax1.text(0.5, 0.5, 'CPUData Not Available', ha='center', va='center', transform=ax1.transAxes)
-                ax1.set_title('CPU性能指标 (Data Not Available)')
+                ax1.set_title(f'{LABELS["cpu_usage"]} (Data Not Available)')
         else:
             missing_fields = []
             if not cpu_usage_col:
                 missing_fields.append('cpu_usage')
             if not cpu_iowait_col:
                 missing_fields.append('cpu_iowait')
-            ax1.text(0.5, 0.5, f'缺少字段: {", ".join(missing_fields)}', ha='center', va='center', transform=ax1.transAxes)
-            ax1.set_title('CPU性能指标 (Field Missing)')
+            ax1.text(0.5, 0.5, f'Missing Fields: {", ".join(missing_fields)}', ha='center', va='center', transform=ax1.transAxes)
+            ax1.set_title(f'{LABELS["cpu_usage"]} (Field Missing)')
         
         # ✅ DATA DeviceIOPS (改进的数据检查)
         ax2 = axes[0, 1]
@@ -366,7 +444,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         output_file = os.path.join(self.output_dir, 'performance_overview.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 性能总览图已保存: {output_file}")
+        print(f"📊 {LABELS['performance_analysis']} overview saved: {output_file}")
         
         return output_file
     
@@ -393,12 +471,12 @@ class PerformanceVisualizer(CSVDataProcessor):
             missing_fields.append('data_aqu_sz')
         
         if missing_fields:
-            print(f"⚠️  缺少相关性分析所需的字段: {', '.join(missing_fields)}")
+            print(f"⚠️  Missing fields for correlation analysis: {', '.join(missing_fields)}")
             # 在图表中显示错误信息
             for i, ax in enumerate(axes.flat):
-                ax.text(0.5, 0.5, f'缺少字段:\n{chr(10).join(missing_fields)}', 
+                ax.text(0.5, 0.5, f'Missing Fields:\n{chr(10).join(missing_fields)}', 
                        ha='center', va='center', transform=ax.transAxes, fontsize=12)
-                ax.set_title(f'相关性分析 {i+1} (Field Missing)')
+                ax.set_title(f'{LABELS["correlation_analysis"]} {i+1} (Field Missing)')
             plt.tight_layout()
             output_file = os.path.join(self.output_dir, 'cpu_ebs_correlation_visualization.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
@@ -461,8 +539,8 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax.grid(True, alpha=0.3)
                 
             except Exception as e:
-                ax.text(0.5, 0.5, f'分析失败:\n{str(e)[:50]}', ha='center', va='center', transform=ax.transAxes)
-                ax.set_title(f'{title_prefix}\n分析失败')
+                ax.text(0.5, 0.5, f'Analysis Failed:\n{str(e)[:50]}', ha='center', va='center', transform=ax.transAxes)
+                ax.set_title(f'{title_prefix}\nAnalysis Failed')
         
         # 执行各项相关性分析
         safe_correlation_analysis(

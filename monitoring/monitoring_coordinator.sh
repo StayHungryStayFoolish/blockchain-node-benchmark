@@ -333,36 +333,96 @@ main() {
             start_all_monitors "${2:-$DEFAULT_MONITOR_DURATION}"
             # 保持监控协调器运行，监控子进程状态
             echo "🔄 监控协调器保持运行，监控子进程状态..."
+            
+            # 记录启动时间
+            local start_time=$(date +%s)
+            
+            # 检查QPS测试是否还在运行的函数
+            is_qps_test_running() {
+                # 检查QPS测试状态标记文件
+                if [[ -f "$TMP_DIR/qps_test_status" ]]; then
+                    return 0  # QPS测试还在运行
+                fi
+                
+                # 检查master_qps_executor进程
+                if pgrep -f "master_qps_executor" >/dev/null 2>&1; then
+                    return 0  # QPS测试还在运行
+                fi
+                
+                # 检查vegeta进程
+                if pgrep -f "vegeta" >/dev/null 2>&1; then
+                    return 0  # QPS测试还在运行
+                fi
+                
+                return 1  # QPS测试已结束
+            }
+            
             while true; do
                 sleep 10
-                # 检查是否还有监控任务在运行
+                local current_time=$(date +%s)
+                local runtime=$((current_time - start_time))
+                
+                # 1. Priority check QPS test status
+                if is_qps_test_running; then
+                    echo "[ACTIVE] QPS test in progress, monitoring system continues running (runtime: ${runtime}s)"
+                    continue  # QPS test still running, continue regardless of monitoring task status
+                fi
+                
+                # 2. QPS test completed, check monitoring task status
+                echo "[INFO] QPS test completed, checking monitoring task status..."
+                
+                # Check if there are any monitoring tasks running
                 if [[ ! -f "$MONITOR_PIDS_FILE" ]] || [[ ! -s "$MONITOR_PIDS_FILE" ]]; then
-                    echo "ℹ️  没有活跃的监控任务，监控协调器退出"
+                    echo "[INFO] No active monitoring tasks, monitoring coordinator exiting"
                     break
                 fi
                 
-                # 检查监控任务状态
+                # Check monitoring task status - enhanced robustness check
                 local active_count=0
-                while IFS=':' read -r monitor_name pid; do
-                    if kill -0 "$pid" 2>/dev/null; then
-                        ((active_count++))
-                    fi
-                done < "$MONITOR_PIDS_FILE"
+                echo "[CHECK] Checking monitoring task status (runtime: ${runtime}s):"
+                
+                # File existence and readability check
+                if [[ ! -f "$MONITOR_PIDS_FILE" ]]; then
+                    echo "  [WARN] PID file does not exist: $MONITOR_PIDS_FILE"
+                    active_count=0
+                elif [[ ! -r "$MONITOR_PIDS_FILE" ]]; then
+                    echo "  [WARN] PID file is not readable: $MONITOR_PIDS_FILE"
+                    active_count=0
+                elif [[ ! -s "$MONITOR_PIDS_FILE" ]]; then
+                    echo "  [WARN] PID file is empty: $MONITOR_PIDS_FILE"
+                    active_count=0
+                else
+                    # Safe reading and format validation
+                    while IFS=':' read -r monitor_name pid; do
+                        if [[ -n "$monitor_name" && -n "$pid" && "$pid" =~ ^[0-9]+$ ]]; then
+                            if kill -0 "$pid" 2>/dev/null; then
+                                echo "  [OK] $monitor_name (PID: $pid) - running"
+                                ((active_count++))
+                            else
+                                echo "  [STOP] $monitor_name (PID: $pid) - stopped"
+                            fi
+                        else
+                            echo "  [WARN] Invalid PID file format: '$monitor_name:$pid'"
+                        fi
+                    done < "$MONITOR_PIDS_FILE"
+                fi
+                
+                echo "  [STAT] Active task count: $active_count"
                 
                 if [[ $active_count -eq 0 ]]; then
-                    echo "ℹ️  所有监控任务已完成，监控协调器退出"
+                    echo "[INFO] QPS test completed and all monitoring tasks finished, monitoring coordinator exiting"
                     break
                 fi
             done
             ;;
         "start_all")
-            # 新增：为QPS测试框架提供的统一启动入口
+            # New: Unified startup entry for QPS test framework
             init_coordinator
-            echo "🚀 启动所有监控任务 (QPS测试模式)"
+            echo "[START] Starting all monitoring tasks (QPS test mode)"
             start_monitor "unified" "${2:-follow_qps_test}"
             start_monitor "slot" "${2:-follow_qps_test}"
             start_monitor "bottleneck" "${2:-follow_qps_test}"
-            echo "✅ 所有监控任务已启动"
+            echo "[OK] All monitoring tasks started"
             ;;
         "stop")
             stop_all_monitors

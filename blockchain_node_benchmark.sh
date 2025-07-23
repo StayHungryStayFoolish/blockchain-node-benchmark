@@ -212,7 +212,12 @@ stop_monitoring_system() {
 
 # 执行核心QPS测试
 execute_core_qps_test() {
-    echo "🚀 执行核心QPS测试 (RPC模式: $RPC_MODE)..."
+    echo "[START] Executing core QPS test (RPC mode: $RPC_MODE)..."
+    
+    # Create QPS test status marker file - using atomic operation for reliability
+    echo "running" > "$TMP_DIR/qps_test_status.tmp"
+    mv "$TMP_DIR/qps_test_status.tmp" "$TMP_DIR/qps_test_status"
+    echo "[STATUS] QPS test status marker created: $TMP_DIR/qps_test_status"
     
     # 构建参数数组，过滤掉RPC模式参数，因为我们会单独添加
     local executor_args=()
@@ -235,6 +240,14 @@ execute_core_qps_test() {
     # 调用master_qps_executor.sh
     "${SCRIPT_DIR}/core/master_qps_executor.sh" "${executor_args[@]}"
     local test_result=$?
+    
+    # Delete QPS test status marker file - safe deletion
+    if [[ -f "$TMP_DIR/qps_test_status" ]]; then
+        rm -f "$TMP_DIR/qps_test_status"
+        echo "[STATUS] QPS test status marker deleted"
+    else
+        echo "[WARN] QPS test status marker file does not exist, may have been deleted"
+    fi
     
     # 检查是否检测到瓶颈
     if [[ -f "${MEMORY_SHARE_DIR}/bottleneck_status.json" ]]; then
