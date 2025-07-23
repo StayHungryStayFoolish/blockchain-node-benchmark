@@ -488,8 +488,15 @@ execute_performance_cliff_analysis() {
 generate_final_reports() {
     echo "📊 生成最终报告..."
     
-    # 查找最新的性能数据文件
-    local latest_csv=$(find "$LOGS_DIR" -name "performance_*.csv" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+    # 查找最新的性能数据文件 - 修复文件名模式 (跨平台兼容)
+    local latest_csv
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # macOS版本 - 使用stat命令
+        latest_csv=$(find "$LOGS_DIR" -name "unified_monitor_*.csv" -type f -exec stat -f "%m %N" {} \; 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+    else
+        # Linux版本 - 使用printf
+        latest_csv=$(find "$LOGS_DIR" -name "unified_monitor_*.csv" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+    fi
     
     if [[ -z "$latest_csv" ]]; then
         echo "⚠️ 警告: 没有找到性能数据文件"
@@ -610,7 +617,7 @@ EOF
 
 - **详细瓶颈分析**: $QPS_STATUS_FILE
 - **瓶颈事件日志**: ${LOGS_DIR}/bottleneck_events.jsonl
-- **性能数据**: $(find "$LOGS_DIR" -name "performance_*.csv" | head -1)
+- **性能数据**: $(find "$LOGS_DIR" -name "unified_monitor_*.csv" | head -1)
 
 ## 🎯 下一步行动
 
