@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-性能可视化器 - 生产级版本 (已修复CSV字段一致性问题)
-使用统一的CSV数据处理器，确保字段访问的一致性和可靠性
+Performance Visualizer - Production Version (CSV Field Consistency Fixed)
+Uses unified CSV data processor to ensure field access consistency and reliability
 """
 
 import pandas as pd
@@ -15,82 +15,38 @@ import os
 import sys
 from pathlib import Path
 
-# 配置中文字体支持
-def setup_chinese_font():
-    """配置matplotlib的中文字体支持"""
-    # 尝试常见的中文字体
-    chinese_fonts = [
-        'Noto Sans CJK SC',      # Linux推荐
-        'SimHei',                # Windows
-        'Microsoft YaHei',       # Windows
-        'PingFang SC',           # macOS
-        'STHeiti',               # macOS
-        'WenQuanYi Micro Hei',   # Linux
-        'DejaVu Sans'            # 后备字体
-    ]
-    
-    # 获取系统可用字体
-    available_fonts = [f.name for f in fm.fontManager.ttflist]
-    
-    # 查找第一个可用的中文字体
-    selected_font = None
-    for font in chinese_fonts:
-        if font in available_fonts:
-            selected_font = font
-            break
-    
-    if selected_font:
-        plt.rcParams['font.sans-serif'] = [selected_font]
-        plt.rcParams['axes.unicode_minus'] = False
-        print(f"✅ 使用字体: {selected_font}")
-        return True
-    else:
-        # 如果没有找到中文字体，使用英文标签
-        plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
-        print("⚠️  未找到中文字体，将使用英文标签")
-        return False
+# Configure font support for cross-platform compatibility
+def setup_font():
+    """Configure matplotlib font for cross-platform compatibility"""
+    # Use standard fonts that work across all platforms
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False
+    print("✅ Using font: DejaVu Sans")
+    return True
 
-# 初始化字体配置
-HAS_CHINESE_FONT = setup_chinese_font()
+# Initialize font configuration
+setup_font()
 
-# 多语言标签配置
-def get_labels():
-    """获取适合当前字体环境的标签"""
-    if HAS_CHINESE_FONT:
-        return {
-            'performance_analysis': '性能分析',
-            'time': '时间',
-            'cpu_usage': 'CPU使用率 (%)',
-            'memory_usage': '内存使用率 (%)',
-            'disk_usage': '磁盘使用率 (%)',
-            'network_usage': '网络使用率 (%)',
-            'qps': 'QPS',
-            'latency': '延迟 (ms)',
-            'throughput': '吞吐量',
-            'bottleneck_analysis': '瓶颈分析',
-            'trend_analysis': '趋势分析',
-            'correlation_analysis': '关联分析',
-            'performance_summary': '性能摘要'
-        }
-    else:
-        return {
-            'performance_analysis': 'Performance Analysis',
-            'time': 'Time',
-            'cpu_usage': 'CPU Usage (%)',
-            'memory_usage': 'Memory Usage (%)',
-            'disk_usage': 'Disk Usage (%)',
-            'network_usage': 'Network Usage (%)',
-            'qps': 'QPS',
-            'latency': 'Latency (ms)',
-            'throughput': 'Throughput',
-            'bottleneck_analysis': 'Bottleneck Analysis',
-            'trend_analysis': 'Trend Analysis',
-            'correlation_analysis': 'Correlation Analysis',
-            'performance_summary': 'Performance Summary'
-        }
-
-# 获取当前环境的标签
-LABELS = get_labels()
+# English labels for universal compatibility
+LABELS = {
+    'performance_analysis': 'Performance Analysis',
+    'time': 'Time',
+    'cpu_usage': 'CPU Usage (%)',
+    'memory_usage': 'Memory Usage (%)',
+    'disk_usage': 'Disk Usage (%)',
+    'network_usage': 'Network Usage (%)',
+    'qps': 'QPS',
+    'latency': 'Latency (ms)',
+    'throughput': 'Throughput',
+    'bottleneck_analysis': 'Bottleneck Analysis',
+    'trend_analysis': 'Trend Analysis',
+    'correlation_analysis': 'Correlation Analysis',
+    'performance_summary': 'Performance Summary',
+    'device_performance': 'Device Performance',
+    'io_latency': 'I/O Latency',
+    'utilization': 'Utilization',
+    'threshold_analysis': 'Threshold Analysis'
+}
 
 # 导入统一的CSV数据处理器
 current_dir = Path(__file__).parent
@@ -108,12 +64,12 @@ try:
     from unit_converter import UnitConverter
     from advanced_chart_generator import AdvancedChartGenerator
     ADVANCED_TOOLS_AVAILABLE = True
-    print("✅ 高级分析工具已加载")
+    print("✅ Advanced analysis tools loaded")
 except ImportError as e:
-    print(f"⚠️  高级分析工具不可用: {e}")
-    print("📝 将使用基础功能模式，部分高级功能可能不可用")
+    print(f"⚠️  Advanced analysis tools unavailable: {e}")
+    print("📝 Using basic functionality mode, some advanced features may be unavailable")
     ADVANCED_TOOLS_AVAILABLE = False
-    # 设置占位符类以避免运行时错误
+    # Set placeholder classes to avoid runtime errors
     class CSVDataProcessor:
         def __init__(self):
             self.df = None
@@ -139,10 +95,10 @@ try:
     from cpu_ebs_correlation_analyzer import CPUEBSCorrelationAnalyzer  
     from unit_converter import UnitConverter
     ADVANCED_TOOLS_AVAILABLE = True
-    print("✅ 高级分析工具已加载")
+    print("✅ Advanced analysis tools loaded")
 except ImportError as e:
-    print(f"⚠️  高级分析工具不可用: {e}")
-    print("📝 将使用基础功能模式，部分高级功能可能不可用")
+    print(f"⚠️  Advanced analysis tools unavailable: {e}")
+    print("📝 Using basic functionality mode, some advanced features may be unavailable")
     ADVANCED_TOOLS_AVAILABLE = False
     
     # 定义占位符类以避免IDE警告和运行时错误
@@ -200,7 +156,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 self.correlation_analyzer = CPUEBSCorrelationAnalyzer(data_file)
                 self.chart_generator = AdvancedChartGenerator(data_file, self.output_dir)
             except Exception as e:
-                print(f"⚠️ 高级工具初始化失败: {e}")
+                print(f"⚠️ Advanced tools initialization failed: {e}")
                 self.unit_converter = None
                 self.correlation_analyzer = None
                 self.chart_generator = None
@@ -221,18 +177,18 @@ class PerformanceVisualizer(CSVDataProcessor):
                 if 'timestamp' in self.df.columns:
                     try:
                         self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
-                        print(f"✅ Time戳字段 'self.df['timestamp']' 转换成功")
+                        print(f"✅ Timestamp field 'self.df['timestamp']' conversion successful")
                     except Exception as e:
-                        print(f"⚠️  Time戳转换失败: {e}")
+                        print(f"⚠️  Timestamp conversion failed: {e}")
                         # 创建默认Time戳
                         self.df['timestamp'] = pd.date_range(start='2024-01-01', periods=len(self.df), freq='1min')
                 else:
-                    print("⚠️  未找到Time戳字段，创建默认Time戳")
+                    print("⚠️  Timestamp field not found, creating default timestamp")
                     self.df['timestamp'] = pd.date_range(start='2024-01-01', periods=len(self.df), freq='1min')
                 
-                print(f"✅ 加载了 {len(self.df)} 条性能数据")
-                print(f"📊 CSV列数: {len(self.df.columns)}")
-                self.print_field_info()  # 打印字段信息用于调试
+                print(f"✅ Loaded {len(self.df)} performance data records")
+                print(f"📊 CSV columns: {len(self.df.columns)}")
+                self.print_field_info()  # Print field info for debugging
                 
                 # 动态添加ACCOUNTS设备阈值（仅在ACCOUNTS设备配置时）
                 self._add_accounts_thresholds_if_configured()
@@ -240,7 +196,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             return success
             
         except Exception as e:
-            print(f"❌ 数据加载失败: {e}")
+            print(f"❌ Data loading failed: {e}")
             return False
     
     def print_field_info(self):
@@ -256,7 +212,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 'accounts_w_await': 10.0,   # ACCOUNTS 写Latency阈值 (ms)
             })
             self._accounts_thresholds_added = True
-            print("✅ 已添加ACCOUNTS设备阈值配置")
+            print("✅ ACCOUNTS device threshold configuration added")
     
     def _is_accounts_configured(self):
         """检查 ACCOUNTS Device是否配置和可用
@@ -279,7 +235,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             
         # 如果环境变量配置了但没有数据列，说明配置有问题
         if accounts_device and accounts_vol_type:
-            print(f"⚠️  ACCOUNTS Device已配置 ({accounts_device}) 但未找到监控数据")
+            print(f"⚠️  ACCOUNTS Device configured ({accounts_device}) but monitoring data not found")
             return False
             
         # 完全未配置，这是正常情况
@@ -349,7 +305,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         
         if not data_iops_cols:
-            print("❌ 未找到DATA Device数据")
+            print("❌ DATA Device data not found")
             return None
         
         data_iops_col = data_iops_cols[0]
@@ -518,9 +474,9 @@ class PerformanceVisualizer(CSVDataProcessor):
                     p = np.poly1d(z)
                     ax.plot(x_clean, p(x_clean), "r--", alpha=0.8, linewidth=2)
                 except np.linalg.LinAlgError:
-                    print(f"⚠️  {title_prefix}: 回归线拟合警告 - 数据线性相关性不足")
+                    print(f"⚠️  {title_prefix}: Regression line fitting warning - insufficient data linear correlation")
                 except Exception as e:
-                    print(f"⚠️  {title_prefix}: 回归线拟合失败: {e}")
+                    print(f"⚠️  {title_prefix}: Regression line fitting failed: {e}")
                 
                 # ✅ 安全的相关性计算
                 try:
@@ -586,7 +542,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         output_file = os.path.join(self.output_dir, 'cpu_ebs_correlation_visualization.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 CPU-EBS相关性可视化图已保存: {output_file}")
+        print(f"📊 CPU-EBS correlation visualization saved: {output_file}")
         
         return output_file
     
@@ -613,7 +569,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         accounts_cols = [col for col in self.df.columns if col.startswith('accounts_')] if accounts_configured else []
         
         if not data_cols:
-            print("❌ 未找到DATA Device数据")
+            print("❌ DATA Device data not found")
             return None
         
         # 上图：IOPS对比
@@ -662,7 +618,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         output_file = os.path.join(self.output_dir, 'device_performance_comparison.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 Device性能对比图已保存: {output_file}")
+        print(f"📊 Device performance comparison chart saved: {output_file}")
         
         return output_file
 
@@ -816,7 +772,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         output_file = os.path.join(self.output_dir, 'await_threshold_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 I/O Latency阈值分析图已保存: {output_file}")
+        print(f"📊 I/O Latency threshold analysis chart saved: {output_file}")
         
         return output_file, threshold_violations
 
@@ -964,22 +920,14 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         output_file = os.path.join(self.output_dir, 'util_threshold_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 Device Utilization阈值分析图已保存: {output_file}")
-        
-        return output_file, threshold_violations
-        
-        plt.tight_layout()
-        
-        output_file = os.path.join(self.output_dir, 'util_threshold_analysis.png')
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 Device Utilization阈值分析图已保存: {output_file}")
+        print(f"📊 Device Utilization threshold analysis chart saved: {output_file}")
         
         return output_file, threshold_violations
 
     def create_monitoring_overhead_analysis_chart(self):
         """创建监控开销分析图表"""
         if not self.overhead_file or not os.path.exists(self.overhead_file):
-            print("⚠️ 监控开销数据文件不存在，跳过开销分析图表")
+            print("⚠️ Monitoring overhead data file does not exist, skipping overhead analysis chart")
             return None, {}
         
         try:
@@ -987,7 +935,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             if 'timestamp' in overhead_df.columns:
                 overhead_df['timestamp'] = pd.to_datetime(overhead_df['timestamp'])
         except Exception as e:
-            print(f"❌ 监控开销数据加载失败: {e}")
+            print(f"❌ Monitoring overhead data loading failed: {e}")
             return None, {}
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -1091,7 +1039,7 @@ CPU开销:
         
         output_file = os.path.join(self.output_dir, 'monitoring_overhead_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 监控开销分析图已保存: {output_file}")
+        print(f"📊 Monitoring overhead analysis chart saved: {output_file}")
         
         # 返回开销分析结果
         overhead_analysis = {}
@@ -1107,7 +1055,7 @@ CPU开销:
         return output_file, overhead_analysis
 
     def generate_all_charts(self):
-        print("🎨 生成性能可视化图表...")
+        print("🎨 Generating performance visualization charts...")
         
         if not self.load_data():
             return []
@@ -1118,7 +1066,7 @@ CPU开销:
         try:
             # 使用高级图表生成器
             if ADVANCED_TOOLS_AVAILABLE and self.chart_generator is not None:
-                print("🎨 使用高级图表生成器...")
+                print("🎨 Using advanced chart generator...")
                 advanced_charts = self.chart_generator.generate_all_charts()
                 if advanced_charts:
                     chart_files.extend(advanced_charts)
@@ -1142,7 +1090,7 @@ CPU开销:
                 chart_files.append(smoothed_chart)
             
             # 生成阈值分析图表 - 集成自await_util_analyzer
-            print("📊 生成阈值分析图表...")
+            print("📊 Generating threshold analysis charts...")
             
             await_chart, await_violations = self.create_await_threshold_analysis_chart()
             if await_chart:
@@ -1150,19 +1098,19 @@ CPU开销:
                 threshold_analysis_results['await_violations'] = await_violations
             
             # 生成QPS趋势分析图表
-            print("📊 生成QPS趋势分析图表...")
+            print("📊 Generating QPS trend analysis charts...")
             qps_trend_chart = self.create_qps_trend_analysis_chart()
             if qps_trend_chart:
                 chart_files.append(qps_trend_chart)
             
             # 生成资源效率分析图表
-            print("📊 生成资源效率分析图表...")
+            print("📊 Generating resource efficiency analysis charts...")
             efficiency_chart = self.create_resource_efficiency_analysis_chart()
             if efficiency_chart:
                 chart_files.append(efficiency_chart)
             
             # 生成瓶颈识别分析图表
-            print("📊 生成瓶颈识别分析图表...")
+            print("📊 Generating bottleneck identification analysis charts...")
             bottleneck_chart = self.create_bottleneck_identification_chart()
             if bottleneck_chart:
                 chart_files.append(bottleneck_chart)
@@ -1173,7 +1121,7 @@ CPU开销:
                 threshold_analysis_results['util_violations'] = util_violations
             
             # 生成监控开销分析图表
-            print("📊 生成监控开销分析图表...")
+            print("📊 Generating monitoring overhead analysis charts...")
             
             overhead_chart, overhead_analysis = self.create_monitoring_overhead_analysis_chart()
             if overhead_chart:
@@ -1183,43 +1131,43 @@ CPU开销:
             # 打印阈值分析摘要
             self._print_threshold_analysis_summary(threshold_analysis_results)
             
-            print(f"✅ 生成了 {len(chart_files)} 个图表")
+            print(f"✅ Generated {len(chart_files)} charts")
             return chart_files, threshold_analysis_results
             
         except Exception as e:
-            print(f"❌ 图表生成失败: {e}")
+            print(f"❌ Chart generation failed: {e}")
             import traceback
             traceback.print_exc()
             return [], {}
     
     def _print_threshold_analysis_summary(self, results):
-        """打印阈值分析摘要 - 集成自await_util_analyzer"""
-        print("\n📊 阈值分析摘要:")
+        """Print threshold analysis summary - integrated from await_util_analyzer"""
+        print("\n📊 Threshold Analysis Summary:")
         print("=" * 60)
         
         if 'await_violations' in results:
-            print("\n🕐 I/O Latency阈值分析:")
+            print("\n🕐 I/O Latency Threshold Analysis:")
             for device, violations in results['await_violations'].items():
                 print(f"  {device}:")
-                print(f"    平均值: {violations['avg_value']:.2f}ms")
-                print(f"    最大值: {violations['max_value']:.2f}ms")
-                print(f"    警告违规: {violations['warning_violations']}/{violations['total_points']} ({violations['warning_percentage']:.1f}%)")
-                print(f"    危险违规: {violations['critical_violations']}/{violations['total_points']} ({violations['critical_percentage']:.1f}%)")
+                print(f"    Average: {violations['avg_value']:.2f}ms")
+                print(f"    Maximum: {violations['max_value']:.2f}ms")
+                print(f"    Warning violations: {violations['warning_violations']}/{violations['total_points']} ({violations['warning_percentage']:.1f}%)")
+                print(f"    Critical violations: {violations['critical_violations']}/{violations['total_points']} ({violations['critical_percentage']:.1f}%)")
         
         if 'util_violations' in results:
-            print("\n📈 Device Utilization阈值分析:")
+            print("\n📈 Device Utilization Threshold Analysis:")
             for device, violations in results['util_violations'].items():
                 print(f"  {device}:")
-                print(f"    平均值: {violations['avg_value']:.1f}%")
-                print(f"    最大值: {violations['max_value']:.1f}%")
-                print(f"    警告违规: {violations['warning_violations']}/{violations['total_points']} ({violations['warning_percentage']:.1f}%)")
-                print(f"    危险违规: {violations['critical_violations']}/{violations['total_points']} ({violations['critical_percentage']:.1f}%)")
+                print(f"    Average: {violations['avg_value']:.1f}%")
+                print(f"    Maximum: {violations['max_value']:.1f}%")
+                print(f"    Warning violations: {violations['warning_violations']}/{violations['total_points']} ({violations['warning_percentage']:.1f}%)")
+                print(f"    Critical violations: {violations['critical_violations']}/{violations['total_points']} ({violations['critical_percentage']:.1f}%)")
         
         # 新增：详细的监控开销分析摘要
         if 'overhead_analysis' in results:
-            print("\n💻 监控开销详细分析:")
+            print("\n💻 Monitoring Overhead Detailed Analysis:")
             overhead = results['overhead_analysis']
-            print(f"  CPU开销:")
+            print(f"  CPU Overhead:")
             print(f"    平均开销: {overhead.get('avg_cpu_overhead', 0):.2f}%")
             print(f"    峰值开销: {overhead.get('max_cpu_overhead', 0):.2f}%")
             print(f"  内存开销:")

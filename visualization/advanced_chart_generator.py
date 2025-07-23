@@ -15,7 +15,6 @@ from sklearn.linear_model import LinearRegression
 import statsmodels.api as sm
 from typing import Dict, List, Tuple, Optional
 import os
-from utils.unified_logger import get_logger
 import sys
 from pathlib import Path
 
@@ -23,6 +22,14 @@ from pathlib import Path
 current_dir = Path(__file__).parent
 utils_dir = current_dir.parent / 'utils'
 sys.path.insert(0, str(utils_dir))
+
+try:
+    from utils.unified_logger import get_logger
+except ImportError:
+    # 使用基础日志功能作为后备
+    import logging
+    def get_logger(name):
+        return logging.getLogger(name)
 
 try:
     from csv_data_processor import CSVDataProcessor
