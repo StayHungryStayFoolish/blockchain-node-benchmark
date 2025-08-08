@@ -301,6 +301,9 @@ MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
 # ----- 区块链节点配置 -----
 BLOCKCHAIN_NODE="Solana"
 
+# 强制确保 BLOCKCHAIN_NODE 是小写
+BLOCKCHAIN_NODE=$(echo "$BLOCKCHAIN_NODE" | tr '[:upper:]' '[:lower:]')
+
 # 区块链节点运行进程名称
 BLOCKCHAIN_PROCESS_NAMES=(
     "blockchain"
@@ -352,41 +355,6 @@ EOF
 # =====================================================================
 # 多区块链 RPC 方法配置 - 基于 JSON-RPC-API-List.md
 # =====================================================================
-
-# 从 CHAIN_CONFIG 中提取区块链类型
-CURRENT_CHAIN_TYPE=$(echo "$CHAIN_CONFIG" | jq -r '.chain_type // "solana"' 2>/dev/null || echo "solana")
-
-
-# 多区块链 RPC 方法配置 - 移除需要tx和多地址的API
-declare -A BLOCKCHAIN_RPC_METHODS=(
-    # Solana RPC 方法配置 (移除 getMultipleAccounts)
-    ["solana_single"]="getAccountInfo"
-    ["solana_mixed"]="getAccountInfo,getBalance,getTokenAccountBalance,getRecentBlockhash,getBlockHeight"
-
-    # EVM兼容链 RPC 方法配置 (Ethereum, BSC, Base, Polygon, Scroll)
-    ["ethereum_single"]="eth_getBalance"
-    ["ethereum_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice,web3_clientVersion,net_version,eth_chainId,eth_getStorageAt"
-
-    ["bsc_single"]="eth_getBalance"
-    ["bsc_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice,web3_clientVersion,net_version,eth_chainId,eth_getStorageAt"
-
-    ["base_single"]="eth_getBalance"
-    ["base_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice,web3_clientVersion,net_version,eth_chainId,eth_getStorageAt"
-
-    ["polygon_single"]="eth_getBalance"
-    ["polygon_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice,web3_clientVersion,net_version,eth_chainId,eth_getStorageAt"
-
-    ["scroll_single"]="eth_getBalance"
-    ["scroll_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice,web3_clientVersion,net_version,eth_chainId,eth_getStorageAt"
-
-    # StarkNet RPC 方法配置 (移除 starknet_getTransactionByHash)
-    ["starknet_single"]="starknet_getClassAt"
-    ["starknet_mixed"]="starknet_getClassAt,starknet_getNonce,starknet_blockNumber,starknet_chainId,starknet_specVersion,starknet_getStorageAt"
-
-    # Sui RPC 方法配置 (移除 sui_getTransactionBlock, sui_multiGetObjects)
-    ["sui_single"]="sui_getObject"
-    ["sui_mixed"]="sui_getObject,sui_getObjectsOwnedByAddress,sui_getTotalTransactionBlocks,sui_getLatestCheckpointSequenceNumber"
-)
 
 # 多区块链 RPC 方法配置 - 基于 API 功能对应关系总结表
 declare -A BLOCKCHAIN_RPC_METHODS=(
@@ -450,8 +418,8 @@ declare -A RPC_METHOD_PARAM_FORMATS=(
 
 # 获取当前区块链的RPC方法列表
 get_current_rpc_methods() {
-    local chain_type="${CURRENT_CHAIN_TYPE,,}"  # 转换为小写
-    local rpc_mode="${RPC_MODE,,}"
+    local chain_type=$(echo "${BLOCKCHAIN_NODE}" | tr '[:upper:]' '[:lower:]')
+    local rpc_mode=$(echo "${RPC_MODE}" | tr '[:upper:]' '[:lower:]')
     local config_key="${chain_type}_${rpc_mode}"
 
     local methods_string="${BLOCKCHAIN_RPC_METHODS[$config_key]}"
@@ -464,9 +432,6 @@ get_current_rpc_methods() {
     echo "$methods_string"
 }
 
-# 设置当前RPC方法
-CURRENT_RPC_METHODS_STRING=$(get_current_rpc_methods)
-IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
 
 # 验证关键变量是否正确设置
 if [[ -z "$ACCOUNTS_OUTPUT_FILE" ]]; then
@@ -477,12 +442,16 @@ if [[ -z "$LOCAL_RPC_URL" ]]; then
 fi
 
 # 标记配置已加载
+# 导出函数到子进程
+export -f get_current_rpc_methods
+CURRENT_RPC_METHODS_STRING=$(get_current_rpc_methods)
+IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
 export CONFIG_LOADED="true"
 export ACCOUNTS_OUTPUT_FILE SINGLE_METHOD_TARGETS_FILE MIXED_METHOD_TARGETS_FILE
 export LOCAL_RPC_URL MAINNET_RPC_URL BLOCKCHAIN_NODE BLOCKCHAIN_PROCESS_NAMES RPC_MODE
 export ACCOUNT_COUNT ACCOUNT_OUTPUT_FILE ACCOUNT_TARGET_ADDRESS ACCOUNT_MAX_SIGNATURES ACCOUNT_TX_BATCH_SIZE ACCOUNT_SEMAPHORE_LIMIT
 export CHAIN_CONFIG
-export CURRENT_CHAIN_TYPE BLOCKCHAIN_RPC_METHODS RPC_METHOD_PARAM_FORMATS
+export BLOCKCHAIN_RPC_METHODS RPC_METHOD_PARAM_FORMATS
 export CURRENT_RPC_METHODS_STRING CURRENT_RPC_METHODS_ARRAY
 
 export DATA_DIR CURRENT_TEST_DIR LOGS_DIR REPORTS_DIR VEGETA_RESULTS_DIR TMP_DIR ARCHIVES_DIR
@@ -497,7 +466,7 @@ export BASE_FRAMEWORK_DIR BASE_DATA_DIR DEPLOYMENT_STRUCTURE
 
 
 echo "🔧 RPC方法配置完成:" >&2
-echo "   区块链类型: $CURRENT_CHAIN_TYPE" >&2
+echo "   区块链类型: $BLOCKCHAIN_NODE" >&2
 echo "   RPC模式: $RPC_MODE" >&2
 echo "   当前方法: $CURRENT_RPC_METHODS_STRING" >&2
 echo "🎉 分层配置加载完成！" >&2
@@ -510,38 +479,40 @@ echo "🎉 分层配置加载完成！" >&2
 ## Solana USDC Address
 #ACCOUNT_TARGET_ADDRESS="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 ## Solana Json
-#CHAIN_CONFIG='{
-#    "chain_type": "'${BLOCKCHAIN_NODE}'",
-#    "rpc_url": "'${LOCAL_RPC_URL}'",
-#    "target_address": "'${ACCOUNT_TARGET_ADDRESS}'",
-#    "methods": {
-#        "get_signatures": "getSignaturesForAddress",
-#        "get_transaction": "getTransaction"
-#    },
-#    "data_extraction": {
-#        "account_keys_path": "transaction.message.accountKeys",
-#        "pubkey_field": "pubkey"
-#    },
-#    "system_addresses": [
-#        "11111111111111111111111111111111",
-#        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-#        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
-#        "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
-#        "SysvarRent111111111111111111111111111111111",
-#        "ComputeBudget111111111111111111111111111111",
-#    ],
-#    "limits": {
-#        "max_signatures": '${ACCOUNT_MAX_SIGNATURES}',
-#        "batch_size": '${ACCOUNT_TX_BATCH_SIZE}',
-#        "semaphore_limit": '${ACCOUNT_SEMAPHORE_LIMIT}'
-#    }
-#}'
+#CHAIN_CONFIG=$(cat <<EOF
+#{
+#  "chain_type": "BLOCKCHAIN_NODE",
+#  "rpc_url": "LOCAL_RPC_URL",
+#  "params": {
+#    "account_count": "ACCOUNT_COUNT",
+#    "output_file": "ACCOUNTS_OUTPUT_FILE",
+#    "target_address": "ACCOUNT_TARGET_ADDRESS",
+#    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+#    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+#    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+#  },
+#  "methods": {
+#    "get_signatures": "getSignaturesForAddress",
+#    "get_transaction": "getTransaction"
+#  },
+#  "system_addresses": [
+#    "11111111111111111111111111111111",
+#    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+#    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+#    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+#    "SysvarRent111111111111111111111111111111111",
+#    "ComputeBudget111111111111111111111111111111"
+#  ]
+#}
+#EOF
+#)
 #
 ## =====================================================================
 ## Ethereum USDT Address
-#export ACCOUNT_TARGET_ADDRESS="0xdAC17F958D2ee523a2206206994597C13D831ec7"
+#ACCOUNT_TARGET_ADDRESS="0xdAC17F958D2ee523a2206206994597C13D831ec7"
 ## Ethereum Json
-#export CHAIN_CONFIG='{
+#CHAIN_CONFIG=$(cat <<EOF
+#{
 #  "chain_type": "ethereum",
 #  "rpc_url": "LOCAL_RPC_URL",
 #  "params": {
@@ -560,14 +531,17 @@ echo "🎉 分层配置加载完成！" >&2
 #    "0x0000000000000000000000000000000000000000",
 #    "0x000000000000000000000000000000000000dead"
 #  ]
-#}'
+#}
+#EOF
+#)
 #
 ## =====================================================================
 #
 ## BSC USDS Address
-#export ACCOUNT_TARGET_ADDRESS="0x250632378E573c6Be1AC2f97Fcdf00515d0Aa91B"
+#ACCOUNT_TARGET_ADDRESS="0x250632378E573c6Be1AC2f97Fcdf00515d0Aa91B"
 ## BSC Json
-#export CHAIN_CONFIG='{
+#CHAIN_CONFIG=$(cat <<EOF
+#{
 #  "chain_type": "bsc",
 #  "rpc_url": "LOCAL_RPC_URL",
 #  "params": {
@@ -586,14 +560,17 @@ echo "🎉 分层配置加载完成！" >&2
 #    "0x0000000000000000000000000000000000000000",
 #    "0x000000000000000000000000000000000000dead"
 #  ]
-#}'
+#}
+#EOF
+#)
 #
 ## =====================================================================
 #
 ## Base USDC Address
-#export ACCOUNT_TARGET_ADDRESS="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"  # USDC on Base
+#ACCOUNT_TARGET_ADDRESS="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"  # USDC on Base
 ## Base Json
-#export CHAIN_CONFIG='{
+#CHAIN_CONFIG=$(cat <<EOF
+#{
 #  "chain_type": "base",
 #  "rpc_url": "LOCAL_RPC_URL",
 #  "params": {
@@ -612,13 +589,16 @@ echo "🎉 分层配置加载完成！" >&2
 #    "0x0000000000000000000000000000000000000000",
 #    "0x000000000000000000000000000000000000dead"
 #  ]
-#}'
+#}
+#EOF
+#)
 #
 ## =====================================================================
 ## Scroll USDC Address
-#export ACCOUNT_TARGET_ADDRESS="0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4"
+#ACCOUNT_TARGET_ADDRESS="0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4"
 ## Scroll Json
-#export CHAIN_CONFIG='{
+#CHAIN_CONFIG=$(cat <<EOF
+#{
 #  "chain_type": "scroll",
 #  "rpc_url": "LOCAL_RPC_URL",
 #  "params": {
@@ -637,13 +617,16 @@ echo "🎉 分层配置加载完成！" >&2
 #    "0x0000000000000000000000000000000000000000",
 #    "0x000000000000000000000000000000000000dead"
 #  ]
-#}'
+#}
+#EOF
+#)
 #
 ## =====================================================================
 ## Polygon USDT Address
-#export ACCOUNT_TARGET_ADDRESS="0xc2132D05D31c914a87C6611C10748AEb04B58e8F"  # USDT on Polygon
+#ACCOUNT_TARGET_ADDRESS="0xc2132D05D31c914a87C6611C10748AEb04B58e8F"  # USDT on Polygon
 ## Polygon Jason
-#export CHAIN_CONFIG='{
+#CHAIN_CONFIG=$(cat <<EOF
+#{
 #  "chain_type": "polygon",
 #  "rpc_url": "LOCAL_RPC_URL",
 #  "params": {
@@ -662,13 +645,16 @@ echo "🎉 分层配置加载完成！" >&2
 #    "0x0000000000000000000000000000000000000000",
 #    "0x000000000000000000000000000000000000dead"
 #  ]
-#}'
+#}
+#EOF
+#)
 #
 ## =====================================================================
 ## Starknet USDC Address
-#export ACCOUNT_TARGET_ADDRESS="0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8"  # Starknet USDC
+#ACCOUNT_TARGET_ADDRESS="0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8"  # Starknet USDC
 ## Starknet Json
-#export CHAIN_CONFIG='{
+#CHAIN_CONFIG=$(cat <<EOF
+#{
 #  "chain_type": "starknet",
 #  "rpc_url": "LOCAL_RPC_URL",
 #  "params": {
@@ -684,14 +670,17 @@ echo "🎉 分层配置加载完成！" >&2
 #    "get_transaction": "starknet_getTransactionByHash"
 #  },
 #  "system_addresses": []
-#}'
+#}
+#EOF
+#)
 #
 ## =====================================================================
 #
 ## Sui USDC Address
-#export ACCOUNT_TARGET_ADDRESS="0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC"
+#ACCOUNT_TARGET_ADDRESS="0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC"
 ## Sui Json
-#export CHAIN_CONFIG='{
+#CHAIN_CONFIG=$(cat <<EOF
+#{
 #  "chain_type": "sui",
 #  "rpc_url": "LOCAL_RPC_URL",
 #  "params": {
@@ -708,6 +697,8 @@ echo "🎉 分层配置加载完成！" >&2
 #    "get_transactions": "suix_queryTransactionBlocks"
 #  },
 #  "system_addresses": ["0x1", "0x2", "0x3"]
-#}'
-
+#}
+#EOF
+#)
+#
 ## =====================================================================
