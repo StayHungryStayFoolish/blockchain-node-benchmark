@@ -7,7 +7,7 @@
 # =====================================================================
 
 # 安全加载配置文件，避免readonly变量冲突
-if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh" 2>/dev/null; then
+if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
     echo "警告: 配置文件加载失败，使用默认配置"
     MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}

@@ -1,125 +1,703 @@
 #!/usr/bin/env python3
 
 # =====================================================================
-# Solana 活跃账户获取脚本
-# 用于获取 Solana 网络上的活跃账户列表
+# 多区块链活跃账户获取脚本 - 修复版
+# 支持 Solana, Ethereum, BSC, Base, Scroll, Polygon, Starknet, Sui
+# 统一分页策略：< 1000不分页，≥ 1000分页
 # =====================================================================
 
 import asyncio
+import requests
 import os
 import argparse
 import sys
+import time
+import json
 from collections import Counter
 from pathlib import Path
 
-# 检查依赖项
-try:
-    from solana.rpc.async_api import AsyncClient
-    from solders.pubkey import Pubkey
-    from solders.signature import Signature
-    from solders.transaction_status import EncodedConfirmedTransactionWithStatusMeta
-    from solana.exceptions import SolanaRpcException
-    from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-except ImportError:
-    print("Error: Required dependencies not found.")
-    print("Please install the required packages:")
-    print("  pip install solana tenacity")
-    sys.exit(1)
 
-# 默认配置
-# 默认配置 - 优先从环境变量读取，支持config.sh配置
-DEFAULT_ACCOUNT_COUNT = int(os.environ.get("ACCOUNT_COUNT", "1000"))
-DEFAULT_OUTPUT_FILE = os.environ.get("ACCOUNT_OUTPUT_FILE", "address.txt")
-DEFAULT_RPC_URL = os.environ.get("LOCAL_RPC_URL") or os.environ.get("RPC_URL", "http://localhost:8899")
-DEFAULT_TARGET_ADDRESS = os.environ.get("ACCOUNT_TARGET_ADDRESS", "TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM")  # 示例目标地址
-DEFAULT_MAX_SIGNATURES = int(os.environ.get("ACCOUNT_MAX_SIGNATURES", "50000"))
-DEFAULT_TX_BATCH_SIZE = int(os.environ.get("ACCOUNT_TX_BATCH_SIZE", "100"))
-DEFAULT_SEMAPHORE_LIMIT = int(os.environ.get("ACCOUNT_SEMAPHORE_LIMIT", "10"))
+def replace_env_vars(obj):
+    """递归替换配置中的环境变量占位符"""
+    if isinstance(obj, dict):
+        return {k: replace_env_vars(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [replace_env_vars(item) for item in obj]
+    elif isinstance(obj, str):
+        # 检查是否是环境变量占位符
+        if obj in os.environ:
+            env_value = os.environ[obj]
+            # 自动类型转换
+            if env_value.lower() in ('true', 'false'):
+                return env_value.lower() == 'true'
+            try:
+                return int(env_value)
+            except ValueError:
+                try:
+                    return float(env_value)
+                except ValueError:
+                    return env_value
+        return obj
+    else:
+        return obj
 
-# 系统地址黑名单
-SYSTEM_ADDRESSES = {
-    "11111111111111111111111111111111",  # 系统程序
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  # SPL代币程序
-    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",  # 关联代币账户程序
-    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",  # 元数据程序
-    "SysvarRent111111111111111111111111111111111",  # 系统变量-租金
-    "ComputeBudget111111111111111111111111111111",  # 计算预算程序
-}
 
-def parse_args():
+def load_chain_config():
+    """从环境变量加载区块链配置"""
+    chain_config_str = os.environ.get("CHAIN_CONFIG")
+    if not chain_config_str:
+        raise ValueError("CHAIN_CONFIG environment variable is required")
+
+    try:
+        config = json.loads(chain_config_str)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in CHAIN_CONFIG: {e}")
+
+    # 递归替换环境变量占位符
+    config = replace_env_vars(config)
+
+    # 验证必需字段
+    if not config.get("chain_type"):
+        raise ValueError("chain_type is required in CHAIN_CONFIG")
+    if not config.get("rpc_url"):
+        raise ValueError("rpc_url is required in CHAIN_CONFIG")
+
+    # 设置默认值
+    if "params" not in config:
+        config["params"] = {}
+
+    default_params = {
+        "account_count": 1000,
+        "output_file": "active_accounts.txt",
+        "max_signatures": 50000,
+        "tx_batch_size": 100,
+        "semaphore_limit": 10,
+        "target_address": ""
+    }
+
+    for key, default_value in default_params.items():
+        if key not in config["params"]:
+            config["params"][key] = default_value
+
+    return config
+
+
+def parse_args(config):
     """解析命令行参数"""
-    parser = argparse.ArgumentParser(description="Fetch active Solana accounts")
-    parser.add_argument("-c", "--count", type=int, default=DEFAULT_ACCOUNT_COUNT,
-                        help=f"Number of accounts to fetch (default: {DEFAULT_ACCOUNT_COUNT})")
-    parser.add_argument("-o", "--output", type=str, default=DEFAULT_OUTPUT_FILE,
-                        help=f"Output file (default: {DEFAULT_OUTPUT_FILE})")
-    parser.add_argument("-u", "--rpc-url", type=str, default=DEFAULT_RPC_URL,
-                        help=f"Solana RPC URL (default: {DEFAULT_RPC_URL})")
-    parser.add_argument("-t", "--target", type=str, default=DEFAULT_TARGET_ADDRESS,
-                        help=f"Target address to analyze (default: {DEFAULT_TARGET_ADDRESS})")
-    parser.add_argument("-m", "--max-signatures", type=int, default=DEFAULT_MAX_SIGNATURES,
-                        help=f"Maximum signatures to fetch (default: {DEFAULT_MAX_SIGNATURES})")
+    params = config.get("params", {})
+
+    parser = argparse.ArgumentParser(description=f"Fetch active {config.get('chain_type', 'blockchain')} accounts")
+    parser.add_argument("-c", "--count", type=int, default=params.get("account_count", 1000),
+                        help=f"Number of accounts to fetch (default: {params.get('account_count', 1000)})")
+    parser.add_argument("-o", "--output", type=str, default=params.get("output_file", "active_accounts.txt"),
+                        help=f"Output file (default: {params.get('output_file', 'active_accounts.txt')})")
+    parser.add_argument("-u", "--rpc-url", type=str, default=config.get("rpc_url", ""),
+                        help=f"RPC URL (default: from config)")
+    parser.add_argument("-t", "--target", type=str, default=params.get("target_address", ""),
+                        help=f"Target address to analyze (default: from config)")
+    parser.add_argument("-m", "--max-signatures", type=int, default=params.get("max_signatures", 50000),
+                        help=f"Maximum signatures to fetch (default: {params.get('max_signatures', 50000)})")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Enable verbose output")
-    
     return parser.parse_args()
 
-# 重试装饰器
-def create_retry_decorator():
-    return retry(
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        stop=stop_after_attempt(5),
-        retry=retry_if_exception_type((SolanaRpcException, asyncio.TimeoutError)),
-        reraise=True
-    )
 
-@create_retry_decorator()
-async def fetch_signatures_with_retry(client, address, before=None, limit=1000):
-    """获取地址的交易签名，带重试机制"""
-    return await client.get_signatures_for_address(address, before=before, limit=limit)
+def request_jsonrpc(url, method, params=None, retries=3):
+    """发送 JSON RPC 请求 - 增强错误处理"""
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": method,
+        "params": params or []
+    }
+    headers = {"Content-Type": "application/json"}
 
-@create_retry_decorator()
-async def get_transaction_with_retry(client, sig: Signature):
-    """获取交易详情，带重试机制"""
-    return await client.get_transaction(
-        sig,
-        encoding="jsonParsed",
-        max_supported_transaction_version=0
-    )
+    for attempt in range(retries):
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            result = response.json()
 
-async def fetch_all_signatures(client, address, limit_total, verbose=False):
-    """分批获取指定地址的所有交易签名"""
+            if "error" in result:
+                error_code = result["error"].get("code", 0)
+                error_msg = result["error"].get("message", "")
+
+                # 针对特定错误码的处理
+                if error_code == -32005:  # limit exceeded
+                    raise Exception(f"Rate limit exceeded: {error_msg}")
+                elif error_code == -32603:  # invalid input
+                    raise Exception(f"Invalid parameters: {error_msg}")
+                else:
+                    raise Exception(f"RPC Error: {result['error']}")
+
+            return result
+        except Exception as e:
+            if attempt == retries - 1:
+                raise e
+            print(f"Request failed (attempt {attempt + 1}/{retries}): {e}")
+            time.sleep(2 ** attempt)  # 指数退避
+
+
+class BlockchainAdapter:
+    """区块链适配器基类 - 统一分页框架"""
+
+    def __init__(self, config):
+        self.config = config
+        self.rpc_url = config["rpc_url"]
+        self.methods = config["methods"]
+        self.chain_type = config["chain_type"]
+        self.system_addresses = set(config.get("system_addresses", []))
+
+    def fetch_signatures(self, address, cursor=None, limit=1000, verbose=False):
+        """统一的账户获取入口 - 修复方法签名"""
+        if verbose:
+            print(f"Fetching {self.chain_type} signatures for {address}, target: {limit} transactions")
+
+        # 简化分页策略
+        if limit < 1000:
+            return self._fetch_without_pagination(address, limit, verbose)
+        else:
+            return self._fetch_with_pagination(address, limit, verbose)
+
+    def _fetch_without_pagination(self, address, limit, verbose):
+        """非分页获取：单次请求"""
+        if verbose:
+            print(f"Using single request strategy (target: {limit})")
+
+        target_transactions = limit * 5
+        return self._single_request(address, target_transactions, verbose)
+
+    def _fetch_with_pagination(self, address, limit, verbose):
+        """分页获取：多次请求"""
+        if verbose:
+            print(f"Using pagination strategy (target: {limit})")
+
+        all_results = []
+        seen_digests = set()
+        target_transactions = limit * 8
+        batch_size = 500
+
+        while len(all_results) < target_transactions:
+            batch_results = self._single_request(address, batch_size, verbose)
+            if not batch_results:
+                break
+
+            # 去重添加
+            new_count = 0
+            for tx in batch_results:
+                digest = tx.get("signature")
+                if digest and digest not in seen_digests:
+                    all_results.append(tx)
+                    seen_digests.add(digest)
+                    new_count += 1
+
+            if verbose:
+                print(f"Batch added {new_count} new transactions (total: {len(all_results)})")
+
+            if len(all_results) >= target_transactions or new_count == 0:
+                break
+
+            time.sleep(1)  # 批次间延迟
+
+        return all_results[:target_transactions]
+
+    def _single_request(self, address, limit, verbose):
+        """各链实现的单次请求方法"""
+        raise NotImplementedError("Subclasses must implement _single_request")
+
+    def fetch_transaction(self, signature):
+        """获取交易详情 - 各适配器需实现"""
+        raise NotImplementedError("Subclasses must implement fetch_transaction")
+
+    def extract_accounts_from_transaction(self, tx_data, target_address):
+        """从交易数据中提取账户地址 - 各适配器需实现"""
+        raise NotImplementedError("Subclasses must implement extract_accounts_from_transaction")
+
+    def _is_valid_account(self, address, target_address):
+        """统一的地址验证逻辑"""
+        if not address or not isinstance(address, str):
+            return False
+
+        # 排除目标地址和系统地址
+        if address == target_address or address in self.system_addresses:
+            return False
+
+        # 排除明显无效地址
+        if len(address) < 10:
+            return False
+
+        return True
+
+
+class SolanaAdapter(BlockchainAdapter):
+    """Solana 区块链适配器 - 修复版"""
+
+    def _single_request(self, address, limit, verbose):
+        """Solana单次请求实现"""
+        params = [address, {"limit": min(limit, 1000)}]
+
+        try:
+            result = request_jsonrpc(self.rpc_url, self.methods["get_signatures"], params)
+            return result.get("result", [])
+        except Exception as e:
+            if verbose:
+                print(f"Solana request failed: {e}")
+            return []
+
+    def fetch_transaction(self, signature):
+        """获取Solana交易详情"""
+        params = [signature, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}]
+        result = request_jsonrpc(self.rpc_url, self.methods["get_transaction"], params)
+        return result.get("result")
+
+    def extract_accounts_from_transaction(self, tx_data, target_address):
+        """从Solana交易中提取账户地址"""
+        accounts = set()
+        if not tx_data or "transaction" not in tx_data:
+            return accounts
+
+        try:
+            account_keys = tx_data["transaction"]["message"]["accountKeys"]
+            for account in account_keys:
+                pubkey_str = account.get('pubkey') if isinstance(account, dict) else str(account)
+                if self._is_valid_account(pubkey_str, target_address):
+                    accounts.add(pubkey_str)
+        except (AttributeError, KeyError, TypeError):
+            pass
+
+        return accounts
+
+
+class EthereumAdapter(BlockchainAdapter):
+    """Ethereum 及兼容链适配器 - 修复版"""
+
+    def _single_request(self, address, limit, verbose):
+        """Ethereum单次请求实现 - 修复RPC参数"""
+        # 检查是否是合约地址
+        is_contract = self._is_contract_address(address)
+
+        if is_contract:
+            return self._fetch_contract_logs_fixed(address, limit, verbose)
+        else:
+            return self._fetch_eoa_transactions_simple(address, limit, verbose)
+
+    def _is_contract_address(self, address):
+        """检查是否是合约地址"""
+        try:
+            params = [address, "latest"]
+            result = request_jsonrpc(self.rpc_url, "eth_getCode", params)
+            return result.get("result", "0x") != "0x"
+        except Exception:
+            return False
+
+    def _fetch_contract_logs_fixed(self, address, limit, verbose):
+        """修复的合约日志获取"""
+        try:
+            latest_result = request_jsonrpc(self.rpc_url, "eth_blockNumber", [])
+            latest_block = int(latest_result["result"], 16)
+
+            # 根据链类型调整查询范围
+            if self.chain_type.lower() == "bsc":
+                block_range = 50  # BSC限制更严格
+            elif self.chain_type.lower() == "ethereum":
+                block_range = 100  # Ethereum适中
+            else:
+                block_range = 200  # 其他链较宽松
+
+            start_block = max(0, latest_block - block_range)
+
+            params = [{
+                "address": address,
+                "fromBlock": f"0x{start_block:x}",  # 修复十六进制格式
+                "toBlock": f"0x{latest_block:x}",  # 修复十六进制格式
+                "topics": []
+            }]
+
+            result = request_jsonrpc(self.rpc_url, self.methods["get_logs"], params)
+            logs = result.get("result", [])
+
+            return [{"signature": log.get("transactionHash")}
+                    for log in logs[:limit] if log.get("transactionHash")]
+
+        except Exception as e:
+            if verbose:
+                print(f"Ethereum contract logs failed: {e}")
+            # 降级策略：返回空结果而不是崩溃
+            return []
+
+    def _fetch_eoa_transactions_simple(self, address, limit, verbose):
+        """简化的EOA交易获取"""
+        try:
+            latest_result = request_jsonrpc(self.rpc_url, "eth_blockNumber", [])
+            latest_block = int(latest_result["result"], 16)
+            start_block = max(0, latest_block - 100)  # 减少查询范围
+
+            transactions = []
+            for block_num in range(start_block, latest_block + 1):
+                if len(transactions) >= limit:
+                    break
+
+                try:
+                    block_result = request_jsonrpc(self.rpc_url, "eth_getBlockByNumber", [f"0x{block_num:x}", True])
+                    block_data = block_result.get("result")
+
+                    if not block_data or not block_data.get("transactions"):
+                        continue
+
+                    for tx in block_data.get("transactions", []):
+                        tx_from = tx.get("from", "").lower()
+                        tx_to = tx.get("to", "").lower()
+                        target_addr = address.lower()
+
+                        if tx_from == target_addr or tx_to == target_addr:
+                            transactions.append({"signature": tx["hash"]})
+                            if len(transactions) >= limit:
+                                break
+                except Exception:
+                    # 跳过失败的区块
+                    continue
+
+            return transactions
+
+        except Exception as e:
+            if verbose:
+                print(f"Ethereum EOA scan failed: {e}")
+            return []
+
+    def fetch_transaction(self, tx_hash):
+        """获取Ethereum交易详情"""
+        params = [tx_hash]
+        result = request_jsonrpc(self.rpc_url, self.methods["get_transaction"], params)
+        return result.get("result")
+
+    def extract_accounts_from_transaction(self, tx_data, target_address):
+        """从Ethereum交易中提取地址"""
+        accounts = set()
+        if not tx_data:
+            return accounts
+
+        try:
+            from_addr = tx_data.get("from")
+            to_addr = tx_data.get("to")
+
+            if from_addr and self._is_valid_account(from_addr.lower(), target_address):
+                accounts.add(from_addr.lower())
+
+            if to_addr and self._is_valid_account(to_addr.lower(), target_address):
+                accounts.add(to_addr.lower())
+
+        except (AttributeError, KeyError, TypeError):
+            pass
+
+        return accounts
+
+
+class StarknetAdapter(BlockchainAdapter):
+    """StarkNet 适配器 - 保持原版"""
+
+    def _single_request(self, address, limit, verbose):
+        """StarkNet单次请求实现"""
+        params = [{
+            "from_block": {"block_number": 0},
+            "to_block": "latest",
+            "address": address,
+            "keys": [],
+            "chunk_size": min(limit, 1000)
+        }]
+
+        try:
+            result = request_jsonrpc(self.rpc_url, self.methods.get("get_events_native", "starknet_getEvents"), params)
+            events = result.get("result", {}).get("events", [])
+
+            tx_hashes = []
+            seen = set()
+            for event in events:
+                tx_hash = event.get("transaction_hash")
+                if tx_hash and tx_hash not in seen:
+                    tx_hashes.append({"signature": tx_hash})
+                    seen.add(tx_hash)
+                    if len(tx_hashes) >= limit:
+                        break
+
+            return tx_hashes
+
+        except Exception as e:
+            if verbose:
+                print(f"StarkNet request failed: {e}")
+            return []
+
+    def fetch_transaction(self, tx_hash):
+        """获取StarkNet交易详情"""
+        params = [tx_hash]
+        result = request_jsonrpc(self.rpc_url, "starknet_getTransactionByHash", params)
+        return result.get("result")
+
+    def extract_accounts_from_transaction(self, tx_data, target_address):
+        """从StarkNet交易中提取地址"""
+        accounts = set()
+        if not tx_data:
+            return accounts
+
+        try:
+            # 合约地址
+            contract_address = tx_data.get("contract_address")
+            if contract_address and self._is_valid_starknet_account(contract_address, target_address):
+                accounts.add(contract_address.lower())
+
+            # 发送者地址
+            sender_address = tx_data.get("sender_address")
+            if sender_address and self._is_valid_starknet_account(sender_address, target_address):
+                accounts.add(sender_address.lower())
+
+            # Calldata中的地址
+            calldata = tx_data.get("calldata", [])
+            if isinstance(calldata, list):
+                for data_item in calldata:
+                    if self._is_valid_starknet_account(data_item, target_address):
+                        accounts.add(data_item.lower())
+
+        except (AttributeError, KeyError, TypeError):
+            pass
+
+        return accounts
+
+    def _is_valid_starknet_account(self, address, target_address):
+        """验证StarkNet地址"""
+        if not self._is_valid_account(address, target_address):
+            return False
+
+        try:
+            if isinstance(address, str) and address.startswith("0x"):
+                addr_len = len(address)
+                # 排除以太坊地址长度，保留StarkNet地址
+                return addr_len != 42 and 60 <= addr_len <= 66
+            return False
+        except (ValueError, TypeError):
+            return False
+
+
+class SuiAdapter(BlockchainAdapter):
+    """Sui 区块链适配器 - 保持原版"""
+
+    def _single_request(self, address, limit, verbose):
+        """回归简单有效的查询策略"""
+        if '::' in address:
+            # USDC类型地址 - 使用代币查询（已验证有效）
+            package_address = address.split('::')[0]
+            module_name = address.split('::')[1] if len(address.split('::')) > 1 else None
+            return self._fetch_token_transactions(package_address, module_name, limit, verbose)
+        else:
+            # Binance类型地址 - 使用简单的全局搜索（历史证明有效）
+            return self._fetch_simple_global_search(address, limit, verbose)
+
+    def _fetch_token_transactions(self, package_address, module_name, limit, verbose):
+        """代币交易获取 - 保持原有逻辑"""
+        combinations = [
+            {"module": module_name, "function": None},
+            {"module": None, "function": None}
+        ]
+
+        for combo in combinations:
+            try:
+                params = [
+                    {
+                        "filter": {
+                            "MoveFunction": {
+                                "package": package_address,
+                                "module": combo["module"],
+                                "function": combo["function"]
+                            }
+                        }
+                    },
+                    None,
+                    min(600, limit),
+                    True
+                ]
+
+                result = request_jsonrpc(self.rpc_url, self.methods["get_transactions"], params)
+                result_data = result.get("result", {})
+                transactions = result_data.get("data", [])
+
+                if transactions:
+                    if verbose:
+                        print(f"Token combo {combo} found {len(transactions)} transactions")
+                    return [{"signature": tx.get("digest")}
+                            for tx in transactions if tx.get("digest")]
+
+            except Exception as e:
+                if verbose:
+                    print(f"Token combo {combo} failed: {e}")
+                continue
+
+        return []
+
+    def _fetch_simple_global_search(self, address, limit, verbose):
+        """简单全局搜索 - 回归历史有效方案"""
+        try:
+            # 使用之前证明有效的简单策略
+            params = [{}, None, min(200, limit), True]
+
+            result = request_jsonrpc(self.rpc_url, self.methods["get_transactions"], params)
+            result_data = result.get("result", {})
+            transactions = result_data.get("data", [])
+
+            if verbose:
+                print(f"Global search found {len(transactions)} transactions with filter: None")
+
+            # 直接返回交易，不进行复杂的相关性筛选
+            return [{"signature": tx.get("digest")}
+                    for tx in transactions if tx.get("digest")]
+
+        except Exception as e:
+            if verbose:
+                print(f"Global search failed: {e}")
+            return []
+
+    def fetch_transaction(self, digest):
+        """获取交易详情"""
+        params = [
+            digest,
+            {
+                "showInput": True,
+                "showRawInput": False,
+                "showEffects": True,
+                "showEvents": False,
+                "showObjectChanges": True,
+                "showBalanceChanges": True
+            }
+        ]
+
+        try:
+            result = request_jsonrpc(self.rpc_url, self.methods["get_transaction"], params)
+            return result.get("result")
+        except Exception:
+            return None
+
+    def extract_accounts_from_transaction(self, tx_data, target_address):
+        """从交易中提取账户地址"""
+        accounts = set()
+        if not tx_data:
+            return accounts
+
+        try:
+            # 从余额变化中提取地址
+            balance_changes = tx_data.get("balanceChanges", [])
+            for change in balance_changes:
+                owner = change.get("owner", {})
+                if "AddressOwner" in owner:
+                    addr = owner["AddressOwner"]
+                    if self._is_valid_account(addr, target_address):
+                        accounts.add(addr)
+
+            # 从对象变化中提取地址
+            object_changes = tx_data.get("objectChanges", [])
+            for change in object_changes:
+                owner = change.get("owner", {})
+                if isinstance(owner, dict) and "AddressOwner" in owner:
+                    addr = owner["AddressOwner"]
+                    if self._is_valid_account(addr, target_address):
+                        accounts.add(addr)
+
+            # 从交易发送者中提取
+            transaction = tx_data.get("transaction", {})
+            if transaction:
+                sender = transaction.get("data", {}).get("sender")
+                if sender and self._is_valid_account(sender, target_address):
+                    accounts.add(sender)
+
+        except (AttributeError, KeyError, TypeError):
+            pass
+
+        return accounts
+
+    def _is_valid_account(self, address, target_address):
+        """简化的地址验证"""
+        if not address or not isinstance(address, str):
+            return False
+
+        # 排除目标地址和系统地址
+        if address == target_address or address in self.system_addresses:
+            return False
+
+        # 基本验证
+        if not address.startswith('0x') or len(address) < 10:
+            return False
+
+        return True
+
+
+def create_adapter(config):
+    """根据配置创建相应的适配器"""
+    chain_type = config["chain_type"].lower()
+
+    if chain_type == "solana":
+        return SolanaAdapter(config)
+    elif chain_type in ["ethereum", "bsc", "base", "scroll", "polygon"]:
+        return EthereumAdapter(config)
+    elif chain_type == "starknet":
+        return StarknetAdapter(config)
+    elif chain_type == "sui":
+        return SuiAdapter(config)
+    else:
+        raise ValueError(f"Unsupported chain type: {chain_type}")
+
+
+async def fetch_all_signatures(adapter, address, limit_total, verbose=False):
+    """修复的分批获取指定地址的所有交易签名"""
     sigs = []
-    before = None
+    cursor = None  # 统一使用cursor而非before
+
     while len(sigs) < limit_total:
         try:
-            resp = await fetch_signatures_with_retry(client, address, before=before, limit=1000)
-            batch = resp.value
-            if not batch:
-                if verbose:
-                    print("All available signatures retrieved.")
-                break
-            sigs.extend(batch)
-            before = batch[-1].signature
+            if adapter.chain_type == "solana":
+                # 修复：使用cursor参数而非before
+                batch = adapter.fetch_signatures(address, cursor=cursor, limit=500, verbose=verbose)
+                if not batch:
+                    if verbose:
+                        print("All available signatures retrieved.")
+                    break
+                sigs.extend(batch)
+                # 设置下一页游标
+                if batch:
+                    cursor = batch[-1]["signature"] if isinstance(batch[-1], dict) else batch[-1]
+            else:
+                batch = adapter.fetch_signatures(address, limit=limit_total - len(sigs), verbose=verbose)
+                if not batch:
+                    if verbose:
+                        print("All available signatures retrieved.")
+                    break
+                sigs.extend(batch)
+                break  # 大多数链一次性获取
+
             if verbose:
                 print(f"Retrieved {len(sigs)} / {limit_total} signatures...")
+
         except Exception as e:
             print(f"Error retrieving signatures after {len(sigs)} signatures: {e}")
             break
-    return [s.signature for s in sigs[:limit_total]]
 
-async def fetch_and_count(client, signatures, target, counter, batch_size=DEFAULT_TX_BATCH_SIZE, 
-                         semaphore_limit=DEFAULT_SEMAPHORE_LIMIT, verbose=False):
-    """并发获取交易详情并统计关联账户"""
+    return [s["signature"] if isinstance(s, dict) else s for s in sigs[:limit_total]]
+
+
+async def fetch_and_count(adapter, signatures, target_address, counter, verbose=False):
+    """并发获取交易详情并统计关联账户 - 强化去重版"""
+    params = adapter.config.get("params", {})
+    batch_size = params.get("tx_batch_size", 100)
+    semaphore_limit = params.get("semaphore_limit", 10)
+
     sem = asyncio.Semaphore(semaphore_limit)
-    system_addresses = SYSTEM_ADDRESSES.copy()
-    system_addresses.add(str(target))  # 添加目标地址到黑名单
+    system_addresses = adapter.system_addresses.copy()
+    system_addresses.add(target_address)
 
-    async def fetch_tx(sig: Signature):
+    # 全局去重集合
+    all_unique_accounts = set()
+
+    async def fetch_tx(sig):
         async with sem:
             try:
-                resp = await get_transaction_with_retry(client, sig)
-                return resp.value
+                loop = asyncio.get_event_loop()
+                tx = await loop.run_in_executor(None, adapter.fetch_transaction, sig)
+                return tx
             except Exception as e:
                 if verbose:
                     print(f"Failed to get transaction {sig}: {e}")
@@ -131,87 +709,87 @@ async def fetch_and_count(client, signatures, target, counter, batch_size=DEFAUL
         txs = await asyncio.gather(*tasks)
 
         for tx in txs:
-            if not isinstance(tx, EncodedConfirmedTransactionWithStatusMeta) or tx.transaction is None or tx.transaction.transaction is None:
+            if not tx:
                 continue
 
             try:
-                # 处理账户密钥
-                account_keys = tx.transaction.transaction.message.account_keys
+                accounts = adapter.extract_accounts_from_transaction(tx, target_address)
+                for account in accounts:
+                    # 多重验证和去重
+                    if (account and
+                            account not in system_addresses and
+                            account != target_address and
+                            account not in all_unique_accounts):
+                        all_unique_accounts.add(account)
+                        counter[account] += 1
 
-                for account in account_keys:
-                    # 提取 pubkey 字符串
-                    if hasattr(account, 'pubkey'):
-                        # 如果是 ParsedAccount 对象，提取 pubkey 属性
-                        pubkey_str = str(account.pubkey)
-                    else:
-                        # 如果直接是 Pubkey 对象
-                        pubkey_str = str(account)
-
-                    # 过滤系统地址和目标地址
-                    if pubkey_str not in system_addresses:
-                        counter[pubkey_str] += 1
-
-            except (AttributeError, KeyError) as e:
+            except Exception as e:
                 if verbose:
-                    print(f"Skipping malformed transaction... Error: {e}")
+                    print(f"Error processing transaction: {e}")
                 continue
 
         if verbose:
             print(f"Processed {min(i + batch_size, len(signatures))}/{len(signatures)} transactions")
+            print(f"Unique accounts found so far: {len(all_unique_accounts)}")
+
 
 async def main():
-    """主函数"""
-    args = parse_args()
-    
-    # 创建输出目录
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    print(f"Fetching {args.count} active Solana accounts...")
-    print(f"RPC URL: {args.rpc_url}")
-    print(f"Target address: {args.target}")
-    
-    # 创建 RPC 客户端
-    client = AsyncClient(args.rpc_url, timeout=30)
-    
     try:
-        # 解析目标地址
-        target_address = Pubkey.from_string(args.target)
-        
+        # 加载区块链配置
+        config = load_chain_config()
+        print(f"Loaded configuration for {config['chain_type']} blockchain")
+
+        # 创建适配器
+        adapter = create_adapter(config)
+
+        # 解析命令行参数
+        args = parse_args(config)
+
+        # 创建输出目录
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        print(f"Fetching {args.count} active {config['chain_type']} accounts...")
+        print(f"RPC URL: {args.rpc_url}")
+        print(f"Target address: {args.target}")
+
+        target_address = args.target
+
         # 获取交易签名
         print("Retrieving transaction signatures...")
-        sigs = await fetch_all_signatures(client, target_address, args.max_signatures, args.verbose)
+        estimated_tx_count = max(args.count * 10, 100)
+        actual_limit = min(estimated_tx_count, args.max_signatures)
+        sigs = await fetch_all_signatures(adapter, target_address, actual_limit, args.verbose)
         print(f"Retrieved {len(sigs)} signatures for analysis.")
-        
+
         if not sigs:
             print("No signatures found. Exiting.")
-            await client.close()
             return
-        
+
         # 统计账户出现频率
         counter = Counter()
-        await fetch_and_count(client, sigs, target_address, counter, 
-                             DEFAULT_TX_BATCH_SIZE, DEFAULT_SEMAPHORE_LIMIT, args.verbose)
-        
+        await fetch_and_count(adapter, sigs, target_address, counter, args.verbose)
+
         # 获取最活跃的账户
         top_accounts = counter.most_common(args.count)
-        
+
         # 写入文件
         with open(args.output, "w") as f:
             for addr, _ in top_accounts:
                 f.write(f"{addr}\n")
-        
+
         print(f"Successfully wrote {len(top_accounts)} accounts to {args.output}")
-        
+
         # 显示前5个账户
         if args.verbose:
             print("\nTop 5 most active accounts:")
             for i, (addr, count) in enumerate(top_accounts[:5]):
                 print(f"{i + 1}. {addr} (interactions: {count})")
-    
-    finally:
-        # 关闭客户端
-        await client.close()
+
+    except Exception as e:
+        print(f"Error during execution: {e}")
+        return
+
 
 if __name__ == "__main__":
     try:

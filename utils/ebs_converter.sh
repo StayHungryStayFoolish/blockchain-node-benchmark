@@ -3,8 +3,8 @@
 # 用于将实际的IOPS和I/O大小转换为AWS EBS标准基准
 
 # AWS标准基准常量
-# AWS EBS基准配置 - 使用config.sh中的配置，如果不可用则使用默认值
-# 注意：如果变量已经定义（如从config.sh加载），则不重新定义
+# AWS EBS基准配置 - 使用user_config.sh中的配置，如果不可用则使用默认值
+# 注意：如果变量已经定义（如从user_config.sh加载），则不重新定义
 if [[ -z "${AWS_EBS_BASELINE_IO_SIZE_KIB:-}" ]]; then
     readonly AWS_EBS_BASELINE_IO_SIZE_KIB=16
 fi

@@ -6,7 +6,7 @@
 # 适用于开发阶段的代码审查和标准化
 # =====================================================================
 
-source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/unified_logger.sh"
 
 init_logger "log_analyzer" $LOG_LEVEL_INFO "${LOGS_DIR}/log_analysis.log"
@@ -36,7 +36,7 @@ analyze_logging_status() {
     echo "| 文件 | 日志方式 | 状态 | 建议 |" >> "$ANALYSIS_REPORT"
     echo "|------|----------|------|------|" >> "$ANALYSIS_REPORT"
     
-    for file in $(find . -name "*.sh" -not -path "./backups/*" -not -path "./utils/migrate_logging.sh"); do
+    for file in $(find . -name "*.sh" -not -path "./backups/*"); do
         [[ -f "$file" ]] || continue
         ((total_shell_files++))
         

@@ -28,9 +28,9 @@ show_framework_info() {
     echo "🚀 Blockchain Node Performance Benchmark Framework"
     echo ""
     echo "📊 支持的测试模式:"
-    echo "   • 快速验证测试 (7分钟)   - 基础性能验证"
-    echo "   • 标准性能测试 (15分钟)  - 全面性能评估"
-    echo "   • 极限压力测试 (2小时)   - 智能瓶颈检测"
+    echo "   • 快速验证测试 - 基础性能验证"
+    echo "   • 标准性能测试 - 全面性能评估"
+    echo "   • 极限压力测试 - 智能瓶颈检测"
     echo ""
     echo "🔍 监控能力:"
     echo "   • 49-67个性能指标实时监控"
@@ -63,7 +63,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 加载配置和共享函数
-source "${SCRIPT_DIR}/config/config.sh"
+source "${SCRIPT_DIR}/config/config_loader.sh"
 source "${SCRIPT_DIR}/core/common_functions.sh"
 source "${SCRIPT_DIR}/utils/error_handler.sh"
 
@@ -93,19 +93,19 @@ cleanup_framework() {
 # 设置清理陷阱
 trap cleanup_framework EXIT INT TERM
 
-# 准备测试数据
-prepare_test_data() {
-    echo "📊 准备测试数据..."
+# 准备 Benchmark 数据
+prepare_benchmark_data() {
+    echo "📊 准备 Benchmark 数据..."
     
     # 检查账户文件是否存在
     if [[ ! -f "$ACCOUNTS_OUTPUT_FILE" ]]; then
         echo "🔍 获取活跃账户..."
         if [[ -f "${SCRIPT_DIR}/tools/fetch_active_accounts.py" ]]; then
             python3 "${SCRIPT_DIR}/tools/fetch_active_accounts.py" \
-                --rpc-url "$LOCAL_RPC_URL" \
                 --output "$ACCOUNTS_OUTPUT_FILE" \
-                --count "$ACCOUNT_COUNT"
-            
+                --count "$ACCOUNT_COUNT" \
+                --verbose
+
             if [[ $? -eq 0 && -f "$ACCOUNTS_OUTPUT_FILE" ]]; then
                 echo "✅ 账户获取成功: $(wc -l < "$ACCOUNTS_OUTPUT_FILE") 个账户"
             else
@@ -270,8 +270,9 @@ process_test_results() {
     # AWS基准转换
     echo "📊 执行AWS基准转换..."
     if [[ -f "${SCRIPT_DIR}/utils/ebs_converter.sh" ]]; then
-        "${SCRIPT_DIR}/utils/ebs_converter.sh" --auto-convert
-        echo "✅ EBS基准转换完成"
+        # 注意: ebs_converter.sh是函数库，不支持直接执行参数
+        # 实际的EBS转换在iostat_collector.sh中通过source调用实现
+        echo "✅ EBS转换库已加载，转换在数据收集时自动执行"
     else
         echo "⚠️ EBS转换脚本不存在，跳过转换"
     fi
@@ -398,7 +399,6 @@ execute_data_analysis() {
         "analysis/cpu_ebs_correlation_analyzer.py"
         "analysis/qps_analyzer.py"
         "analysis/rpc_deep_analyzer.py"
-        "analysis/validator_log_analyzer.py"
     )
     
     for script in "${analysis_scripts[@]}"; do
@@ -738,10 +738,10 @@ main() {
     
     # 注意：目录初始化已在config.sh中完成，无需重复执行
     
-    # 阶段1: 准备测试数据
-    echo "📋 阶段1: 准备测试数据"
-    if ! prepare_test_data; then
-        echo "❌ 测试数据准备失败"
+    # 阶段1: 准备 Benchmark 数据
+    echo "📋 阶段1: 准备 Benchmark 数据"
+    if ! prepare_benchmark_data; then
+        echo "❌ Benchmark 数据准备失败"
         exit 1
     fi
     

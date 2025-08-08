@@ -36,18 +36,8 @@ except ImportError as e:
     logger = logging.getLogger(__name__)
     logger.warning(f"⚠️ 统一日志管理器不可用，使用标准logging: {e}")
 
-try:
-    # CSV字段映射器已移除，不再需要
-    FIELD_MAPPER_AVAILABLE = False
-    logger.info("✅ 使用直接字段访问模式")
-except ImportError as e:
-    FIELD_MAPPER_AVAILABLE = False
-    logger.warning(f"⚠️ 字段映射器不可用: {e}")
-    logger.info("📝 将使用原始字段名，部分字段标准化功能不可用")
-
-
-class SolanaQPSAnalyzer:
-    """Solana QPS性能分析器 + 瓶颈模式支持"""
+class NodeQPSAnalyzer:
+    """区块链节点 QPS性能分析器 + 瓶颈模式支持 - 支持多种区块链"""
 
     def __init__(self, output_dir: Optional[str] = None, benchmark_mode: str = "standard", bottleneck_mode: bool = False):
         """
@@ -69,17 +59,8 @@ class SolanaQPSAnalyzer:
         
         # 初始化CSV文件路径 - 修复缺失的属性
         self.csv_file = self.get_latest_csv()
-        
-        # 初始化字段映射器 - 已移除
-        if FIELD_MAPPER_AVAILABLE:
-            # 不再使用字段映射器
-            pass
-        else:
-            # 使用直接字段访问
-            pass
-        
-        # 使用英文标签系统，移除复杂的字体管理
-        self.use_english_labels = True
+
+        # Using English labels system directly
         
         logger.info(f"🔍 QPS分析器初始化完成，输出目录: {output_dir}, 基准测试模式: {benchmark_mode}")
         if bottleneck_mode:
@@ -348,11 +329,8 @@ class SolanaQPSAnalyzer:
                 return None
             
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            # 根据字体支持情况选择标题语言
-            if self.use_english_labels:
-                fig.suptitle('📉 Performance Cliff Analysis', fontsize=16, fontweight='bold', color='red')
-            else:
-                fig.suptitle('📉 性能悬崖分析', fontsize=16, fontweight='bold', color='red')
+            # Using English title directly
+            fig.suptitle('📉 Performance Cliff Analysis', fontsize=16, fontweight='bold', color='red')
             
             # 1. QPS性能曲线
             qps_column = None
@@ -571,11 +549,8 @@ class SolanaQPSAnalyzer:
 
         plt.style.use('default')
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        # 根据字体支持情况选择标题语言
-        if self.use_english_labels:
-            fig.suptitle('Solana QPS Performance Analysis Dashboard', fontsize=16, fontweight='bold')
-        else:
-            fig.suptitle('Solana QPS 性能分析仪表板', fontsize=16, fontweight='bold')
+        # Using English title directly
+        fig.suptitle('Solana QPS Performance Analysis Dashboard', fontsize=16, fontweight='bold')
 
         # 1. CPU使用率 vs QPS
         if len(df) > 0:
@@ -965,7 +940,7 @@ def main():
             return 1
         
         # 初始化分析器
-        analyzer = SolanaQPSAnalyzer(args.output_dir, args.benchmark_mode, args.bottleneck_mode)
+        analyzer = NodeQPSAnalyzer(args.output_dir, args.benchmark_mode, args.bottleneck_mode)
         
         # 读取数据
         df = pd.read_csv(args.csv_file)
@@ -1008,12 +983,12 @@ if __name__ == "__main__":
         print("python qps_analyzer.py data.csv --cliff-analysis --max-qps 5000 --bottleneck-qps 3000")
     else:
         sys.exit(main())
-    print("analyzer = SolanaQPSAnalyzer('/path/to/output/dir', 'standard', False)")
+    print("analyzer = NodeQPSAnalyzer('/path/to/output/dir', 'standard', False)")
     print("results = analyzer.run_qps_analysis()")
     
     # 演示功能
     try:
-        analyzer = SolanaQPSAnalyzer(benchmark_mode="standard", bottleneck_mode=False)
+        analyzer = NodeQPSAnalyzer(benchmark_mode="standard", bottleneck_mode=False)
         results = analyzer.run_qps_analysis()
         if results:
             print("🎯 QPS分析器演示完成")

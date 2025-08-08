@@ -17,7 +17,7 @@ else
 fi
 
 # 安全加载配置文件，避免readonly变量冲突
-if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh" 2>/dev/null; then
+if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
     echo "警告: 配置文件加载失败，使用默认配置"
     MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
@@ -344,48 +344,7 @@ check_ena_network_bottleneck() {
     return 1  # 未检测到ENA网络限制瓶颈
 }
 
-# 触发验证器日志关联分析
-trigger_validator_log_analysis() {
-    local bottleneck_time="$1"
-    local bottleneck_types="$2"
-    
-    # 检查验证器日志文件是否存在
-    if [[ ! -f "$VALIDATOR_LOG_PATH" ]]; then
-        echo "⚠️  验证器日志文件不存在: $VALIDATOR_LOG_PATH" | tee -a "$BOTTLENECK_LOG"
-        return 1
-    fi
-    
-    echo "🔍 触发验证器日志关联分析..." | tee -a "$BOTTLENECK_LOG"
-    echo "   瓶颈时间: $bottleneck_time" | tee -a "$BOTTLENECK_LOG"
-    echo "   瓶颈类型: $bottleneck_types" | tee -a "$BOTTLENECK_LOG"
-    echo "   分析窗口: ±${BOTTLENECK_ANALYSIS_WINDOW}秒" | tee -a "$BOTTLENECK_LOG"
-    
-    # 生成分析输出文件名
-    local timestamp=$(date +%Y%m%d_%H%M%S)
-    local log_analysis_output="${MEMORY_SHARE_DIR}/bottleneck_validator_analysis_${timestamp}.txt"
-    
-    # 调用验证器日志分析脚本
-    if bash "$(dirname "${BASH_SOURCE[0]}")/../analysis/analyze_validator_logs.sh" \
-        -i "$VALIDATOR_LOG_PATH" \
-        -o "$log_analysis_output" \
-        --bottleneck-time "$bottleneck_time" \
-        --window-seconds "$BOTTLENECK_ANALYSIS_WINDOW" \
-        --bottleneck-types "$bottleneck_types" \
-        --focus-errors; then
-        
-        echo "✅ 验证器日志分析完成: $log_analysis_output" | tee -a "$BOTTLENECK_LOG"
-        
-        # 将分析结果路径记录到瓶颈状态中
-        echo "validator_log_analysis_file: $log_analysis_output" >> "$BOTTLENECK_LOG"
-        
-        return 0
-    else
-        echo "❌ 验证器日志分析失败" | tee -a "$BOTTLENECK_LOG"
-        return 1
-    fi
-}
-
-# 检测网络瓶颈 (增强版，集成ENA监控)
+# 检测通用网络瓶颈 (基于网络利用率阈值)
 check_network_bottleneck() {
     local network_util="$1"
     
@@ -550,7 +509,6 @@ extract_performance_metrics() {
         fi
     done
     
-    # TODO: 从QPS测试结果获取错误率
     # 这需要读取最新的QPS测试报告文件
     error_rate=$(get_latest_qps_error_rate)
     
@@ -785,9 +743,8 @@ detect_bottleneck() {
         echo "🚨 检测到系统瓶颈: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
         echo "   瓶颈值: $value_list" | tee -a "$BOTTLENECK_LOG"
         
-        # 触发验证器日志关联分析
+        # 验证器日志关联分析已删除（依赖失效脚本）
         local detection_time=$(get_unified_timestamp)
-        trigger_validator_log_analysis "$detection_time" "$bottleneck_list"
         
         cat > "$BOTTLENECK_STATUS_FILE" << EOF
 {

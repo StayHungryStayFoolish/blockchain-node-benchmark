@@ -15,7 +15,7 @@ LOCAL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 加载统一日志工具
 source "${LOCAL_SCRIPT_DIR}/unified_logger.sh"
 
-# 全局错误处理配置 - 使用config.sh中的统一配置
+# 全局错误处理配置 - 使用config_loader.sh中的统一配置
 if [[ -z "${ERROR_LOG_DIR:-}" ]]; then
     readonly ERROR_LOG_DIR="${LOGS_DIR:-/tmp}/error_logs"
 fi
@@ -178,7 +178,7 @@ safe_execute() {
 
 # 清理临时文件的通用函数
 cleanup_temp_files() {
-    # 使用config.sh中配置的临时文件模式，如果不可用则使用默认模式
+    # 使用user_config.sh中配置的临时文件模式，如果不可用则使用默认模式
     local temp_pattern="${1:-${TEMP_FILE_PATTERN:-/tmp/solana-qps-*}}"
     
     echo "🧹 清理临时文件: $temp_pattern" >&2
@@ -208,7 +208,7 @@ check_disk_space() {
 
 # 验证配置文件
 validate_config() {
-    local config_file="${1:-config.sh}"
+    local config_file="${1:-config_loader.sh}"
     
     if [[ ! -f "$config_file" ]]; then
         echo "❌ 配置文件不存在: $config_file" >&2

@@ -1,0 +1,28 @@
+# =====================================================================
+# Blockchain Node Performance Benchmark Framework - Python Dependencies
+# 区块链节点性能基准测试框架 - Python依赖
+# =====================================================================
+
+# HTTP请求和异步处理
+requests>=2.25.0
+
+# 数据处理和分析
+pandas>=1.3.0
+numpy>=1.20.0
+
+# 数据可视化
+matplotlib>=3.3.0
+seaborn>=0.11.0
+
+# 统计分析和机器学习
+scipy>=1.7.0
+scikit-learn>=1.0.0
+statsmodels>=0.12.0
+
+# =====================================================================
+# 安装说明:
+# 1. 创建虚拟环境: python3 -m venv blockchain-benchmark-env
+# 2. 激活虚拟环境: source blockchain-benchmark-env/bin/activate
+# 3. 安装依赖: pip install -r requirements.txt
+# 4. 验证安装: python3 -c "import pandas, numpy, matplotlib, seaborn, scipy, sklearn, statsmodels, requests; print('All dependencies installed successfully!')"
+# =====================================================================

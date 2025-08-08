@@ -13,7 +13,7 @@ fi
 
 # 引入配置 - 防止重复加载
 if [[ -z "${CONFIG_LOADED:-}" ]]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh"
+    source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh"
 fi
 
 # =====================================================================

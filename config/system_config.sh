@@ -1,0 +1,102 @@
+#!/bin/bash
+# =====================================================================
+# Solana QPS 测试框架 - 系统配置层
+# =====================================================================
+# 版本: 3.0 - 分层配置架构
+# 目标用户: 系统管理员和高级用户
+# 配置内容: AWS参数、日志配置、高级瓶颈检测阈值
+# 修改频率: 偶尔修改
+# =====================================================================
+
+# ----- 部署平台检测配置 -----
+# 部署平台类型 (auto: 自动检测, aws: AWS环境, other: 其他环境)
+DEPLOYMENT_PLATFORM=${DEPLOYMENT_PLATFORM:-"auto"}
+
+# ENA网络限制监控配置 - 基于AWS ENA文档 (将根据部署平台自动调整)
+ENA_ALLOWANCE_FIELDS=(
+    "bw_in_allowance_exceeded"
+    "bw_out_allowance_exceeded" 
+    "pps_allowance_exceeded"
+    "conntrack_allowance_exceeded"
+    "linklocal_allowance_exceeded"
+    "conntrack_allowance_available"
+)
+
+# ----- 统一日志管理配置 -----
+# 日志级别配置 (0=DEBUG, 1=INFO, 2=WARN, 3=ERROR, 4=FATAL)
+LOG_LEVEL=${LOG_LEVEL:-1}  # 默认INFO级别
+
+# 日志格式配置
+LOG_FORMAT=${LOG_FORMAT:-"[%timestamp%] [%level%] [%component%] %message%"}
+
+# 日志轮转配置
+MAX_LOG_SIZE=${MAX_LOG_SIZE:-"10M"}    # 最大日志文件大小
+MAX_LOG_FILES=${MAX_LOG_FILES:-5}      # 保留的日志文件数量
+
+# 日志输出配置
+LOG_JSON=${LOG_JSON:-false}            # JSON格式输出
+
+# Python日志配置
+PYTHON_LOG_LEVEL=${PYTHON_LOG_LEVEL:-"INFO"}
+
+# 导出日志配置环境变量
+export LOG_LEVEL LOG_FORMAT MAX_LOG_SIZE MAX_LOG_FILES
+export LOG_JSON PYTHON_LOG_LEVEL
+
+# ----- 错误处理和恢复配置 -----
+# 错误恢复开关 (true/false) - 启用后会自动处理和恢复监控系统错误
+ERROR_RECOVERY_ENABLED=${ERROR_RECOVERY_ENABLED:-true}
+
+# 错误处理阈值
+ERROR_RECOVERY_DELAY=${ERROR_RECOVERY_DELAY:-10}          # 错误恢复延迟 (秒)
+
+# ----- 错误处理和日志配置 -----
+# 基于统一路径结构的错误处理目录 (将在detect_deployment_paths中设置完整路径)
+ERROR_LOG_SUBDIR="error_logs"                                  # 错误日志子目录名
+PYTHON_ERROR_LOG_SUBDIR="python_logs"                         # Python错误日志子目录名
+TEMP_FILE_PREFIX="blockchain-node-qps"                                 # 临时文件前缀
+
+# ----- AWS相关配置 -----
+# AWS EBS基准配置
+AWS_EBS_BASELINE_IO_SIZE_KIB=16                               # AWS EBS基准IO大小 (KiB)
+
+# AWS元数据服务端点配置
+AWS_METADATA_ENDPOINT="http://169.254.169.254"                # AWS实例元数据端点
+AWS_METADATA_TOKEN_TTL=21600                                  # 元数据令牌TTL (6小时)
+AWS_METADATA_API_VERSION="latest"                             # API版本
+
+# ----- 监控进程配置 -----
+# 监控进程名配置（用于监控开销计算）
+MONITORING_PROCESS_NAMES=(
+    "iostat"
+    "mpstat"
+    "sar"
+    "vmstat"
+    "netstat"
+    "unified_monitor"
+    "bottleneck_detector"
+    "ena_network_monitor"
+    "slot_monitor"
+    "performance_visualizer"
+    "overhead_monitor"
+    "adaptive_frequency"
+    "error_recovery"
+    "report_generator"
+)
+
+# 时间格式标准
+TIMESTAMP_FORMAT="%Y-%m-%d %H:%M:%S"
+
+# 静默模式配置
+SILENT_MODE=${SILENT_MODE:-false}
+
+# 监控开销日志存储路径
+MONITORING_OVERHEAD_LOG=""  # 将在路径检测完成后设置
+
+# 导出系统配置变量
+export ENA_ALLOWANCE_FIELDS MONITORING_PROCESS_NAMES DEPLOYMENT_PLATFORM
+export LOG_LEVEL LOG_FORMAT MAX_LOG_SIZE MAX_LOG_FILES LOG_JSON PYTHON_LOG_LEVEL
+export ERROR_RECOVERY_ENABLED ERROR_RECOVERY_DELAY
+export ERROR_LOG_SUBDIR PYTHON_ERROR_LOG_SUBDIR TEMP_FILE_PREFIX
+export AWS_EBS_BASELINE_IO_SIZE_KIB AWS_METADATA_ENDPOINT AWS_METADATA_TOKEN_TTL AWS_METADATA_API_VERSION
+export TIMESTAMP_FORMAT SILENT_MODE MONITORING_OVERHEAD_LOG

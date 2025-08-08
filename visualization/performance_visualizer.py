@@ -48,20 +48,29 @@ LABELS = {
     'threshold_analysis': 'Threshold Analysis'
 }
 
-# 导入统一的CSV数据处理器
+# Import unified CSV data processor
 current_dir = Path(__file__).parent
 utils_dir = current_dir.parent / 'utils'
 analysis_dir = current_dir.parent / 'analysis'
 
-# 添加路径到sys.path
+# Add paths to sys.path
 for path in [str(utils_dir), str(analysis_dir)]:
     if path not in sys.path:
         sys.path.insert(0, path)
 
 try:
-    from csv_data_processor import CSVDataProcessor
-    from cpu_ebs_correlation_analyzer import CPUEBSCorrelationAnalyzer
-    from unit_converter import UnitConverter
+    # Add parent directory to path for utils imports
+    import sys
+    import os
+    parent_dir = os.path.dirname(os.path.dirname(__file__))
+    sys.path.insert(0, parent_dir)
+    
+    from utils.csv_data_processor import CSVDataProcessor
+    from analysis.cpu_ebs_correlation_analyzer import CPUEBSCorrelationAnalyzer
+    from utils.unit_converter import UnitConverter
+    # Import advanced_chart_generator from current directory
+    current_dir = os.path.dirname(__file__)
+    sys.path.insert(0, current_dir)
     from advanced_chart_generator import AdvancedChartGenerator
     ADVANCED_TOOLS_AVAILABLE = True
     print("✅ Advanced analysis tools loaded")
@@ -89,19 +98,9 @@ except ImportError as e:
                     matching_cols.append(col)
             return matching_cols
 
-# 高级工具导入检查
-try:
-    from advanced_chart_generator import AdvancedChartGenerator
-    from cpu_ebs_correlation_analyzer import CPUEBSCorrelationAnalyzer  
-    from unit_converter import UnitConverter
-    ADVANCED_TOOLS_AVAILABLE = True
-    print("✅ Advanced analysis tools loaded")
-except ImportError as e:
-    print(f"⚠️  Advanced analysis tools unavailable: {e}")
-    print("📝 Using basic functionality mode, some advanced features may be unavailable")
-    ADVANCED_TOOLS_AVAILABLE = False
+# Advanced tools import check completed above, duplicate import removed here
     
-    # 定义占位符类以避免IDE警告和运行时错误
+    # Define placeholder classes to avoid IDE warnings and runtime errors
     class DummyTool:
         def __init__(self, *args, **kwargs):
             pass
@@ -114,7 +113,7 @@ except ImportError as e:
     AdvancedChartGenerator = DummyTool
 
 class PerformanceVisualizer(CSVDataProcessor):
-    """性能可视化器 - 基于统一CSV数据处理器"""
+    """Performance Visualizer - Based on unified CSV data processor"""
     
     def __init__(self, data_file, overhead_file=None):
         super().__init__()  # 初始化CSV数据处理器
@@ -126,8 +125,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
         
-        # 使用英文标签系统，移除复杂的字体管理
-        self.use_english_labels = True
+        # Using English labels system directly
         self.font_manager = None
             
         # 阈值配置 - 集成自await_util_analyzer
@@ -217,7 +215,7 @@ class PerformanceVisualizer(CSVDataProcessor):
     def _is_accounts_configured(self):
         """检查 ACCOUNTS Device是否配置和可用
         
-        根据 config.sh 的逻辑，ACCOUNTS Device是可选的：
+        根据 user_config.sh 的逻辑，ACCOUNTS Device是可选的：
         1. 检查环境变量配置
         2. 检查实际数据列是否存在
         3. 返回配置状态
@@ -242,7 +240,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         return False
     
     def _analyze_threshold_violations(self, data_series, thresholds, metric_name):
-        """✅ 改进的阈值违规分析 - 集成自await_util_analyzer"""
+        """✅ Improved threshold violation analysis - integrated from await_util_analyzer"""
         # 数据有效性检查
         if data_series.empty:
             return {
@@ -254,7 +252,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 'max_value': 0.0,  # 使用float类型保持一致性
                 'avg_value': 0.0,  # 使用float类型保持一致性
                 'metric_name': metric_name,
-                'error': '数据为空'
+                'error': 'Data is empty'
             }
         
         # ✅ 过滤NaN值
@@ -269,7 +267,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 'max_value': 0.0,  # 使用float类型保持一致性
                 'avg_value': 0.0,  # 使用float类型保持一致性
                 'metric_name': metric_name,
-                'error': '所有数据都是NaN'
+                'error': 'All data is NaN'
             }
         
         total_points = len(valid_data)
@@ -291,7 +289,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         }
     
     def create_performance_overview_chart(self):
-        """✅ 改进的性能总览图生成"""
+        """✅ Improved performance overview chart generation"""
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
         fig.suptitle('System Performance Overview', fontsize=16, fontweight='bold')
         
@@ -311,7 +309,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         data_iops_col = data_iops_cols[0]
         data_util_col = data_util_cols[0] if data_util_cols else None
         
-        # ✅ CPU性能指标 (改进的字段处理)
+        # ✅ CPU performance metrics (improved field handling)
         ax1 = axes[0, 0]
         if cpu_usage_col and cpu_iowait_col:
             # 检查数据有效性
@@ -320,13 +318,13 @@ class PerformanceVisualizer(CSVDataProcessor):
             
             if len(cpu_usage_data) > 0 and len(cpu_iowait_data) > 0:
                 # 原始数据
-                ax1.plot(self.df['timestamp'], self.df[cpu_usage_col], color='blue', linewidth=1, alpha=0.6, label='CPU Usage(原始)')
+                ax1.plot(self.df['timestamp'], self.df[cpu_usage_col], color='blue', linewidth=1, alpha=0.6, label='CPU Usage (Raw)')
                 ax1.plot(self.df['timestamp'], self.df[cpu_iowait_col], color='red', linewidth=1, alpha=0.6, label='CPU I/O Wait (Raw)')
                 
                 # ✅ 安全的移动平均计算
                 if len(cpu_usage_data) >= 10:
                     cpu_smooth = self.df[cpu_usage_col].rolling(window=10, center=True, min_periods=1).mean()
-                    ax1.plot(self.df['timestamp'], cpu_smooth, color='blue', linewidth=2, label='CPU Usage(平滑)')
+                    ax1.plot(self.df['timestamp'], cpu_smooth, color='blue', linewidth=2, label='CPU Usage (Smoothed)')
                 
                 if len(cpu_iowait_data) >= 10:
                     iowait_smooth = self.df[cpu_iowait_col].rolling(window=10, center=True, min_periods=1).mean()
@@ -372,10 +370,10 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax3.legend()
                 ax3.grid(True, alpha=0.3)
             else:
-                ax3.text(0.5, 0.5, '内存Data Not Available', ha='center', va='center', transform=ax3.transAxes)
+                ax3.text(0.5, 0.5, 'Memory Data Not Available', ha='center', va='center', transform=ax3.transAxes)
                 ax3.set_title('Memory Usage (Data Not Available)')
         else:
-            ax3.text(0.5, 0.5, '缺少Memory Usage字段', ha='center', va='center', transform=ax3.transAxes)
+            ax3.text(0.5, 0.5, 'Memory Usage Field Missing', ha='center', va='center', transform=ax3.transAxes)
             ax3.set_title('Memory Usage (Field Missing)')
         
         # ✅ Device Utilization (改进的数据检查)
@@ -393,7 +391,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax4.text(0.5, 0.5, 'Device UtilizationData Not Available', ha='center', va='center', transform=ax4.transAxes)
                 ax4.set_title('Device Utilization (Data Not Available)')
         else:
-            ax4.text(0.5, 0.5, '缺少Device Utilization字段', ha='center', va='center', transform=ax4.transAxes)
+            ax4.text(0.5, 0.5, 'Device Utilization Field Missing', ha='center', va='center', transform=ax4.transAxes)
             ax4.set_title('Device Utilization (Field Missing)')
         
         plt.tight_layout()
@@ -428,7 +426,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         if missing_fields:
             print(f"⚠️  Missing fields for correlation analysis: {', '.join(missing_fields)}")
-            # 在图表中显示错误信息
+            # Display error information in chart
             for i, ax in enumerate(axes.flat):
                 ax.text(0.5, 0.5, f'Missing Fields:\n{chr(10).join(missing_fields)}', 
                        ha='center', va='center', transform=ax.transAxes, fontsize=12)
@@ -444,22 +442,22 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         from scipy.stats import pearsonr
         
-        # ✅ 安全的相关性分析函数
+        # ✅ Safe correlation analysis function
         def safe_correlation_analysis(x_data, y_data, ax, xlabel, ylabel, title_prefix):
-            """安全的相关性分析和可视化"""
+            """Safe correlation analysis and visualization"""
             try:
                 # 数据有效性检查
                 if x_data.empty or y_data.empty:
-                    ax.text(0.5, 0.5, '数据为空', ha='center', va='center', transform=ax.transAxes)
+                    ax.text(0.5, 0.5, 'Data is empty', ha='center', va='center', transform=ax.transAxes)
                     ax.set_title(f'{title_prefix}\nData Not Available')
                     return
                 
                 # 移除NaN值并对齐数据
                 combined_data = pd.concat([x_data, y_data], axis=1).dropna()
                 if len(combined_data) < 10:
-                    ax.text(0.5, 0.5, f'有效数据点不足\n(仅{len(combined_data)}个点)', 
+                    ax.text(0.5, 0.5, f'Insufficient valid data points\n(only {len(combined_data)} points)', 
                            ha='center', va='center', transform=ax.transAxes)
-                    ax.set_title(f'{title_prefix}\n数据不足')
+                    ax.set_title(f'{title_prefix}\nInsufficient Data')
                     return
                 
                 x_clean = combined_data.iloc[:, 0]
@@ -482,12 +480,12 @@ class PerformanceVisualizer(CSVDataProcessor):
                 try:
                     corr, p_value = pearsonr(x_clean, y_clean)
                     if np.isnan(corr):
-                        corr_text = "相关系数: NaN"
+                        corr_text = "Correlation: NaN"
                     else:
                         significance = "***" if p_value < 0.001 else "**" if p_value < 0.01 else "*" if p_value < 0.05 else ""
-                        corr_text = f'相关系数: {corr:.3f}{significance}\n(n={len(x_clean)})'
+                        corr_text = f'Correlation: {corr:.3f}{significance}\n(n={len(x_clean)})'
                 except Exception as e:
-                    corr_text = f"计算失败: {str(e)[:20]}"
+                    corr_text = f"Calculation failed: {str(e)[:20]}"
                 
                 ax.set_xlabel(xlabel)
                 ax.set_ylabel(ylabel)
@@ -498,7 +496,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax.text(0.5, 0.5, f'Analysis Failed:\n{str(e)[:50]}', ha='center', va='center', transform=ax.transAxes)
                 ax.set_title(f'{title_prefix}\nAnalysis Failed')
         
-        # 执行各项相关性分析
+        # Execute various correlation analyses
         safe_correlation_analysis(
             self.df[cpu_iowait_col], self.df[data_util_col], axes[0, 0],
             'CPU I/O Wait (%)', 'Device Utilization (%)', 'CPU I/O Wait vs Device Utilization'
@@ -511,7 +509,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         safe_correlation_analysis(
             self.df[cpu_iowait_col], self.df[data_aqu_col], axes[1, 0],
-            'CPU I/O Wait (%)', 'I/O队列长度', 'CPU I/O Wait vs I/O队列长度'
+            'CPU I/O Wait (%)', 'I/O Queue Length', 'CPU I/O Wait vs I/O Queue Length'
         )
         
         # ✅ Time序列对比 (改进的处理)
@@ -529,14 +527,14 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax4.set_xlabel('Time')
                 ax4.set_ylabel('CPU I/O Wait (%)', color='blue')
                 ax4_twin.set_ylabel('Device Utilization (%)', color='red')
-                ax4.set_title('CPU I/O Wait vs Device UtilizationTime序列')
+                ax4.set_title('CPU I/O Wait vs Device Utilization Time Series')
                 ax4.grid(True, alpha=0.3)
             else:
-                ax4.text(0.5, 0.5, 'Time序列Data Not Available', ha='center', va='center', transform=ax4.transAxes)
-                ax4.set_title('Time序列对比 (Data Not Available)')
+                ax4.text(0.5, 0.5, 'Time Series Data Not Available', ha='center', va='center', transform=ax4.transAxes)
+                ax4.set_title('Time Series Comparison (Data Not Available)')
         except Exception as e:
-            ax4.text(0.5, 0.5, f'Time序列分析失败:\n{str(e)[:50]}', ha='center', va='center', transform=ax4.transAxes)
-            ax4.set_title('Time序列对比 (分析失败)')
+            ax4.text(0.5, 0.5, f'Time series analysis failed:\n{str(e)[:50]}', ha='center', va='center', transform=ax4.transAxes)
+            ax4.set_title('Time Series Comparison (Analysis Failed)')
         
         plt.tight_layout()
         
@@ -547,11 +545,11 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file
     
     def create_device_comparison_chart(self):
-        """创建Device对比图表（DATA vs ACCOUNTS）- 优化版本
+        """Create Device comparison chart (DATA vs ACCOUNTS) - optimized version
         
-        根据 ACCOUNTS Device配置状态动态调整图表内容：
-        - 如果 ACCOUNTS 未配置：只显示 DATA Device分析
-        - 如果 ACCOUNTS 已配置：显示 DATA vs ACCOUNTS 对比
+        Dynamically adjust chart content based on ACCOUNTS Device configuration status:
+        - If ACCOUNTS not configured: only show DATA Device analysis
+        - If ACCOUNTS configured: show DATA vs ACCOUNTS comparison
         """
         # 检查 ACCOUNTS Device配置状态
         accounts_configured = self._is_accounts_configured()
@@ -560,9 +558,9 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # 根据配置状态设置标题
         if accounts_configured:
-            fig.suptitle('Device性能对比分析 (DATA vs ACCOUNTS)', fontsize=16, fontweight='bold')
+            fig.suptitle('Device Performance Comparison Analysis (DATA vs ACCOUNTS)', fontsize=16, fontweight='bold')
         else:
-            fig.suptitle('Device性能分析 (DATA)', fontsize=16, fontweight='bold')
+            fig.suptitle('Device Performance Analysis (DATA)', fontsize=16, fontweight='bold')
         
         # 查找Device列
         data_cols = [col for col in self.df.columns if col.startswith('data_')]
@@ -586,7 +584,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax1.plot(self.df['timestamp'], self.df[accounts_iops_col[0]], 
                         label='ACCOUNTS IOPS', linewidth=2, color='green')
         
-        ax1.set_title('DeviceIOPS对比' if accounts_configured else 'DATA DeviceIOPS')
+        ax1.set_title('Device IOPS Comparison' if accounts_configured else 'DATA Device IOPS')
         ax1.set_ylabel('IOPS')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
@@ -596,19 +594,19 @@ class PerformanceVisualizer(CSVDataProcessor):
         data_util_col = [col for col in data_cols if col.endswith('_util')]
         if data_util_col:
             ax2.plot(self.df['timestamp'], self.df[data_util_col[0]], 
-                    label='DATA 利用率', linewidth=2, color='blue')
+                    label='DATA Utilization', linewidth=2, color='blue')
         
         # 只有在 ACCOUNTS 配置时才处理 ACCOUNTS 数据
         if accounts_configured and accounts_cols:
             accounts_util_col = [col for col in accounts_cols if col.endswith('_util')]
             if accounts_util_col:
                 ax2.plot(self.df['timestamp'], self.df[accounts_util_col[0]], 
-                        label='ACCOUNTS 利用率', linewidth=2, color='green')
+                        label='ACCOUNTS Utilization', linewidth=2, color='green')
         
         ax2.axhline(y=80, color='orange', linestyle='--', alpha=0.7, label='80% Warning Line')
         ax2.axhline(y=95, color='red', linestyle='--', alpha=0.7, label='95% Critical Line')
         
-        ax2.set_title('Device Utilization对比' if accounts_configured else 'DATADevice Utilization')
+        ax2.set_title('Device Utilization Comparison' if accounts_configured else 'DATA Device Utilization')
         ax2.set_xlabel('Time')
         ax2.set_ylabel('Utilization (%)')
         ax2.legend()
@@ -623,11 +621,11 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file
 
     def create_await_threshold_analysis_chart(self):
-        """创建awaitLatency阈值分析图表 - 优化版本
+        """Create await latency threshold analysis chart - optimized version
         
-        根据 ACCOUNTS Device配置状态动态调整分析内容：
-        - 如果 ACCOUNTS 未配置：只分析 DATA Device
-        - 如果 ACCOUNTS 已配置：分析 DATA 和 ACCOUNTS Device
+        Dynamically adjust analysis content based on ACCOUNTS Device configuration status:
+        - If ACCOUNTS not configured: only analyze DATA Device
+        - If ACCOUNTS configured: analyze DATA and ACCOUNTS Device
         """
         # 检查 ACCOUNTS Device配置状态
         accounts_configured = self._is_accounts_configured()
@@ -636,17 +634,17 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # 根据配置状态设置标题
         if accounts_configured:
-            fig.suptitle('I/O Latency(await)阈值分析 - DATA & ACCOUNTS', fontsize=16, fontweight='bold')
+            fig.suptitle('I/O Latency (await) Threshold Analysis - DATA & ACCOUNTS', fontsize=16, fontweight='bold')
         else:
-            fig.suptitle('I/O Latency(await)阈值分析 - DATA', fontsize=16, fontweight='bold')
+            fig.suptitle('I/O Latency (await) Threshold Analysis - DATA', fontsize=16, fontweight='bold')
         
         # 获取await相关列
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and 'avg_await' in col]
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'avg_await' in col] if accounts_configured else []
         
-        # 平均等待Time趋势
+        # Average wait time trends
         ax1 = axes[0, 0]
-        ax1.set_title('平均I/O等待Time趋势')
+        ax1.set_title('Average I/O Wait Time Trends')
         
         threshold_violations = {}
         
@@ -654,9 +652,9 @@ class PerformanceVisualizer(CSVDataProcessor):
         if data_await_cols:
             col = data_await_cols[0]
             ax1.plot(self.df['timestamp'], self.df[col], 
-                    label='DATA 平均等待Time', linewidth=2)
+                    label='DATA Average Wait Time', linewidth=2)
             
-            # 分析阈值违规
+            # Analyze threshold violations
             violations = self._analyze_threshold_violations(
                 self.df[col], self.await_thresholds, 'data_avg_await'
             )
@@ -666,29 +664,29 @@ class PerformanceVisualizer(CSVDataProcessor):
         if accounts_configured and accounts_await_cols:
             col = accounts_await_cols[0]
             ax1.plot(self.df['timestamp'], self.df[col], 
-                    label='ACCOUNTS 平均等待Time', linewidth=2)
+                    label='ACCOUNTS Average Wait Time', linewidth=2)
             
-            # 分析阈值违规
+            # Analyze threshold violations
             violations = self._analyze_threshold_violations(
                 self.df[col], self.await_thresholds, 'accounts_avg_await'
             )
             threshold_violations['accounts_avg_await'] = violations
         elif not accounts_configured:
             # 添加说明文本
-            ax1.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax1.transAxes, 
+            ax1.text(0.02, 0.98, 'ACCOUNTS Device Not Configured', transform=ax1.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax1.axhline(y=self.await_thresholds['warning'], color='orange', 
                    linestyle='--', alpha=0.7, label='Warning Threshold (20ms)')
         ax1.axhline(y=self.await_thresholds['critical'], color='red', 
                    linestyle='--', alpha=0.7, label='Critical Threshold (50ms)')
-        ax1.set_ylabel('等待Time (ms)')
+        ax1.set_ylabel('Wait Time (ms)')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
         # 读等待Time
         ax2 = axes[0, 1]
-        ax2.set_title('读操作等待Time')
+        ax2.set_title('Read Operation Wait Time')
         
         # 获取读等待Time列
         data_r_await_cols = [col for col in self.df.columns if col.startswith('data_') and 'r_await' in col]
@@ -697,27 +695,27 @@ class PerformanceVisualizer(CSVDataProcessor):
         if data_r_await_cols:
             col = data_r_await_cols[0]
             ax2.plot(self.df['timestamp'], self.df[col], 
-                    label='DATA 读等待Time', linewidth=2)
+                    label='DATA Read Wait Time', linewidth=2)
         
         if accounts_configured and accounts_r_await_cols:
             col = accounts_r_await_cols[0]
             ax2.plot(self.df['timestamp'], self.df[col], 
-                    label='ACCOUNTS 读等待Time', linewidth=2)
+                    label='ACCOUNTS Read Wait Time', linewidth=2)
         elif not accounts_configured:
-            ax2.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax2.transAxes, 
+            ax2.text(0.02, 0.98, 'ACCOUNTS Device Not Configured', transform=ax2.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax2.axhline(y=self.await_thresholds['warning'], color='orange', 
                    linestyle='--', alpha=0.7)
         ax2.axhline(y=self.await_thresholds['critical'], color='red', 
                    linestyle='--', alpha=0.7)
-        ax2.set_ylabel('读等待Time (ms)')
+        ax2.set_ylabel('Read Wait Time (ms)')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
         # 写等待Time
         ax3 = axes[1, 0]
-        ax3.set_title('写操作等待Time')
+        ax3.set_title('Write Operation Wait Time')
         
         # 获取写等待Time列
         data_w_await_cols = [col for col in self.df.columns if col.startswith('data_') and 'w_await' in col]
@@ -726,27 +724,27 @@ class PerformanceVisualizer(CSVDataProcessor):
         if data_w_await_cols:
             col = data_w_await_cols[0]
             ax3.plot(self.df['timestamp'], self.df[col], 
-                    label='DATA 写等待Time', linewidth=2)
+                    label='DATA Write Wait Time', linewidth=2)
         
         if accounts_configured and accounts_w_await_cols:
             col = accounts_w_await_cols[0]
             ax3.plot(self.df['timestamp'], self.df[col], 
-                    label='ACCOUNTS 写等待Time', linewidth=2)
+                    label='ACCOUNTS Write Wait Time', linewidth=2)
         elif not accounts_configured:
-            ax3.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax3.transAxes, 
+            ax3.text(0.02, 0.98, 'ACCOUNTS Device Not Configured', transform=ax3.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax3.axhline(y=self.await_thresholds['warning'], color='orange', 
                    linestyle='--', alpha=0.7)
         ax3.axhline(y=self.await_thresholds['critical'], color='red', 
                    linestyle='--', alpha=0.7)
-        ax3.set_ylabel('写等待Time (ms)')
+        ax3.set_ylabel('Write Wait Time (ms)')
         ax3.legend()
         ax3.grid(True, alpha=0.3)
         
         # 阈值违规统计
         ax4 = axes[1, 1]
-        ax4.set_title('阈值违规统计')
+        ax4.set_title('Threshold Violation Statistics')
         
         if threshold_violations:
             devices = list(threshold_violations.keys())
@@ -756,17 +754,17 @@ class PerformanceVisualizer(CSVDataProcessor):
             x = np.arange(len(devices))
             width = 0.35
             
-            ax4.bar(x - width/2, warning_pcts, width, label='警告违规%', color='orange', alpha=0.7)
-            ax4.bar(x + width/2, critical_pcts, width, label='危险违规%', color='red', alpha=0.7)
+            ax4.bar(x - width/2, warning_pcts, width, label='Warning Violations %', color='orange', alpha=0.7)
+            ax4.bar(x + width/2, critical_pcts, width, label='Critical Violations %', color='red', alpha=0.7)
             
             ax4.set_xlabel('Device')
-            ax4.set_ylabel('违规百分比 (%)')
+            ax4.set_ylabel('Violation Percentage (%)')
             ax4.set_xticks(x)
             ax4.set_xticklabels([dev.replace('_avg_await', '') for dev in devices])
             ax4.legend()
             ax4.grid(True, alpha=0.3)
         else:
-            ax4.text(0.5, 0.5, '无阈值违规数据', ha='center', va='center', transform=ax4.transAxes)
+            ax4.text(0.5, 0.5, 'No Threshold Violation Data', ha='center', va='center', transform=ax4.transAxes)
         
         plt.tight_layout()
         
@@ -777,11 +775,11 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file, threshold_violations
 
     def create_util_threshold_analysis_chart(self):
-        """创建利用率阈值分析图表 - 优化版本
+        """Create utilization threshold analysis chart - optimized version
         
-        根据 ACCOUNTS Device配置状态动态调整分析内容：
-        - 如果 ACCOUNTS 未配置：只分析 DATA Device
-        - 如果 ACCOUNTS 已配置：分析 DATA 和 ACCOUNTS Device
+        Dynamically adjust analysis content based on ACCOUNTS Device configuration status:
+        - If ACCOUNTS not configured: only analyze DATA Device
+        - If ACCOUNTS configured: analyze DATA and ACCOUNTS Device
         """
         # 检查 ACCOUNTS Device配置状态
         accounts_configured = self._is_accounts_configured()
@@ -790,9 +788,9 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # 根据配置状态设置标题
         if accounts_configured:
-            fig.suptitle('Device Utilization阈值分析 - DATA & ACCOUNTS', fontsize=16, fontweight='bold')
+            fig.suptitle('Device Utilization Threshold Analysis - DATA & ACCOUNTS', fontsize=16, fontweight='bold')
         else:
-            fig.suptitle('Device Utilization阈值分析 - DATA', fontsize=16, fontweight='bold')
+            fig.suptitle('Device Utilization Threshold Analysis - DATA', fontsize=16, fontweight='bold')
         
         # 获取利用率相关列
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and '_util' in col]
@@ -800,7 +798,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # 利用率Time序列
         ax1 = axes[0, 0]
-        ax1.set_title('Device UtilizationTime序列')
+        ax1.set_title('Device Utilization Time Series')
         
         threshold_violations = {}
         
@@ -808,9 +806,9 @@ class PerformanceVisualizer(CSVDataProcessor):
         if data_util_cols:
             col = data_util_cols[0]
             ax1.plot(self.df['timestamp'], self.df[col], 
-                    label='DATA 利用率', linewidth=2)
+                    label='DATA Utilization', linewidth=2)
             
-            # 分析阈值违规
+            # Analyze threshold violations
             violations = self._analyze_threshold_violations(
                 self.df[col], self.util_thresholds, 'data_util'
             )
@@ -820,16 +818,16 @@ class PerformanceVisualizer(CSVDataProcessor):
         if accounts_configured and accounts_util_cols:
             col = accounts_util_cols[0]
             ax1.plot(self.df['timestamp'], self.df[col], 
-                    label='ACCOUNTS 利用率', linewidth=2)
+                    label='ACCOUNTS Utilization', linewidth=2)
             
-            # 分析阈值违规
+            # Analyze threshold violations
             violations = self._analyze_threshold_violations(
                 self.df[col], self.util_thresholds, 'accounts_util'
             )
             threshold_violations['accounts_util'] = violations
         elif not accounts_configured:
             # 添加说明文本
-            ax1.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax1.transAxes, 
+            ax1.text(0.02, 0.98, 'ACCOUNTS Device Not Configured', transform=ax1.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax1.axhline(y=self.util_thresholds['warning'], color='orange', 
@@ -842,21 +840,21 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # 利用率分布
         ax2 = axes[0, 1]
-        ax2.set_title('利用率分布')
+        ax2.set_title('Utilization Distribution')
         
         # 处理dataDevice分布
         if data_util_cols:
             col = data_util_cols[0]
             ax2.hist(self.df[col], bins=30, alpha=0.7, 
-                    label='DATA 利用率分布')
+                    label='DATA Utilization Distribution')
         
         # 只有在 ACCOUNTS 配置时才处理 ACCOUNTS 数据
         if accounts_configured and accounts_util_cols:
             col = accounts_util_cols[0]
             ax2.hist(self.df[col], bins=30, alpha=0.7, 
-                    label='ACCOUNTS 利用率分布')
+                    label='ACCOUNTS Utilization Distribution')
         elif not accounts_configured:
-            ax2.text(0.02, 0.98, 'ACCOUNTS Device未配置', transform=ax2.transAxes, 
+            ax2.text(0.02, 0.98, 'ACCOUNTS Device Not Configured', transform=ax2.transAxes, 
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax2.axvline(x=self.util_thresholds['warning'], color='orange', 
@@ -864,13 +862,13 @@ class PerformanceVisualizer(CSVDataProcessor):
         ax2.axvline(x=self.util_thresholds['critical'], color='red', 
                    linestyle='--', alpha=0.7)
         ax2.set_xlabel('Utilization (%)')
-        ax2.set_ylabel('频次')
+        ax2.set_ylabel('Frequency')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
         # 高利用率Time统计
         ax3 = axes[1, 0]
-        ax3.set_title('高利用率Time统计')
+        ax3.set_title('High Utilization Time Statistics')
         
         if threshold_violations:
             devices = list(threshold_violations.keys())
@@ -880,21 +878,21 @@ class PerformanceVisualizer(CSVDataProcessor):
             x = np.arange(len(devices))
             width = 0.35
             
-            ax3.bar(x - width/2, warning_times, width, label='警告次数', color='orange', alpha=0.7)
-            ax3.bar(x + width/2, critical_times, width, label='危险次数', color='red', alpha=0.7)
+            ax3.bar(x - width/2, warning_times, width, label='Warning Count', color='orange', alpha=0.7)
+            ax3.bar(x + width/2, critical_times, width, label='Critical Count', color='red', alpha=0.7)
             
             ax3.set_xlabel('Device')
-            ax3.set_ylabel('违规次数')
+            ax3.set_ylabel('Violation Count')
             ax3.set_xticks(x)
             ax3.set_xticklabels([dev.replace('_util', '') for dev in devices])
             ax3.legend()
             ax3.grid(True, alpha=0.3)
         else:
-            ax3.text(0.5, 0.5, '无高利用率违规', ha='center', va='center', transform=ax3.transAxes)
+            ax3.text(0.5, 0.5, 'No High Utilization Violations', ha='center', va='center', transform=ax3.transAxes)
         
         # 阈值违规百分比
         ax4 = axes[1, 1]
-        ax4.set_title('阈值违规百分比')
+        ax4.set_title('Threshold Violation Percentage')
         
         if threshold_violations:
             devices = list(threshold_violations.keys())
@@ -904,17 +902,17 @@ class PerformanceVisualizer(CSVDataProcessor):
             x = np.arange(len(devices))
             width = 0.35
             
-            ax4.bar(x - width/2, warning_pcts, width, label='警告违规%', color='orange', alpha=0.7)
-            ax4.bar(x + width/2, critical_pcts, width, label='危险违规%', color='red', alpha=0.7)
+            ax4.bar(x - width/2, warning_pcts, width, label='Warning Violations %', color='orange', alpha=0.7)
+            ax4.bar(x + width/2, critical_pcts, width, label='Critical Violations %', color='red', alpha=0.7)
             
             ax4.set_xlabel('Device')
-            ax4.set_ylabel('违规百分比 (%)')
+            ax4.set_ylabel('Violation Percentage (%)')
             ax4.set_xticks(x)
             ax4.set_xticklabels([dev.replace('_util', '') for dev in devices])
             ax4.legend()
             ax4.grid(True, alpha=0.3)
         else:
-            ax4.text(0.5, 0.5, '无阈值违规数据', ha='center', va='center', transform=ax4.transAxes)
+            ax4.text(0.5, 0.5, 'No Threshold Violation Data', ha='center', va='center', transform=ax4.transAxes)
         
         plt.tight_layout()
         
@@ -925,7 +923,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file, threshold_violations
 
     def create_monitoring_overhead_analysis_chart(self):
-        """创建监控开销分析图表"""
+        """Create monitoring overhead analysis chart"""
         if not self.overhead_file or not os.path.exists(self.overhead_file):
             print("⚠️ Monitoring overhead data file does not exist, skipping overhead analysis chart")
             return None, {}
@@ -939,14 +937,14 @@ class PerformanceVisualizer(CSVDataProcessor):
             return None, {}
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('监控开销分析', fontsize=16, fontweight='bold')
+        fig.suptitle('Monitoring Overhead Analysis', fontsize=16, fontweight='bold')
         
-        # 1. 资源消耗对比 (总资源 vs 节点资源 vs 监控开销)
+        # 1. Resource consumption comparison (total resources vs node resources vs monitoring overhead)
         ax1 = axes[0, 0]
-        ax1.set_title('系统资源消耗对比')
+        ax1.set_title('System Resource Consumption Comparison')
         
         if all(col in self.df.columns for col in ['cpu_usage', 'mem_usage']):
-            # 计算平均资源使用
+            # Calculate average resource usage
             total_cpu = self.df['cpu_usage'].mean()
             total_mem = self.df['mem_usage'].mean()
             
@@ -965,36 +963,36 @@ class PerformanceVisualizer(CSVDataProcessor):
                 x = np.arange(len(categories))
                 width = 0.25
                 
-                ax1.bar(x - width, total_values, width, label='总系统资源', alpha=0.8)
-                ax1.bar(x, node_values, width, label='区块链节点', alpha=0.8)
-                ax1.bar(x + width, monitor_values, width, label='监控开销', alpha=0.8)
+                ax1.bar(x - width, total_values, width, label='Total System Resources', alpha=0.8)
+                ax1.bar(x, node_values, width, label='Blockchain Node', alpha=0.8)
+                ax1.bar(x + width, monitor_values, width, label='Monitoring Overhead', alpha=0.8)
                 
                 ax1.set_xticks(x)
                 ax1.set_xticklabels(categories)
                 ax1.legend()
                 ax1.grid(True, alpha=0.3)
         
-        # 2. 监控开销趋势
+        # 2. Monitoring overhead trends
         ax2 = axes[0, 1]
-        ax2.set_title('监控开销Time趋势')
+        ax2.set_title('Monitoring Overhead Time Trends')
         
         if 'timestamp' in overhead_df.columns and 'monitoring_cpu_percent' in overhead_df.columns:
             ax2.plot(overhead_df['timestamp'], overhead_df['monitoring_cpu_percent'], 
-                    label='CPU开销', linewidth=2)
+                    label='CPU Overhead', linewidth=2)
             if 'monitoring_mem_percent' in overhead_df.columns:
                 ax2_mem = ax2.twinx()
                 ax2_mem.plot(overhead_df['timestamp'], overhead_df['monitoring_mem_percent'], 
-                           'r-', label='内存开销', linewidth=2)
-                ax2_mem.set_ylabel('内存开销 (%)', color='r')
+                           'r-', label='Memory Overhead', linewidth=2)
+                ax2_mem.set_ylabel('Memory Overhead (%)', color='r')
                 ax2_mem.tick_params(axis='y', labelcolor='r')
             
-            ax2.set_ylabel('CPU开销 (%)')
+            ax2.set_ylabel('CPU Overhead (%)')
             ax2.legend(loc='upper left')
             ax2.grid(True, alpha=0.3)
         
-        # 3. 监控进程资源分布
+        # 3. Monitoring process resource distribution
         ax3 = axes[1, 0]
-        ax3.set_title('监控进程资源分布')
+        ax3.set_title('Monitoring Process Resource Distribution')
         
         # 如果有进程级别的数据
         process_cols = [col for col in overhead_df.columns if col.startswith('process_')]
@@ -1011,26 +1009,26 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # 4. 监控开销统计摘要
         ax4 = axes[1, 1]
-        ax4.set_title('监控开销统计摘要')
+        ax4.set_title('Monitoring Overhead Statistics Summary')
         ax4.axis('off')
         
         if all(col in overhead_df.columns for col in ['monitoring_cpu_percent', 'monitoring_mem_percent']):
             stats_text = f"""
-监控开销统计:
+Monitoring Overhead Statistics:
 
-CPU开销:
-  平均: {overhead_df['monitoring_cpu_percent'].mean():.2f}%
-  最大: {overhead_df['monitoring_cpu_percent'].max():.2f}%
-  最小: {overhead_df['monitoring_cpu_percent'].min():.2f}%
+CPU Overhead:
+  Average: {overhead_df['monitoring_cpu_percent'].mean():.2f}%
+  Maximum: {overhead_df['monitoring_cpu_percent'].max():.2f}%
+  Minimum: {overhead_df['monitoring_cpu_percent'].min():.2f}%
 
-内存开销:
-  平均: {overhead_df['monitoring_mem_percent'].mean():.2f}%
-  最大: {overhead_df['monitoring_mem_percent'].max():.2f}%
-  最小: {overhead_df['monitoring_mem_percent'].min():.2f}%
+Memory Overhead:
+  Average: {overhead_df['monitoring_mem_percent'].mean():.2f}%
+  Maximum: {overhead_df['monitoring_mem_percent'].max():.2f}%
+  Minimum: {overhead_df['monitoring_mem_percent'].min():.2f}%
 
-监控效率:
-  数据点数: {len(overhead_df)}
-  监控时长: {(overhead_df['timestamp'].max() - overhead_df['timestamp'].min()).total_seconds():.0f}秒
+Monitoring Efficiency:
+  Data points: {len(overhead_df)}
+  Monitoring duration: {(overhead_df['timestamp'].max() - overhead_df['timestamp'].min()).total_seconds():.0f}s
             """
             ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=10,
                     verticalalignment='top', fontfamily='monospace')
@@ -1041,7 +1039,7 @@ CPU开销:
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         print(f"📊 Monitoring overhead analysis chart saved: {output_file}")
         
-        # 返回开销分析结果
+        # Return overhead analysis results
         overhead_analysis = {}
         if all(col in overhead_df.columns for col in ['monitoring_cpu_percent', 'monitoring_mem_percent']):
             overhead_analysis = {
@@ -1064,14 +1062,14 @@ CPU开销:
         threshold_analysis_results = {}
         
         try:
-            # 使用高级图表生成器
+            # Use advanced chart generator
             if ADVANCED_TOOLS_AVAILABLE and self.chart_generator is not None:
                 print("🎨 Using advanced chart generator...")
                 advanced_charts = self.chart_generator.generate_all_charts()
                 if advanced_charts:
                     chart_files.extend(advanced_charts)
             
-            # 生成传统图表作为补充
+            # Generate traditional charts as supplement
             overview_chart = self.create_performance_overview_chart()
             if overview_chart:
                 chart_files.append(overview_chart)
@@ -1084,12 +1082,12 @@ CPU开销:
             if comparison_chart:
                 chart_files.append(comparison_chart)
             
-            # 新增: 移动平均趋势图表
+            # New: Moving average trend charts
             smoothed_chart = self.create_smoothed_trend_chart()
             if smoothed_chart:
                 chart_files.append(smoothed_chart)
             
-            # 生成阈值分析图表 - 集成自await_util_analyzer
+            # Generate threshold analysis charts - integrated from await_util_analyzer
             print("📊 Generating threshold analysis charts...")
             
             await_chart, await_violations = self.create_await_threshold_analysis_chart()
@@ -1097,19 +1095,19 @@ CPU开销:
                 chart_files.append(await_chart)
                 threshold_analysis_results['await_violations'] = await_violations
             
-            # 生成QPS趋势分析图表
+            # Generate QPS trend analysis charts
             print("📊 Generating QPS trend analysis charts...")
             qps_trend_chart = self.create_qps_trend_analysis_chart()
             if qps_trend_chart:
                 chart_files.append(qps_trend_chart)
             
-            # 生成资源效率分析图表
+            # Generate resource efficiency analysis charts
             print("📊 Generating resource efficiency analysis charts...")
             efficiency_chart = self.create_resource_efficiency_analysis_chart()
             if efficiency_chart:
                 chart_files.append(efficiency_chart)
             
-            # 生成瓶颈识别分析图表
+            # Generate bottleneck identification analysis charts
             print("📊 Generating bottleneck identification analysis charts...")
             bottleneck_chart = self.create_bottleneck_identification_chart()
             if bottleneck_chart:
@@ -1120,7 +1118,7 @@ CPU开销:
                 chart_files.append(util_chart)
                 threshold_analysis_results['util_violations'] = util_violations
             
-            # 生成监控开销分析图表
+            # Generate monitoring overhead analysis charts
             print("📊 Generating monitoring overhead analysis charts...")
             
             overhead_chart, overhead_analysis = self.create_monitoring_overhead_analysis_chart()
@@ -1128,7 +1126,7 @@ CPU开销:
                 chart_files.append(overhead_chart)
                 threshold_analysis_results['overhead_analysis'] = overhead_analysis
             
-            # 打印阈值分析摘要
+            # Print threshold analysis summary
             self._print_threshold_analysis_summary(threshold_analysis_results)
             
             print(f"✅ Generated {len(chart_files)} charts")
@@ -1163,150 +1161,150 @@ CPU开销:
                 print(f"    Warning violations: {violations['warning_violations']}/{violations['total_points']} ({violations['warning_percentage']:.1f}%)")
                 print(f"    Critical violations: {violations['critical_violations']}/{violations['total_points']} ({violations['critical_percentage']:.1f}%)")
         
-        # 新增：详细的监控开销分析摘要
+        # New: Detailed monitoring overhead analysis summary
         if 'overhead_analysis' in results:
             print("\n💻 Monitoring Overhead Detailed Analysis:")
             overhead = results['overhead_analysis']
             print(f"  CPU Overhead:")
-            print(f"    平均开销: {overhead.get('avg_cpu_overhead', 0):.2f}%")
-            print(f"    峰值开销: {overhead.get('max_cpu_overhead', 0):.2f}%")
-            print(f"  内存开销:")
-            print(f"    平均开销: {overhead.get('avg_mem_overhead', 0):.2f}%")
-            print(f"    峰值开销: {overhead.get('max_mem_overhead', 0):.2f}%")
-            print(f"  监控效率:")
-            print(f"    数据点数: {overhead.get('total_data_points', 0)}")
+            print(f"    Average Overhead: {overhead.get('avg_cpu_overhead', 0):.2f}%")
+            print(f"    Peak Overhead: {overhead.get('max_cpu_overhead', 0):.2f}%")
+            print(f"  Memory Overhead:")
+            print(f"    Average Overhead: {overhead.get('avg_mem_overhead', 0):.2f}%")
+            print(f"    Peak Overhead: {overhead.get('max_mem_overhead', 0):.2f}%")
+            print(f"  Monitoring efficiency:")
+            print(f"    Data Points: {overhead.get('total_data_points', 0)}")
             
-            # 计算资源效率比
+            # Calculate resource efficiency ratio
             if self.df is not None and len(self.df) > 0:
                 if 'cpu_usage' in self.df.columns:
                     total_cpu = self.df['cpu_usage'].mean()
                     overhead_cpu = overhead.get('avg_cpu_overhead', 0)
                     if total_cpu > 0:
                         cpu_efficiency = (1 - overhead_cpu / total_cpu) * 100
-                        print(f"    CPU效率: {cpu_efficiency:.1f}% (节点实际使用)")
+                        print(f"    CPU efficiency: {cpu_efficiency:.1f}% (actual node usage)")
                 
                 if 'mem_usage' in self.df.columns:
                     total_mem = self.df['mem_usage'].mean()
                     overhead_mem = overhead.get('avg_mem_overhead', 0)
                     if total_mem > 0:
                         mem_efficiency = (1 - overhead_mem / total_mem) * 100
-                        print(f"    内存效率: {mem_efficiency:.1f}% (节点实际使用)")
+                        print(f"    Memory efficiency: {mem_efficiency:.1f}% (actual node usage)")
         
         print("=" * 60)
 
     def create_smoothed_trend_chart(self):
         """
-        生成移动平均平滑趋势图表
-        显示原始数据和平滑后的趋势线对比
+        Generate moving average smoothed trend charts
+        Display comparison between original data and smoothed trend lines
         """
-        print("📈 生成移动平均趋势图表...")
+        print("📈 Generating moving average trend charts...")
         
         try:
             fig, axes = plt.subplots(2, 2, figsize=(18, 12))
-            fig.suptitle('性能指标移动平均趋势分析', fontsize=16, fontweight='bold')
+            fig.suptitle('Performance Metrics Moving Average Trend Analysis', fontsize=16, fontweight='bold')
             
-            # 移动平均窗口大小
+            # Moving average window size
             window_size = min(10, len(self.df) // 10)  # 自适应窗口大小
             if window_size < 3:
                 window_size = 3
             
-            # 1. CPU Usage趋势
+            # 1. CPU Usage trends
             ax1 = axes[0, 0]
             ax1.plot(self.df['timestamp'], self.df['cpu_usage'], 
-                    color='lightblue', linewidth=1, alpha=0.5, label='CPU Usage(原始)')
+                    color='lightblue', linewidth=1, alpha=0.5, label='CPU Usage (Raw)')
             
             cpu_smooth = self.df['cpu_usage'].rolling(window=window_size, center=True).mean()
             ax1.plot(self.df['timestamp'], cpu_smooth, 
-                    color='blue', linewidth=2, label=f'CPU Usage({window_size}点平滑)')
+                    color='blue', linewidth=2, label=f'CPU Usage({window_size}-point smoothed)')
             
-            ax1.set_title('CPU Usage趋势')
+            ax1.set_title('CPU Usage Trends')
             ax1.set_ylabel('Usage (%)')
             ax1.legend()
             ax1.grid(True, alpha=0.3)
             
-            # 2. Memory Usage趋势
+            # 2. Memory Usage trends
             ax2 = axes[0, 1]
             ax2.plot(self.df['timestamp'], self.df['mem_usage'], 
-                    color='lightcoral', linewidth=1, alpha=0.5, label='Memory Usage(原始)')
+                    color='lightcoral', linewidth=1, alpha=0.5, label='Memory Usage (Raw)')
             
             mem_smooth = self.df['mem_usage'].rolling(window=window_size, center=True).mean()
             ax2.plot(self.df['timestamp'], mem_smooth, 
-                    color='red', linewidth=2, label=f'Memory Usage({window_size}点平滑)')
+                    color='red', linewidth=2, label=f'Memory Usage({window_size}-point smoothed)')
             
-            ax2.set_title('Memory Usage趋势')
+            ax2.set_title('Memory Usage Trends')
             ax2.set_ylabel('Usage (%)')
             ax2.legend()
             ax2.grid(True, alpha=0.3)
             
-            # 3. EBSLatency趋势
+            # 3. EBS Latency trends
             data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
             if data_await_cols:
                 ax3 = axes[1, 0]
                 await_col = data_await_cols[0]
                 
                 ax3.plot(self.df['timestamp'], self.df[await_col], 
-                        color='lightgreen', linewidth=1, alpha=0.5, label='EBSLatency(原始)')
+                        color='lightgreen', linewidth=1, alpha=0.5, label='EBS Latency (Raw)')
                 
                 await_smooth = self.df[await_col].rolling(window=window_size, center=True).mean()
                 ax3.plot(self.df['timestamp'], await_smooth, 
-                        color='green', linewidth=2, label=f'EBSLatency({window_size}点平滑)')
+                        color='green', linewidth=2, label=f'EBS Latency({window_size}-point smoothed)')
                 
-                ax3.set_title('EBSLatency趋势')
+                ax3.set_title('EBS Latency Trends')
                 ax3.set_ylabel('Latency (ms)')
                 ax3.legend()
                 ax3.grid(True, alpha=0.3)
             else:
-                axes[1, 0].text(0.5, 0.5, '未找到EBSLatency数据', ha='center', va='center', transform=axes[1, 0].transAxes)
-                axes[1, 0].set_title('EBSLatency趋势 (无数据)')
+                axes[1, 0].text(0.5, 0.5, 'EBS Latency data not found', ha='center', va='center', transform=axes[1, 0].transAxes)
+                axes[1, 0].set_title('EBS Latency Trends (No Data)')
             
-            # 4. 网络带宽趋势
+            # 4. Network bandwidth trends
             if 'net_rx_mbps' in self.df.columns:
                 ax4 = axes[1, 1]
                 ax4.plot(self.df['timestamp'], self.df['net_rx_mbps'], 
-                        color='lightcoral', linewidth=1, alpha=0.5, label='网络接收(原始)')
+                        color='lightcoral', linewidth=1, alpha=0.5, label='Network RX (Raw)')
                 
                 net_smooth = self.df['net_rx_mbps'].rolling(window=window_size, center=True).mean()
                 ax4.plot(self.df['timestamp'], net_smooth, 
-                        color='orange', linewidth=2, label=f'网络接收({window_size}点平滑)')
+                        color='orange', linewidth=2, label=f'Network RX({window_size}-point smoothed)')
                 
-                ax4.set_title('网络带宽趋势')
-                ax4.set_ylabel('带宽 (Mbps)')
+                ax4.set_title('Network Bandwidth Trends')
+                ax4.set_ylabel('Bandwidth (Mbps)')
                 ax4.legend()
                 ax4.grid(True, alpha=0.3)
             else:
-                axes[1, 1].text(0.5, 0.5, '未找到网络带宽数据', ha='center', va='center', transform=axes[1, 1].transAxes)
-                axes[1, 1].set_title('网络带宽趋势 (无数据)')
+                axes[1, 1].text(0.5, 0.5, 'Network bandwidth data not found', ha='center', va='center', transform=axes[1, 1].transAxes)
+                axes[1, 1].set_title('Network Bandwidth Trends (No Data)')
             
-            # 格式化Time轴
+            # Format time axis
             for ax in axes.flat:
                 ax.tick_params(axis='x', rotation=45)
             
             plt.tight_layout()
             
-            # 保存图表
+            # Save chart
             output_file = os.path.join(self.output_dir, 'smoothed_trend_analysis.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"  ✅ 移动平均趋势图: {os.path.basename(output_file)}")
+            print(f"  ✅ Moving average trend chart: {os.path.basename(output_file)}")
             return output_file
             
         except Exception as e:
-            print(f"❌ 移动平均趋势图生成失败: {e}")
+            print(f"❌ Moving average trend chart generation failed: {e}")
             return None
 
     def create_qps_trend_analysis_chart(self):
-        """QPS趋势分析图"""
-        print("📊 生成QPS趋势分析图表...")
+        """QPS trend analysis chart"""
+        print("📊 Generating QPS trend analysis charts...")
         
         try:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle('QPS性能趋势分析', fontsize=16, fontweight='bold')
+            fig.suptitle('QPS Performance Trend Analysis', fontsize=16, fontweight='bold')
             
             # 查找QPS相关字段
             qps_cols = [col for col in self.df.columns if 'qps' in col.lower()]
             if not qps_cols:
-                print("⚠️  未找到QPS相关字段")
+                print("⚠️  QPS related fields not found")
                 plt.close()
                 return None
             
@@ -1314,7 +1312,7 @@ CPU开销:
             ax1 = axes[0, 0]
             for qps_col in qps_cols[:3]:  # 最多显示3个QPS指标
                 ax1.plot(self.df['timestamp'], self.df[qps_col], label=qps_col, linewidth=2)
-            ax1.set_title('QPSTime序列')
+            ax1.set_title('QPS Time Series')
             ax1.set_ylabel('QPS')
             ax1.legend()
             ax1.grid(True, alpha=0.3)
@@ -1323,9 +1321,9 @@ CPU开销:
             ax2 = axes[0, 1]
             for qps_col in qps_cols[:2]:
                 ax2.hist(self.df[qps_col].dropna(), alpha=0.7, label=qps_col, bins=30)
-            ax2.set_title('QPS分布')
+            ax2.set_title('QPS Distribution')
             ax2.set_xlabel('QPS')
-            ax2.set_ylabel('频次')
+            ax2.set_ylabel('Frequency')
             ax2.legend()
             
             # 3. QPS与CPU相关性
@@ -1340,43 +1338,43 @@ CPU开销:
             # 4. QPS统计摘要
             ax4 = axes[1, 1]
             ax4.axis('off')
-            stats_text = "QPS统计摘要:\n\n"
+            stats_text = "QPS Statistics Summary:\n\n"
             for qps_col in qps_cols[:3]:
                 qps_data = self.df[qps_col].dropna()
                 if len(qps_data) > 0:
                     stats_text += f"{qps_col}:\n"
-                    stats_text += f"  平均: {qps_data.mean():.2f}\n"
-                    stats_text += f"  最大: {qps_data.max():.2f}\n"
-                    stats_text += f"  最小: {qps_data.min():.2f}\n\n"
+                    stats_text += f"  Average: {qps_data.mean():.2f}\n"
+                    stats_text += f"  Maximum: {qps_data.max():.2f}\n"
+                    stats_text += f"  Minimum: {qps_data.min():.2f}\n\n"
             ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=10, verticalalignment='top')
             
             plt.tight_layout()
             
-            # 保存图表
+            # Save chart
             output_file = os.path.join(self.output_dir, 'qps_trend_analysis.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"  ✅ QPS趋势分析图: {os.path.basename(output_file)}")
+            print(f"  ✅ QPS trend analysis chart: {os.path.basename(output_file)}")
             return output_file
             
         except Exception as e:
-            print(f"❌ QPS趋势分析图生成失败: {e}")
+            print(f"❌ QPS trend analysis chart generation failed: {e}")
             return None
 
     def create_resource_efficiency_analysis_chart(self):
-        """资源效率分析图"""
-        print("📊 生成资源效率分析图表...")
+        """Resource efficiency analysis chart"""
+        print("📊 Generating resource efficiency analysis charts...")
         
         try:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle('资源效率分析', fontsize=16, fontweight='bold')
+            fig.suptitle('Resource Efficiency Analysis', fontsize=16, fontweight='bold')
             
-            # 1. CPU效率分析
+            # 1. CPU efficiency analysis
             ax1 = axes[0, 0]
             if 'cpu_usage' in self.df.columns:
                 cpu_data = self.df['cpu_usage'].dropna()
-                efficiency_ranges = ['低效(<30%)', '一般(30-60%)', '高效(60-85%)', '过载(>85%)']
+                efficiency_ranges = ['Low(<30%)', 'Normal(30-60%)', 'High(60-85%)', 'Overload(>85%)']
                 efficiency_counts = [
                     len(cpu_data[cpu_data < 30]),
                     len(cpu_data[(cpu_data >= 30) & (cpu_data < 60)]),
@@ -1384,13 +1382,13 @@ CPU开销:
                     len(cpu_data[cpu_data >= 85])
                 ]
                 ax1.pie(efficiency_counts, labels=efficiency_ranges, autopct='%1.1f%%')
-                ax1.set_title('CPU效率分布')
+                ax1.set_title('CPU Efficiency Distribution')
             
-            # 2. 内存效率分析
+            # 2. Memory efficiency analysis
             ax2 = axes[0, 1]
             if 'mem_usage' in self.df.columns:
                 mem_data = self.df['mem_usage'].dropna()
-                mem_ranges = ['低效(<40%)', '一般(40-70%)', '高效(70-90%)', '过载(>90%)']
+                mem_ranges = ['Low(<40%)', 'Normal(40-70%)', 'High(70-90%)', 'Overload(>90%)']
                 mem_counts = [
                     len(mem_data[mem_data < 40]),
                     len(mem_data[(mem_data >= 40) & (mem_data < 70)]),
@@ -1398,34 +1396,34 @@ CPU开销:
                     len(mem_data[mem_data >= 90])
                 ]
                 ax2.pie(mem_counts, labels=mem_ranges, autopct='%1.1f%%')
-                ax2.set_title('内存效率分布')
+                ax2.set_title('Memory Efficiency Distribution')
             
-            # 3. I/O效率分析
+            # 3. I/O efficiency analysis
             ax3 = axes[1, 0]
             data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
             if data_util_cols:
                 util_col = data_util_cols[0]
                 util_data = self.df[util_col].dropna()
                 ax3.hist(util_data, bins=20, alpha=0.7, color='green')
-                ax3.axvline(util_data.mean(), color='red', linestyle='--', label=f'平均: {util_data.mean():.1f}%')
-                ax3.set_title('I/O利用率分布')
+                ax3.axvline(util_data.mean(), color='red', linestyle='--', label=f'Average: {util_data.mean():.1f}%')
+                ax3.set_title('I/O Utilization Distribution')
                 ax3.set_xlabel('Utilization (%)')
-                ax3.set_ylabel('频次')
+                ax3.set_ylabel('Frequency')
                 ax3.legend()
             
-            # 4. 效率统计摘要
+            # 4. Efficiency statistics summary
             ax4 = axes[1, 1]
             ax4.axis('off')
-            stats_text = "效率统计摘要:\n\n"
+            stats_text = "Efficiency Statistics Summary:\n\n"
             if 'cpu_usage' in self.df.columns:
                 cpu_avg = self.df['cpu_usage'].mean()
-                stats_text += f"CPU平均利用率: {cpu_avg:.1f}%\n"
+                stats_text += f"CPU Average Utilization: {cpu_avg:.1f}%\n"
             if 'mem_usage' in self.df.columns:
                 mem_avg = self.df['mem_usage'].mean()
-                stats_text += f"内存平均利用率: {mem_avg:.1f}%\n"
+                stats_text += f"Memory Average Utilization: {mem_avg:.1f}%\n"
             if data_util_cols:
                 io_avg = self.df[data_util_cols[0]].mean()
-                stats_text += f"I/O平均利用率: {io_avg:.1f}%\n"
+                stats_text += f"I/O Average Utilization: {io_avg:.1f}%\n"
             ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=12, verticalalignment='top')
             
             plt.tight_layout()
@@ -1435,57 +1433,57 @@ CPU开销:
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"  ✅ 资源效率分析图: {os.path.basename(output_file)}")
+            print(f"  ✅ Resource efficiency analysis chart: {os.path.basename(output_file)}")
             return output_file
             
         except Exception as e:
-            print(f"❌ 资源效率分析图生成失败: {e}")
+            print(f"❌ Resource efficiency analysis chart generation failed: {e}")
             return None
 
     def create_bottleneck_identification_chart(self):
-        """瓶颈识别分析图"""
-        print("📊 生成瓶颈识别分析图表...")
+        """Bottleneck identification analysis chart"""
+        print("📊 Generating bottleneck identification analysis charts...")
         
         try:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle('系统瓶颈识别分析', fontsize=16, fontweight='bold')
+            fig.suptitle('System Bottleneck Identification Analysis', fontsize=16, fontweight='bold')
             
-            # 1. 瓶颈Time序列
+            # 1. Bottleneck time series
             ax1 = axes[0, 0]
             bottleneck_data = []
             
             if 'cpu_usage' in self.df.columns:
                 cpu_bottleneck = (self.df['cpu_usage'] > 85).astype(int)
-                ax1.plot(self.df['timestamp'], cpu_bottleneck, label='CPU瓶颈(>85%)', linewidth=2)
+                ax1.plot(self.df['timestamp'], cpu_bottleneck, label='CPU Bottleneck(>85%)', linewidth=2)
                 bottleneck_data.append(('CPU', cpu_bottleneck.sum()))
             
             if 'mem_usage' in self.df.columns:
                 mem_bottleneck = (self.df['mem_usage'] > 90).astype(int)
-                ax1.plot(self.df['timestamp'], mem_bottleneck, label='内存瓶颈(>90%)', linewidth=2)
-                bottleneck_data.append(('内存', mem_bottleneck.sum()))
+                ax1.plot(self.df['timestamp'], mem_bottleneck, label='Memory Bottleneck(>90%)', linewidth=2)
+                bottleneck_data.append(('Memory', mem_bottleneck.sum()))
             
             data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
             if data_util_cols:
                 io_bottleneck = (self.df[data_util_cols[0]] > 80).astype(int)
-                ax1.plot(self.df['timestamp'], io_bottleneck, label='I/O瓶颈(>80%)', linewidth=2)
+                ax1.plot(self.df['timestamp'], io_bottleneck, label='I/O Bottleneck(>80%)', linewidth=2)
                 bottleneck_data.append(('I/O', io_bottleneck.sum()))
             
-            ax1.set_title('瓶颈Time序列')
-            ax1.set_ylabel('瓶颈状态')
+            ax1.set_title('Bottleneck Time Series')
+            ax1.set_ylabel('Bottleneck Status')
             ax1.legend()
             ax1.grid(True, alpha=0.3)
             
-            # 2. 瓶颈频次统计
+            # 2. Bottleneck frequency statistics
             ax2 = axes[0, 1]
             if bottleneck_data:
                 resources, counts = zip(*bottleneck_data)
                 ax2.bar(resources, counts, color=['red', 'orange', 'yellow'])
-                ax2.set_title('瓶颈频次统计')
-                ax2.set_ylabel('瓶颈次数')
+                ax2.set_title('Bottleneck Frequency Statistics')
+                ax2.set_ylabel('Bottleneck Count')
                 for i, count in enumerate(counts):
                     ax2.text(i, count + max(counts) * 0.01, str(count), ha='center')
             
-            # 3. 资源使用率热力图
+            # 3. Resource utilization heatmap
             ax3 = axes[1, 0]
             resource_cols = []
             if 'cpu_usage' in self.df.columns:
@@ -1499,22 +1497,22 @@ CPU开销:
                 resource_data = self.df[resource_cols].dropna()
                 if len(resource_data) > 0:
                     im = ax3.imshow(resource_data.T, aspect='auto', cmap='RdYlBu_r')
-                    ax3.set_title('资源使用率热力图')
+                    ax3.set_title('Resource Utilization Heatmap')
                     ax3.set_yticks(range(len(resource_cols)))
                     ax3.set_yticklabels(resource_cols)
                     plt.colorbar(im, ax=ax3)
             
-            # 4. 瓶颈分析摘要
+            # 4. Bottleneck analysis summary
             ax4 = axes[1, 1]
             ax4.axis('off')
-            summary_text = "瓶颈分析摘要:\n\n"
+            summary_text = "Bottleneck Analysis Summary:\n\n"
             total_points = len(self.df)
             
             for resource, count in bottleneck_data:
                 percentage = (count / total_points) * 100 if total_points > 0 else 0
-                summary_text += f"{resource}瓶颈:\n"
-                summary_text += f"  发生次数: {count}\n"
-                summary_text += f"  占比: {percentage:.1f}%\n\n"
+                summary_text += f"{resource} Bottleneck:\n"
+                summary_text += f"  Occurrences: {count}\n"
+                summary_text += f"  Percentage: {percentage:.1f}%\n\n"
             
             ax4.text(0.1, 0.9, summary_text, transform=ax4.transAxes, fontsize=10, verticalalignment='top')
             
@@ -1525,21 +1523,21 @@ CPU开销:
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"  ✅ 瓶颈识别分析图: {os.path.basename(output_file)}")
+            print(f"  ✅ Bottleneck identification analysis chart: {os.path.basename(output_file)}")
             return output_file
             
         except Exception as e:
-            print(f"❌ 瓶颈识别分析图生成失败: {e}")
+            print(f"❌ Bottleneck identification analysis chart generation failed: {e}")
             return None
 
 def main():
-    parser = argparse.ArgumentParser(description='性能可视化器')
-    parser.add_argument('data_file', help='系统性能监控CSV文件')
+    parser = argparse.ArgumentParser(description='Performance Visualizer')
+    parser.add_argument('data_file', help='System performance monitoring CSV file')
     
     args = parser.parse_args()
     
     if not os.path.exists(args.data_file):
-        print(f"❌ 数据文件不存在: {args.data_file}")
+        print(f"❌ Data file does not exist: {args.data_file}")
         return 1
     
     visualizer = PerformanceVisualizer(args.data_file)
@@ -1547,10 +1545,10 @@ def main():
     result = visualizer.generate_all_charts()
     
     if result:
-        print("🎉 性能可视化完成!")
+        print("🎉 Performance visualization completed!")
         return 0
     else:
-        print("❌ 性能可视化失败")
+        print("❌ Performance visualization failed")
         return 1
 
 if __name__ == "__main__":

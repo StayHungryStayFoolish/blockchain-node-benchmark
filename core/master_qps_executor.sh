@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # =====================================================================
-# Solana QPS 测试框架主控制器 - 纯QPS测试引擎
+# Blockchain Node QPS 测试框架主控制器 - 纯QPS测试引擎
 # Master QPS Executor - Core QPS Testing Engine Only
 # =====================================================================
 
 # 加载共享函数和配置
 QPS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${QPS_SCRIPT_DIR}/common_functions.sh"
-source "${QPS_SCRIPT_DIR}/../config/config.sh"
+source "${QPS_SCRIPT_DIR}/../config/config_loader.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # 初始化统一日志管理器
@@ -21,18 +21,18 @@ setup_error_handling "$(basename "${BASH_SOURCE[0]}")" "QPS测试引擎"
 log_script_start "$(basename "$0")"
 
 # 全局变量
-readonly PROGRAM_NAME="Solana QPS 基准测试引擎"
+readonly PROGRAM_NAME="Blockchain Node QPS 基准测试引擎"
 readonly VERSION="v2.1"
 readonly BENCHMARK_MODES=("quick" "standard" "intensive")
 readonly RPC_MODES=("single" "mixed")
 
-# 基准测试参数 - 直接使用config.sh中的配置值
-# 注意: 所有默认值都来自config.sh，确保配置一致性
+# 基准测试参数 - 直接使用user_config.sh中的配置值
+# 注意: 所有默认值都来自user_config.sh，确保配置一致性
 BENCHMARK_MODE=""
 RPC_MODE="single"
-INITIAL_QPS=$QUICK_INITIAL_QPS    # 来自config.sh: QUICK_INITIAL_QPS=1000
-MAX_QPS=$QUICK_MAX_QPS           # 来自config.sh: QUICK_MAX_QPS=3000
-STEP_QPS=$QUICK_QPS_STEP         # 来自config.sh: QUICK_QPS_STEP=500
+INITIAL_QPS=$QUICK_INITIAL_QPS    # 来自user_config.sh: QUICK_INITIAL_QPS=1000
+MAX_QPS=$QUICK_MAX_QPS           # 来自user_config.sh: QUICK_MAX_QPS=3000
+STEP_QPS=$QUICK_QPS_STEP         # 来自user_config.sh: QUICK_QPS_STEP=500
 DURATION=""
 CUSTOM_PARAMS=false
 
@@ -50,9 +50,9 @@ show_help() {
     $0 [测试模式] [RPC模式] [自定义参数]
 
 🎯 基准测试模式:
-    --quick     快速基准测试 (7分钟)
-    --standard  标准基准测试 (15分钟)  
-    --intensive 深度基准测试 (2小时，自动瓶颈检测)
+    --quick     快速基准测试
+    --standard  标准基准测试
+    --intensive 深度基准测试 (自动瓶颈检测)
 
 🔗 RPC模式:
     --single    单一RPC方法测试 (默认: getAccountInfo)

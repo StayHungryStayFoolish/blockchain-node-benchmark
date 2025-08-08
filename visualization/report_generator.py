@@ -16,7 +16,7 @@ import numpy as np
 from scipy.stats import pearsonr
 
 class ReportGenerator:
-    def __init__(self, performance_csv, config_file='config.sh', overhead_csv=None, bottleneck_info=None):
+    def __init__(self, performance_csv, config_file='config_loader.sh', overhead_csv=None, bottleneck_info=None):
         self.performance_csv = performance_csv
         self.config_file = config_file
         self.overhead_csv = overhead_csv  # 新增：支持监控开销CSV
@@ -123,9 +123,8 @@ class ReportGenerator:
         """生成HTML报告 - 使用安全的字段访问"""
         try:
             df = pd.read_csv(self.performance_csv)
-            ec2_info = self._get_ec2_info()
             
-            html_content = self._generate_html_content(df, ec2_info)
+            html_content = self._generate_html_content(df)
             
             output_file = os.path.join(self.output_dir, f'performance_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.html')
             with open(output_file, 'w', encoding='utf-8') as f:
@@ -137,22 +136,7 @@ class ReportGenerator:
         except Exception as e:
             print(f"❌ HTML报告生成失败: {e}")
             return None
-    
 
-    
-    def _get_ec2_info(self):
-        try:
-            result = subprocess.run(['./ec2_info_collector.sh'], 
-                                  capture_output=True, text=True, cwd='.')
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')
-                for line in lines:
-                    if line.startswith('{') and line.endswith('}'):
-                        return json.loads(line)
-        except:
-            pass
-        return {"instance_type": "Unknown", "vcpu_count": "Unknown", "memory_size": "Unknown"}
-    
     def _generate_config_status_section(self):
         """生成配置状态检查部分"""
         ledger_status = "✅ 已配置" if self.config.get('LEDGER_DEVICE') else "❌ 未配置"
@@ -355,7 +339,7 @@ class ReportGenerator:
                     <p>监控开销统计功能已集成到统一监控系统中，默认启用。</p>
                     <p>如果未生成监控开销数据，请检查以下配置:</p>
                     <ul>
-                        <li>确保 <code>config.sh</code> 中的 <code>MONITORING_OVERHEAD_LOG</code> 变量已正确设置</li>
+                        <li>确保 <code>config_loader.sh</code> 中的 <code>MONITORING_OVERHEAD_LOG</code> 变量已正确设置</li>
                         <li>确保 <code>log_performance_data</code> 函数中调用了 <code>write_monitoring_overhead_log</code></li>
                         <li>检查日志目录权限是否正确</li>
                     </ul>
@@ -367,107 +351,7 @@ class ReportGenerator:
     
 
     
-    def _generate_solana_specific_section(self, df):
-        """✅ 生成完整的Solana特定分析部分"""
-        try:
-            # ✅ 查找Solana相关字段
-            solana_fields = {
-                'slot_fields': [col for col in df.columns if 'slot' in col],
-                'rpc_fields': [col for col in df.columns if 'rpc' in col],
-                'sync_fields': [col for col in df.columns if 'sync' in col or 'lag' in col]
-            }
-            
-            # ✅ CPU Usage分析（保留原有逻辑）
-            cpu_avg = df['cpu_usage'].mean() if 'cpu_usage' in df.columns and len(df) > 0 else 0
-            
-            if cpu_avg > 90:
-                cpu_status = "✅ 正常"
-                cpu_note = "CPU高利用率正常 - Solana Central Scheduler工作正常"
-                cpu_status_class = "success"
-            elif cpu_avg > 80:
-                cpu_status = "⚠️ 注意"
-                cpu_note = "CPU利用率偏高但可接受 - 建议监控Solana同步状态"
-                cpu_status_class = "warning"
-            else:
-                cpu_status = "❌ 异常"
-                cpu_note = "CPU利用率异常低 - 可能影响Solana性能"
-                cpu_status_class = "warning"
-            
-            # ✅ Slot处理性能分析
-            slot_analysis = self._analyze_slot_performance(df, solana_fields['slot_fields'])
-            
-            # ✅ RPC性能分析
-            rpc_analysis = self._analyze_rpc_performance(df, solana_fields['rpc_fields'])
-            
-            # ✅ 区块链同步状态分析
-            sync_analysis = self._analyze_sync_status(df, solana_fields['sync_fields'])
-            
-            return f"""
-            <div class="section">
-                <h2>🔗 Solana特定性能分析</h2>
-                
-                <div class="info">
-                    <h4>📊 分析概览</h4>
-                    <p>基于Solana区块链特有的性能指标进行深度分析，包括Central Scheduler状态、Slot处理、RPC性能等关键指标。</p>
-                </div>
-                
-                <h3>🖥️ Central Scheduler状态</h3>
-                <div class="info-grid">
-                    <div class="info-card">
-                        <h4>CPU总体使用率</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{cpu_avg:.1f}%</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>Central Scheduler状态</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{cpu_status}</div>
-                    </div>
-                </div>
-                <div class="{cpu_status_class}">
-                    <h4>🎯 Central Scheduler分析</h4>
-                    <p><strong>状态:</strong> {cpu_note}</p>
-                    <p><strong>说明:</strong> Solana架构中CPU0默认绑定Central Scheduler，高利用率(90%+)通常表示节点正常工作。</p>
-                    <p><strong>建议:</strong> 如果CPU利用率持续过低，请检查Solana节点与主网的同步状态。</p>
-                </div>
-                
-                <h3>🎯 Slot处理性能</h3>
-                {slot_analysis}
-                
-                <h3>🔌 RPC服务性能</h3>
-                {rpc_analysis}
-                
-                <h3>🔄 区块链同步状态</h3>
-                {sync_analysis}
-                
-                <div class="info">
-                    <h4>🎯 Solana性能优化建议</h4>
-                    <ul>
-                        <li><strong>Central Scheduler优化</strong>: 确保CPU0有足够资源处理调度任务</li>
-                        <li><strong>Slot处理优化</strong>: 监控Slot处理Latency，确保及时跟上网络节奏</li>
-                        <li><strong>RPC优化</strong>: 优化RPC服务配置，提高响应速度和成功率</li>
-                        <li><strong>同步优化</strong>: 保持良好的网络连接，减少同步Latency</li>
-                    </ul>
-                </div>
-            </div>
-            """
-            
-        except Exception as e:
-            print(f"❌ Solana特定分析生成失败: {e}")
-            return f"""
-            <div class="section">
-                <h2>🔗 Solana特定性能分析</h2>
-                <div class="warning">
-                    <h4>⚠️  Solana分析Data Not Available</h4>
-                    <p>错误信息: {str(e)[:100]}</p>
-                    <p>可能的原因：</p>
-                    <ul>
-                        <li>CSV数据中缺少Solana特定字段</li>
-                        <li>字段命名不符合预期格式</li>
-                        <li>数据格式或内容有问题</li>
-                    </ul>
-                    <p><strong>建议</strong>: 确保监控数据包含Slot、RPC等Solana相关指标</p>
-                </div>
-            </div>
-            """
+
     
     def _generate_monitoring_overhead_detailed_section(self):
         """生成详细的监控开销分析部分"""
@@ -1086,7 +970,7 @@ class ReportGenerator:
             <h4>📋 配置建议摘要</h4>
             <p>基于测试数据分析，生产环境建议配置:</p>
             <ul>
-                <li><strong>实例类型</strong>: 至少 {recommended_cores} vCPU, {recommended_memory_gb} GB 内存</li>
+                <li><strong>计算资源</strong>: 建议增加 CPU 和内存资源以提升性能</li>
                 <li><strong>EBS配置</strong>: {recommended_iops} IOPS, 建议使用 {'IO2' if recommended_iops > 16000 else 'GP3'} 类型</li>
                 <li><strong>网络配置</strong>: {recommended_network_gbps} Gbps 网络带宽</li>
                 <li><strong>监控开销</strong>: 预留 {monitoring_cpu:.1f}% CPU 和 {monitoring_memory_mb:.0f} MB 内存用于监控</li>
@@ -1106,9 +990,9 @@ class ReportGenerator:
                 <h4>💰 CPU瓶颈的成本优化策略</h4>
                 <ul>
                     <li><strong>垂直扩展</strong>: 升级到更高CPU配置的实例类型</li>
-                    <li><strong>计算优化实例</strong>: 考虑使用C5/C6i系列实例，CPU性价比更高</li>
-                    <li><strong>Spot实例</strong>: 对于非关键环境，使用Spot实例可节省60-90%成本</li>
-                    <li><strong>预留实例</strong>: 长期使用可考虑1-3年预留实例，节省30-60%成本</li>
+                    <li><strong>CPU优化</strong>: 考虑升级到更高性能的计算资源</li>
+                    <li><strong>成本优化</strong>: 对于非关键环境，考虑使用更经济的资源配置</li>
+                    <li><strong>长期规划</strong>: 长期使用可考虑资源预留或批量采购以降低成本</li>
                 </ul>
             </div>
             """
@@ -1117,7 +1001,7 @@ class ReportGenerator:
             <div class="cost-optimization">
                 <h4>💰 内存瓶颈的成本优化策略</h4>
                 <ul>
-                    <li><strong>内存优化实例</strong>: 使用R5/R6i系列实例，内存性价比更高</li>
+                    <li><strong>内存优化</strong>: 增加系统内存以减少内存瓶颈</li>
                     <li><strong>数据压缩</strong>: 优化区块链节点配置，减少内存占用</li>
                     <li><strong>分层存储</strong>: 将部分数据迁移到EBS，减少内存需求</li>
                     <li><strong>监控优化</strong>: 减少监控数据在内存中的缓存时间</li>
@@ -1130,7 +1014,7 @@ class ReportGenerator:
                 <h4>💰 存储I/O瓶颈的成本优化策略</h4>
                 <ul>
                     <li><strong>EBS类型优化</strong>: GP3比IO2成本更低，优先考虑GP3</li>
-                    <li><strong>Instance Store</strong>: 对于临时数据，使用Instance Store可显著降低成本</li>
+                    <li><strong>存储优化</strong>: 对于临时数据，考虑使用高速本地存储</li>
                     <li><strong>数据分层</strong>: 热数据使用高IOPS EBS，冷数据使用标准EBS</li>
                     <li><strong>压缩和去重</strong>: 减少存储空间需求，降低EBS成本</li>
                 </ul>
@@ -1144,7 +1028,7 @@ class ReportGenerator:
                     <li><strong>右配置</strong>: 当前配置已较为合理，避免过度配置</li>
                     <li><strong>监控优化</strong>: 适当降低监控频率，减少监控开销</li>
                     <li><strong>自动扩缩容</strong>: 根据负载自动调整资源，避免资源浪费</li>
-                    <li><strong>预留实例</strong>: 对于稳定负载，使用预留实例节省成本</li>
+                    <li><strong>资源规划</strong>: 对于稳定负载，提前规划资源配置以优化成本</li>
                 </ul>
             </div>
             """
@@ -1155,9 +1039,9 @@ class ReportGenerator:
             return """
             <div class="warning">
                 <h4>⚠️  监控开销Data Not Available</h4>
-                <p>监控开销数据文件未找到或为空。请确保在QPS测试期间运行了监控开销计算器。</p>
-                <p><strong>运行命令</strong>: <code>python3 tools/monitoring_overhead_calculator.py ./logs 5</code></p>
+                <p>监控开销数据文件未找到或为空。请确保在性能测试期间启用了监控开销统计。</p>
                 <p><strong>预期文件</strong>: <code>logs/monitoring_overhead_YYYYMMDD_HHMMSS.csv</code></p>
+                <p><strong>说明</strong>: 监控开销数据由unified_monitor.sh自动生成，无需手动运行额外工具。</p>
             </div>
             """
         
@@ -1609,7 +1493,7 @@ class ReportGenerator:
             
             html += """
                 </ul>
-                <p><strong>建议</strong>: 考虑优化网络配置、升级实例类型或调整应用负载模式。</p>
+                <p><strong>建议</strong>: 考虑优化网络配置、升级硬件资源或调整应用负载模式。</p>
             </div>
             """
             
@@ -1964,16 +1848,11 @@ class ReportGenerator:
         return table_html
 
     def _analyze_slot_performance(self, df, slot_fields):
-        """分析Slot处理性能"""
+        """分析Slot数据处理性能 - 用于账户地址生成等核心功能"""
         if not slot_fields:
             return """
-            <div class="warning">
-                <p>未找到Slot相关数据字段。建议监控以下指标：</p>
-                <ul>
-                    <li>local_slot - 本地节点Slot</li>
-                    <li>mainnet_slot - 主网Slot</li>
-                    <li>slot_diff - Slot差异</li>
-                </ul>
+            <div class="info">
+                <p>未找到Slot相关数据字段。</p>
             </div>
             """
         
@@ -1998,113 +1877,22 @@ class ReportGenerator:
                 stats_html += f"""
                 <div class="info-card">
                     <h4>{field.replace('_', ' ').title()}</h4>
-                    <div style="font-size: 1.2em; font-weight: bold;">当前值: {stats['current']}</div>
-                    <div>平均值: {stats['avg']:.2f}</div>
-                    <div>范围: {stats['min']:.0f} - {stats['max']:.0f}</div>
+                    <div style="font-size: 1.2em; font-weight: bold;">Current: {stats['current']}</div>
+                    <div>Average: {stats['avg']:.2f}</div>
+                    <div>Range: {stats['min']:.0f} - {stats['max']:.0f}</div>
                 </div>
                 """
             stats_html += '</div>'
             return stats_html
             
         except Exception as e:
-            return f"<p>Slot分析失败: {str(e)[:50]}</p>"
+            return f"<p>Slot analysis failed: {str(e)[:50]}</p>"
     
-    def _analyze_rpc_performance(self, df, rpc_fields):
-        """分析RPC性能"""
-        if not rpc_fields:
-            return """
-            <div class="warning">
-                <p>未找到RPC相关数据字段。建议监控以下指标：</p>
-                <ul>
-                    <li>rpc_requests - RPC请求数</li>
-                    <li>rpc_latency - RPCLatency</li>
-                </ul>
-            </div>
-            """
-        
-        try:
-            rpc_stats = {}
-            for field in rpc_fields[:3]:
-                if field in df.columns:
-                    data = df[field].dropna()
-                    if len(data) > 0:
-                        rpc_stats[field] = {
-                            'current': data.iloc[-1],
-                            'avg': data.mean(),
-                            'max': data.max()
-                        }
-            
-            if not rpc_stats:
-                return "<p>RPC数据为空或无效</p>"
-            
-            stats_html = '<div class="info-grid">'
-            for field, stats in rpc_stats.items():
-                stats_html += f"""
-                <div class="info-card">
-                    <h4>{field.replace('_', ' ').title()}</h4>
-                    <div style="font-size: 1.2em; font-weight: bold;">当前: {stats['current']:.1f}</div>
-                    <div>平均: {stats['avg']:.1f}</div>
-                    <div>峰值: {stats['max']:.1f}</div>
-                </div>
-                """
-            stats_html += '</div>'
-            return stats_html
-            
-        except Exception as e:
-            return f"<p>RPC分析失败: {str(e)[:50]}</p>"
 
-    def _analyze_sync_status(self, df, sync_fields):
-        """分析区块链同步状态"""
-        if not sync_fields:
-            return """
-            <div class="info">
-                <p>未找到同步状态相关数据字段。建议监控以下指标：</p>
-                <ul>
-                    <li>sync_lag - 同步Latency</li>
-                    <li>peer_count - 连接节点数</li>
-                    <li>sync_status - 同步状态</li>
-                </ul>
-            </div>
-            """
-        
-        try:
-            sync_details = []
-            
-            for field in sync_fields[:3]:
-                if field in df.columns:
-                    data = df[field].dropna()
-                    if len(data) > 0:
-                        current_value = data.iloc[-1]
-                        avg_value = data.mean()
-                        
-                        if 'lag' in field.lower() or 'delay' in field.lower():
-                            # Latency类指标
-                            status = "良好" if avg_value < 1000 else "一般" if avg_value < 5000 else "需要关注"
-                            sync_details.append(f"<li><strong>{field}</strong>: 当前 {current_value:.1f}ms, 平均 {avg_value:.1f}ms - {status}</li>")
-                        elif 'peer' in field.lower() or 'connection' in field.lower():
-                            # 连接数指标
-                            status = "良好" if avg_value > 10 else "一般" if avg_value > 5 else "需要关注"
-                            sync_details.append(f"<li><strong>{field}</strong>: 当前 {current_value:.0f}, 平均 {avg_value:.1f} - {status}</li>")
-                        else:
-                            # 其他指标
-                            sync_details.append(f"<li><strong>{field}</strong>: 当前 {current_value}, 平均 {avg_value:.2f}</li>")
-            
-            if sync_details:
-                return f"""
-                <div class="info">
-                    <p>🔄 区块链同步状态分析</p>
-                    <ul>
-                        {''.join(sync_details)}
-                    </ul>
-                </div>
-                """
-            else:
-                return "<p>同步状态数据为空</p>"
-                
-        except Exception as e:
-            return f"<p>同步状态分析失败: {str(e)[:50]}</p>"
 
-    def _generate_html_content(self, df, ec2_info):
+
+
+    def _generate_html_content(self, df):
         """生成HTML内容 + 瓶颈信息展示 + 图片引用"""
         try:
             # 生成各个部分 - 使用实际存在的方法
@@ -2115,7 +1903,7 @@ class ReportGenerator:
             production_resource_planning = self._generate_production_resource_planning_section()  # 生产环境资源规划
             ena_warnings = self._generate_ena_warnings_section(df)  # 新增ENA警告
             ena_data_table = self._generate_ena_data_table(df)     # 新增ENA数据表
-            solana_analysis = self._generate_solana_specific_section(df)
+
             correlation_table = self._generate_cpu_ebs_correlation_table(df)
             overhead_table = self._generate_overhead_data_table()
             
@@ -2154,7 +1942,7 @@ class ReportGenerator:
                     {production_resource_planning}
                     {ena_warnings}
                     {ena_data_table}
-                    {solana_analysis}
+
                     {correlation_table}
                     {overhead_table}
                 </div>
@@ -2268,12 +2056,7 @@ class ReportGenerator:
                     'description': '性能指标相关性的热力图展示，直观显示指标间关系强度'
                 },
                 
-                # analysis/*.py 生成的图片
-                {
-                    'filename': 'reports/bottleneck_analysis_chart.png',
-                    'title': '🚨 瓶颈分析图表',
-                    'description': '详细的瓶颈分析图表，包括瓶颈因子和影响程度'
-                },
+                # analysis/*.py 生成的图片（bottleneck_analysis_chart.png已删除）
                 {
                     'filename': 'reports/performance_cliff_analysis.png',
                     'title': '📉 性能悬崖分析',
@@ -2815,7 +2598,7 @@ def main():
     
     parser = argparse.ArgumentParser(description='报告生成器 - 增强版 + 瓶颈模式支持')
     parser.add_argument('performance_csv', help='系统性能监控CSV文件')
-    parser.add_argument('-c', '--config', help='配置文件', default='config.sh')
+    parser.add_argument('-c', '--config', help='配置文件', default='config_loader.sh')
     parser.add_argument('-o', '--overhead-csv', help='监控开销CSV文件')
     parser.add_argument('--bottleneck-mode', action='store_true', help='启用瓶颈分析模式')
     parser.add_argument('--bottleneck-info', help='瓶颈信息JSON文件路径')

@@ -4,7 +4,7 @@
 
 # 引入依赖
 # 安全加载配置文件，避免readonly变量冲突
-if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh" 2>/dev/null; then
+if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
     echo "警告: 配置文件加载失败，使用默认配置"
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
@@ -14,11 +14,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 init_logger "ebs_bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/ebs_bottleneck_detector.log"
 
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/../monitoring/ec2_info_collector.sh"
 
 # 瓶颈检测配置
-readonly HIGH_FREQ_INTERVAL=1        # 高频监控间隔(秒)
-readonly BOTTLENECK_THRESHOLD=0.85   # 瓶颈阈值(85%)
+# 使用统一的监控间隔，从config.sh加载
+# 使用 internal_config.sh 中定义的 BOTTLENECK_EBS_UTIL_THRESHOLD 变量
+readonly BOTTLENECK_THRESHOLD=$(echo "scale=2; ${BOTTLENECK_EBS_UTIL_THRESHOLD:-85} / 100" | bc)
 readonly PEAK_DETECTION_WINDOW=10    # 峰值检测窗口(秒)
 readonly BOTTLENECK_LOG_FILE="${LOGS_DIR}/ebs_bottleneck_$(date +%Y%m%d_%H%M%S).csv"
 
@@ -222,7 +222,7 @@ start_high_freq_monitoring() {
             duration="$QPS_TEST_DURATION"  # 使用QPS测试时长
             echo "🔗 EBS监控与QPS测试同步，时长: ${duration}s"
         else
-            duration="$DEFAULT_MONITOR_DURATION"  # 独立运行时使用默认时长
+            duration=300  # 独立运行时使用默认时长(5分钟)
             echo "🔧 EBS独立监控模式，时长: ${duration}s"
         fi
     fi
@@ -231,7 +231,7 @@ start_high_freq_monitoring() {
     
     echo "🚀 Starting high-frequency EBS monitoring..."
     echo "   Duration: ${duration}s"
-    echo "   Interval: ${HIGH_FREQ_INTERVAL}s"
+    echo "   Interval: ${MONITOR_INTERVAL}s"
     echo "   Output: $output_file"
     echo "   Bottleneck Log: $BOTTLENECK_LOG_FILE"
     echo "   QPS Test Mode: $qps_test_mode"
@@ -280,7 +280,7 @@ start_high_freq_monitoring() {
             fi
         done
         
-        sleep "$HIGH_FREQ_INTERVAL"
+        sleep "$MONITOR_INTERVAL"
     done
     
     echo ""
@@ -400,7 +400,7 @@ stop_ebs_monitoring() {
     
     # 终止所有相关的监控进程
     pkill -f "ebs_bottleneck_detector" 2>/dev/null || true
-    pkill -f "iostat.*${HIGH_FREQ_INTERVAL}" 2>/dev/null || true
+    pkill -f "iostat.*${MONITOR_INTERVAL}" 2>/dev/null || true
     
     echo "✅ EBS监控已停止"
     

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-高级图表生成器 - 严格按照文档要求生成CPU-EBS相关性图表
-实现统计分析方法的可视化，包括相关性热力图
-已修复CSV字段一致性问题，使用统一的字段访问接口
+Advanced Chart Generator - Generate CPU-EBS correlation charts according to documentation requirements
+Implement visualization of statistical analysis methods, including correlation heatmaps
+Fixed CSV field consistency issues, using unified field access interface
 """
 
 import pandas as pd
@@ -18,7 +18,7 @@ import os
 import sys
 from pathlib import Path
 
-# 导入统一的CSV数据处理器
+# Import unified CSV data processor
 current_dir = Path(__file__).parent
 utils_dir = current_dir.parent / 'utils'
 sys.path.insert(0, str(utils_dir))
@@ -26,17 +26,33 @@ sys.path.insert(0, str(utils_dir))
 try:
     from utils.unified_logger import get_logger
 except ImportError:
-    # 使用基础日志功能作为后备
-    import logging
-    def get_logger(name):
-        return logging.getLogger(name)
+    try:
+        # Try importing from parent directory
+        import sys
+        import os
+        parent_dir = os.path.dirname(os.path.dirname(__file__))
+        sys.path.insert(0, parent_dir)
+        from utils.unified_logger import get_logger
+    except ImportError:
+        # Use basic logging functionality as fallback
+        import logging
+        def get_logger(name):
+            return logging.getLogger(name)
 
 try:
+    # Add parent directory to path for utils imports
+    import sys
+    from pathlib import Path
+    current_dir = Path(__file__).parent
+    utils_dir = current_dir.parent / 'utils'
+    if str(utils_dir) not in sys.path:
+        sys.path.insert(0, str(utils_dir))
+    
     from csv_data_processor import CSVDataProcessor
     from unit_converter import UnitConverter
 except ImportError as e:
-    logging.warning(f"导入模块失败: {e}")
-    # 创建占位符类
+    logging.warning(f"Module import failed: {e}")
+    # Create placeholder classes
     class CSVDataProcessor:
         def __init__(self):
             self.df = None
@@ -63,17 +79,17 @@ logger = get_logger(__name__)
 
 
 class AdvancedChartGenerator(CSVDataProcessor):
-    """高级图表生成器 - 基于统一CSV数据处理器"""
+    """Advanced Chart Generator - Based on unified CSV data processor"""
     
     def __init__(self, data_file: str, output_dir: str = None):
         """
-        初始化图表生成器
+        Initialize chart generator
         
         Args:
-            data_file: 数据文件路径
-            output_dir: 输出目录
+            data_file: Data file path
+            output_dir: Output directory
         """
-        super().__init__()  # 初始化CSV数据处理器
+        super().__init__()  # Initialize CSV data processor
         
         self.data_file = data_file
         self.output_dir = output_dir or os.path.dirname(data_file)
@@ -83,38 +99,37 @@ class AdvancedChartGenerator(CSVDataProcessor):
         except:
             self.unit_converter = None
         
-        # 设置图表样式
+        # Set chart style
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
         
-        # 使用英文标签系统，移除复杂的字体管理
-        self.use_english_labels = True
+        # Using English label system directly
         self.font_manager = None
             
     def _get_localized_text(self, chinese_text: str, english_text: str) -> str:
-        """获取本地化文本"""
+        """Get localized text"""
         if self.font_manager:
             return self.font_manager.get_label(chinese_text, english_text)
-        return english_text  # 回退到英文
+        return english_text  # Fallback to English
         
     def _check_device_configured(self, logical_name: str) -> bool:
-        """检查Device是否配置并且有数据"""
+        """Check if device is configured and has data"""
         if self.df is None:
             return False
         
-        # 通过列名前缀检查Device是否存在
+        # Check if device exists by column name prefix
         device_cols = [col for col in self.df.columns if col.startswith(f'{logical_name}_')]
         return len(device_cols) > 0
     
     def _get_device_columns_safe(self, logical_name: str, metric_suffix: str) -> List[str]:
-        """安全获取Device列，只返回存在的列"""
+        """Safely get device columns, only return existing columns"""
         if not self._check_device_configured(logical_name):
             return []
         
         return self.get_device_columns_safe(logical_name, metric_suffix)
     
     def _get_configured_devices(self) -> List[str]:
-        """获取已配置的Device列表"""
+        """Get list of configured devices"""
         devices = []
         if self._check_device_configured('data'):
             devices.append('data')
@@ -123,36 +138,36 @@ class AdvancedChartGenerator(CSVDataProcessor):
         return devices
         
     def load_data(self) -> bool:
-        """加载数据"""
+        """Load data"""
         try:
             success = self.load_csv_data(self.data_file)
             if success:
-                self.clean_data()  # 清洗数据
-                logger.info(f"✅ 加载数据成功: {len(self.df)} 行")
+                self.clean_data()  # Clean data
+                logger.info(f"✅ Data loaded successfully: {len(self.df)} rows")
                 self.print_field_info()  # 打印字段信息用于调试
             return success
         except Exception as e:
-            logger.error(f"❌ 数据加载失败: {e}")
+            logger.error(f"❌ Data loading failed: {e}")
             return False
     
     def print_field_info(self):
-        """打印字段信息用于调试"""
+        """Print field information for debugging"""
         if self.df is not None:
-            logger.info(f"📊 数据字段信息: {list(self.df.columns)}")
-            logger.info(f"📊 数据形状: {self.df.shape}")
+            logger.info(f"📊 Data field information: {list(self.df.columns)}")
+            logger.info(f"📊 Data shape: {self.df.shape}")
         else:
-            logger.warning("⚠️ 数据未加载")
+            logger.warning("⚠️ Data not loaded")
     
     def get_field_name_safe(self, field_name: str) -> Optional[str]:
-        """安全获取字段名称"""
+        """Safely get field name"""
         if self.df is None:
             return None
         
-        # 直接匹配
+        # Direct match
         if field_name in self.df.columns:
             return field_name
         
-        # 模糊匹配
+        # Fuzzy match
         for col in self.df.columns:
             if field_name.lower() in col.lower():
                 return col
@@ -160,21 +175,21 @@ class AdvancedChartGenerator(CSVDataProcessor):
         return None
     
     def generate_pearson_correlation_charts(self) -> List[str]:
-        """生成Pearson相关性图表"""
+        """Generate Pearson correlation charts"""
         if not self.load_data():
             return []
         
-        print("📊 生成Pearson相关性图表...")
+        print("📊 Generating Pearson correlation charts...")
         chart_files = []
         
-        # 检查Device配置
+        # Check Device configuration
         data_configured = self._check_device_configured('data')
         accounts_configured = self._check_device_configured('accounts')
         
-        # 使用安全的字段获取方法
+        # Use safe field access method
         cpu_iowait_field = self.get_field_name_safe('cpu_iowait')
         if not cpu_iowait_field:
-            print("⚠️ 未找到CPU I/O Wait字段，跳过相关性分析")
+            print("⚠️ CPU I/O Wait field not found, skipping correlation analysis")
             return []
         
         # 获取Device字段
@@ -201,14 +216,14 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         for aqu_col in device_aqu_cols:
             device_name = aqu_col.split('_')[0].upper()
-            plot_configs.append((cpu_iowait_field, aqu_col, f'CPU I/O Wait vs {device_name}Device队列长度'))
+            plot_configs.append((cpu_iowait_field, aqu_col, f'CPU I/O Wait vs {device_name} Device Queue Length'))
         
         for await_col in device_await_cols:
             device_name = await_col.split('_')[0].upper()
             plot_configs.append((cpu_iowait_field, await_col, f'CPU I/O Wait vs {device_name}DeviceLatency'))
         
         if not plot_configs:
-            print("  ⚠️ 没有配置的Device，跳过Pearson相关性图表生成")
+            print("  ⚠️ No configured devices, skipping Pearson correlation chart generation")
             return []
         
         # 动态创建子图布局
@@ -230,11 +245,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
         elif cols == 1:
             axes = axes.reshape(-1, 1)
         
-        # 根据字体支持情况选择标题语言
-        if self.use_english_labels:
-            fig.suptitle('CPU-EBS Pearson Correlation Analysis', fontsize=16, fontweight='bold')
-        else:
-            fig.suptitle('CPU-EBS Pearson相关性分析', fontsize=16, fontweight='bold')
+        # Using English title directly
+        fig.suptitle('CPU-EBS Pearson Correlation Analysis', fontsize=16, fontweight='bold')
         
         # 生成每个子图
         plot_idx = 0
@@ -256,7 +268,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                             # 绘制散点图
                             ax.scatter(cpu_data, ebs_data, alpha=0.6, s=20)
                             
-                            # 添加趋势线
+                            # Add trend line
                             z = np.polyfit(cpu_data, ebs_data, 1)
                             p = np.poly1d(z)
                             ax.plot(cpu_data, p(cpu_data), "r--", alpha=0.8)
@@ -266,12 +278,12 @@ class AdvancedChartGenerator(CSVDataProcessor):
                             ax.set_title(f'{title}\nr={corr:.3f}, p={p_value:.3f}')
                             ax.grid(True, alpha=0.3)
                         else:
-                            ax.text(0.5, 0.5, '数据不足', ha='center', va='center', transform=ax.transAxes)
+                            ax.text(0.5, 0.5, 'Insufficient Data', ha='center', va='center', transform=ax.transAxes)
                             ax.set_title(title)
                     
                     except Exception as e:
-                        print(f"⚠️ 生成子图失败: {e}")
-                        ax.text(0.5, 0.5, f'生成失败\n{str(e)}', ha='center', va='center', transform=ax.transAxes)
+                        print(f"⚠️ Subplot generation failed: {e}")
+                        ax.text(0.5, 0.5, f'Generation Failed\n{str(e)}', ha='center', va='center', transform=ax.transAxes)
                         ax.set_title(title)
                     
                     plot_idx += 1
@@ -287,16 +299,16 @@ class AdvancedChartGenerator(CSVDataProcessor):
         plt.close()
         
         chart_files.append(output_file)
-        print(f"✅ Pearson相关性图表已保存: {output_file}")
+        print(f"✅ Pearson correlation chart saved: {output_file}")
         
         return chart_files
         
     def generate_regression_analysis_charts(self) -> List[str]:
-        """生成回归分析图表"""
+        """Generate regression analysis charts"""
         if not self.load_data():
             return []
         
-        print("📈 生成回归分析图表...")
+        print("📈 Generating regression analysis charts...")
         chart_files = []
         
         # 检查Device配置
@@ -312,16 +324,16 @@ class AdvancedChartGenerator(CSVDataProcessor):
         # 构建回归配置
         regression_configs = []
         if data_configured and data_r_cols:
-            regression_configs.append(('cpu_usr', data_r_cols[0], 'User CPU vs DATA读请求'))
+            regression_configs.append(('cpu_usr', data_r_cols[0], 'User CPU vs DATA Read Requests'))
         if data_configured and data_w_cols:
-            regression_configs.append(('cpu_sys', data_w_cols[0], 'System CPU vs DATA写请求'))
+            regression_configs.append(('cpu_sys', data_w_cols[0], 'System CPU vs DATA Write Requests'))
         if accounts_configured and accounts_r_cols:
-            regression_configs.append(('cpu_usr', accounts_r_cols[0], 'User CPU vs ACCOUNTS读请求'))
+            regression_configs.append(('cpu_usr', accounts_r_cols[0], 'User CPU vs ACCOUNTS Read Requests'))
         if accounts_configured and accounts_w_cols:
-            regression_configs.append(('cpu_sys', accounts_w_cols[0], 'System CPU vs ACCOUNTS写请求'))
+            regression_configs.append(('cpu_sys', accounts_w_cols[0], 'System CPU vs ACCOUNTS Write Requests'))
         
         if not regression_configs:
-            print("  ⚠️ 没有配置的Device，跳过回归分析图表生成")
+            print("  ⚠️ No configured devices, skipping regression analysis chart generation")
             return []
         
         # 动态创建子图布局
@@ -341,11 +353,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
         elif cols == 1:
             axes = axes.reshape(-1, 1)
         
-        # 根据字体支持情况选择标题语言
-        if self.use_english_labels:
-            fig.suptitle('Linear Regression Analysis', fontsize=16, fontweight='bold')
-        else:
-            fig.suptitle('线性回归分析', fontsize=16, fontweight='bold')
+        # Using English title directly
+        fig.suptitle('Linear Regression Analysis', fontsize=16, fontweight='bold')
         
         for idx, (x_col, y_col, title) in enumerate(regression_configs):
             row, col = divmod(idx, cols)
@@ -369,7 +378,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax.plot(self.df[x_col], y_pred, 'r-', linewidth=2)
                 
                 # 设置标题和标签
-                ax.set_title(f'{title}\nR²={r2:.3f}, 系数={model.coef_[0]:.3f}', fontsize=12)
+                ax.set_title(f'{title}\nR²={r2:.3f}, Coefficient={model.coef_[0]:.3f}', fontsize=12)
                 ax.set_xlabel(x_col.replace('_', ' ').title())
                 ax.set_ylabel(y_col.replace('_', ' ').title())
                 ax.grid(True, alpha=0.3)
@@ -388,16 +397,16 @@ class AdvancedChartGenerator(CSVDataProcessor):
         plt.close()
         
         chart_files.append(chart_file)
-        print(f"  ✅ 线性回归图表: {os.path.basename(chart_file)}")
+        print(f"  ✅ Linear regression chart: {os.path.basename(chart_file)}")
         
         return chart_files
     
     def generate_negative_correlation_charts(self) -> List[str]:
-        """生成负相关分析图表"""
+        """Generate negative correlation analysis charts"""
         if not self.load_data():
             return []
         
-        print("📉 生成负相关分析图表...")
+        print("📉 Generating negative correlation analysis charts...")
         chart_files = []
         
         # 检查Device配置
@@ -411,12 +420,12 @@ class AdvancedChartGenerator(CSVDataProcessor):
         # 构建负相关配置
         negative_configs = []
         if data_configured and data_aqu_cols:
-            negative_configs.append(('cpu_idle', data_aqu_cols[0], 'CPU空闲 vs DATA队列长度'))
+            negative_configs.append(('cpu_idle', data_aqu_cols[0], 'CPU Idle vs DATA Queue Length'))
         if accounts_configured and accounts_aqu_cols:
-            negative_configs.append(('cpu_idle', accounts_aqu_cols[0], 'CPU空闲 vs ACCOUNTS队列长度'))
+            negative_configs.append(('cpu_idle', accounts_aqu_cols[0], 'CPU Idle vs ACCOUNTS Queue Length'))
         
         if not negative_configs:
-            print("  ⚠️ 没有配置的Device，跳过负相关分析图表生成")
+            print("  ⚠️ No configured devices, skipping negative correlation analysis chart generation")
             return []
         
         # 动态创建子图布局
@@ -427,11 +436,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
         if total_plots == 1:
             axes = [axes]
         
-        # 根据字体支持情况选择标题语言
-        if self.use_english_labels:
-            fig.suptitle('Negative Correlation Analysis', fontsize=16, fontweight='bold')
-        else:
-            fig.suptitle('负相关分析', fontsize=16, fontweight='bold')
+        # Using English title directly
+        fig.suptitle('Negative Correlation Analysis', fontsize=16, fontweight='bold')
         
         for idx, (x_col, y_col, title) in enumerate(negative_configs):
             ax: Axes = axes[idx]  # 类型注解：明确指定为 matplotlib Axes 对象
@@ -449,7 +455,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax.plot(self.df[x_col], p(self.df[x_col]), "r--", alpha=0.8)
                 
                 # 设置标题和标签
-                correlation_type = "负相关" if corr < 0 else "正相关"
+                correlation_type = "Negative" if corr < 0 else "Positive"
                 ax.set_title(f'{title}\nr={corr:.3f} ({correlation_type})', fontsize=12)
                 ax.set_xlabel(x_col.replace('_', ' ').title())
                 ax.set_ylabel(y_col.replace('_', ' ').title())
@@ -457,10 +463,10 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 
                 # 高亮负相关
                 if corr < 0:
-                    ax.text(0.05, 0.95, '✓ 负相关关系', transform=ax.transAxes,
+                    ax.text(0.05, 0.95, '✓ Negative Correlation', transform=ax.transAxes,
                            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgreen", alpha=0.7))
                 else:
-                    ax.text(0.05, 0.95, '⚠ 非负相关', transform=ax.transAxes,
+                    ax.text(0.05, 0.95, '⚠ Non-negative Correlation', transform=ax.transAxes,
                            bbox=dict(boxstyle="round,pad=0.3", facecolor="orange", alpha=0.7))
             else:
                 ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes)
@@ -472,19 +478,19 @@ class AdvancedChartGenerator(CSVDataProcessor):
         plt.close()
         
         chart_files.append(chart_file)
-        print(f"  ✅ 负相关分析图表: {os.path.basename(chart_file)}")
+        print(f"  ✅ Negative correlation analysis chart: {os.path.basename(chart_file)}")
         
         return chart_files
     
     def generate_comprehensive_correlation_matrix(self) -> List[str]:
-        """生成综合相关性矩阵热力图"""
+        """Generate comprehensive correlation matrix heatmap"""
         if not self.load_data():
             return []
         
-        print("🔥 生成综合相关性矩阵...")
+        print("🔥 Generating comprehensive correlation matrix...")
         chart_files = []
         
-        # 选择关键列进行相关性分析
+        # Select key columns for correlation analysis
         key_columns = []
         
         # CPU相关列
@@ -504,7 +510,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         key_columns = [col for col in key_columns if col in self.df.columns]
         
         if len(key_columns) < 4:
-            print("  ⚠️ 可用列数不足，跳过相关性矩阵生成")
+            print("  ⚠️ Insufficient available columns, skipping correlation matrix generation")
             return []
         
         # 计算相关性矩阵
@@ -527,11 +533,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
                    fmt='.3f',
                    cbar_kws={"shrink": .8})
         
-        # 根据字体支持情况选择标题语言
-        if self.use_english_labels:
-            plt.title('CPU-EBS Performance Metrics Correlation Matrix', fontsize=16, fontweight='bold', pad=20)
-        else:
-            plt.title('CPU-EBS性能指标相关性矩阵', fontsize=16, fontweight='bold', pad=20)
+        # Using English title directly
+        plt.title('CPU-EBS Performance Metrics Correlation Matrix', fontsize=16, fontweight='bold', pad=20)
         plt.xticks(rotation=45, ha='right')
         plt.yticks(rotation=0)
         
@@ -541,79 +544,76 @@ class AdvancedChartGenerator(CSVDataProcessor):
         plt.close()
         
         chart_files.append(chart_file)
-        print(f"  ✅ 综合相关性矩阵: {os.path.basename(chart_file)}")
+        print(f"  ✅ Comprehensive correlation matrix: {os.path.basename(chart_file)}")
         
         return chart_files
     
     def generate_performance_trend_analysis(self) -> List[str]:
-        """生成性能趋势分析图表"""
+        """Generate performance trend analysis charts"""
         if not self.load_data():
             return []
         
-        print("📈 生成性能趋势分析...")
+        print("📈 Generating performance trend analysis...")
         chart_files = []
         
         # 确保有Time戳列
         if 'timestamp' not in self.df.columns:
-            print("  ⚠️ 缺少Time戳列，跳过趋势分析")
+            print("  ⚠️ Missing timestamp column, skipping trend analysis")
             return []
         
         # 转换Time戳
         self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         
         fig, axes = plt.subplots(3, 2, figsize=(18, 15))
-        # 根据字体支持情况选择标题语言
-        if self.use_english_labels:
-            fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=16, fontweight='bold')
-        else:
-            fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=16, fontweight='bold')
+        # Using English title directly
+        fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=16, fontweight='bold')
         
-        # CPU Usage趋势
+        # CPU Usage trends
         if 'cpu_iowait' in self.df.columns:
             axes[0, 0].plot(self.df['timestamp'], self.df['cpu_iowait'], 'b-', alpha=0.7)
-            axes[0, 0].set_title('CPU I/O WaitTime趋势')
+            axes[0, 0].set_title('CPU I/O Wait Time Trends')
             axes[0, 0].set_ylabel('I/O Wait (%)')
             axes[0, 0].grid(True, alpha=0.3)
         
-        # EBS利用率趋势 - 使用统一的字段格式匹配
+        # EBS utilization trends - using unified field format matching
         util_cols = [col for col in self.df.columns if 
                     (col.startswith('data_') and col.endswith('_util')) or 
                     (col.startswith('accounts_') and col.endswith('_util'))]
         if util_cols:
             axes[0, 1].plot(self.df['timestamp'], self.df[util_cols[0]], 'r-', alpha=0.7)
-            axes[0, 1].set_title('EBSDevice Utilization趋势')
+            axes[0, 1].set_title('EBS Device Utilization Trends')
             axes[0, 1].set_ylabel('Utilization (%)')
             axes[0, 1].grid(True, alpha=0.3)
         
-        # IOPS趋势
+        # IOPS trends
         iops_cols = [col for col in self.df.columns if 'total_iops' in col]
         if iops_cols:
             axes[1, 0].plot(self.df['timestamp'], self.df[iops_cols[0]], 'g-', alpha=0.7)
-            axes[1, 0].set_title('IOPS趋势')
+            axes[1, 0].set_title('IOPS Trends')
             axes[1, 0].set_ylabel('IOPS')
             axes[1, 0].grid(True, alpha=0.3)
         
-        # Throughput趋势
+        # Throughput trends
         throughput_cols = [col for col in self.df.columns if 'throughput' in col and 'mibs' in col]
         if throughput_cols:
             axes[1, 1].plot(self.df['timestamp'], self.df[throughput_cols[0]], 'm-', alpha=0.7)
-            axes[1, 1].set_title('Throughput趋势')
+            axes[1, 1].set_title('Throughput Trends')
             axes[1, 1].set_ylabel('Throughput (MiB/s)')
             axes[1, 1].grid(True, alpha=0.3)
         
-        # Latency趋势
+        # Latency trends
         await_cols = [col for col in self.df.columns if 'avg_await' in col]
         if await_cols:
             axes[2, 0].plot(self.df['timestamp'], self.df[await_cols[0]], 'orange', alpha=0.7)
-            axes[2, 0].set_title('I/O Latency趋势')
+            axes[2, 0].set_title('I/O Latency Trends')
             axes[2, 0].set_ylabel('Latency (ms)')
             axes[2, 0].grid(True, alpha=0.3)
         
-        # 队列深度趋势
+        # Queue depth trends
         queue_cols = [col for col in self.df.columns if 'aqu_sz' in col]
         if queue_cols:
             axes[2, 1].plot(self.df['timestamp'], self.df[queue_cols[0]], 'purple', alpha=0.7)
-            axes[2, 1].set_title('I/O队列深度趋势')
+            axes[2, 1].set_title('I/O Queue Depth Trends')
             axes[2, 1].set_ylabel('Queue Depth')
             axes[2, 1].grid(True, alpha=0.3)
         
@@ -627,47 +627,47 @@ class AdvancedChartGenerator(CSVDataProcessor):
         plt.close()
         
         chart_files.append(chart_file)
-        print(f"  ✅ 性能趋势分析: {os.path.basename(chart_file)}")
+        print(f"  ✅ Performance trend analysis: {os.path.basename(chart_file)}")
         
         return chart_files
     
     def _get_correlation_strength(self, corr: float) -> str:
-        """获取相关性强度描述"""
+        """Get correlation strength description"""
         abs_corr = abs(corr)
         if abs_corr >= 0.8:
-            return "很强"
+            return "Very Strong"
         elif abs_corr >= 0.6:
-            return "强"
+            return "Strong"
         elif abs_corr >= 0.4:
-            return "中等"
+            return "Moderate"
         elif abs_corr >= 0.2:
-            return "弱"
+            return "Weak"
         else:
-            return "很弱"
+            return "Very Weak"
     
     def generate_ena_network_analysis_charts(self) -> List[str]:
-        """生成ENA网络限制分析图表"""
+        """Generate ENA network limitation analysis charts"""
         if not self.load_data():
             return []
         
-        print("🌐 生成ENA网络限制分析图表...")
+        print("🌐 Generating ENA network limitation analysis charts...")
         chart_files = []
         
         # 检查是否有ENA数据
         ena_columns = [col for col in self.df.columns if col.startswith('ena_')]
         if not ena_columns:
-            print("  ⚠️ 没有ENA网络数据，跳过ENA分析图表")
+            print("  ⚠️ No ENA network data, skipping ENA analysis charts")
             return []
         
         # 检查Time戳列
         if 'timestamp' not in self.df.columns:
-            print("  ⚠️ 缺少Time戳列，跳过ENA趋势分析")
+            print("  ⚠️ Missing timestamp column, skipping ENA trend analysis")
             return []
         
         # 转换Time戳
         self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         
-        # 生成ENA限制趋势图
+        # Generate ENA limitation trend charts
         trend_chart = self._generate_ena_limitation_trends_chart()
         if trend_chart:
             chart_files.append(trend_chart)
@@ -685,15 +685,15 @@ class AdvancedChartGenerator(CSVDataProcessor):
         return chart_files
 
     def _generate_ena_limitation_trends_chart(self):
-        """生成ENA限制趋势图表"""
+        """Generate ENA limitation trend charts"""
         try:
             # 定义ENA限制字段 (exceeded类型)
             limitation_fields = {
-                'ena_pps_exceeded': {'label': 'PPS超限', 'color': 'red'},
-                'ena_bw_in_exceeded': {'label': '入站带宽超限', 'color': 'orange'}, 
-                'ena_bw_out_exceeded': {'label': '出站带宽超限', 'color': 'blue'},
-                'ena_conntrack_exceeded': {'label': '连接跟踪超限', 'color': 'purple'},
-                'ena_linklocal_exceeded': {'label': '本地代理超限', 'color': 'green'}
+                'ena_pps_exceeded': {'label': 'PPS Exceeded', 'color': 'red'},
+                'ena_bw_in_exceeded': {'label': 'Inbound BW Exceeded', 'color': 'orange'}, 
+                'ena_bw_out_exceeded': {'label': 'Outbound BW Exceeded', 'color': 'blue'},
+                'ena_conntrack_exceeded': {'label': 'Connection Tracking Exceeded', 'color': 'purple'},
+                'ena_linklocal_exceeded': {'label': 'Link Local Exceeded', 'color': 'green'}
             }
             
             # 检查是否有任何限制数据
@@ -704,13 +704,13 @@ class AdvancedChartGenerator(CSVDataProcessor):
                     break
             
             if not has_limitation_data:
-                print("  ℹ️ 未检测到ENA限制，跳过限制趋势图")
+                print("  ℹ️ No ENA limitations detected, skipping limitation trend chart")
                 return None
             
             # 创建图表
             fig, ax = plt.subplots(1, 1, figsize=(16, 8))
             
-            # 绘制每个ENA限制指标的趋势线
+            # Plot trend lines for each ENA limitation metric
             lines_plotted = 0
             for field, config in limitation_fields.items():
                 if field in self.df.columns:
@@ -729,16 +729,10 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 plt.close()
                 return None
             
-            # 图表美化
-            # 根据字体支持情况选择标签语言
-            if self.use_english_labels:
-                ax.set_title('🚨 ENA Network Limitation Trend Analysis', fontsize=16, fontweight='bold')
-                ax.set_xlabel('Time', fontsize=12)
-                ax.set_ylabel('Limitation Triggers (Cumulative)', fontsize=12)
-            else:
-                ax.set_title('🚨 ENA网络限制趋势分析', fontsize=16, fontweight='bold')
-                ax.set_xlabel('Time', fontsize=12)
-                ax.set_ylabel('限制触发次数 (累计)', fontsize=12)
+            # Chart styling with English labels
+            ax.set_title('🚨 ENA Network Limitation Trend Analysis', fontsize=16, fontweight='bold')
+            ax.set_xlabel('Time', fontsize=12)
+            ax.set_ylabel('Limitation Triggers (Cumulative)', fontsize=12)
             ax.legend(loc='upper left')
             ax.grid(True, alpha=0.3)
             
@@ -751,22 +745,22 @@ class AdvancedChartGenerator(CSVDataProcessor):
             plt.savefig(chart_file, dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"  ✅ ENA限制趋势图已生成: {os.path.basename(chart_file)}")
+            print(f"  ✅ ENA limitation trend chart generated: {os.path.basename(chart_file)}")
             return chart_file
             
         except Exception as e:
-            print(f"  ❌ ENA限制趋势图生成失败: {str(e)}")
+            print(f"  ❌ ENA limitation trend chart generation failed: {str(e)}")
             return None
 
     def _generate_ena_connection_capacity_chart(self):
-        """生成ENA连接容量图表"""
+        """Generate ENA connection capacity charts"""
         try:
             if 'ena_conntrack_available' not in self.df.columns:
                 return None
             
             # 检查是否有连接容量数据
             if self.df['ena_conntrack_available'].max() == 0:
-                print("  ℹ️ 无ENA连接容量数据，跳过连接容量图")
+                print("  ℹ️ No ENA connection capacity data, skipping connection capacity chart")
                 return None
             
             # 创建图表
@@ -781,16 +775,10 @@ class AdvancedChartGenerator(CSVDataProcessor):
             ax.axhline(y=warning_threshold, color='red', linestyle='--', alpha=0.7, 
                       label=f'Warning Threshold ({warning_threshold:,})')
             
-            # 图表美化
-            # 根据字体支持情况选择标签语言
-            if self.use_english_labels:
-                ax.set_title('🔗 ENA Connection Capacity Monitoring', fontsize=16, fontweight='bold')
-                ax.set_xlabel('Time', fontsize=12)
-                ax.set_ylabel('Available Connections', fontsize=12)
-            else:
-                ax.set_title('🔗 ENA连接容量监控', fontsize=16, fontweight='bold')
-                ax.set_xlabel('Time', fontsize=12)
-                ax.set_ylabel('可用连接数', fontsize=12)
+            # Chart styling with English labels
+            ax.set_title('🔗 ENA Connection Capacity Monitoring', fontsize=16, fontweight='bold')
+            ax.set_xlabel('Time', fontsize=12)
+            ax.set_ylabel('Available Connections', fontsize=12)
             ax.legend()
             ax.grid(True, alpha=0.3)
             
@@ -806,15 +794,15 @@ class AdvancedChartGenerator(CSVDataProcessor):
             plt.savefig(chart_file, dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"  ✅ ENA连接容量图已生成: {os.path.basename(chart_file)}")
+            print(f"  ✅ ENA connection capacity chart generated: {os.path.basename(chart_file)}")
             return chart_file
             
         except Exception as e:
-            print(f"  ❌ ENA连接容量图生成失败: {str(e)}")
+            print(f"  ❌ ENA connection capacity chart generation failed: {str(e)}")
             return None
 
     def _generate_ena_comprehensive_status_chart(self):
-        """生成ENA综合状态图表"""
+        """Generate ENA comprehensive status charts"""
         try:
             # 检查是否有足够的ENA数据
             ena_fields = ['ena_pps_exceeded', 'ena_bw_in_exceeded', 'ena_bw_out_exceeded', 
@@ -826,21 +814,18 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # 创建2x2子图布局
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            # 根据字体支持情况选择标题语言
-            if self.use_english_labels:
-                fig.suptitle('🌐 ENA Network Comprehensive Analysis', fontsize=16, fontweight='bold')
-            else:
-                fig.suptitle('🌐 ENA网络综合分析', fontsize=16, fontweight='bold')
+            # Using English title directly
+            fig.suptitle('🌐 ENA Network Comprehensive Analysis', fontsize=16, fontweight='bold')
             
             # 1. 限制类型分布 (左上)
             ax1 = axes[0, 0]
             limitation_counts = {}
             field_labels = {
-                'ena_pps_exceeded': 'PPS超限',
-                'ena_bw_in_exceeded': '入站带宽超限',
-                'ena_bw_out_exceeded': '出站带宽超限',
-                'ena_conntrack_exceeded': '连接跟踪超限',
-                'ena_linklocal_exceeded': '本地代理超限'
+                'ena_pps_exceeded': 'PPS Exceeded',
+                'ena_bw_in_exceeded': 'Inbound BW Exceeded',
+                'ena_bw_out_exceeded': 'Outbound BW Exceeded',
+                'ena_conntrack_exceeded': 'Connection Tracking Exceeded',
+                'ena_linklocal_exceeded': 'Link Local Exceeded'
             }
             
             for field, label in field_labels.items():
@@ -852,11 +837,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
             if limitation_counts:
                 ax1.pie(limitation_counts.values(), labels=limitation_counts.keys(), 
                        autopct='%1.1f%%', startangle=90)
-                ax1.set_title('限制类型分布')
+                ax1.set_title('Limitation Type Distribution')
             else:
-                ax1.text(0.5, 0.5, '未检测到网络限制', ha='center', va='center', 
+                ax1.text(0.5, 0.5, 'No Network Limitations Detected', ha='center', va='center', 
                         transform=ax1.transAxes, fontsize=12)
-                ax1.set_title('限制类型分布')
+                ax1.set_title('Limitation Type Distribution')
             
             # 2. 连接容量状态 (右上)
             ax2 = axes[0, 1]
@@ -864,15 +849,15 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 capacity_data = self.df['ena_conntrack_available']
                 ax2.hist(capacity_data, bins=20, alpha=0.7, color='green', edgecolor='black')
                 ax2.axvline(capacity_data.mean(), color='red', linestyle='--', 
-                           label=f'平均值: {capacity_data.mean():,.0f}')
-                ax2.set_title('连接容量分布')
-                ax2.set_xlabel('可用连接数')
-                ax2.set_ylabel('频次')
+                           label=f'Average: {capacity_data.mean():,.0f}')
+                ax2.set_title('Connection Capacity Distribution')
+                ax2.set_xlabel('Available Connections')
+                ax2.set_ylabel('Frequency')
                 ax2.legend()
             else:
-                ax2.text(0.5, 0.5, '无连接容量数据', ha='center', va='center', 
+                ax2.text(0.5, 0.5, 'No Connection Capacity Data', ha='center', va='center', 
                         transform=ax2.transAxes, fontsize=12)
-                ax2.set_title('连接容量分布')
+                ax2.set_title('Connection Capacity Distribution')
             
             # 3. 限制严重程度Time线 (左下)
             ax3 = axes[1, 0]
@@ -888,14 +873,14 @@ class AdvancedChartGenerator(CSVDataProcessor):
             if severity_score.max() > 0:
                 ax3.plot(self.df['timestamp'], severity_score, color='red', linewidth=2)
                 ax3.fill_between(self.df['timestamp'], severity_score, alpha=0.3, color='red')
-                ax3.set_title('网络限制严重程度')
+                ax3.set_title('Network Limitation Severity')
                 ax3.set_xlabel('Time')
-                ax3.set_ylabel('同时限制类型数')
+                ax3.set_ylabel('Concurrent Limitation Types')
                 plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45)
             else:
-                ax3.text(0.5, 0.5, '无网络限制记录', ha='center', va='center', 
+                ax3.text(0.5, 0.5, 'No Network Limitation Records', ha='center', va='center', 
                         transform=ax3.transAxes, fontsize=12)
-                ax3.set_title('网络限制严重程度')
+                ax3.set_title('Network Limitation Severity')
             
             # 4. ENA状态汇总 (右下)
             ax4 = axes[1, 1]
@@ -917,22 +902,22 @@ class AdvancedChartGenerator(CSVDataProcessor):
                         total_events = (self.df[field] > 0).sum()
                         summary_data.append([field_labels.get(field, field), 
                                            f'{max_val}', 
-                                           f'{total_events}次'])
+                                           f'{total_events} events'])
             
             if summary_data:
                 table = ax4.table(cellText=summary_data,
-                                colLabels=['指标', '最大值/平均值', '事件次数/最小值'],
+                                colLabels=['Metric', 'Max/Avg Value', 'Event Count/Min Value'],
                                 cellLoc='center',
                                 loc='center')
                 table.auto_set_font_size(False)
                 table.set_fontsize(9)
                 table.scale(1.2, 1.5)
                 ax4.axis('off')
-                ax4.set_title('ENA状态汇总')
+                ax4.set_title('ENA Status Summary')
             else:
-                ax4.text(0.5, 0.5, '无ENA数据', ha='center', va='center', 
+                ax4.text(0.5, 0.5, 'No ENA Data', ha='center', va='center', 
                         transform=ax4.transAxes, fontsize=12)
-                ax4.set_title('ENA状态汇总')
+                ax4.set_title('ENA Status Summary')
             
             plt.tight_layout()
             
@@ -941,18 +926,16 @@ class AdvancedChartGenerator(CSVDataProcessor):
             plt.savefig(chart_file, dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"  ✅ ENA综合状态图已生成: {os.path.basename(chart_file)}")
+            print(f"  ✅ ENA comprehensive status chart generated: {os.path.basename(chart_file)}")
             return chart_file
             
         except Exception as e:
-            print(f"  ❌ ENA综合状态图生成失败: {str(e)}")
+            print(f"  ❌ ENA comprehensive status chart generation failed: {str(e)}")
             return None
-        
-        return chart_files
 
     def generate_all_charts(self) -> List[str]:
-        """生成所有图表"""
-        print("🎨 开始生成完整的CPU-EBS相关性分析图表...")
+        """Generate all charts"""
+        print("🎨 Starting complete CPU-EBS correlation analysis chart generation...")
         
         all_charts = []
         
@@ -977,7 +960,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         # 新增: 相关性热力图
         all_charts.extend(self.generate_correlation_heatmap())
         
-        print(f"\n🎉 图表生成完成！共生成 {len(all_charts)} 个图表文件:")
+        print(f"\n🎉 Chart generation completed! Generated {len(all_charts)} chart files:")
         for chart in all_charts:
             print(f"  📊 {os.path.basename(chart)}")
         
@@ -988,7 +971,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         生成性能指标相关性热力图
         基于现有的71个CSV字段映射生成全面的相关性分析
         """
-        print("\n📊 生成相关性热力图...")
+        print("\n📊 Generating correlation heatmap...")
         
         try:
             # 选择数值型字段进行相关性分析
@@ -999,7 +982,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             numeric_cols = [col for col in numeric_cols if col not in exclude_cols]
             
             if len(numeric_cols) < 2:
-                print("⚠️  可用于相关性分析的数值字段不足")
+                print("⚠️  Insufficient numeric fields available for correlation analysis")
                 return []
             
             # 计算相关性矩阵
@@ -1025,17 +1008,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 annot_kws={'size': 8}
             )
             
-            # 根据字体支持情况选择标签语言
-            if self.use_english_labels:
-                plt.title('Performance Metrics Correlation Heatmap', 
-                         fontsize=16, fontweight='bold', pad=20)
-                plt.xlabel('Performance Metrics', fontsize=12)
-                plt.ylabel('Performance Metrics', fontsize=12)
-            else:
-                plt.title('性能指标相关性热力图\nPerformance Metrics Correlation Heatmap', 
-                         fontsize=16, fontweight='bold', pad=20)
-                plt.xlabel('性能指标 Performance Metrics', fontsize=12)
-                plt.ylabel('性能指标 Performance Metrics', fontsize=12)
+            # Using English labels directly
+            plt.title('Performance Metrics Correlation Heatmap', 
+                     fontsize=16, fontweight='bold', pad=20)
+            plt.xlabel('Performance Metrics', fontsize=12)
+            plt.ylabel('Performance Metrics', fontsize=12)
             
             # 旋转标签以提高可读性
             plt.xticks(rotation=45, ha='right')
@@ -1048,7 +1025,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             plt.savefig(chart_file, dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"  ✅ 相关性热力图: {os.path.basename(chart_file)}")
+            print(f"  ✅ Correlation heatmap: {os.path.basename(chart_file)}")
             
             # 生成强相关性分析报告
             self._generate_correlation_insights(correlation_matrix, chart_file)
@@ -1056,7 +1033,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             return [chart_file]
             
         except Exception as e:
-            print(f"❌ 相关性热力图生成失败: {e}")
+            print(f"❌ Correlation heatmap generation failed: {e}")
             return []
 
     def _generate_correlation_insights(self, correlation_matrix: pd.DataFrame, chart_file: str):
@@ -1085,30 +1062,30 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 生成洞察报告
             insights_file = chart_file.replace('.png', '_insights.txt')
             with open(insights_file, 'w', encoding='utf-8') as f:
-                f.write("性能指标相关性分析洞察报告\n")
+                f.write("Performance Metrics Correlation Analysis Insights Report\n")
                 f.write("=" * 50 + "\n\n")
-                f.write(f"分析Time: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"分析指标数量: {len(correlation_matrix.columns)}\n")
-                f.write(f"强相关性对数: {len(strong_correlations)}\n\n")
+                f.write(f"Analysis Time: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Number of Metrics Analyzed: {len(correlation_matrix.columns)}\n")
+                f.write(f"Strong Correlation Pairs: {len(strong_correlations)}\n\n")
                 
                 if strong_correlations:
-                    f.write("🔍 强相关性指标对 (|r| > 0.7):\n")
+                    f.write("🔍 Strong Correlation Pairs (|r| > 0.7):\n")
                     f.write("-" * 40 + "\n")
-                    for i, corr in enumerate(strong_correlations[:10], 1):  # 只显示前10个
+                    for i, corr in enumerate(strong_correlations[:10], 1):  # Show top 10 only
                         f.write(f"{i:2d}. {corr['metric1']} ↔ {corr['metric2']}\n")
-                        f.write(f"    相关系数: {corr['correlation']:.3f} ({corr['strength']})\n\n")
+                        f.write(f"    Correlation Coefficient: {corr['correlation']:.3f} ({corr['strength']})\n\n")
                 else:
-                    f.write("未发现强相关性指标对 (|r| > 0.7)\n")
+                    f.write("No strong correlation pairs found (|r| > 0.7)\n")
             
-            print(f"  📋 相关性洞察: {os.path.basename(insights_file)}")
+            print(f"  📋 Correlation insights: {os.path.basename(insights_file)}")
             
         except Exception as e:
-            print(f"⚠️  相关性洞察生成失败: {e}")
+            print(f"⚠️  Correlation insights generation failed: {e}")
 
 
 # 使用示例
 if __name__ == "__main__":
-    print("🎨 高级图表生成器使用示例:")
+    print("🎨 Advanced chart generator usage example:")
     print("generator = AdvancedChartGenerator('performance_data.csv')")
     print("charts = generator.generate_all_charts()")
-    print("# 生成包括相关性热力图在内的统计分析可视化图表")
+    print("# Generate statistical analysis visualization charts including correlation heatmaps")

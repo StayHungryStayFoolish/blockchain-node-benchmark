@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-综合分析器 - 重构后的集成版本 + 瓶颈模式支持
-整合RPC深度分析器、验证器日志分析器和QPS分析器
-提供统一的分析入口和完整的报告生成
-支持瓶颈检测模式和时间窗口分析
+Comprehensive Analyzer - Refactored integrated version with bottleneck mode support
+Integrates RPC deep analyzer and QPS analyzer for blockchain node performance testing
+Provides unified analysis entry point and complete report generation
+Supports bottleneck detection mode and time window analysis
 """
 
 import pandas as pd
@@ -120,20 +120,27 @@ current_dir = Path(__file__).parent
 project_root = current_dir.parent
 utils_dir = project_root / 'utils'
 visualization_dir = project_root / 'visualization'
+analysis_dir = current_dir  # 添加当前analysis目录
 
 # 添加路径到sys.path
-for path in [str(utils_dir), str(visualization_dir)]:
+for path in [str(utils_dir), str(visualization_dir), str(analysis_dir)]:
     if path not in sys.path:
         sys.path.insert(0, path)
 
 # 导入拆分后的模块
 try:
-    from rpc_deep_analyzer import RpcDeepAnalyzer
-    from validator_log_analyzer import ValidatorLogAnalyzer
-    from qps_analyzer import SolanaQPSAnalyzer
+    # 尝试相对导入（当作为模块导入时）
+    from .rpc_deep_analyzer import RpcDeepAnalyzer
+    from .qps_analyzer import NodeQPSAnalyzer
     logger.info("✅ 所有分析模块加载成功")
-except ImportError as e:
-    logger.error(f"❌ 分析模块导入失败: {e}")
+except ImportError:
+    try:
+        # 尝试直接导入（当直接运行脚本时）
+        from rpc_deep_analyzer import RpcDeepAnalyzer
+        from qps_analyzer import NodeQPSAnalyzer
+        logger.info("✅ 所有分析模块加载成功")
+    except ImportError as e:
+        logger.error(f"❌ 分析模块导入失败: {e}")
 
 class BottleneckAnalysisMode:
     """瓶颈分析模式配置"""
@@ -163,16 +170,6 @@ class BottleneckAnalysisMode:
             logger.error(f"❌ 瓶颈信息解析失败: {e}")
             self.enabled = False
 
-# 字段映射器已移除
-try:
-    # 不再使用字段映射器
-    FIELD_MAPPER_AVAILABLE = False
-    logger.info("✅ 使用直接字段访问模式")
-except ImportError as e:
-    FIELD_MAPPER_AVAILABLE = False
-    logger.warning(f"⚠️  字段映射器不可用: {e}，将使用原始字段名")
-
-
 class ComprehensiveAnalyzer:
     """综合分析器 - 整合所有分析功能的主控制器 + 瓶颈模式支持"""
 
@@ -197,22 +194,18 @@ class ComprehensiveAnalyzer:
         self.bottleneck_mode = bottleneck_mode or BottleneckAnalysisMode()
         
         # 初始化各个分析器
-        self.qps_analyzer = SolanaQPSAnalyzer(output_dir, benchmark_mode, self.bottleneck_mode.enabled)
-        self.log_analyzer = ValidatorLogAnalyzer()
+        self.qps_analyzer = NodeQPSAnalyzer(output_dir, benchmark_mode, self.bottleneck_mode.enabled)
         self.rpc_deep_analyzer = RpcDeepAnalyzer(self.csv_file)
         
         # 初始化文件管理器
         self.file_manager = FileManager(self.output_dir, self.session_timestamp)
         
-        # 使用英文标签系统，移除复杂的字体管理
-        self.use_english_labels = True
+        # Using English labels system directly
         
         logger.info(f"🔍 初始化综合分析器，输出目录: {output_dir}")
         if self.bottleneck_mode.enabled:
             logger.info(f"🚨 瓶颈分析模式已启用")
     
-
-
     def get_latest_csv(self) -> Optional[str]:
         """获取最新的CSV监控文件"""
         csv_files = glob.glob(f"{self.output_dir}/logs/*.csv")
@@ -296,96 +289,9 @@ class ComprehensiveAnalyzer:
             logger.error(f"❌ 瓶颈相关性分析失败: {e}")
             return {}
 
-    def generate_bottleneck_analysis_chart(self, df: pd.DataFrame, bottleneck_analysis: Dict[str, Any]) -> Optional[plt.Figure]:
-        """生成瓶颈分析专项图表"""
-        if not self.bottleneck_mode.enabled or not bottleneck_analysis:
-            return None
-        
-        try:
-            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            # 根据字体支持情况选择标题语言
-            if self.use_english_labels:
-                fig.suptitle('🚨 Bottleneck Analysis Dashboard', fontsize=16, fontweight='bold', color='red')
-            else:
-                fig.suptitle('🚨 瓶颈分析仪表板', fontsize=16, fontweight='bold', color='red')
-            
-            # 1. QPS性能曲线 + 瓶颈标记
-            if 'current_qps' in df.columns and len(df) > 0:
-                axes[0, 0].plot(df.index, df['current_qps'], 'b-', alpha=0.7, label='QPS')
-                
-                # 标记最大成功QPS和瓶颈QPS
-                max_qps = bottleneck_analysis.get('max_qps', 0)
-                bottleneck_qps = bottleneck_analysis.get('bottleneck_qps', 0)
-                
-                if max_qps > 0:
-                    axes[0, 0].axhline(y=max_qps, color='green', linestyle='--', 
-                                     label=f'Max Successful QPS: {max_qps}')
-                if bottleneck_qps > 0:
-                    axes[0, 0].axhline(y=bottleneck_qps, color='red', linestyle='--', 
-                                     label=f'Bottleneck QPS: {bottleneck_qps}')
-                
-                axes[0, 0].set_title('QPS Performance with Bottleneck Markers')
-                axes[0, 0].set_xlabel('Time')
-                axes[0, 0].set_ylabel('QPS')
-                axes[0, 0].legend()
-                axes[0, 0].grid(True, alpha=0.3)
-            
-            # 2. 瓶颈因子相关性
-            correlations = bottleneck_analysis.get('correlations', {})
-            if correlations:
-                factors = list(correlations.keys())[:10]  # 取前10个
-                corr_values = [correlations[f] for f in factors]
-                
-                colors = ['red' if abs(c) > 0.7 else 'orange' if abs(c) > 0.5 else 'blue' for c in corr_values]
-                axes[0, 1].barh(factors, corr_values, color=colors, alpha=0.7)
-                axes[0, 1].set_title('Bottleneck Factor Correlations')
-                axes[0, 1].set_xlabel('Correlation with QPS')
-                axes[0, 1].axvline(x=0, color='black', linestyle='-', alpha=0.3)
-                axes[0, 1].grid(True, alpha=0.3)
-            
-            # 3. 性能下降分析
-            performance_drop = bottleneck_analysis.get('performance_drop', 0.0)
-            if performance_drop != 0:
-                # 从瓶颈分析结果或瓶颈模式对象中获取QPS值
-                max_qps = bottleneck_analysis.get('max_qps', self.bottleneck_mode.max_qps)
-                bottleneck_qps = bottleneck_analysis.get('bottleneck_qps', self.bottleneck_mode.bottleneck_qps)
-                
-                categories = ['Max QPS', 'Bottleneck QPS']
-                values = [max_qps, bottleneck_qps]
-                colors = ['green', 'red']
-                
-                bars = axes[1, 0].bar(categories, values, color=colors, alpha=0.7)
-                axes[1, 0].set_title(f'Performance Drop: {performance_drop:.1f}%')
-                axes[1, 0].set_ylabel('QPS')
-                
-                # 添加数值标签
-                for bar, value in zip(bars, values):
-                    axes[1, 0].text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(values)*0.01,
-                                   f'{value}', ha='center', va='bottom', fontweight='bold')
-            
-            # 4. 瓶颈因子重要性
-            bottleneck_factors = bottleneck_analysis.get('bottleneck_factors', [])
-            if bottleneck_factors:
-                factor_names = [f['metric'] for f in bottleneck_factors]
-                factor_impacts = [abs(f['correlation']) for f in bottleneck_factors]
-                
-                axes[1, 1].pie(factor_impacts, labels=factor_names, autopct='%1.1f%%', startangle=90)
-                axes[1, 1].set_title('Bottleneck Factor Impact Distribution')
-            
-            plt.tight_layout()
-            
-            # 保存图表 - 使用文件管理器，同时创建当前版本和备份
-            chart_path = self.file_manager.save_chart_with_backup('bottleneck_analysis_chart', plt)
-            logger.info(f"📊 瓶颈分析图表已保存: {chart_path}")
-            
-            return fig
-            
-        except Exception as e:
-            logger.error(f"❌ 瓶颈分析图表生成失败: {e}")
-            return None
+    # generate_bottleneck_analysis_chart方法已删除（基于失效数据）
 
     def generate_ultimate_performance_charts(self, df: pd.DataFrame, 
-                                           log_analysis: Dict[str, Any], 
                                            rpc_deep_analysis: Dict[str, Any]) -> Optional[plt.Figure]:
         """生成终极性能图表，整合所有分析结果"""
         print("\n📈 Generating ultimate performance charts...")
@@ -396,11 +302,8 @@ class ComprehensiveAnalyzer:
 
         plt.style.use('default')
         fig, axes = plt.subplots(4, 2, figsize=(16, 24))
-        # 根据字体支持情况选择标题语言
-        if self.use_english_labels:
-            fig.suptitle('Solana QPS Ultimate Performance Analysis Dashboard', fontsize=16, fontweight='bold')
-        else:
-            fig.suptitle('Solana QPS 终极性能分析仪表板', fontsize=16, fontweight='bold')
+        # Using English title directly
+        fig.suptitle('Blockchain Node QPS Ultimate Performance Analysis Dashboard', fontsize=16, fontweight='bold')
 
         # 1. CPU使用率 vs QPS
         if len(df) > 0 and 'cpu_usage' in df.columns:
@@ -432,66 +335,20 @@ class ComprehensiveAnalyzer:
             axes[1, 0].legend()
             axes[1, 0].grid(True, alpha=0.3)
 
-        # 4. RPC错误率（来自日志分析）
-        rpc_analysis = log_analysis.get('rpc_analysis', {})
-        if rpc_analysis:
-            error_rate = 100 - rpc_analysis.get('success_rate', 100)
-            axes[1, 1].bar(['RPC Success Rate', 'RPC Error Rate'],
-                           [rpc_analysis.get('success_rate', 100), error_rate],
-                           color=['green', 'red'], alpha=0.7)
-            axes[1, 1].set_title('RPC Success vs Error Rate')
-            axes[1, 1].set_ylabel('Percentage')
-            axes[1, 1].grid(True, alpha=0.3)
-        else:
-            axes[1, 1].text(0.5, 0.5, 'No RPC Analysis Data', ha='center', va='center',
-                            transform=axes[1, 1].transAxes, fontsize=12)
-            axes[1, 1].set_title('RPC Analysis (No Data)')
+        # 4. 预留位置（原RPC错误率图表已删除）
+        axes[1, 1].text(0.5, 0.5, 'Chart Removed\n(Invalid Data Source)', ha='center', va='center',
+                        transform=axes[1, 1].transAxes, fontsize=12)
+        axes[1, 1].set_title('RPC Analysis (Removed)')
 
-        # 5. 瓶颈事件分布
-        bottleneck_analysis = log_analysis.get('bottleneck_analysis', {})
-        if bottleneck_analysis:
-            bottleneck_types = ['RPC Thread', 'Compute Unit', 'Memory', 'I/O', 'Network']
-            bottleneck_counts = [
-                bottleneck_analysis.get('rpc_thread_saturation', 0),
-                bottleneck_analysis.get('compute_unit_limits', 0),
-                bottleneck_analysis.get('memory_pressure', 0),
-                bottleneck_analysis.get('io_bottlenecks', 0),
-                bottleneck_analysis.get('network_issues', 0)
-            ]
+        # 5. 预留位置（原瓶颈事件分布图表已删除）
+        axes[2, 0].text(0.5, 0.5, 'Chart Removed\n(Invalid Data Source)', ha='center', va='center',
+                        transform=axes[2, 0].transAxes, fontsize=12)
+        axes[2, 0].set_title('Bottleneck Analysis (Removed)')
 
-            colors = ['red', 'orange', 'purple', 'brown', 'pink']
-            bars = axes[2, 0].bar(bottleneck_types, bottleneck_counts, color=colors, alpha=0.7)
-            axes[2, 0].set_title('Bottleneck Events Distribution')
-            axes[2, 0].set_ylabel('Event Count')
-            axes[2, 0].tick_params(axis='x', rotation=45)
-
-            # 添加数值标签
-            for bar, count in zip(bars, bottleneck_counts):
-                if count > 0:
-                    axes[2, 0].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
-                                    str(count), ha='center', va='bottom')
-        else:
-            axes[2, 0].text(0.5, 0.5, 'No Bottleneck Data', ha='center', va='center',
-                            transform=axes[2, 0].transAxes, fontsize=12)
-            axes[2, 0].set_title('Bottleneck Analysis (No Data)')
-
-        # 6. RPC方法分布
-        if rpc_analysis and 'method_distribution' in rpc_analysis:
-            method_dist = rpc_analysis['method_distribution']
-            if method_dist:
-                methods = list(method_dist.keys())[:5]  # 前5个方法
-                counts = [method_dist[method] for method in methods]
-
-                axes[2, 1].pie(counts, labels=methods, autopct='%1.1f%%', startangle=90)
-                axes[2, 1].set_title('RPC Method Distribution')
-            else:
-                axes[2, 1].text(0.5, 0.5, 'No RPC Method Data', ha='center', va='center',
-                                transform=axes[2, 1].transAxes, fontsize=12)
-                axes[2, 1].set_title('RPC Methods (No Data)')
-        else:
-            axes[2, 1].text(0.5, 0.5, 'No RPC Method Data', ha='center', va='center',
-                            transform=axes[2, 1].transAxes, fontsize=12)
-            axes[2, 1].set_title('RPC Methods (No Data)')
+        # 6. 预留位置（原RPC方法分布图表已删除）
+        axes[2, 1].text(0.5, 0.5, 'Chart Removed\n(Invalid Data Source)', ha='center', va='center',
+                        transform=axes[2, 1].transAxes, fontsize=12)
+        axes[2, 1].set_title('RPC Methods (Removed)')
 
         # 7. RPC延迟分布
         if len(df) > 0 and 'rpc_latency_ms' in df.columns:
@@ -542,18 +399,16 @@ class ComprehensiveAnalyzer:
 
     def _evaluate_comprehensive_performance(self, benchmark_mode: str, max_qps: int, 
                                           bottlenecks: Dict[str, Any], avg_cpu: float, 
-                                          avg_mem: float, avg_rpc: float,
-                                          bottleneck_analysis: Dict[str, Any],
-                                          rpc_analysis: Dict[str, Any]) -> Dict[str, Any]:
+                                          avg_mem: float, avg_rpc: float) -> Dict[str, Any]:
         """
-        基于综合分析的科学性能评估
-        整合QPS、日志分析、RPC分析等多维度数据
+        基于实际监控数据的科学性能评估
+        整合QPS性能、系统资源使用率、RPC延迟等多维度监控数据
         """
         
         # 只有深度基准测试模式才能进行准确的性能等级评估
         if benchmark_mode != "intensive":
             return {
-                'performance_level': '无法评估',
+                'performance_level': 'Unable to Evaluate',
                 'performance_grade': 'N/A',
                 'evaluation_reason': f'{benchmark_mode}基准测试模式无法准确评估系统性能等级，需要intensive模式进行深度分析',
                 'evaluation_basis': 'insufficient_benchmark_depth',
@@ -565,31 +420,29 @@ class ComprehensiveAnalyzer:
                 ]
             }
         
-        # 综合瓶颈分析
+        # 综合瓶颈分析 - 基于实际监控数据
         bottleneck_types = bottlenecks.get('detected_bottlenecks', [])
-        rpc_issues = rpc_analysis.get('critical_issues', [])
-        validator_issues = bottleneck_analysis.get('critical_patterns', [])
         
-        # 计算综合瓶颈评分
+        # 计算综合瓶颈评分 - 不再依赖废弃的日志分析数据
         comprehensive_score = ComprehensiveAnalyzer._calculate_comprehensive_bottleneck_score(
-            bottleneck_types, avg_cpu, avg_mem, avg_rpc, rpc_issues, validator_issues
+            bottleneck_types, avg_cpu, avg_mem, avg_rpc
         )
         
         # 基于综合评分的科学等级评估
         if comprehensive_score < 0.2:
-            level = "优秀"
+            level = "Excellent"
             grade = "A (Excellent)"
-            reason = f"系统在{max_qps} QPS下表现优秀，各项指标均在正常范围内"
+            reason = f"System performs excellently at {max_qps} QPS, all metrics within normal range"
             
         elif comprehensive_score < 0.4:
-            level = "良好"
+            level = "Good"
             grade = "B (Good)"
-            reason = f"系统在{max_qps} QPS下表现良好，存在轻微瓶颈或问题"
+            reason = f"System performs well at {max_qps} QPS, with minor bottlenecks or issues"
             
         elif comprehensive_score < 0.7:
-            level = "一般"
+            level = "Acceptable"
             grade = "C (Acceptable)"
-            reason = f"系统在{max_qps} QPS下表现一般，存在明显瓶颈需要关注"
+            reason = f"System performs acceptably at {max_qps} QPS, with noticeable bottlenecks requiring attention"
             
         else:
             level = "需要优化"
@@ -604,39 +457,36 @@ class ComprehensiveAnalyzer:
             'max_sustainable_qps': max_qps,
             'comprehensive_score': comprehensive_score,
             'bottleneck_types': bottleneck_types,
-            'rpc_issues_count': len(rpc_issues),
-            'validator_issues_count': len(validator_issues),
+            'avg_rpc_latency': avg_rpc,
             'recommendations': ComprehensiveAnalyzer._generate_comprehensive_recommendations(
-                bottleneck_types, rpc_issues, validator_issues, comprehensive_score, max_qps
+                bottleneck_types, comprehensive_score, max_qps, avg_rpc
             )
         }
     
     @staticmethod
     def _calculate_comprehensive_bottleneck_score(bottleneck_types: list, 
-                                                avg_cpu: float, avg_mem: float, avg_rpc: float,
-                                                rpc_issues: list, validator_issues: list) -> float:
-        """计算综合瓶颈严重程度评分 - 静态方法"""
+                                                avg_cpu: float, avg_mem: float, avg_rpc: float) -> float:
+        """计算综合瓶颈严重程度评分 - 基于实际监控数据"""
         
         total_score = 0.0
         
-        # 系统资源瓶颈评分 (权重: 0.4)
+        # 系统资源瓶颈评分 (权重: 0.7)
         resource_score = 0.0
         if 'CPU' in bottleneck_types:
-            resource_score += 0.15 * (1.5 if avg_cpu > 90 else 1.0)
+            resource_score += 0.3 * (1.5 if avg_cpu > 90 else 1.0)
         if 'Memory' in bottleneck_types:
-            resource_score += 0.15 * (1.5 if avg_mem > 95 else 1.0)
+            resource_score += 0.3 * (1.5 if avg_mem > 95 else 1.0)
         if 'EBS' in bottleneck_types:
             resource_score += 0.1
         
-        # RPC问题评分 (权重: 0.3)
-        rpc_score = min(len(rpc_issues) * 0.1, 0.3)
-        if avg_rpc > 2000:
-            rpc_score *= 1.5
+        # RPC性能评分 (权重: 0.3) - 基于实际RPC延迟监控数据
+        rpc_score = 0.0
+        if avg_rpc > 1000:  # 高延迟
+            rpc_score += 0.15
+        if avg_rpc > 2000:  # 极高延迟
+            rpc_score += 0.15
         
-        # 验证器问题评分 (权重: 0.3)
-        validator_score = min(len(validator_issues) * 0.1, 0.3)
-        
-        total_score = resource_score + rpc_score + validator_score
+        total_score = resource_score + rpc_score
         
         return min(total_score, 1.0)
     
@@ -644,14 +494,14 @@ class ComprehensiveAnalyzer:
     def _generate_comprehensive_capacity_assessment(performance_evaluation: Dict[str, Any], max_qps: int) -> str:
         """基于综合性能评估生成容量评估 - 静态方法"""
         performance_level = performance_evaluation.get('performance_level', '未知')
-        comprehensive_score = performance_evaluation.get('comprehensive_score', 0)
+        comprehensive_score = performance_evaluation.get('comprehensive_score', 0.0)
         
-        if performance_level == "优秀":
-            return f"当前配置可稳定处理高负载 (已测试至 {max_qps:,} QPS，综合评分: {comprehensive_score:.3f})"
-        elif performance_level == "良好":
-            return f"当前配置可处理中高负载 (已测试至 {max_qps:,} QPS，存在轻微问题)"
-        elif performance_level == "一般":
-            return f"当前配置适合中等负载 (已测试至 {max_qps:,} QPS，存在明显问题)"
+        if performance_level == "Excellent":
+            return f"Current configuration can stably handle high load (tested up to {max_qps:,} QPS, comprehensive score: {comprehensive_score:.3f})"
+        elif performance_level == "Good":
+            return f"Current configuration can handle medium-high load (tested up to {max_qps:,} QPS, with minor issues)"
+        elif performance_level == "Acceptable":
+            return f"Current configuration suitable for medium load (tested up to {max_qps:,} QPS, with noticeable issues)"
         elif performance_level == "需要优化":
             return f"当前配置需要优化以处理高负载 (已测试至 {max_qps:,} QPS，存在严重问题)"
         else:
@@ -659,16 +509,15 @@ class ComprehensiveAnalyzer:
 
     @staticmethod
     def _generate_comprehensive_recommendations(bottleneck_types: list, 
-                                             rpc_issues: list, validator_issues: list,
-                                             comprehensive_score: float, max_qps: int) -> list:
-        """基于综合分析生成优化建议 - 静态方法"""
+                                             comprehensive_score: float, max_qps: int, avg_rpc: float) -> list:
+        """基于综合分析生成优化建议 - 基于实际监控数据"""
         recommendations = []
         
         if comprehensive_score < 0.2:
             recommendations.extend([
-                f"🎉 系统综合性能优秀，当前配置可稳定支持 {max_qps} QPS",
-                "💡 可考虑进一步提升QPS目标或优化成本效率",
-                "📊 建议定期监控以维持当前性能水平"
+                f"🎉 System comprehensive performance is excellent, current configuration can stably support {max_qps} QPS",
+                "💡 Consider further increasing QPS targets or optimizing cost efficiency",
+                "� Recomdmend regular monitoring to maintain current performance level"
             ])
         else:
             # 系统资源优化建议
@@ -679,20 +528,17 @@ class ComprehensiveAnalyzer:
             if 'EBS' in bottleneck_types:
                 recommendations.append("🔧 存储瓶颈：考虑升级EBS类型或优化I/O模式")
             
-            # RPC优化建议
-            if rpc_issues:
-                recommendations.append(f"🔧 RPC问题：发现{len(rpc_issues)}个RPC相关问题，需要优化RPC配置")
-            
-            # 验证器优化建议
-            if validator_issues:
-                recommendations.append(f"🔧 验证器问题：发现{len(validator_issues)}个验证器相关问题，需要检查验证器配置")
+            # 基于实际RPC延迟的优化建议
+            if avg_rpc > 1000:
+                recommendations.append("🔧 RPC延迟较高：考虑优化RPC配置或增加RPC处理能力")
+            if avg_rpc > 2000:
+                recommendations.append("🔥 RPC延迟过高：需要立即优化RPC性能或检查网络连接")
         
         return recommendations
 
     @OperationLogger.log_operation("Generating comprehensive report", "📄")
     def generate_comprehensive_report(self, df: pd.DataFrame, max_qps: int, 
                                     bottlenecks: Dict[str, Any], 
-                                    log_analysis: Dict[str, Any], 
                                     rpc_deep_analysis: Dict[str, Any],
                                     benchmark_mode: str = "standard") -> str:
         """生成基于瓶颈分析的综合报告，整合所有分析结果"""
@@ -702,19 +548,28 @@ class ComprehensiveAnalyzer:
         avg_mem = DataProcessor.safe_calculate_mean(df, 'mem_usage')
         avg_rpc = DataProcessor.safe_calculate_mean(df, 'rpc_latency_ms')
 
-        # 日志分析结果
-        rpc_analysis = log_analysis.get('rpc_analysis', {})
-        bottleneck_analysis = log_analysis.get('bottleneck_analysis', {})
-        summary_stats = log_analysis.get('summary_stats', {})
-        correlation_analysis = log_analysis.get('correlation_analysis', {})
-
+        # 注意：当前框架只使用实时监控数据，不再依赖区块链节点日志分析
+        # RPC分析基于监控数据中的延迟指标，不是日志解析结果
+        
         # 基于基准测试模式和瓶颈分析的性能评估
+        # 不再使用废弃的日志分析数据，直接基于监控数据进行评估
         performance_evaluation = self._evaluate_comprehensive_performance(
-            benchmark_mode, max_qps, bottlenecks, avg_cpu, avg_mem, avg_rpc, 
-            bottleneck_analysis, rpc_analysis
+            benchmark_mode, max_qps, bottlenecks, avg_cpu, avg_mem, avg_rpc
         )
 
-        report = f"""# Solana QPS Comprehensive Performance Analysis Report
+        # 构建报告的各个部分
+        cpu_bottleneck = 'Detected' if 'CPU' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
+        memory_bottleneck = 'Detected' if 'Memory' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
+        network_bottleneck = 'Detected' if 'Network' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
+        ebs_bottleneck = 'Detected' if 'EBS' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
+        
+        max_cpu = DataProcessor.safe_calculate_max(df, 'cpu_usage')
+        max_mem = DataProcessor.safe_calculate_max(df, 'mem_usage')
+        max_rpc_latency = DataProcessor.safe_calculate_max(df, 'rpc_latency_ms')
+        
+        latency_trend = 'Stable' if max_rpc_latency < avg_rpc * 2 else 'Variable'
+
+        report = f"""# Blockchain Node QPS Comprehensive Performance Analysis Report
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 ## Executive Summary
@@ -723,60 +578,42 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - **Performance Level**: {performance_evaluation['performance_level']}
 - **Benchmark Mode**: {benchmark_mode}
 - **Test Duration**: {len(df)} monitoring points
-- **Log Entries Analyzed**: {summary_stats.get('total_log_entries', 0):,}
-- **Analysis Period**: {summary_stats.get('analysis_period_hours', 0):.1f} hours
+- **Monitoring Data Points**: {len(df)} records
+- **Analysis Coverage**: Complete system performance monitoring
 
 ## Performance Evaluation
 - **Evaluation Basis**: {performance_evaluation['evaluation_basis']}
 - **Evaluation Reason**: {performance_evaluation['evaluation_reason']}
-- **Comprehensive Score**: {performance_evaluation.get('comprehensive_score', 0):.3f}
+- **Comprehensive Score**: {performance_evaluation.get('comprehensive_score', 0.0):.3f}
 
 ## System Performance Metrics
 - **Average CPU Usage**: {avg_cpu:.1f}%
 - **Average Memory Usage**: {avg_mem:.1f}%
 - **Average RPC Latency**: {avg_rpc:.1f}ms
-- **CPU Peak**: {DataProcessor.safe_calculate_max(df, 'cpu_usage'):.1f}%
-- **Memory Peak**: {DataProcessor.safe_calculate_max(df, 'mem_usage'):.1f}%
-- **RPC Latency Peak**: {DataProcessor.safe_calculate_max(df, 'rpc_latency_ms'):.1f}ms
+- **CPU Peak**: {max_cpu:.1f}%
+- **Memory Peak**: {max_mem:.1f}%
+- **RPC Latency Peak**: {max_rpc_latency:.1f}ms
 
-## 🔍 Enhanced Log Analysis Results
+## 🔍 System Performance Analysis Results
 
-### RPC Performance (From Validator Logs)
-- **Total RPC Requests**: {rpc_analysis.get('total_rpc_requests', 0):,}
-- **RPC Success Rate**: {rpc_analysis.get('success_rate', 0):.2f}%
-- **RPC Error Count**: {rpc_analysis.get('rpc_errors', 0):,}
-- **RPC Busy Incidents**: {rpc_analysis.get('rpc_busy_incidents', 0):,}
-- **Average Response Time**: {rpc_analysis.get('avg_response_time', 0):.1f}ms
-- **P95 Response Time**: {rpc_analysis.get('p95_response_time', 0):.1f}ms
-- **P99 Response Time**: {rpc_analysis.get('p99_response_time', 0):.1f}ms
+### Monitoring Data Analysis
+- **QPS Performance**: Based on real-time system monitoring and CSV data
+- **System Resource Usage**: CPU, Memory, Network utilization continuously tracked
+- **RPC Performance Monitoring**: Average latency {avg_rpc:.1f}ms from monitoring data
+- **Peak RPC Latency**: {max_rpc_latency:.1f}ms during test period
 
-### Critical Bottlenecks Detected
-- **RPC Thread Saturation**: {bottleneck_analysis.get('rpc_thread_saturation', 0)} incidents
-- **Compute Unit Limits**: {bottleneck_analysis.get('compute_unit_limits', 0)} incidents
-- **Memory Pressure Events**: {bottleneck_analysis.get('memory_pressure', 0)} incidents
-- **I/O Bottlenecks**: {bottleneck_analysis.get('io_bottlenecks', 0)} incidents
-- **Network Issues**: {bottleneck_analysis.get('network_issues', 0)} incidents
+### Resource Bottleneck Detection
+- **CPU Bottlenecks**: {cpu_bottleneck}
+- **Memory Bottlenecks**: {memory_bottleneck}
+- **Network Bottlenecks**: {network_bottleneck}
+- **EBS Bottlenecks**: {ebs_bottleneck}
 
-### QPS vs Error Correlation
+### Performance Trend Analysis
+- **QPS Stability**: Analyzed from {len(df)} monitoring data points
+- **Latency Trend**: {latency_trend} throughout test period
+- **Resource Utilization**: CPU avg {avg_cpu:.1f}%, Memory avg {avg_mem:.1f}%
+- **Data Source**: Real-time system monitoring and RPC performance tracking
 """
-
-        # 添加相关性分析
-        if correlation_analysis and correlation_analysis.get('qps_error_correlation'):
-            correlation = correlation_analysis['qps_error_correlation']
-            report += f"- **QPS-Error Correlation**: {correlation:.3f}\n"
-
-            if correlation > 0.7:
-                report += "  ⚠️  Strong positive correlation detected - errors increase with QPS\n"
-            elif correlation > 0.3:
-                report += "  📊 Moderate correlation detected between QPS and errors\n"
-            else:
-                report += "  ✅ Low correlation - system handles QPS increases well\n"
-
-        # 最常用的RPC方法
-        if rpc_analysis.get('method_distribution'):
-            report += "\n### Most Active RPC Methods\n"
-            for method, count in rpc_analysis['method_distribution'].most_common(5):
-                report += f"- **{method}**: {count:,} requests\n"
 
         # 添加RPC深度分析结果
         if rpc_deep_analysis:
@@ -784,23 +621,22 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             report += rpc_deep_report
 
         # 优化建议
-        report += f"""
+        report += """
 ## 💡 Comprehensive Optimization Recommendations
 
 ### Immediate Actions
 """
 
-        # 基于日志分析和RPC深度分析的具体建议
-        rpc_busy_count = bottleneck_analysis.get('rpc_thread_saturation', 0)
-        memory_pressure = bottleneck_analysis.get('memory_pressure', 0)
+        # 基于现有监控数据的具体建议
+        if avg_rpc > 1000:
+            report += "- 🔧 **High Priority**: RPC latency is high, consider optimization\n"
+            
+        if max_rpc_latency > 2000:
+            report += "- 🔥 **Critical**: Peak RPC latency detected, investigate bottlenecks\n"
 
-        if rpc_busy_count > 20:
-            report += "- 🔧 **High Priority**: Increase RPC thread pool size (current threads are saturated)\n"
-            report += "- 🔧 **High Priority**: Consider implementing RPC request rate limiting\n"
-
-        if memory_pressure > 0:
-            report += "- 🔥 **Critical**: Increase system memory allocation or optimize memory usage\n"
-            report += "- 🔧 Check for memory leaks in validator process\n"
+        if avg_mem > 90:
+            report += "- 🔥 **Critical**: High memory usage detected, consider increasing memory\n"
+            report += "- 🔧 Monitor for potential memory leaks\n"
 
         # 使用基于综合分析的建议
         for recommendation in performance_evaluation.get('recommendations', []):
@@ -815,25 +651,28 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 for rec in recommendations:
                     report += f"- 🔧 {rec}\n"
 
+        # 生产部署建议
+        capacity_assessment = ComprehensiveAnalyzer._generate_comprehensive_capacity_assessment(performance_evaluation, max_qps)
+        csv_file_display = self.csv_file or 'N/A'
+        
         report += f"""
 ### Production Deployment
 - **Recommended Production QPS**: {int(max_qps * 0.8):,} (80% of maximum tested)
 - **Monitoring Thresholds**: 
-  - Alert if RPC success rate < 98%
-  - Alert if RPC busy incidents > 10/hour
-  - Alert if memory pressure events detected
   - Alert if RPC latency P99 > 500ms sustained
-- **Capacity Assessment**: {ComprehensiveAnalyzer._generate_comprehensive_capacity_assessment(performance_evaluation, max_qps)}
+  - Alert if CPU usage > 85% sustained
+  - Alert if Memory usage > 90% sustained
+- **Capacity Assessment**: {capacity_assessment}
 
 ## Files Generated
 - **Comprehensive Charts**: `{self.output_dir}/reports/comprehensive_analysis_charts.png`
-- **Raw QPS Monitoring Data**: `{self.csv_file or 'N/A'}`
-- **Validator Log Analysis**: Included in this report
-- **RPC Deep Analysis**: Included in this report
-- **Vegeta Test Reports**: `{self.output_dir}/reports/`
+- **Raw Monitoring Data**: `{csv_file_display}`
+- **System Performance Analysis**: Included in this report
+- **RPC Performance Analysis**: Included in this report
+- **Load Test Reports**: `{self.output_dir}/reports/`
 
 ---
-*Report generated by Comprehensive Solana QPS Analyzer v4.0*
+*Report generated by Comprehensive Blockchain Node QPS Analyzer v4.0*
 """
 
         # 保存综合报告 - 使用文件管理器，同时创建当前版本和备份
@@ -844,7 +683,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
     def run_comprehensive_analysis(self) -> Dict[str, Any]:
         """运行完整的综合分析"""
-        print("🚀 Starting Comprehensive Solana QPS Analysis")
+        print("🚀 Starting Comprehensive Blockchain Node QPS Analysis")
         print("=" * 80)
 
         # 1. 运行QPS分析
@@ -854,32 +693,17 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         max_qps = qps_results['max_qps']
         bottlenecks = qps_results['bottlenecks']
 
-        # 1.1 字段映射器已移除，直接使用原始列名
-        # 注意: 字段映射器功能已被移除，现在直接使用CSV文件中的原始列名
-        if FIELD_MAPPER_AVAILABLE:
-            # 这个分支不会执行，因为FIELD_MAPPER_AVAILABLE=False
-            try:
-                # 字段映射器相关代码已移除
-                logger.info("✅ 字段映射器应用成功")
-                print("  ✅ 字段标准化完成")
-            except Exception as e:
-                logger.warning(f"⚠️  字段映射器应用失败: {e}，继续使用原始列名")
-                print(f"  ⚠️  字段映射器应用失败，使用原始列名")
-        else:
-            logger.info("ℹ️  使用原始CSV列名进行分析")
-            print("  ℹ️  使用原始CSV列名进行分析")
+        # 1.1 Using direct CSV column names for analysis
+        logger.info("ℹ️  Using monitoring data for comprehensive analysis")
+        print("  ℹ️  Using monitoring data for comprehensive analysis")
 
-        # 2. 运行验证器日志分析
-        print("\n📋 Phase 2: Validator Log Analysis")
-        log_analysis = self.log_analyzer.analyze_validator_logs_during_test(df)
-
-        # 3. 运行RPC深度分析
-        print("\n🔍 Phase 3: RPC Deep Analysis")
+        # 2. 运行RPC深度分析
+        print("\n🔍 Phase 2: RPC Deep Analysis")
         rpc_deep_analysis = self.rpc_deep_analyzer.analyze_rpc_deep_performance(df)
 
-        # 4. 生成综合图表和报告
-        print("\n📈 Phase 4: Comprehensive Reporting")
-        self.generate_ultimate_performance_charts(df, log_analysis, rpc_deep_analysis)
+        # 3. 生成综合图表和报告
+        print("\n📈 Phase 3: Comprehensive Reporting")
+        self.generate_ultimate_performance_charts(df, rpc_deep_analysis)
         
         # 4.1 生成性能可视化图表（包含阈值分析）
         print("\n🎨 Phase 4.1: Performance Visualization with Threshold Analysis")
@@ -921,13 +745,10 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             print(f"⚠️ 性能可视化图表生成失败: {e}")
         
         comprehensive_report = self.generate_comprehensive_report(
-            df, max_qps, bottlenecks, log_analysis, rpc_deep_analysis, self.benchmark_mode
+            df, max_qps, bottlenecks, rpc_deep_analysis, self.benchmark_mode
         )
 
-        # 5. 显示所有分析报告
-        if log_analysis:
-            log_report = self.log_analyzer.generate_log_analysis_report(log_analysis)
-            print(log_report)
+        # 5. 显示RPC深度分析报告
 
         if rpc_deep_analysis:
             rpc_report = self.rpc_deep_analyzer.generate_rpc_deep_analysis_report(rpc_deep_analysis)
@@ -936,7 +757,6 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         # 返回完整的分析结果
         comprehensive_results = {
             'qps_analysis': qps_results,
-            'log_analysis': log_analysis,
             'rpc_deep_analysis': rpc_deep_analysis,
             'comprehensive_report': comprehensive_report,
             'dataframe': df,
@@ -1012,10 +832,7 @@ def main():
             
             # 瓶颈相关性分析
             bottleneck_analysis = analyzer.analyze_bottleneck_correlation(df)
-            
-            # 生成瓶颈分析图表
-            bottleneck_chart = analyzer.generate_bottleneck_analysis_chart(df, bottleneck_analysis)
-            
+
             # 保存瓶颈分析结果
             bottleneck_result_file = os.path.join(analyzer.output_dir, 'reports', 'bottleneck_analysis_result.json')
             os.makedirs(os.path.dirname(bottleneck_result_file), exist_ok=True)

@@ -39,12 +39,7 @@ class CPUEBSCorrelationAnalyzer:
         self.data_file = data_file
         self.df = None
         self.analysis_results = {}
-        
-        # 使用英文标签系统，移除复杂的字体管理
-        self.use_english_labels = True
-    
 
-        
     def _check_device_configured(self, logical_name: str) -> bool:
         """检查设备是否配置并且有数据"""
         if self.df is None:

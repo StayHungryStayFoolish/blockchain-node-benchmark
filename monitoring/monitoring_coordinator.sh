@@ -9,9 +9,9 @@
 # 加载错误处理和配置
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/error_handler.sh"
 # 安全加载配置文件，避免readonly变量冲突
-if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config.sh" 2>/dev/null; then
+if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
     echo "警告: 配置文件加载失败，使用默认配置"
-    MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
+    MONITOR_INTERVAL=${MONITOR_INTERVAL:-5}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 
@@ -24,10 +24,12 @@ if [[ -z "${MONITOR_STATUS_FILE:-}" ]]; then
     readonly MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
 fi
 
-# 监控任务定义 (移除bottleneck，因为它只在intensive模式下使用)
+# 监控任务定义 - 包含所有必要的监控脚本
 declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
     ["slot"]="slot_monitor.sh"
+    ["iostat"]="iostat_collector.sh"
+    ["ena_network"]="ena_network_monitor.sh"
     ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
 )
 
@@ -76,7 +78,6 @@ is_monitor_running() {
 start_monitor() {
     local monitor_name="$1"
     local script_name="${MONITOR_TASKS[$monitor_name]}"
-    local duration="${2:-$DEFAULT_MONITOR_DURATION}"
     
     if [[ -z "$script_name" ]]; then
         echo "❌ 未知的监控任务: $monitor_name"
@@ -104,6 +105,21 @@ start_monitor() {
             # QPS测试模式：不传递duration，无限运行
             # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
             (cd "${script_dir}" && ./"${script_name}" -b) &
+            ;;
+        "iostat")
+            # iostat收集器 - 独立运行模式，生成自己的CSV文件
+            # 注意：这个脚本目前只有测试模式，需要添加持续监控模式
+            echo "⚠️  iostat_collector.sh 需要持续监控模式支持"
+            return 1
+            ;;
+        "ena_network")
+            # ENA网络监控器 - 独立运行模式
+            if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
+                (cd "${script_dir}" && ./"${script_name}" start -i "$MONITOR_INTERVAL") &
+            else
+                echo "⚠️  ENA监控已禁用，跳过ena_network任务"
+                return 0
+            fi
             ;;
         "ebs_bottleneck")
             # QPS测试模式：不传递duration，无限运行
@@ -165,15 +181,13 @@ stop_monitor() {
 
 # 启动所有监控任务
 start_all_monitors() {
-    local duration="${1:-$DEFAULT_MONITOR_DURATION}"
+    echo "🚀 启动所有监控任务 (监控间隔: ${MONITOR_INTERVAL}秒)"
     
-    echo "🚀 启动所有监控任务 (持续时间: ${duration}秒)"
-    
-    # 按优先级启动监控任务 (移除bottleneck，因为它只在intensive模式下使用)
-    local monitors_to_start=("unified" "slot" "ebs_bottleneck")
+    # 按优先级启动监控任务 - 启动所有必要的监控脚本
+    local monitors_to_start=("unified" "iostat" "ena_network" "slot" "ebs_bottleneck")
     
     for monitor in "${monitors_to_start[@]}"; do
-        start_monitor "$monitor" "$duration"
+        start_monitor "$monitor"
         sleep 1  # 避免同时启动造成资源竞争
     done
     
@@ -301,7 +315,7 @@ show_usage() {
     echo "用法: $0 [选项] [命令]"
     echo ""
     echo "命令:"
-    echo "  start [duration]     启动所有监控任务"
+    echo "  start                启动所有监控任务"
     echo "  stop                 停止所有监控任务"
     echo "  status               显示监控状态"
     echo "  health               执行健康检查"
@@ -330,7 +344,7 @@ main() {
     case "$command" in
         "start")
             init_coordinator
-            start_all_monitors "${2:-$DEFAULT_MONITOR_DURATION}"
+            start_all_monitors
             # 保持监控协调器运行，监控子进程状态
             echo "🔄 监控协调器保持运行，监控子进程状态..."
             
@@ -440,7 +454,7 @@ main() {
                 exit 1
             fi
             init_coordinator
-            start_monitor "$2" "${3:-$DEFAULT_MONITOR_DURATION}"
+            start_monitor "$2"
             ;;
         "stop-monitor")
             if [[ -z "$2" ]]; then
