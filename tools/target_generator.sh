@@ -30,7 +30,7 @@ show_help() {
     echo "  -v, --verbose              启用详细输出"
     echo ""
     echo "支持的区块链: solana, ethereum, bsc, base, polygon, scroll, starknet, sui"
-    echo "当前区块链: $CURRENT_CHAIN_TYPE"
+    echo "当前区块链: $BLOCKCHAIN_NODE"
     echo "RPC模式:"
     echo "  single: 使用单一RPC方法生成目标"
     echo "  mixed: 使用多种RPC方法生成目标"
@@ -174,7 +174,7 @@ check_required_variables() {
         "SINGLE_METHOD_TARGETS_FILE"
         "MIXED_METHOD_TARGETS_FILE"
         "LOCAL_RPC_URL"
-        "CURRENT_CHAIN_TYPE"
+        "BLOCKCHAIN_NODE"
         "CURRENT_RPC_METHODS_STRING"
     )
 
@@ -214,7 +214,7 @@ check_input_file() {
 # 生成测试目标 - 使用配置化的方法列表
 generate_targets() {
     echo "🎯 生成Vegeta测试目标..." >&2
-    echo "   区块链类型: $CURRENT_CHAIN_TYPE" >&2
+    echo "   区块链类型: $BLOCKCHAIN_NODE" >&2
     echo "   RPC模式: $RPC_MODE" >&2
     echo "   RPC方法: $CURRENT_RPC_METHODS_STRING" >&2
     echo "   输入文件: $ACCOUNTS_OUTPUT_FILE" >&2
