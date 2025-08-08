@@ -322,9 +322,9 @@ ACCOUNT_SEMAPHORE_LIMIT=10                                            # 并发�
 RPC_MODE="${RPC_MODE:-single}"      # RPC模式: single/mixed (默认single)
 
 CHAIN_CONFIG='{
-    "chain_type": "'${BLOCKCHAIN_NODE}'",
-    "rpc_url": "'${LOCAL_RPC_URL}'",
-    "target_address": "'${ACCOUNT_TARGET_ADDRESS}'",
+    "chain_type": "${BLOCKCHAIN_NODE}",
+    "rpc_url": "${LOCAL_RPC_URL}",
+    "target_address": "${ACCOUNT_TARGET_ADDRESS}",
     "methods": {
         "get_signatures": "getSignaturesForAddress",
         "get_transaction": "getTransaction"
@@ -342,9 +342,9 @@ CHAIN_CONFIG='{
         "ComputeBudget111111111111111111111111111111"
     ],
     "limits": {
-        "max_signatures": '${ACCOUNT_MAX_SIGNATURES}',
-        "batch_size": '${ACCOUNT_TX_BATCH_SIZE}',
-        "semaphore_limit": '${ACCOUNT_SEMAPHORE_LIMIT}'
+        "max_signatures": "${ACCOUNT_MAX_SIGNATURES}",
+        "batch_size": "${ACCOUNT_TX_BATCH_SIZE}",
+        "semaphore_limit": "${ACCOUNT_SEMAPHORE_LIMIT}"
     }
 }'
 
