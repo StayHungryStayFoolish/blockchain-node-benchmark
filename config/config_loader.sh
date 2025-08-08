@@ -335,11 +335,11 @@ CHAIN_CONFIG='{
     },
     "system_addresses": [
         "11111111111111111111111111111111",
-        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  # SPL代币程序
-        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",  # 关联代币账户程序
-        "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",  # 元数据程序
-        "SysvarRent111111111111111111111111111111111",  # 系统变量-租金
-        "ComputeBudget111111111111111111111111111111",  # 计算预算程序
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+        "SysvarRent111111111111111111111111111111111",
+        "ComputeBudget111111111111111111111111111111"
     ],
     "limits": {
         "max_signatures": '${ACCOUNT_MAX_SIGNATURES}',
@@ -355,7 +355,8 @@ CHAIN_CONFIG='{
 # =====================================================================
 
 # 从 CHAIN_CONFIG 中提取区块链类型
-CURRENT_CHAIN_TYPE=$(echo "$CHAIN_CONFIG" | jq -r '.chain_type // "solana"')
+CURRENT_CHAIN_TYPE=$(echo "$CHAIN_CONFIG" | jq -r '.chain_type // "solana"' 2>/dev/null || echo "solana")
+
 
 # 多区块链 RPC 方法配置 - 移除需要tx和多地址的API
 declare -A BLOCKCHAIN_RPC_METHODS=(
