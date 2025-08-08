@@ -321,7 +321,7 @@ ACCOUNT_SEMAPHORE_LIMIT=10                                            # 并发�
 # ----- RPC模式配置 -----
 RPC_MODE="${RPC_MODE:-single}"      # RPC模式: single/mixed (默认single)
 
-CHAIN_CONFIG='{
+CHAIN_CONFIG="{
     "chain_type": "${BLOCKCHAIN_NODE}",
     "rpc_url": "${LOCAL_RPC_URL}",
     "target_address": "${ACCOUNT_TARGET_ADDRESS}",
@@ -346,7 +346,7 @@ CHAIN_CONFIG='{
         "batch_size": "${ACCOUNT_TX_BATCH_SIZE}",
         "semaphore_limit": "${ACCOUNT_SEMAPHORE_LIMIT}"
     }
-}'
+}"
 
 
 
