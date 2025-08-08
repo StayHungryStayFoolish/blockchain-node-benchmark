@@ -294,7 +294,7 @@ create_directories_safely "$DATA_DIR" "$CURRENT_TEST_DIR" "$LOGS_DIR" "$REPORTS_
 
 # ----- 基础配置 -----
 # Blockchain Node Local RPC Endpoint
-LOCAL_RPC_URL="http://localhost:8899"
+LOCAL_RPC_URL="${LOCAL_RPC_URL:-http://localhost:8899}"
 # Mainnet RPC Endpoint
 MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
 
