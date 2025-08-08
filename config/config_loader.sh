@@ -321,7 +321,35 @@ ACCOUNT_SEMAPHORE_LIMIT=10                                            # 并发�
 # ----- RPC模式配置 -----
 RPC_MODE="${RPC_MODE:-single}"      # RPC模式: single/mixed (默认single)
 
-CHAIN_CONFIG="{
+#CHAIN_CONFIG="{
+#    "chain_type": "${BLOCKCHAIN_NODE}",
+#    "rpc_url": "${LOCAL_RPC_URL}",
+#    "target_address": "${ACCOUNT_TARGET_ADDRESS}",
+#    "methods": {
+#        "get_signatures": "getSignaturesForAddress",
+#        "get_transaction": "getTransaction"
+#    },
+#    "data_extraction": {
+#        "account_keys_path": "transaction.message.accountKeys",
+#        "pubkey_field": "pubkey"
+#    },
+#    "system_addresses": [
+#        "11111111111111111111111111111111",
+#        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+#        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+#        "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+#        "SysvarRent111111111111111111111111111111111",
+#        "ComputeBudget111111111111111111111111111111"
+#    ],
+#    "limits": {
+#        "max_signatures": "${ACCOUNT_MAX_SIGNATURES}",
+#        "batch_size": "${ACCOUNT_TX_BATCH_SIZE}",
+#        "semaphore_limit": "${ACCOUNT_SEMAPHORE_LIMIT}"
+#    }
+#}"
+
+CHAIN_CONFIG=$(cat <<EOF
+{
     "chain_type": "${BLOCKCHAIN_NODE}",
     "rpc_url": "${LOCAL_RPC_URL}",
     "target_address": "${ACCOUNT_TARGET_ADDRESS}",
@@ -346,7 +374,9 @@ CHAIN_CONFIG="{
         "batch_size": "${ACCOUNT_TX_BATCH_SIZE}",
         "semaphore_limit": "${ACCOUNT_SEMAPHORE_LIMIT}"
     }
-}"
+}
+EOF
+)
 
 
 
