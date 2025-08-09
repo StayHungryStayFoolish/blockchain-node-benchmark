@@ -11,6 +11,12 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
     exit 1
 fi
 
+# 兜底：若方法串为空，现算一遍（避免上游未初始化）
+if [[ -z "${CURRENT_RPC_METHODS_STRING:-}" ]]; then
+    CURRENT_RPC_METHODS_STRING="$(get_current_rpc_methods)"
+    IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
+fi
+
 # 初始化变量（保持向后兼容）
 VERBOSE=${VERBOSE:-false}
 
@@ -306,6 +312,15 @@ main() {
 
     # 解析参数
     parse_args "$@"
+
+    # 再次兜底：确保方法串/数组就绪
+    if [[ -z "${CURRENT_RPC_METHODS_STRING:-}" ]]; then
+        CURRENT_RPC_METHODS_STRING="$(get_current_rpc_methods)"
+    fi
+    IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
+
+    # 可选DEBUG输出
+    [[ "${CFG_DEBUG:-}" == "1" ]] && { echo "=== DEBUG TG: methods=($CURRENT_RPC_METHODS_STRING)" >&2; }
 
     # 检查输入文件
     if ! check_input_file; then

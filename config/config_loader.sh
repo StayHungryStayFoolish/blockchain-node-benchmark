@@ -418,15 +418,27 @@ declare -A RPC_METHOD_PARAM_FORMATS=(
 
 # 获取当前区块链的RPC方法列表
 get_current_rpc_methods() {
-    local chain_type=$(echo "${BLOCKCHAIN_NODE}" | tr '[:upper:]' '[:lower:]')
-    local rpc_mode=$(echo "${RPC_MODE}" | tr '[:upper:]' '[:lower:]')
+    local chain_type
+    chain_type=$(echo "${BLOCKCHAIN_NODE}" | tr '[:upper:]' '[:lower:]')
+    local rpc_mode
+    rpc_mode=$(echo "${RPC_MODE}" | tr '[:upper:]' '[:lower:]')
     local config_key="${chain_type}_${rpc_mode}"
 
     local methods_string="${BLOCKCHAIN_RPC_METHODS[$config_key]}"
 
     if [[ -z "$methods_string" ]]; then
-        echo "⚠️ 警告: 未找到 $config_key 的RPC方法配置，使用默认Solana配置" >&2
+        echo "⚠️ 警告: 未找到 $config_key 的RPC方法配置，尝试回退到 solana_${rpc_mode}" >&2
         methods_string="${BLOCKCHAIN_RPC_METHODS["solana_${rpc_mode}"]}"
+    fi
+
+    # 最终兜底，防止空串继续传播
+    if [[ -z "$methods_string" ]]; then
+        if [[ "$rpc_mode" == "mixed" ]]; then
+            methods_string="getAccountInfo,getBalance"  # 最小可运行混合集合
+        else
+            methods_string="getAccountInfo"             # 最小可运行单方法
+        fi
+        echo "❌ 错误: 回退后依然为空，启用最小默认集: $methods_string" >&2
     fi
 
     echo "$methods_string"
@@ -463,6 +475,17 @@ export NETWORK_INTERFACE BASE_MEMORY_DIR DEPLOYMENT_ENV
 export BASE_FRAMEWORK_DIR BASE_DATA_DIR DEPLOYMENT_STRUCTURE
 
 
+
+# 可选DEBUG开关
+if [[ "${CFG_DEBUG:-}" == "1" ]]; then
+    echo "=== DEBUG: bash=$BASH_VERSION" >&2
+    echo "=== DEBUG: declare -p BLOCKCHAIN_RPC_METHODS" >&2
+    declare -p BLOCKCHAIN_RPC_METHODS 2>&1 | sed 's/^/  /' >&2 || true
+    echo "=== DEBUG: declare -p RPC_METHOD_PARAM_FORMATS" >&2
+    declare -p RPC_METHOD_PARAM_FORMATS 2>&1 | sed 's/^/  /' >&2 || true
+    echo "=== DEBUG: CURRENT_RPC_METHODS_STRING=$CURRENT_RPC_METHODS_STRING" >&2
+    echo "=== DEBUG: CURRENT_RPC_METHODS_ARRAY=(${CURRENT_RPC_METHODS_ARRAY[*]})" >&2
+fi
 
 echo "🔧 RPC方法配置完成:" >&2
 echo "   区块链类型: $BLOCKCHAIN_NODE" >&2
