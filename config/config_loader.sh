@@ -2,12 +2,62 @@
 # =====================================================================
 # Solana QPS 测试框架 - 统一配置加载器
 # =====================================================================
-# 版本: 3.0 - 分层配置架构
 # 功能: 按顺序加载所有配置层并执行动态配置检测
 # =====================================================================
 
-# 防止重复加载配置文件
-if [[ "${CONFIG_LOADED:-}" == "true" ]]; then
+# =====================================================================
+# 用户配置变量 - 用户只需要配置这些变量
+# =====================================================================
+
+# ----- 基础配置 -----
+# Blockchain Node Local RPC Endpoint
+LOCAL_RPC_URL="${LOCAL_RPC_URL:-http://localhost:8899}"
+# Mainnet RPC Endpoint
+MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
+
+# ----- 区块链节点配置 -----
+BLOCKCHAIN_NODE="${BLOCKCHAIN_NODE:-solana}"
+
+# 强制确保 BLOCKCHAIN_NODE 是小写
+BLOCKCHAIN_NODE=$(echo "$BLOCKCHAIN_NODE" | tr '[:upper:]' '[:lower:]')
+
+# 区块链节点运行进程名称
+BLOCKCHAIN_PROCESS_NAMES=(
+    "blockchain"
+    "validator"
+    "node"
+)
+
+# 账户和目标文件配置
+ACCOUNT_COUNT=1000                                                    # 默认账户数量
+
+# ----- 账户获取工具配置 -----
+# 账户获取工具的详细配置参数
+ACCOUNT_MAX_SIGNATURES=50000                                          # 最大签名数量
+ACCOUNT_TX_BATCH_SIZE=100                                             # 交易批处理大小
+ACCOUNT_SEMAPHORE_LIMIT=10                                            # 并发限制
+
+# ----- RPC模式配置 -----
+RPC_MODE="${RPC_MODE:-single}"      # RPC模式: single/mixed (默认single)
+
+# =====================================================================
+# 用户配置变量 - 用户只需要配置以上这些变量
+# =====================================================================
+
+
+# =====================================================================
+# 高性能配置缓存机制 - 防止重复加载和JSON解析
+# =====================================================================
+CONFIG_CACHE_KEY="${BLOCKCHAIN_NODE}_${RPC_MODE}"
+
+# 检查是否需要重新加载配置
+NEED_RELOAD="false"
+if [[ "${CONFIG_LOADED:-}" != "true" ]]; then
+    NEED_RELOAD="true"
+elif [[ "${LAST_CONFIG_CACHE_KEY:-}" != "$CONFIG_CACHE_KEY" ]]; then
+    NEED_RELOAD="true"
+fi
+if [[ "$NEED_RELOAD" == "false" ]]; then
     return 0
 fi
 
@@ -286,164 +336,446 @@ detect_deployment_paths
 # 创建必要的目录
 create_directories_safely "$DATA_DIR" "$CURRENT_TEST_DIR" "$LOGS_DIR" "$REPORTS_DIR" "$VEGETA_RESULTS_DIR" "$TMP_DIR" "$ARCHIVES_DIR" "$ERROR_LOG_DIR" "$PYTHON_ERROR_LOG_DIR" "$MEMORY_SHARE_DIR"
 
-
-
 # =====================================================================
 # 配置 Blockchain Node & On-chain Active Addresses
 # =====================================================================
+# 用户配置变量已移动到文件开头
 
-# ----- 基础配置 -----
-# Blockchain Node Local RPC Endpoint
-LOCAL_RPC_URL="${LOCAL_RPC_URL:-http://localhost:8899}"
-# Mainnet RPC Endpoint
-MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
-
-# ----- 区块链节点配置 -----
-BLOCKCHAIN_NODE="Solana"
-
-# 强制确保 BLOCKCHAIN_NODE 是小写
-BLOCKCHAIN_NODE=$(echo "$BLOCKCHAIN_NODE" | tr '[:upper:]' '[:lower:]')
-
-# 区块链节点运行进程名称
-BLOCKCHAIN_PROCESS_NAMES=(
-    "blockchain"
-    "validator"
-    "node"
-)
-
-# 账户和目标文件配置
-ACCOUNT_COUNT=1000                                                    # 默认账户数量
-
-# ----- 账户获取工具配置 -----
-# 账户获取工具的详细配置参数
-ACCOUNT_TARGET_ADDRESS="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" # 示例目标地址
-ACCOUNT_MAX_SIGNATURES=50000                                          # 最大签名数量
-ACCOUNT_TX_BATCH_SIZE=100                                             # 交易批处理大小
-ACCOUNT_SEMAPHORE_LIMIT=10                                            # 并发限制
-
-# ----- RPC模式配置 -----
-RPC_MODE="${RPC_MODE:-single}"      # RPC模式: single/mixed (默认single)
-
-CHAIN_CONFIG=$(cat <<EOF
+# =====================================================================
+# 统一区块链配置 - 集成所有8个区块链的完整配置
+# =====================================================================
+UNIFIED_BLOCKCHAIN_CONFIG=$(cat <<'EOF'
 {
-  "chain_type": "BLOCKCHAIN_NODE",
-  "rpc_url": "LOCAL_RPC_URL",
-  "params": {
-    "account_count": "ACCOUNT_COUNT",
-    "output_file": "ACCOUNTS_OUTPUT_FILE",
-    "target_address": "ACCOUNT_TARGET_ADDRESS",
-    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-  },
-  "methods": {
-    "get_signatures": "getSignaturesForAddress",
-    "get_transaction": "getTransaction"
-  },
-  "system_addresses": [
-    "11111111111111111111111111111111",
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
-    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
-    "SysvarRent111111111111111111111111111111111",
-    "ComputeBudget111111111111111111111111111111"
-  ]
+  "blockchains": {
+    "solana": {
+      "chain_type": "solana",
+      "rpc_url": "LOCAL_RPC_URL",
+      "params": {
+        "account_count": "ACCOUNT_COUNT",
+        "output_file": "ACCOUNTS_OUTPUT_FILE",
+        "target_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+      },
+      "methods": {
+        "get_signatures": "getSignaturesForAddress",
+        "get_transaction": "getTransaction"
+      },
+      "system_addresses": [
+        "11111111111111111111111111111111",
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+        "SysvarRent111111111111111111111111111111111",
+        "ComputeBudget111111111111111111111111111111"
+      ],
+      "rpc_methods": {
+        "single": "getAccountInfo",
+        "mixed": "getAccountInfo,getBalance,getTokenAccountBalance,getRecentBlockhash,getBlockHeight"
+      },
+      "param_formats": {
+        "getAccountInfo": "single_address",
+        "getBalance": "single_address",
+        "getTokenAccountBalance": "single_address",
+        "getRecentBlockhash": "no_params",
+        "getBlockHeight": "no_params"
+      }
+    },
+    "ethereum": {
+      "chain_type": "ethereum",
+      "rpc_url": "LOCAL_RPC_URL",
+      "params": {
+        "account_count": "ACCOUNT_COUNT",
+        "output_file": "ACCOUNTS_OUTPUT_FILE",
+        "target_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+      },
+      "methods": {
+        "get_logs": "eth_getLogs",
+        "get_transaction": "eth_getTransactionByHash"
+      },
+      "system_addresses": [
+        "0x0000000000000000000000000000000000000000",
+        "0x000000000000000000000000000000000000dead"
+      ],
+      "rpc_methods": {
+        "single": "eth_getBalance",
+        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
+      },
+      "param_formats": {
+        "eth_getBalance": "address_latest",
+        "eth_getTransactionCount": "address_latest",
+        "eth_blockNumber": "no_params",
+        "eth_gasPrice": "no_params"
+      }
+    },
+    "bsc": {
+      "chain_type": "bsc",
+      "rpc_url": "LOCAL_RPC_URL",
+      "params": {
+        "account_count": "ACCOUNT_COUNT",
+        "output_file": "ACCOUNTS_OUTPUT_FILE",
+        "target_address": "0x250632378E573c6Be1AC2f97Fcdf00515d0Aa91B",
+        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+      },
+      "methods": {
+        "get_logs": "eth_getLogs",
+        "get_transaction": "eth_getTransactionByHash"
+      },
+      "system_addresses": [
+        "0x0000000000000000000000000000000000000000",
+        "0x000000000000000000000000000000000000dead"
+      ],
+      "rpc_methods": {
+        "single": "eth_getBalance",
+        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
+      },
+      "param_formats": {
+        "eth_getBalance": "address_latest",
+        "eth_getTransactionCount": "address_latest",
+        "eth_blockNumber": "no_params",
+        "eth_gasPrice": "no_params"
+      }
+    },
+    "base": {
+      "chain_type": "base",
+      "rpc_url": "LOCAL_RPC_URL",
+      "params": {
+        "account_count": "ACCOUNT_COUNT",
+        "output_file": "ACCOUNTS_OUTPUT_FILE",
+        "target_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+      },
+      "methods": {
+        "get_logs": "eth_getLogs",
+        "get_transaction": "eth_getTransactionByHash"
+      },
+      "system_addresses": [
+        "0x0000000000000000000000000000000000000000",
+        "0x000000000000000000000000000000000000dead"
+      ],
+      "rpc_methods": {
+        "single": "eth_getBalance",
+        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
+      },
+      "param_formats": {
+        "eth_getBalance": "address_latest",
+        "eth_getTransactionCount": "address_latest",
+        "eth_blockNumber": "no_params",
+        "eth_gasPrice": "no_params"
+      }
+    },
+    "scroll": {
+      "chain_type": "scroll",
+      "rpc_url": "LOCAL_RPC_URL",
+      "params": {
+        "account_count": "ACCOUNT_COUNT",
+        "output_file": "ACCOUNTS_OUTPUT_FILE",
+        "target_address": "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4",
+        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+      },
+      "methods": {
+        "get_logs": "eth_getLogs",
+        "get_transaction": "eth_getTransactionByHash"
+      },
+      "system_addresses": [
+        "0x0000000000000000000000000000000000000000",
+        "0x000000000000000000000000000000000000dead"
+      ],
+      "rpc_methods": {
+        "single": "eth_getBalance",
+        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
+      },
+      "param_formats": {
+        "eth_getBalance": "address_latest",
+        "eth_getTransactionCount": "address_latest",
+        "eth_blockNumber": "no_params",
+        "eth_gasPrice": "no_params"
+      }
+    },
+    "polygon": {
+      "chain_type": "polygon",
+      "rpc_url": "LOCAL_RPC_URL",
+      "params": {
+        "account_count": "ACCOUNT_COUNT",
+        "output_file": "ACCOUNTS_OUTPUT_FILE",
+        "target_address": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+      },
+      "methods": {
+        "get_logs": "eth_getLogs",
+        "get_transaction": "eth_getTransactionByHash"
+      },
+      "system_addresses": [
+        "0x0000000000000000000000000000000000000000",
+        "0x000000000000000000000000000000000000dead"
+      ],
+      "rpc_methods": {
+        "single": "eth_getBalance",
+        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
+      },
+      "param_formats": {
+        "eth_getBalance": "address_latest",
+        "eth_getTransactionCount": "address_latest",
+        "eth_blockNumber": "no_params",
+        "eth_gasPrice": "no_params"
+      }
+    },
+    "starknet": {
+      "chain_type": "starknet",
+      "rpc_url": "LOCAL_RPC_URL",
+      "params": {
+        "account_count": "ACCOUNT_COUNT",
+        "output_file": "ACCOUNTS_OUTPUT_FILE",
+        "target_address": "0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8",
+        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+      },
+      "methods": {
+        "get_events_native": "starknet_getEvents",
+        "get_transaction": "starknet_getTransactionByHash"
+      },
+      "system_addresses": [],
+      "rpc_methods": {
+        "single": "starknet_getClassAt",
+        "mixed": "starknet_getClassAt,starknet_getNonce,starknet_getStorageAt,starknet_blockNumber"
+      },
+      "param_formats": {
+        "starknet_getClassAt": "latest_address",
+        "starknet_getNonce": "latest_address",
+        "starknet_getStorageAt": "address_key_latest",
+        "starknet_blockNumber": "no_params"
+      }
+    },
+    "sui": {
+      "chain_type": "sui",
+      "rpc_url": "LOCAL_RPC_URL",
+      "params": {
+        "account_count": "ACCOUNT_COUNT",
+        "output_file": "ACCOUNTS_OUTPUT_FILE",
+        "target_address": "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+      },
+      "methods": {
+        "get_owned_objects": "suix_getOwnedObjects",
+        "get_transaction": "sui_getTransactionBlock",
+        "get_transactions": "suix_queryTransactionBlocks"
+      },
+      "system_addresses": ["0x1", "0x2", "0x3"],
+      "rpc_methods": {
+        "single": "sui_getObject",
+        "mixed": "sui_getObject,sui_getObjectsOwnedByAddress,sui_getTotalTransactionBlocks,sui_getLatestCheckpointSequenceNumber"
+      },
+      "param_formats": {
+        "sui_getObject": "address_with_options",
+        "sui_getObjectsOwnedByAddress": "single_address",
+        "sui_getTotalTransactionBlocks": "no_params",
+        "sui_getLatestCheckpointSequenceNumber": "no_params"
+      }
+    }
+  }
 }
 EOF
 )
 
 # =====================================================================
-# 多区块链 RPC 方法配置 - 基于 JSON-RPC-API-List.md
+# 自动配置生成函数
 # =====================================================================
 
-# 多区块链 RPC 方法配置 - 基于 API 功能对应关系总结表
-declare -A BLOCKCHAIN_RPC_METHODS=(
-    # Solana RPC 方法配置
-    ["solana_single"]="getAccountInfo"
-    ["solana_mixed"]="getAccountInfo,getBalance,getTokenAccountBalance,getRecentBlockhash,getBlockHeight"
-
-    # EVM兼容链 RPC 方法配置 (Ethereum, BSC, Base, Polygon, Scroll)
-    ["ethereum_single"]="eth_getBalance"
-    ["ethereum_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-
-    ["bsc_single"]="eth_getBalance"
-    ["bsc_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-
-    ["base_single"]="eth_getBalance"
-    ["base_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-
-    ["polygon_single"]="eth_getBalance"
-    ["polygon_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-
-    ["scroll_single"]="eth_getBalance"
-    ["scroll_mixed"]="eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-
-    # StarkNet RPC 方法配置
-    ["starknet_single"]="starknet_getClassAt"
-    ["starknet_mixed"]="starknet_getClassAt,starknet_getNonce,starknet_getStorageAt,starknet_blockNumber"
-
-    # Sui RPC 方法配置
-    ["sui_single"]="sui_getObject"
-    ["sui_mixed"]="sui_getObject,sui_getObjectsOwnedByAddress,sui_getTotalTransactionBlocks,sui_getLatestCheckpointSequenceNumber"
-)
-
-
-# 精确的参数格式配置 - 基于实际API文档
-declare -A RPC_METHOD_PARAM_FORMATS=(
-    # Solana 方法参数格式
-    ["getAccountInfo"]="single_address"           # ["address"]
-    ["getBalance"]="single_address"               # ["address"]
-    ["getTokenAccountBalance"]="single_address"   # ["address"]
-    ["getRecentBlockhash"]="no_params"           # []
-    ["getBlockHeight"]="no_params"               # []
-
-    # EVM兼容链方法参数格式
-    ["eth_getBalance"]="address_latest"          # ["address", "latest"]
-    ["eth_getTransactionCount"]="address_latest" # ["address", "latest"]
-    ["eth_blockNumber"]="no_params"              # []
-    ["eth_gasPrice"]="no_params"                 # []
-
-    # StarkNet 方法参数格式
-    ["starknet_getClassAt"]="latest_address"     # ["latest", "address"]
-    ["starknet_getNonce"]="latest_address"       # ["latest", "address"]
-    ["starknet_getStorageAt"]="address_key_latest" # ["address", "0x1", "latest"]
-    ["starknet_blockNumber"]="no_params"         # []
-
-    # Sui 方法参数格式
-    ["sui_getObject"]="address_with_options"     # ["address", {"showType": true, "showContent": true, "showDisplay": false}]
-    ["sui_getObjectsOwnedByAddress"]="single_address" # ["address"]
-    ["sui_getTotalTransactionBlocks"]="no_params"     # []
-    ["sui_getLatestCheckpointSequenceNumber"]="no_params" # []
-)
-
-# 获取当前区块链的RPC方法列表
-get_current_rpc_methods() {
-    local chain_type
-    chain_type=$(echo "${BLOCKCHAIN_NODE}" | tr '[:upper:]' '[:lower:]')
-    local rpc_mode
-    rpc_mode=$(echo "${RPC_MODE}" | tr '[:upper:]' '[:lower:]')
-    local config_key="${chain_type}_${rpc_mode}"
-
-    local methods_string="${BLOCKCHAIN_RPC_METHODS[$config_key]}"
-
-    if [[ -z "$methods_string" ]]; then
-        echo "⚠️ 警告: 未找到 $config_key 的RPC方法配置，尝试回退到 solana_${rpc_mode}" >&2
-        methods_string="${BLOCKCHAIN_RPC_METHODS["solana_${rpc_mode}"]}"
-    fi
-
-    # 最终兜底，防止空串继续传播
-    if [[ -z "$methods_string" ]]; then
-        if [[ "$rpc_mode" == "mixed" ]]; then
-            methods_string="getAccountInfo,getBalance"  # 最小可运行混合集合
-        else
-            methods_string="getAccountInfo"             # 最小可运行单方法
+# 验证BLOCKCHAIN_NODE值的有效性
+validate_blockchain_node() {
+    local blockchain_node="$1"
+    local blockchain_node_lower
+    blockchain_node_lower=$(echo "$blockchain_node" | tr '[:upper:]' '[:lower:]')
+    # 支持的区块链列表
+    local supported_blockchains=("solana" "ethereum" "bsc" "base" "scroll" "polygon" "starknet" "sui")
+    # 检查是否在支持列表中
+    for supported in "${supported_blockchains[@]}"; do
+        if [[ "$blockchain_node_lower" == "$supported" ]]; then
+            return 0  # 有效
         fi
-        echo "❌ 错误: 回退后依然为空，启用最小默认集: $methods_string" >&2
-    fi
+    done
+    # 无效的区块链类型
+    echo "❌ 错误: 不支持的区块链类型 '$blockchain_node'" >&2
+    echo "📋 支持的区块链类型:" >&2
+    printf "   - %s\n" "${supported_blockchains[@]}" >&2
+    echo "💡 提示: 请检查BLOCKCHAIN_NODE环境变量的值" >&2
+    return 1  # 无效
+}
 
+
+
+# 基于BLOCKCHAIN_NODE自动生成配置
+generate_auto_config() {
+    local blockchain_node="${BLOCKCHAIN_NODE:-solana}"
+    local blockchain_node_lower
+    # 验证BLOCKCHAIN_NODE值
+    if ! validate_blockchain_node "$blockchain_node"; then
+        # 配置错误，直接退出
+        exit 1
+    fi
+    blockchain_node_lower=$(echo "$blockchain_node" | tr '[:upper:]' '[:lower:]')
+    echo "🎯 开始自动配置生成..." >&2
+    echo "   BLOCKCHAIN_NODE原值: ${BLOCKCHAIN_NODE}" >&2
+    echo "   目标区块链: $blockchain_node_lower" >&2
+    
+    # 性能优化：使用缓存的JSON解析结果
+    local cache_var_name="CACHED_CHAIN_CONFIG_${blockchain_node_lower}"
+    local cached_config="${!cache_var_name}"
+    
+    if [[ -n "$cached_config" ]]; then
+        # 使用缓存的配置
+        CHAIN_CONFIG="$cached_config"
+
+    else
+        local jq_query=".blockchains.\"$blockchain_node_lower\""
+        CHAIN_CONFIG=$(echo "$UNIFIED_BLOCKCHAIN_CONFIG" | jq -c "$jq_query")
+        # 缓存解析结果
+        if [[ "$CHAIN_CONFIG" != "null" && -n "$CHAIN_CONFIG" ]]; then
+            export "$cache_var_name"="$CHAIN_CONFIG"
+        fi
+    fi
+    
+    # 验证配置是否正确加载
+    if [[ "$CHAIN_CONFIG" == "null" || -z "$CHAIN_CONFIG" ]]; then
+        echo "❌ 错误: 无法加载 $blockchain_node_lower 的配置" >&2
+        echo "   这表示UNIFIED_BLOCKCHAIN_CONFIG中缺少该区块链的配置" >&2
+        echo "   请检查配置文件的完整性" >&2
+        exit 1
+    fi
+    
+    # 从CHAIN_CONFIG中获取RPC方法 - 修复缓存逻辑
+    local rpc_mode_lower
+    rpc_mode_lower=$(echo "${RPC_MODE:-single}" | tr '[:upper:]' '[:lower:]')
+    
+    # 性能优化：使用缓存的RPC方法解析结果
+    local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower}_${rpc_mode_lower}"
+    local cached_rpc_methods="${!rpc_cache_var_name}"
+    
+    if [[ -n "$cached_rpc_methods" ]]; then
+        # 使用缓存的RPC方法
+        CURRENT_RPC_METHODS_STRING="$cached_rpc_methods"
+    else
+        # 重新计算并缓存
+        CURRENT_RPC_METHODS_STRING=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"")
+        # 缓存RPC方法解析结果
+        if [[ "$CURRENT_RPC_METHODS_STRING" != "null" && -n "$CURRENT_RPC_METHODS_STRING" ]]; then
+            export "$rpc_cache_var_name"="$CURRENT_RPC_METHODS_STRING"
+        fi
+    fi
+    # 直接使用配置，框架配置是完整的
+    # 无需验证和回退机制
+    # 框架配置是完整的，直接使用
+    
+    # 转换为数组
+    IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
+    
+    # 配置一致性验证（混合方案的安全检查）
+    validate_config_consistency
+    
+    echo "🎯 自动配置完成:" >&2
+    echo "   区块链: $blockchain_node_lower" >&2
+    echo "   RPC方法: $CURRENT_RPC_METHODS_STRING" >&2
+    echo "   方法数量: ${#CURRENT_RPC_METHODS_ARRAY[@]}" >&2
+}
+
+# 配置一致性验证函数（混合方案的核心安全机制）
+validate_config_consistency() {
+    local blockchain_node_lower
+    blockchain_node_lower=$(echo "${BLOCKCHAIN_NODE:-solana}" | tr '[:upper:]' '[:lower:]')
+    local rpc_mode_lower
+    rpc_mode_lower=$(echo "${RPC_MODE:-single}" | tr '[:upper:]' '[:lower:]')
+    
+    # 验证CHAIN_CONFIG和CURRENT_RPC_METHODS_STRING的一致性
+    if [[ -n "$CHAIN_CONFIG" && "$CHAIN_CONFIG" != "null" ]]; then
+        local expected_method
+        expected_method=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"")
+        
+        if [[ -n "$expected_method" && "$expected_method" != "null" ]]; then
+            if [[ "$CURRENT_RPC_METHODS_STRING" != "$expected_method" ]]; then
+                echo "⚠️ 配置不一致检测: 期望 '$expected_method', 实际 '$CURRENT_RPC_METHODS_STRING'" >&2
+                echo "🔧 自动修复配置不一致..." >&2
+                CURRENT_RPC_METHODS_STRING="$expected_method"
+                
+                # 更新缓存
+                local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower}_${rpc_mode_lower}"
+                export "$rpc_cache_var_name"="$CURRENT_RPC_METHODS_STRING"
+                
+                echo "✅ 配置一致性已修复" >&2
+            fi
+        fi
+    fi
+}
+
+# 清理过期缓存函数
+clear_stale_cache() {
+    local current_blockchain="${BLOCKCHAIN_NODE:-solana}"
+    local current_rpc_mode="${RPC_MODE:-single}"
+    
+    # 清理不匹配当前配置的缓存
+    for var in $(env | grep "^CACHED_RPC_METHODS_" | cut -d= -f1); do
+        if [[ "$var" != "CACHED_RPC_METHODS_${current_blockchain}_${current_rpc_mode}" ]]; then
+            unset "$var"
+        fi
+    done
+}
+
+# =====================================================================
+# 自动配置生成函数
+# =====================================================================
+
+# 重新设计的RPC方法获取函数
+get_current_rpc_methods() {
+    local rpc_mode_lower
+    rpc_mode_lower=$(echo "${RPC_MODE}" | tr '[:upper:]' '[:lower:]')
+    
+    # 从CHAIN_CONFIG的rpc_methods字段中获取对应模式的方法
+    local methods_string
+    methods_string=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"")
+    
+    # 直接使用配置，框架配置是完整的
+    
+    # 框架配置是完整的，直接使用
+    
     echo "$methods_string"
 }
 
+get_param_format_from_json() {
+    local method="$1"
+    local format
+    
+    # 性能优化：使用缓存的参数格式
+    local param_cache_var_name="CACHED_PARAM_FORMAT_${method}"
+    local cached_format="${!param_cache_var_name}"
+    
+    if [[ -n "$cached_format" ]]; then
+        echo "$cached_format"
+        return 0
+    fi
+    
+    format=$(echo "$CHAIN_CONFIG" | jq -r ".param_formats.\"$method\"")
+    
+    if [[ "$format" == "null" || -z "$format" ]]; then
+        format="single_address"  # 默认格式
+    fi
+    
+    export "$param_cache_var_name"="$format"
+    echo "$format"
+}
 
 # 验证关键变量是否正确设置
 if [[ -z "$ACCOUNTS_OUTPUT_FILE" ]]; then
@@ -453,15 +785,28 @@ if [[ -z "$LOCAL_RPC_URL" ]]; then
     echo "⚠️ 警告: LOCAL_RPC_URL 未正确设置" >&2
 fi
 
-# 标记配置已加载
-# 导出函数到子进程
-export -f get_current_rpc_methods
-CURRENT_RPC_METHODS_STRING=$(get_current_rpc_methods)
-IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
+# 执行自动配置生成
+echo "调用generate_auto_config前: BLOCKCHAIN_NODE=$BLOCKCHAIN_NODE" >&2
+generate_auto_config
+
+clear_config_cache() {
+    local cache_pattern="$1"
+    if [[ -z "$cache_pattern" ]]; then
+        cache_pattern="CACHED_"
+    fi
+    # 清理匹配模式的缓存变量
+    for var in $(compgen -v | grep "^${cache_pattern}"); do
+        unset "$var"
+    done
+}
+
+export -f get_current_rpc_methods get_param_format_from_json clear_config_cache generate_auto_config validate_config_consistency clear_stale_cache
 export CONFIG_LOADED="true"
+export LAST_BLOCKCHAIN_NODE="${BLOCKCHAIN_NODE:-solana}"
+export LAST_CONFIG_CACHE_KEY="$CONFIG_CACHE_KEY"
 export ACCOUNTS_OUTPUT_FILE SINGLE_METHOD_TARGETS_FILE MIXED_METHOD_TARGETS_FILE
 export LOCAL_RPC_URL MAINNET_RPC_URL BLOCKCHAIN_NODE BLOCKCHAIN_PROCESS_NAMES RPC_MODE
-export ACCOUNT_COUNT ACCOUNT_OUTPUT_FILE ACCOUNT_TARGET_ADDRESS ACCOUNT_MAX_SIGNATURES ACCOUNT_TX_BATCH_SIZE ACCOUNT_SEMAPHORE_LIMIT
+export ACCOUNT_COUNT ACCOUNT_OUTPUT_FILE ACCOUNT_MAX_SIGNATURES ACCOUNT_TX_BATCH_SIZE ACCOUNT_SEMAPHORE_LIMIT
 export CHAIN_CONFIG
 export CURRENT_RPC_METHODS_STRING
 
@@ -474,253 +819,8 @@ export NETWORK_MAX_BANDWIDTH_MBPS DEPLOYMENT_PLATFORM ENA_MONITOR_ENABLED
 export NETWORK_INTERFACE BASE_MEMORY_DIR DEPLOYMENT_ENV
 export BASE_FRAMEWORK_DIR BASE_DATA_DIR DEPLOYMENT_STRUCTURE
 
-
-
-# 可选DEBUG开关
-if [[ "${CFG_DEBUG:-}" == "1" ]]; then
-    echo "=== DEBUG: bash=$BASH_VERSION" >&2
-    echo "=== DEBUG: declare -p BLOCKCHAIN_RPC_METHODS" >&2
-    declare -p BLOCKCHAIN_RPC_METHODS 2>&1 | sed 's/^/  /' >&2 || true
-    echo "=== DEBUG: declare -p RPC_METHOD_PARAM_FORMATS" >&2
-    declare -p RPC_METHOD_PARAM_FORMATS 2>&1 | sed 's/^/  /' >&2 || true
-    echo "=== DEBUG: CURRENT_RPC_METHODS_STRING=$CURRENT_RPC_METHODS_STRING" >&2
-    echo "=== DEBUG: CURRENT_RPC_METHODS_ARRAY=(${CURRENT_RPC_METHODS_ARRAY[*]})" >&2
-fi
-
 echo "🔧 RPC方法配置完成:" >&2
 echo "   区块链类型: $BLOCKCHAIN_NODE" >&2
 echo "   RPC模式: $RPC_MODE" >&2
 echo "   当前方法: $CURRENT_RPC_METHODS_STRING" >&2
 echo "🎉 分层配置加载完成！" >&2
-
-
-## =====================================================================
-## Other Blockchain Configuration
-## =====================================================================
-##
-## Solana USDC Address
-#ACCOUNT_TARGET_ADDRESS="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-## Solana Json
-#CHAIN_CONFIG=$(cat <<EOF
-#{
-#  "chain_type": "BLOCKCHAIN_NODE",
-#  "rpc_url": "LOCAL_RPC_URL",
-#  "params": {
-#    "account_count": "ACCOUNT_COUNT",
-#    "output_file": "ACCOUNTS_OUTPUT_FILE",
-#    "target_address": "ACCOUNT_TARGET_ADDRESS",
-#    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-#    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-#    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-#  },
-#  "methods": {
-#    "get_signatures": "getSignaturesForAddress",
-#    "get_transaction": "getTransaction"
-#  },
-#  "system_addresses": [
-#    "11111111111111111111111111111111",
-#    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-#    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
-#    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
-#    "SysvarRent111111111111111111111111111111111",
-#    "ComputeBudget111111111111111111111111111111"
-#  ]
-#}
-#EOF
-#)
-#
-## =====================================================================
-## Ethereum USDT Address
-#ACCOUNT_TARGET_ADDRESS="0xdAC17F958D2ee523a2206206994597C13D831ec7"
-## Ethereum Json
-#CHAIN_CONFIG=$(cat <<EOF
-#{
-#  "chain_type": "ethereum",
-#  "rpc_url": "LOCAL_RPC_URL",
-#  "params": {
-#    "account_count": "ACCOUNT_COUNT",
-#    "output_file": "ACCOUNTS_OUTPUT_FILE",
-#    "target_address": "ACCOUNT_TARGET_ADDRESS",
-#    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-#    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-#    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-#  },
-#  "methods": {
-#    "get_logs": "eth_getLogs",
-#    "get_transaction": "eth_getTransactionByHash"
-#  },
-#  "system_addresses": [
-#    "0x0000000000000000000000000000000000000000",
-#    "0x000000000000000000000000000000000000dead"
-#  ]
-#}
-#EOF
-#)
-#
-## =====================================================================
-#
-## BSC USDS Address
-#ACCOUNT_TARGET_ADDRESS="0x250632378E573c6Be1AC2f97Fcdf00515d0Aa91B"
-## BSC Json
-#CHAIN_CONFIG=$(cat <<EOF
-#{
-#  "chain_type": "bsc",
-#  "rpc_url": "LOCAL_RPC_URL",
-#  "params": {
-#    "account_count": "ACCOUNT_COUNT",
-#    "output_file": "ACCOUNTS_OUTPUT_FILE",
-#    "target_address": "ACCOUNT_TARGET_ADDRESS",
-#    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-#    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-#    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-#  },
-#  "methods": {
-#    "get_logs": "eth_getLogs",
-#    "get_transaction": "eth_getTransactionByHash"
-#  },
-#  "system_addresses": [
-#    "0x0000000000000000000000000000000000000000",
-#    "0x000000000000000000000000000000000000dead"
-#  ]
-#}
-#EOF
-#)
-#
-## =====================================================================
-#
-## Base USDC Address
-#ACCOUNT_TARGET_ADDRESS="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"  # USDC on Base
-## Base Json
-#CHAIN_CONFIG=$(cat <<EOF
-#{
-#  "chain_type": "base",
-#  "rpc_url": "LOCAL_RPC_URL",
-#  "params": {
-#    "account_count": "ACCOUNT_COUNT",
-#    "output_file": "ACCOUNTS_OUTPUT_FILE",
-#    "target_address": "ACCOUNT_TARGET_ADDRESS",
-#    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-#    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-#    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-#  },
-#  "methods": {
-#    "get_logs": "eth_getLogs",
-#    "get_transaction": "eth_getTransactionByHash"
-#  },
-#  "system_addresses": [
-#    "0x0000000000000000000000000000000000000000",
-#    "0x000000000000000000000000000000000000dead"
-#  ]
-#}
-#EOF
-#)
-#
-## =====================================================================
-## Scroll USDC Address
-#ACCOUNT_TARGET_ADDRESS="0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4"
-## Scroll Json
-#CHAIN_CONFIG=$(cat <<EOF
-#{
-#  "chain_type": "scroll",
-#  "rpc_url": "LOCAL_RPC_URL",
-#  "params": {
-#    "account_count": "ACCOUNT_COUNT",
-#    "output_file": "ACCOUNTS_OUTPUT_FILE",
-#    "target_address": "ACCOUNT_TARGET_ADDRESS",
-#    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-#    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-#    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-#  },
-#  "methods": {
-#    "get_logs": "eth_getLogs",
-#    "get_transaction": "eth_getTransactionByHash"
-#  },
-#  "system_addresses": [
-#    "0x0000000000000000000000000000000000000000",
-#    "0x000000000000000000000000000000000000dead"
-#  ]
-#}
-#EOF
-#)
-#
-## =====================================================================
-## Polygon USDT Address
-#ACCOUNT_TARGET_ADDRESS="0xc2132D05D31c914a87C6611C10748AEb04B58e8F"  # USDT on Polygon
-## Polygon Jason
-#CHAIN_CONFIG=$(cat <<EOF
-#{
-#  "chain_type": "polygon",
-#  "rpc_url": "LOCAL_RPC_URL",
-#  "params": {
-#    "account_count": "ACCOUNT_COUNT",
-#    "output_file": "ACCOUNTS_OUTPUT_FILE",
-#    "target_address": "ACCOUNT_TARGET_ADDRESS",
-#    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-#    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-#    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-#  },
-#  "methods": {
-#    "get_logs": "eth_getLogs",
-#    "get_transaction": "eth_getTransactionByHash"
-#  },
-#  "system_addresses": [
-#    "0x0000000000000000000000000000000000000000",
-#    "0x000000000000000000000000000000000000dead"
-#  ]
-#}
-#EOF
-#)
-#
-## =====================================================================
-## Starknet USDC Address
-#ACCOUNT_TARGET_ADDRESS="0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8"  # Starknet USDC
-## Starknet Json
-#CHAIN_CONFIG=$(cat <<EOF
-#{
-#  "chain_type": "starknet",
-#  "rpc_url": "LOCAL_RPC_URL",
-#  "params": {
-#    "account_count": "ACCOUNT_COUNT",
-#    "output_file": "ACCOUNTS_OUTPUT_FILE",
-#    "target_address": "ACCOUNT_TARGET_ADDRESS",
-#    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-#    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-#    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-#  },
-#  "methods": {
-#    "get_events_native": "starknet_getEvents",
-#    "get_transaction": "starknet_getTransactionByHash"
-#  },
-#  "system_addresses": []
-#}
-#EOF
-#)
-#
-## =====================================================================
-#
-## Sui USDC Address
-#ACCOUNT_TARGET_ADDRESS="0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC"
-## Sui Json
-#CHAIN_CONFIG=$(cat <<EOF
-#{
-#  "chain_type": "sui",
-#  "rpc_url": "LOCAL_RPC_URL",
-#  "params": {
-#    "account_count": "ACCOUNT_COUNT",
-#    "output_file": "ACCOUNTS_OUTPUT_FILE",
-#    "target_address": "ACCOUNT_TARGET_ADDRESS",
-#    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-#    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-#    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-#  },
-#  "methods": {
-#    "get_owned_objects": "suix_getOwnedObjects",
-#    "get_transaction": "sui_getTransactionBlock",
-#    "get_transactions": "suix_queryTransactionBlocks"
-#  },
-#  "system_addresses": ["0x1", "0x2", "0x3"]
-#}
-#EOF
-#)
-#
-## =====================================================================

@@ -5,15 +5,39 @@
 # 支持基于 fetch_active_accounts.py 生成的地址文件
 # =====================================================================
 
-# 加载配置文件
-if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
-    echo "❌ 错误: 配置文件加载失败" >&2
-    exit 1
+# 加载配置文件 - 确保继承父进程的区块链配置
+# 如果配置已经加载且BLOCKCHAIN_NODE匹配，则跳过重新加载
+if [[ "${CONFIG_LOADED:-}" != "true" || "${LAST_BLOCKCHAIN_NODE:-}" != "${BLOCKCHAIN_NODE:-solana}" ]]; then
+    if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
+        echo "❌ 错误: 配置文件加载失败" >&2
+        exit 1
+    fi
 fi
 
-# 兜底：若方法串为空，现算一遍（避免上游未初始化）
+# 智能配置检查和修复
 if [[ -z "${CURRENT_RPC_METHODS_STRING:-}" ]]; then
+    echo "⚠️ 警告: CURRENT_RPC_METHODS_STRING未设置，尝试重新计算..." >&2
     CURRENT_RPC_METHODS_STRING="$(get_current_rpc_methods)"
+    if [[ -z "$CURRENT_RPC_METHODS_STRING" ]]; then
+        echo "❌ 错误: 无法获取RPC方法配置" >&2
+        echo "💡 提示: 请检查BLOCKCHAIN_NODE和RPC_MODE环境变量是否正确设置" >&2
+        exit 1
+    fi
+    echo "✅ 配置重新计算完成: $CURRENT_RPC_METHODS_STRING" >&2
+else
+    echo "✅ 配置已存在: $CURRENT_RPC_METHODS_STRING" >&2
+    # 配置存在时，进行简单的一致性检查
+    if [[ -n "$CHAIN_CONFIG" && "$CHAIN_CONFIG" != "null" ]]; then
+        expected_method=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$(echo "${RPC_MODE:-single}" | tr '[:upper:]' '[:lower:]')\"" 2>/dev/null)
+        if [[ -n "$expected_method" && "$expected_method" != "null" && "$CURRENT_RPC_METHODS_STRING" != "$expected_method" ]]; then
+            echo "🔧 配置不一致，自动修复: $expected_method" >&2
+            CURRENT_RPC_METHODS_STRING="$expected_method"
+        fi
+    fi
+fi
+
+# 确保RPC方法数组已初始化
+if [[ -z "${CURRENT_RPC_METHODS_ARRAY:-}" ]]; then
     IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
 fi
 
@@ -43,14 +67,14 @@ show_help() {
     echo ""
 }
 
-# 精确的 RPC JSON 生成函数 - 完全基于 JSON-RPC-API-List.md
 generate_rpc_json() {
     local method="$1"
     local address="$2"
     local rpc_url="$LOCAL_RPC_URL"
 
-    # 获取方法参数格式
-    local param_format="${RPC_METHOD_PARAM_FORMATS[$method]}"
+    # 获取方法参数格式（使用JSON查询函数）
+    local param_format
+    param_format=$(get_param_format_from_json "$method")
     local params_json=""
 
     case "$param_format" in
@@ -102,7 +126,7 @@ generate_rpc_json() {
            }'
 }
 
-# 参数解析（保持现有接口兼容）
+# 参数解析
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -120,9 +144,18 @@ parse_args() {
                 ;;
             --rpc-mode)
                 RPC_MODE="$2"
-                # 重新计算RPC方法列表
-                CURRENT_RPC_METHODS_STRING=$(get_current_rpc_methods)
+                echo "🔄 RPC模式已改变为: $RPC_MODE" >&2
+                # 用户主动改变RPC模式时，直接重新计算
+                if [[ -n "$CHAIN_CONFIG" && "$CHAIN_CONFIG" != "null" ]]; then
+                    local rpc_mode_lower
+                    rpc_mode_lower=$(echo "$RPC_MODE" | tr '[:upper:]' '[:lower:]')
+                    CURRENT_RPC_METHODS_STRING=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"" 2>/dev/null)
+                else
+                    echo "⚠️ 警告: CHAIN_CONFIG不可用，使用备用方法" >&2
+                    CURRENT_RPC_METHODS_STRING=$(get_current_rpc_methods)
+                fi
                 IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
+                echo "✅ RPC模式切换完成: $CURRENT_RPC_METHODS_STRING" >&2
                 shift 2
                 ;;
             --rpc-url)
@@ -313,14 +346,28 @@ main() {
     # 解析参数
     parse_args "$@"
 
-    # 再次兜底：确保方法串/数组就绪
+    # 最终配置验证和修复
     if [[ -z "${CURRENT_RPC_METHODS_STRING:-}" ]]; then
-        CURRENT_RPC_METHODS_STRING="$(get_current_rpc_methods)"
-    fi
-    IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
+        echo "❌ 致命错误: RPC方法配置在参数解析后仍然为空" >&2
+        echo "   BLOCKCHAIN_NODE: ${BLOCKCHAIN_NODE:-未设置}" >&2
+        echo "   RPC_MODE: ${RPC_MODE:-未设置}" >&2
 
-    # 可选DEBUG输出
-    [[ "${CFG_DEBUG:-}" == "1" ]] && { echo "=== DEBUG TG: methods=($CURRENT_RPC_METHODS_STRING)" >&2; }
+        if command -v get_current_rpc_methods >/dev/null 2>&1; then
+            CURRENT_RPC_METHODS_STRING=$(get_current_rpc_methods)
+            if [[ -n "$CURRENT_RPC_METHODS_STRING" ]]; then
+                echo "✅ 最终修复成功: $CURRENT_RPC_METHODS_STRING" >&2
+            else
+                exit 1
+            fi
+        else
+            exit 1
+        fi
+    fi
+    
+    # 确保数组已初始化
+    if [[ -z "${CURRENT_RPC_METHODS_ARRAY:-}" ]]; then
+        IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
+    fi
 
     # 检查输入文件
     if ! check_input_file; then

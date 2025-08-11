@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Multi-blockchain active account fetcher - Async optimized version.
+Multi-blockchain active account fetcher - Async
 
 This module provides functionality to fetch active accounts from various blockchain networks
 including Solana, Ethereum, BSC, Base, Scroll, Polygon, Starknet, and Sui.
@@ -16,11 +16,10 @@ Usage:
     python3 fetch_active_accounts_async.py -c 100 -v
 
 Author: Blockchain Node Benchmark Team
-Version: 2.0 (Async Optimized)
 """
 
 # =====================================================================
-# 多区块链活跃账户获取脚本 - 修复版
+# 多区块链活跃账户获取脚本
 # 支持 Solana, Ethereum, BSC, Base, Scroll, Polygon, Starknet, Sui
 # 统一分页策略：< 1000不分页，≥ 1000分页
 # =====================================================================
@@ -122,7 +121,6 @@ def parse_args(config):
 
 
 async def request_jsonrpc(session, url, method, params=None, retries=3):
-    """发送异步 JSON RPC 请求 - 性能优化版"""
     payload = {
         "jsonrpc": "2.0",
         "id": 1,
@@ -140,7 +138,6 @@ async def request_jsonrpc(session, url, method, params=None, retries=3):
                     error_code = result["error"].get("code", 0)
                     error_msg = result["error"].get("message", "")
 
-                    # 针对特定错误码的处理
                     if error_code == -32005:  # limit exceeded
                         raise Exception(f"Rate limit exceeded: {error_msg}")
                     elif error_code == -32603:  # invalid input
@@ -168,7 +165,7 @@ class BlockchainAdapter:
         self.session = None  # 异步会话复用
 
     async def fetch_signatures(self, address, cursor=None, limit=1000, verbose=False):
-        """统一的账户获取入口 - 异步优化版"""
+        """统一的账户获取入口"""
         if verbose:
             print(f"Fetching {self.chain_type} signatures for {address}, target: {limit} transactions")
 
@@ -179,7 +176,7 @@ class BlockchainAdapter:
             return await self._fetch_with_pagination(address, limit, verbose)
 
     async def _fetch_without_pagination(self, address, limit, verbose):
-        """非分页获取：单次请求 - 异步优化"""
+        """非分页获取：单次请求"""
         if verbose:
             print(f"Using single request strategy (target: {limit})")
 
@@ -187,7 +184,7 @@ class BlockchainAdapter:
         return await self._single_request(address, target_transactions, verbose)
 
     async def _fetch_with_pagination(self, address, limit, verbose):
-        """分页获取：多次请求 - 异步优化"""
+        """分页获取：多次请求"""
         if verbose:
             print(f"Using pagination strategy (target: {limit})")
 
@@ -221,11 +218,11 @@ class BlockchainAdapter:
         return all_results[:target_transactions]
 
     async def _single_request(self, address, limit, verbose):
-        """各链实现的单次请求方法 - 异步版"""
+        """各链实现的单次请求方法"""
         raise NotImplementedError("Subclasses must implement _single_request")
 
     async def fetch_transaction(self, signature):
-        """获取交易详情 - 各适配器需实现 - 异步版"""
+        """获取交易详情 - 各适配器需实现"""
         raise NotImplementedError("Subclasses must implement fetch_transaction")
 
     def extract_accounts_from_transaction(self, tx_data, target_address):
@@ -249,10 +246,10 @@ class BlockchainAdapter:
 
 
 class SolanaAdapter(BlockchainAdapter):
-    """Solana 区块链适配器 - 修复版"""
+    """Solana 区块链适配器"""
 
     async def _single_request(self, address, limit, verbose):
-        """Solana单次请求实现 - 异步优化"""
+        """Solana单次请求实现"""
         params = [address, {"limit": min(limit, 1000)}]
 
         try:
@@ -264,7 +261,7 @@ class SolanaAdapter(BlockchainAdapter):
             return []
 
     async def fetch_transaction(self, signature):
-        """获取Solana交易详情 - 异步优化"""
+        """获取Solana交易详情"""
         params = [signature, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}]
         result = await request_jsonrpc(self.session, self.rpc_url, self.methods["get_transaction"], params)
         return result.get("result")
@@ -288,10 +285,10 @@ class SolanaAdapter(BlockchainAdapter):
 
 
 class EthereumAdapter(BlockchainAdapter):
-    """Ethereum 及兼容链适配器 - 修复版"""
+    """Ethereum 及 EVM 链适配器"""
 
     async def _single_request(self, address, limit, verbose):
-        """Ethereum单次请求实现 - 异步优化"""
+        """Ethereum单次请求实现"""
         # 检查是否是合约地址
         is_contract = await self._is_contract_address(address)
 
@@ -301,7 +298,7 @@ class EthereumAdapter(BlockchainAdapter):
             return await self._fetch_eoa_transactions_simple(address, limit, verbose)
 
     async def _is_contract_address(self, address):
-        """检查是否是合约地址 - 异步优化"""
+        """检查是否是合约地址"""
         try:
             params = [address, "latest"]
             result = await request_jsonrpc(self.session, self.rpc_url, "eth_getCode", params)
@@ -310,7 +307,7 @@ class EthereumAdapter(BlockchainAdapter):
             return False
 
     async def _fetch_contract_logs_fixed(self, address, limit, verbose):
-        """修复的合约日志获取 - 异步优化"""
+        """修复的合约日志获取"""
         try:
             latest_result = await request_jsonrpc(self.session, self.rpc_url, "eth_blockNumber", [])
             latest_block = int(latest_result["result"], 16)
@@ -327,8 +324,8 @@ class EthereumAdapter(BlockchainAdapter):
 
             params = [{
                 "address": address,
-                "fromBlock": f"0x{start_block:x}",  # 修复十六进制格式
-                "toBlock": f"0x{latest_block:x}",  # 修复十六进制格式
+                "fromBlock": f"0x{start_block:x}",
+                "toBlock": f"0x{latest_block:x}",
                 "topics": []
             }]
 
@@ -341,11 +338,10 @@ class EthereumAdapter(BlockchainAdapter):
         except Exception as e:
             if verbose:
                 print(f"Ethereum contract logs failed: {e}")
-            # 降级策略：返回空结果而不是崩溃
             return []
 
     async def _fetch_eoa_transactions_simple(self, address, limit, verbose):
-        """简化的EOA交易获取 - 异步优化"""
+        """简化的EOA交易获取"""
         try:
             latest_result = await request_jsonrpc(self.session, self.rpc_url, "eth_blockNumber", [])
             latest_block = int(latest_result["result"], 16)
@@ -377,7 +373,7 @@ class EthereumAdapter(BlockchainAdapter):
             return []
 
     async def _fetch_block_transactions(self, block_num, target_address, remaining_limit):
-        """获取单个区块的交易 - 辅助方法"""
+        """获取单个区块的交易"""
         try:
             block_result = await request_jsonrpc(self.session, self.rpc_url, "eth_getBlockByNumber", [f"0x{block_num:x}", True])
             block_data = block_result.get("result")
@@ -403,7 +399,7 @@ class EthereumAdapter(BlockchainAdapter):
             return []
 
     async def fetch_transaction(self, tx_hash):
-        """获取Ethereum交易详情 - 异步优化"""
+        """获取Ethereum交易详情"""
         params = [tx_hash]
         result = await request_jsonrpc(self.session, self.rpc_url, self.methods["get_transaction"], params)
         return result.get("result")
@@ -431,10 +427,10 @@ class EthereumAdapter(BlockchainAdapter):
 
 
 class StarknetAdapter(BlockchainAdapter):
-    """StarkNet 适配器 - 保持原版"""
+    """StarkNet 适配器"""
 
     async def _single_request(self, address, limit, verbose):
-        """StarkNet单次请求实现 - 异步优化"""
+        """StarkNet单次请求实现"""
         params = [{
             "from_block": {"block_number": 0},
             "to_block": "latest",
@@ -465,7 +461,7 @@ class StarknetAdapter(BlockchainAdapter):
             return []
 
     async def fetch_transaction(self, tx_hash):
-        """获取StarkNet交易详情 - 异步优化"""
+        """获取StarkNet交易详情"""
         params = [tx_hash]
         result = await request_jsonrpc(self.session, self.rpc_url, "starknet_getTransactionByHash", params)
         return result.get("result")
@@ -515,21 +511,21 @@ class StarknetAdapter(BlockchainAdapter):
 
 
 class SuiAdapter(BlockchainAdapter):
-    """Sui 区块链适配器 - 保持原版"""
+    """Sui 区块链适配器"""
 
     async def _single_request(self, address, limit, verbose):
-        """回归简单有效的查询策略 - 异步优化"""
+        """回归简单有效的查询策略"""
         if '::' in address:
-            # USDC类型地址 - 使用代币查询（已验证有效）
+            # USDC类型地址 - 使用代币查询
             package_address = address.split('::')[0]
             module_name = address.split('::')[1] if len(address.split('::')) > 1 else None
             return await self._fetch_token_transactions(package_address, module_name, limit, verbose)
         else:
-            # Binance类型地址 - 使用简单的全局搜索（历史证明有效）
+            # 普通类型地址
             return await self._fetch_simple_global_search(address, limit, verbose)
 
     async def _fetch_token_transactions(self, package_address, module_name, limit, verbose):
-        """代币交易获取 - 异步优化"""
+        """代币交易获取"""
         combinations = [
             {"module": module_name, "function": None},
             {"module": None, "function": None}
@@ -570,9 +566,8 @@ class SuiAdapter(BlockchainAdapter):
         return []
 
     async def _fetch_simple_global_search(self, address, limit, verbose):
-        """简单全局搜索 - 异步优化"""
+        """简单全局搜索"""
         try:
-            # 使用之前证明有效的简单策略
             params = [{}, None, min(200, limit), True]
 
             result = await request_jsonrpc(self.session, self.rpc_url, self.methods["get_transactions"], params)
@@ -582,7 +577,6 @@ class SuiAdapter(BlockchainAdapter):
             if verbose:
                 print(f"Global search found {len(transactions)} transactions with filter: None")
 
-            # 直接返回交易，不进行复杂的相关性筛选
             return [{"signature": tx.get("digest")}
                     for tx in transactions if tx.get("digest")]
 
@@ -592,7 +586,7 @@ class SuiAdapter(BlockchainAdapter):
             return []
 
     async def fetch_transaction(self, digest):
-        """获取交易详情 - 异步优化"""
+        """获取交易详情"""
         params = [
             digest,
             {
@@ -681,14 +675,13 @@ def create_adapter(config):
 
 
 async def fetch_all_signatures(adapter, address, limit_total, verbose=False):
-    """修复的分批获取指定地址的所有交易签名 - 异步优化"""
+    """修复的分批获取指定地址的所有交易签名"""
     sigs = []
-    cursor = None  # 统一使用cursor而非before
+    cursor = None
 
     while len(sigs) < limit_total:
         try:
             if adapter.chain_type == "solana":
-                # 修复：使用cursor参数而非before
                 batch = await adapter.fetch_signatures(address, cursor=cursor, limit=500, verbose=verbose)
                 if not batch:
                     if verbose:
@@ -718,7 +711,7 @@ async def fetch_all_signatures(adapter, address, limit_total, verbose=False):
 
 
 async def fetch_and_count(adapter, signatures, target_address, counter, verbose=False):
-    """并发获取交易详情并统计关联账户 - 异步性能优化版"""
+    """并发获取交易详情并统计关联账户"""
     params = adapter.config.get("params", {})
     batch_size = params.get("tx_batch_size", 200)  # 增大批次提高效率
     semaphore_limit = params.get("semaphore_limit", 30)  # 增加并发数
@@ -733,7 +726,6 @@ async def fetch_and_count(adapter, signatures, target_address, counter, verbose=
     async def fetch_tx(sig):
         async with sem:
             try:
-                # 直接使用异步方法，不再使用线程池
                 tx = await adapter.fetch_transaction(sig)
                 return tx
             except Exception as e:
@@ -772,7 +764,6 @@ async def fetch_and_count(adapter, signatures, target_address, counter, verbose=
 
 
 async def main():
-    """主函数 - 异步性能优化版"""
     # 创建全局异步会话
     connector = aiohttp.TCPConnector(
         limit=100,  # 连接池大小
