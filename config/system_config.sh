@@ -87,6 +87,14 @@ MONITORING_PROCESS_NAMES=(
 # 时间格式标准
 TIMESTAMP_FORMAT="%Y-%m-%d %H:%M:%S"
 
+get_unified_timestamp() {
+    date +"$TIMESTAMP_FORMAT"
+}
+
+get_unified_epoch() {
+    date +%s
+}
+
 # 静默模式配置
 SILENT_MODE=${SILENT_MODE:-false}
 
@@ -94,6 +102,7 @@ SILENT_MODE=${SILENT_MODE:-false}
 MONITORING_OVERHEAD_LOG=""  # 将在路径检测完成后设置
 
 # 导出系统配置变量
+export -f get_unified_timestamp get_unified_epoch
 export ENA_ALLOWANCE_FIELDS MONITORING_PROCESS_NAMES DEPLOYMENT_PLATFORM
 export LOG_LEVEL LOG_FORMAT MAX_LOG_SIZE MAX_LOG_FILES LOG_JSON PYTHON_LOG_LEVEL
 export ERROR_RECOVERY_ENABLED ERROR_RECOVERY_DELAY

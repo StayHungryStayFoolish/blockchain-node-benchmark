@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/bin/bash
 # =====================================================================
 # 统一监控器 - 消除重复监控，统一时间管理 (统一日志版本)
 # =====================================================================
@@ -86,10 +86,8 @@ init_monitoring() {
     for cmd in mpstat iostat sar free; do
         if ! command -v "$cmd" &> /dev/null; then
             missing_commands+=("$cmd")
-            # iostat是关键命令，其他可以用替代方案
-            if [[ "$cmd" == "iostat" ]]; then
-                critical_missing+=("$cmd")
-            fi
+            # 所有监控命令都是关键的，缺少任何一个都会影响功能
+            critical_missing+=("$cmd")
         fi
     done
 
@@ -103,8 +101,6 @@ init_monitoring() {
             log_error "缺少关键命令: ${critical_missing[*]}，无法继续"
             echo "❌ 缺少关键命令: ${critical_missing[*]}，监控功能无法启动"
             return 1
-        else
-            echo "🔄 将使用替代方案继续监控..."
         fi
     fi
 
@@ -1840,7 +1836,6 @@ start_unified_monitoring() {
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))
                 echo "📈 已收集 $sample_count 个样本，已运行 ${elapsed}s 跟随QPS测试中"
-                echo "   当前监控间隔: ${CURRENT_MONITOR_INTERVAL}s (系统负载: ${current_system_load}%)"
             fi
 
             sleep "$CURRENT_MONITOR_INTERVAL"
@@ -1864,7 +1859,6 @@ start_unified_monitoring() {
                 local elapsed=$((current_time - start_time))
                 local remaining=$((end_time - current_time))
                 echo "📈 已收集 $sample_count 个样本，已运行 ${elapsed}s，剩余 ${remaining}s"
-                echo "   当前监控间隔: ${CURRENT_MONITOR_INTERVAL}s (系统负载: ${current_system_load}%)"
             fi
 
             sleep "$CURRENT_MONITOR_INTERVAL"
@@ -1952,10 +1946,10 @@ main() {
                 echo "Usage: $0 [options]"
                 echo ""
                 echo "Options:"
-                echo "  -d, --duration SECONDS    监控时长 (0=无限运行, default: 0)"
-                echo "  -i, --interval SECONDS    监控间隔 (default: $MONITOR_INTERVAL)"
+                echo "  -d, --duration SECONDS    Monitor duration, 0=unlimited, default: 0"
+                echo "  -i, --interval SECONDS    Monitor interval, default: $MONITOR_INTERVAL"
                 echo "  -b, --background          后台运行"
-                echo "  --follow-qps-test         跟随QPS测试模式 (无时间限制)"
+                echo "  --follow-qps-test         Follow QPS test mode, no time limit"
                 echo "  -h, --help               显示帮助"
                 echo ""
                 echo "特性:"
@@ -2093,8 +2087,8 @@ generate_error_recovery_report() {
 
         echo ""
         echo "## 系统状态"
-        echo "- 状态: 极限测试模式 (健康检查已禁用)"
-        echo "- 说明: 在极限测试中，高资源使用率是正常现象"
+        echo "- Status: Extreme test mode, health check disabled"
+        echo "- Note: High resource usage is normal during extreme testing"
 
         echo ""
         echo "## 配置参数"
@@ -2218,7 +2212,7 @@ auto_fix_common_issues() {
 # 错误处理系统初始化
 initialize_error_handling_system() {
     if [[ "$ERROR_RECOVERY_ENABLED" != "true" ]]; then
-        log_info "错误恢复系统已禁用"
+        log_info "Error recovery system disabled"
         return 0
     fi
 
@@ -2227,7 +2221,7 @@ initialize_error_handling_system() {
     # 创建错误日志文件
     if [[ ! -f "$ERROR_LOG" ]]; then
         echo "timestamp,function_name,error_code,error_message,consecutive_count" > "$ERROR_LOG"
-        log_info "错误日志文件已创建: $ERROR_LOG"
+        log_info "Error log file created: $ERROR_LOG"
     fi
 
     # 系统健康检查已删除 - 与极限测试理念冲突
@@ -2238,5 +2232,5 @@ initialize_error_handling_system() {
     # 尝试自动修复
     auto_fix_common_issues
 
-    log_info "✅ 错误处理系统初始化完成"
+    log_info "✅ Error handling system initialization completed"
 }

@@ -39,7 +39,9 @@ cleanup_and_exit() {
     rm -f "${TMP_DIR}/slot_monitor.pid" 2>/dev/null || true
     
     # 清理共享内存缓存
-    rm -rf /dev/shm/solana-qps-test/ 2>/dev/null || true
+    if [[ -n "$BASE_MEMORY_DIR" ]]; then
+        rm -rf "$BASE_MEMORY_DIR" 2>/dev/null || true
+    fi
     
     echo "Slot monitor cleanup completed"
     exit 0
