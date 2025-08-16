@@ -786,7 +786,7 @@ detect_bottleneck() {
 EOF
         return 0  # 检测到瓶颈
     else
-        # 更新计数器状态
+        # 更新计数器状态 - 保持格式一致性
         cat > "$BOTTLENECK_STATUS_FILE" << EOF
 {
     "status": "monitoring",

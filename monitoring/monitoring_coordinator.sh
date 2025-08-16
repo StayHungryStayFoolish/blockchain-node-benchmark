@@ -28,7 +28,6 @@ fi
 declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
     ["slot"]="slot_monitor.sh"
-    ["iostat"]="iostat_collector.sh"
     ["ena_network"]="ena_network_monitor.sh"
     ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
 )
@@ -184,7 +183,7 @@ start_all_monitors() {
     echo "🚀 启动所有监控任务 (监控间隔: ${MONITOR_INTERVAL}秒)"
     
     # 按优先级启动监控任务 - 启动所有必要的监控脚本
-    local monitors_to_start=("unified" "iostat" "ena_network" "slot" "ebs_bottleneck")
+    local monitors_to_start=("unified" "ena_network" "slot" "ebs_bottleneck")
     
     for monitor in "${monitors_to_start[@]}"; do
         start_monitor "$monitor"
