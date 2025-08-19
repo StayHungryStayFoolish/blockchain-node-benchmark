@@ -15,6 +15,15 @@ import os
 import sys
 from pathlib import Path
 
+def get_visualization_thresholds():
+    """获取可视化阈值配置"""
+    return {
+        'warning': int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85)),
+        'critical': int(os.getenv('SUCCESS_RATE_THRESHOLD', 95)),
+        'io_warning': int(os.getenv('BOTTLENECK_NETWORK_THRESHOLD', 80)),
+        'memory': int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))
+    }
+
 # Configure font support for cross-platform compatibility
 def setup_font():
     """Configure matplotlib font for cross-platform compatibility"""
@@ -141,10 +150,12 @@ class PerformanceVisualizer(CSVDataProcessor):
         # ACCOUNTS设备阈值将在数据加载后动态添加
         self._accounts_thresholds_added = False
         
+        # 从环境变量读取阈值配置
+        thresholds = get_visualization_thresholds()
         self.util_thresholds = {
             'normal': 70,      # Normal Threshold (%)
-            'warning': 85,     # Warning Threshold (%)
-            'critical': 95     # Critical Threshold (%)
+            'warning': thresholds['warning'],     # Warning Threshold (%)
+            'critical': thresholds['critical']    # Critical Threshold (%)
         }
         
         # 初始化新工具
@@ -382,7 +393,8 @@ class PerformanceVisualizer(CSVDataProcessor):
             util_data = self.df[data_util_col].dropna()
             if len(util_data) > 0:
                 ax4.plot(self.df['timestamp'], self.df[data_util_col], color='orange', linewidth=2, label='DATADevice Utilization')
-                ax4.axhline(y=80, color='red', linestyle='--', alpha=0.7, label='80% Warning Line')
+                thresholds = get_visualization_thresholds()
+                ax4.axhline(y=thresholds['io_warning'], color='red', linestyle='--', alpha=0.7, label=f'{thresholds["io_warning"]}% Warning Line')
                 ax4.set_title('Device Utilization')
                 ax4.set_ylabel('Utilization (%)')
                 ax4.legend()
@@ -603,8 +615,9 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax2.plot(self.df['timestamp'], self.df[accounts_util_col[0]], 
                         label='ACCOUNTS Utilization', linewidth=2, color='green')
         
-        ax2.axhline(y=80, color='orange', linestyle='--', alpha=0.7, label='80% Warning Line')
-        ax2.axhline(y=95, color='red', linestyle='--', alpha=0.7, label='95% Critical Line')
+        thresholds = get_visualization_thresholds()
+        ax2.axhline(y=thresholds['io_warning'], color='orange', linestyle='--', alpha=0.7, label=f'{thresholds["io_warning"]}% Warning Line')
+        ax2.axhline(y=thresholds['critical'], color='red', linestyle='--', alpha=0.7, label=f'{thresholds["critical"]}% Critical Line')
         
         ax2.set_title('Device Utilization Comparison' if accounts_configured else 'DATA Device Utilization')
         ax2.set_xlabel('Time')
@@ -831,9 +844,9 @@ class PerformanceVisualizer(CSVDataProcessor):
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         ax1.axhline(y=self.util_thresholds['warning'], color='orange', 
-                   linestyle='--', alpha=0.7, label='Warning Threshold (85%)')
+                   linestyle='--', alpha=0.7, label=f'Warning Threshold ({self.util_thresholds["warning"]}%)')
         ax1.axhline(y=self.util_thresholds['critical'], color='red', 
-                   linestyle='--', alpha=0.7, label='Critical Threshold (95%)')
+                   linestyle='--', alpha=0.7, label=f'Critical Threshold ({self.util_thresholds["critical"]}%)')
         ax1.set_ylabel('Utilization (%)')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
@@ -1374,12 +1387,13 @@ Monitoring Efficiency:
             ax1 = axes[0, 0]
             if 'cpu_usage' in self.df.columns:
                 cpu_data = self.df['cpu_usage'].dropna()
-                efficiency_ranges = ['Low(<30%)', 'Normal(30-60%)', 'High(60-85%)', 'Overload(>85%)']
+                thresholds = get_visualization_thresholds()
+                efficiency_ranges = ['Low(<30%)', 'Normal(30-60%)', f'High(60-{thresholds["warning"]}%)', f'Overload(>{thresholds["warning"]}%)']
                 efficiency_counts = [
                     len(cpu_data[cpu_data < 30]),
                     len(cpu_data[(cpu_data >= 30) & (cpu_data < 60)]),
-                    len(cpu_data[(cpu_data >= 60) & (cpu_data < 85)]),
-                    len(cpu_data[cpu_data >= 85])
+                    len(cpu_data[(cpu_data >= 60) & (cpu_data < thresholds["warning"])]),
+                    len(cpu_data[cpu_data >= thresholds["warning"]])
                 ]
                 ax1.pie(efficiency_counts, labels=efficiency_ranges, autopct='%1.1f%%')
                 ax1.set_title('CPU Efficiency Distribution')
@@ -1388,12 +1402,13 @@ Monitoring Efficiency:
             ax2 = axes[0, 1]
             if 'mem_usage' in self.df.columns:
                 mem_data = self.df['mem_usage'].dropna()
-                mem_ranges = ['Low(<40%)', 'Normal(40-70%)', 'High(70-90%)', 'Overload(>90%)']
+                thresholds = get_visualization_thresholds()
+                mem_ranges = ['Low(<40%)', 'Normal(40-70%)', f'High(70-{thresholds["memory"]}%)', f'Overload(>{thresholds["memory"]}%)']
                 mem_counts = [
                     len(mem_data[mem_data < 40]),
                     len(mem_data[(mem_data >= 40) & (mem_data < 70)]),
-                    len(mem_data[(mem_data >= 70) & (mem_data < 90)]),
-                    len(mem_data[mem_data >= 90])
+                    len(mem_data[(mem_data >= 70) & (mem_data < thresholds["memory"])]),
+                    len(mem_data[mem_data >= thresholds["memory"]])
                 ]
                 ax2.pie(mem_counts, labels=mem_ranges, autopct='%1.1f%%')
                 ax2.set_title('Memory Efficiency Distribution')
@@ -1451,21 +1466,22 @@ Monitoring Efficiency:
             # 1. Bottleneck time series
             ax1 = axes[0, 0]
             bottleneck_data = []
+            thresholds = get_visualization_thresholds()
             
             if 'cpu_usage' in self.df.columns:
-                cpu_bottleneck = (self.df['cpu_usage'] > 85).astype(int)
-                ax1.plot(self.df['timestamp'], cpu_bottleneck, label='CPU Bottleneck(>85%)', linewidth=2)
+                cpu_bottleneck = (self.df['cpu_usage'] > thresholds['warning']).astype(int)
+                ax1.plot(self.df['timestamp'], cpu_bottleneck, label=f'CPU Bottleneck(>{thresholds["warning"]}%)', linewidth=2)
                 bottleneck_data.append(('CPU', cpu_bottleneck.sum()))
             
             if 'mem_usage' in self.df.columns:
-                mem_bottleneck = (self.df['mem_usage'] > 90).astype(int)
-                ax1.plot(self.df['timestamp'], mem_bottleneck, label='Memory Bottleneck(>90%)', linewidth=2)
+                mem_bottleneck = (self.df['mem_usage'] > thresholds['memory']).astype(int)
+                ax1.plot(self.df['timestamp'], mem_bottleneck, label=f'Memory Bottleneck(>{thresholds["memory"]}%)', linewidth=2)
                 bottleneck_data.append(('Memory', mem_bottleneck.sum()))
             
             data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
             if data_util_cols:
-                io_bottleneck = (self.df[data_util_cols[0]] > 80).astype(int)
-                ax1.plot(self.df['timestamp'], io_bottleneck, label='I/O Bottleneck(>80%)', linewidth=2)
+                io_bottleneck = (self.df[data_util_cols[0]] > thresholds['io_warning']).astype(int)
+                ax1.plot(self.df['timestamp'], io_bottleneck, label=f'I/O Bottleneck(>{thresholds["io_warning"]}%)', linewidth=2)
                 bottleneck_data.append(('I/O', io_bottleneck.sum()))
             
             ax1.set_title('Bottleneck Time Series')

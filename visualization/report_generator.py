@@ -15,16 +15,25 @@ from datetime import datetime
 import numpy as np
 from scipy.stats import pearsonr
 
+def get_visualization_thresholds():
+    """获取可视化阈值配置"""
+    return {
+        'warning': int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85)),
+        'critical': int(os.getenv('SUCCESS_RATE_THRESHOLD', 95)),
+        'io_warning': int(os.getenv('BOTTLENECK_NETWORK_THRESHOLD', 80)),
+        'memory': int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))
+    }
+
 class ReportGenerator:
     def __init__(self, performance_csv, config_file='config_loader.sh', overhead_csv=None, bottleneck_info=None):
         self.performance_csv = performance_csv
         self.config_file = config_file
-        self.overhead_csv = overhead_csv  # 新增：支持监控开销CSV
-        self.bottleneck_info = bottleneck_info  # 新增：瓶颈信息
+        self.overhead_csv = overhead_csv
+        self.bottleneck_info = bottleneck_info
         self.output_dir = os.path.dirname(performance_csv)
         self.config = self._load_config()
-        self.overhead_data = self._load_overhead_data()  # 初始化监控开销数据
-        self.bottleneck_data = self._load_bottleneck_data()  # 初始化瓶颈数据
+        self.overhead_data = self._load_overhead_data()
+        self.bottleneck_data = self._load_bottleneck_data()
         
     def _load_config(self):
         config = {}
@@ -1321,7 +1330,8 @@ class ReportGenerator:
                         return False
                     
                     value = float(utilization_str.rstrip('%'))
-                    return value > 85
+                    thresholds = get_visualization_thresholds()
+                    return value > thresholds['warning']
                 except:
                     return False
             
@@ -1423,7 +1433,7 @@ class ReportGenerator:
                         <li><strong>基准IOPS/Throughput</strong>: 通过环境变量配置的EBS性能基准</li>
                         <li><strong>实际平均值</strong>: 测试期间的平均性能表现</li>
                         <li><strong>利用率</strong>: 实际性能占基准性能的百分比</li>
-                        <li><strong>Warning Threshold</strong>: 利用率超过85%时显示警告</li>
+                        <li><strong>Warning Threshold</strong>: 利用率超过{get_visualization_thresholds()['warning']}%时显示警告</li>
                     </ul>
                     <p><strong>配置方法</strong>: 设置环境变量 DATA_BASELINE_IOPS, DATA_BASELINE_THROUGHPUT, ACCOUNTS_BASELINE_IOPS, ACCOUNTS_BASELINE_THROUGHPUT</p>
                 </div>
@@ -1532,7 +1542,11 @@ class ReportGenerator:
         
         # 特殊处理: 连接容量不足预警
         if 'ena_conntrack_available' in df.columns:
-            low_connection_threshold = 10000  # 可配置阈值
+            # 使用动态阈值：基于网络阈值和数据最大值计算
+            thresholds = get_visualization_thresholds()
+            max_available = df['ena_conntrack_available'].max() if not df['ena_conntrack_available'].empty else 50000
+            # 当可用量低于最大值的(100-网络阈值)%时预警
+            low_connection_threshold = int(max_available * (100 - thresholds['io_warning']) / 100)
             low_connection_records = df[df['ena_conntrack_available'] < low_connection_threshold]
             if not low_connection_records.empty:
                 limitations.append({
@@ -1591,8 +1605,13 @@ class ReportGenerator:
                 status_class = "normal"
                 if field != 'ena_conntrack_available' and stats['current'] > 0:
                     status_class = "warning"
-                elif field == 'ena_conntrack_available' and stats['current'] < 10000:
-                    status_class = "warning"
+                elif field == 'ena_conntrack_available':
+                    # 使用动态阈值判断连接容量状态
+                    thresholds = get_visualization_thresholds()
+                    max_available = max(stats['max'], 50000)  # 使用最大值或默认值
+                    warning_threshold = int(max_available * (100 - thresholds['io_warning']) / 100)
+                    if stats['current'] < warning_threshold:
+                        status_class = "warning"
                 
                 table_rows += f"""
                 <tr class="{status_class}">
@@ -1738,7 +1757,6 @@ class ReportGenerator:
             except Exception as e:
                 return None, f"分析失败: {str(e)[:50]}"
         
-        # ✅ 改进的字段匹配逻辑
         def find_matching_column(target_field, column_list):
             """精确的字段匹配"""
             # 精确匹配
@@ -2194,7 +2212,7 @@ class ReportGenerator:
             if not bottleneck_detected:
                 return ""
             
-            max_qps = self.bottleneck_data.get('max_qps_achieved', 0)
+            max_qps = self.bottleneck_data.get('max_successful_qps', 0)
             bottleneck_qps = self.bottleneck_data.get('bottleneck_qps', 0)
             reasons = self.bottleneck_data.get('bottleneck_reasons', '未知')
             severity = self.bottleneck_data.get('severity', 'medium')

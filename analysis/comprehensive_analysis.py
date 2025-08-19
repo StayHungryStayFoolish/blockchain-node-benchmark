@@ -162,7 +162,7 @@ class BottleneckAnalysisMode:
         try:
             self.bottleneck_time = self.bottleneck_info.get('detection_time')
             self.analysis_window = self.bottleneck_info.get('analysis_window', {})
-            self.max_qps = self.bottleneck_info.get('max_qps_achieved', 0)
+            self.max_qps = self.bottleneck_info.get('max_successful_qps', 0)
             self.bottleneck_qps = self.bottleneck_info.get('bottleneck_qps', 0)
             
             logger.info(f"🚨 瓶颈分析模式: 最大QPS={self.max_qps}, 瓶颈QPS={self.bottleneck_qps}")

@@ -15,7 +15,7 @@ DEPLOYMENT_PLATFORM=${DEPLOYMENT_PLATFORM:-"auto"}
 # ENA网络限制监控配置 - 基于AWS ENA文档 (将根据部署平台自动调整)
 ENA_ALLOWANCE_FIELDS=(
     "bw_in_allowance_exceeded"
-    "bw_out_allowance_exceeded" 
+    "bw_out_allowance_exceeded"
     "pps_allowance_exceeded"
     "conntrack_allowance_exceeded"
     "linklocal_allowance_exceeded"

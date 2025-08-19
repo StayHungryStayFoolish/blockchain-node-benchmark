@@ -40,8 +40,7 @@ init_ebs_limits() {
                 ;;
             "io2")
                 DEVICE_LIMITS["${LEDGER_DEVICE}_max_iops"]="$DATA_VOL_MAX_IOPS"
-                local auto_throughput=$(calculate_io2_throughput "$DATA_VOL_MAX_IOPS")
-                DEVICE_LIMITS["${LEDGER_DEVICE}_max_throughput"]="$auto_throughput"
+                DEVICE_LIMITS["${LEDGER_DEVICE}_max_throughput"]="$DATA_VOL_MAX_THROUGHPUT"
                 ;;
             "instance-store")
                 DEVICE_LIMITS["${LEDGER_DEVICE}_max_iops"]="$DATA_VOL_MAX_IOPS"
@@ -60,8 +59,7 @@ init_ebs_limits() {
                 ;;
             "io2")
                 DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_iops"]="$ACCOUNTS_VOL_MAX_IOPS"
-                local auto_throughput=$(calculate_io2_throughput "$ACCOUNTS_VOL_MAX_IOPS")
-                DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_throughput"]="$auto_throughput"
+                DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_throughput"]="$ACCOUNTS_VOL_MAX_THROUGHPUT"
                 ;;
             "instance-store")
                 DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_iops"]="$ACCOUNTS_VOL_MAX_IOPS"

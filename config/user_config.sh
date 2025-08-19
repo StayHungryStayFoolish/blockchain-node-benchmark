@@ -61,6 +61,49 @@ INTENSIVE_AUTO_STOP=true      # 启用自动瓶颈检测停止
 QPS_COOLDOWN=30      # QPS级别间的冷却时间 (秒)
 QPS_WARMUP_DURATION=60  # 预热时间 (秒)
 
+# ----- EBS io2 类型自动吞吐量计算 -----
+echo "🔧 检查 EBS io2 类型配置..." >&2
+
+# 加载 EBS 转换器（如果需要）
+if [[ "$DATA_VOL_TYPE" == "io2" || "$ACCOUNTS_VOL_TYPE" == "io2" ]]; then
+    if [[ -f "${CONFIG_DIR}/../utils/ebs_converter.sh" ]]; then
+        source "${CONFIG_DIR}/../utils/ebs_converter.sh"
+        echo "✅ EBS转换器加载完成" >&2
+    else
+        echo "❌ 错误: ebs_converter.sh 不存在，无法处理 io2 类型" >&2
+        echo "   路径: ${CONFIG_DIR}/../utils/ebs_converter.sh" >&2
+        exit 1
+    fi
+fi
+
+# 处理 DATA 卷的 io2 自动计算
+if [[ "$DATA_VOL_TYPE" == "io2" && -n "$DATA_VOL_MAX_IOPS" ]]; then
+    local original_throughput="$DATA_VOL_MAX_THROUGHPUT"
+    local auto_throughput
+
+    if auto_throughput=$(calculate_io2_throughput "$DATA_VOL_MAX_IOPS" 2>/dev/null); then
+        DATA_VOL_MAX_THROUGHPUT="$auto_throughput"
+        echo "ℹ️  DATA卷 io2 自动计算: $original_throughput → $auto_throughput MiB/s (基于 $DATA_VOL_MAX_IOPS IOPS)" >&2
+    else
+        echo "❌ 错误: DATA卷 io2 吞吐量计算失败" >&2
+        exit 1
+    fi
+fi
+
+# 处理 ACCOUNTS 卷的 io2 自动计算
+if [[ "$ACCOUNTS_VOL_TYPE" == "io2" && -n "$ACCOUNTS_VOL_MAX_IOPS" && -n "$ACCOUNTS_DEVICE" ]]; then
+    local original_throughput="$ACCOUNTS_VOL_MAX_THROUGHPUT"
+    local auto_throughput
+
+    if auto_throughput=$(calculate_io2_throughput "$ACCOUNTS_VOL_MAX_IOPS" 2>/dev/null); then
+        ACCOUNTS_VOL_MAX_THROUGHPUT="$auto_throughput"
+        echo "ℹ️  ACCOUNTS卷 io2 自动计算: $original_throughput → $auto_throughput MiB/s (基于 $ACCOUNTS_VOL_MAX_IOPS IOPS)" >&2
+    else
+        echo "❌ 错误: ACCOUNTS卷 io2 吞吐量计算失败" >&2
+        exit 1
+    fi
+fi
+
 # 导出用户配置变量
 export LEDGER_DEVICE ACCOUNTS_DEVICE
 export DATA_VOL_TYPE DATA_VOL_SIZE DATA_VOL_MAX_IOPS DATA_VOL_MAX_THROUGHPUT

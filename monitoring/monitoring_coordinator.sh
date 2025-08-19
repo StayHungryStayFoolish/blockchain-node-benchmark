@@ -352,22 +352,7 @@ main() {
             
             # 检查QPS测试是否还在运行的函数
             is_qps_test_running() {
-                # 检查QPS测试状态标记文件
-                if [[ -f "$TMP_DIR/qps_test_status" ]]; then
-                    return 0  # QPS测试还在运行
-                fi
-                
-                # 检查master_qps_executor进程
-                if pgrep -f "master_qps_executor" >/dev/null 2>&1; then
-                    return 0  # QPS测试还在运行
-                fi
-                
-                # 检查vegeta进程
-                if pgrep -f "vegeta" >/dev/null 2>&1; then
-                    return 0  # QPS测试还在运行
-                fi
-                
-                return 1  # QPS测试已结束
+                [[ -f "$TMP_DIR/qps_test_status" ]]
             }
             
             while true; do

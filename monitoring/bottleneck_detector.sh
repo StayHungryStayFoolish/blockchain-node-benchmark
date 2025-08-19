@@ -39,9 +39,7 @@ build_device_field_patterns() {
     if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
         patterns+=("accounts_${ACCOUNTS_DEVICE}_${field_type}")
     fi
-    
-    # 注意：移除了无效的data_device_和简化模式，因为它们从未被实际生成过
-    
+
     # 返回用|分隔的模式字符串
     local IFS='|'
     echo "${patterns[*]}"
@@ -138,8 +136,8 @@ init_bottleneck_detection() {
 {
     "status": "monitoring",
     "bottleneck_detected": false,
-    "bottleneck_type": null,
-    "bottleneck_value": null,
+    "bottleneck_types": [],
+    "bottleneck_values": [],
     "detection_time": null,
     "current_qps": null,
     "counters": {
@@ -458,8 +456,8 @@ extract_performance_metrics() {
     local memory_usage=0
     local ebs_util=0
     local ebs_latency=0
-    local ebs_aws_iops=0      # 新增: AWS标准IOPS
-    local ebs_throughput=0    # 新增: 实际吞吐量
+    local ebs_aws_iops=0
+    local ebs_throughput=0
     local network_util=0
     local error_rate=0
     

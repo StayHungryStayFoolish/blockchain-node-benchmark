@@ -546,7 +546,7 @@ save_bottleneck_context() {
 {
     "bottleneck_detected": true,
     "detection_time": "$(date -Iseconds)",
-    "max_qps_achieved": $LAST_SUCCESSFUL_QPS,
+    "max_successful_qps": $LAST_SUCCESSFUL_QPS,
     "bottleneck_qps": $qps,
     "bottleneck_reasons": "$reasons",
     "severity": "$severity",
@@ -805,6 +805,21 @@ execute_qps_test() {
     
     if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
         echo "🚨 检测到性能瓶颈，详细信息已保存"
+    else
+        # 🚨 新增: 正常完成时写入状态文件
+        cat > "$QPS_STATUS_FILE" << EOF
+{
+    "status": "completed",
+    "max_successful_qps": $LAST_SUCCESSFUL_QPS,
+    "bottleneck_detected": false,
+    "bottleneck_qps": 0,
+    "completion_time": "$(date -Iseconds)",
+    "test_duration": $TEST_DURATION,
+    "benchmark_mode": "$BENCHMARK_MODE",
+    "rpc_mode": "$RPC_MODE"
+}
+EOF
+        echo "📊 QPS状态已保存到: $QPS_STATUS_FILE"
     fi
     
     return 0
@@ -813,6 +828,13 @@ execute_qps_test() {
 # 清理函数
 cleanup() {
     echo "🧹 执行QPS测试引擎清理..."
+    
+    # 🚨 新增: 清理QPS测试状态标记文件
+    if [[ -f "$TMP_DIR/qps_test_status" ]]; then
+        rm -f "$TMP_DIR/qps_test_status"
+        echo "🗑️ QPS测试状态标记文件已清理"
+    fi
+    
     # QPS测试引擎只负责清理自己的资源
     # 监控系统清理由入口脚本负责
     echo "✅ QPS测试引擎清理完成"

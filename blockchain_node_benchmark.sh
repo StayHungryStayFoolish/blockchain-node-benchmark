@@ -252,7 +252,7 @@ execute_core_qps_test() {
     # 检查是否检测到瓶颈
     if [[ -f "${MEMORY_SHARE_DIR}/bottleneck_status.json" ]]; then
         local status_data=$(cat "${MEMORY_SHARE_DIR}/bottleneck_status.json" 2>/dev/null)
-        if echo "$status_data" | grep -q "bottleneck_detected.*true"; then
+        if [[ -n "$status_data" ]] && echo "$status_data" | grep -q "bottleneck_detected.*true"; then
             BOTTLENECK_DETECTED=true
             # 从瓶颈状态文件获取瓶颈摘要
             BOTTLENECK_INFO=$(echo "$status_data" | jq -r '.bottleneck_summary // "Unknown bottleneck"' 2>/dev/null || echo "Unknown bottleneck")
@@ -362,7 +362,7 @@ execute_data_analysis() {
         if [[ -f "$QPS_STATUS_FILE" ]]; then
             bottleneck_details=$(cat "$QPS_STATUS_FILE")
             local bottleneck_qps=$(echo "$bottleneck_details" | jq -r '.bottleneck_qps // 0')
-            local max_qps=$(echo "$bottleneck_details" | jq -r '.max_qps_achieved // 0')
+            local max_qps=$(echo "$bottleneck_details" | jq -r '.max_successful_qps // 0')
             local severity=$(echo "$bottleneck_details" | jq -r '.severity // "medium"')
             
             echo "📊 瓶颈详情: QPS=$bottleneck_qps, 最大成功QPS=$max_qps, 严重程度=$severity"
@@ -465,7 +465,7 @@ execute_performance_cliff_analysis() {
         return
     fi
     
-    local max_qps=$(echo "$bottleneck_info" | jq -r '.max_qps_achieved // 0')
+    local max_qps=$(echo "$bottleneck_info" | jq -r '.max_successful_qps // 0')
     local bottleneck_qps=$(echo "$bottleneck_info" | jq -r '.bottleneck_qps // 0')
     
     if [[ $max_qps -gt 0 && $bottleneck_qps -gt 0 ]]; then
@@ -583,7 +583,7 @@ generate_bottleneck_summary_report() {
 EOF
     
     if [[ -n "$bottleneck_info" ]]; then
-        local max_qps=$(echo "$bottleneck_info" | jq -r '.max_qps_achieved // 0')
+        local max_qps=$(echo "$bottleneck_info" | jq -r '.max_successful_qps // 0')
         local bottleneck_qps=$(echo "$bottleneck_info" | jq -r '.bottleneck_qps // 0')
         local severity=$(echo "$bottleneck_info" | jq -r '.severity // "unknown"')
         local reasons=$(echo "$bottleneck_info" | jq -r '.bottleneck_reasons // "未知"')
@@ -656,7 +656,7 @@ display_final_report_summary() {
         echo "🚨 瓶颈检测结果："
         
         if [[ -f "$QPS_STATUS_FILE" ]]; then
-            local max_qps=$(jq -r '.max_qps_achieved // 0' "$QPS_STATUS_FILE" 2>/dev/null)
+            local max_qps=$(jq -r '.max_successful_qps // 0' "$QPS_STATUS_FILE" 2>/dev/null)
             local bottleneck_qps=$(jq -r '.bottleneck_qps // 0' "$QPS_STATUS_FILE" 2>/dev/null)
             echo "🏆 最大成功QPS: $max_qps"
             echo "🚨 瓶颈触发QPS: $bottleneck_qps"
