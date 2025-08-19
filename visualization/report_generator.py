@@ -15,13 +15,28 @@ from datetime import datetime
 import numpy as np
 from scipy.stats import pearsonr
 
+# 添加项目根目录到路径，以便导入 utils 模块
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.ena_field_accessor import ENAFieldAccessor
+
+def safe_get_env_int(env_name, default_value=0):
+    """安全获取环境变量并转换为整数"""
+    try:
+        value = os.getenv(env_name)
+        if value and value != 'N/A' and value.strip():
+            return int(value)
+        return default_value
+    except (ValueError, TypeError):
+        print(f"⚠️ 环境变量 {env_name} 格式错误")
+        return default_value
+
 def get_visualization_thresholds():
-    """获取可视化阈值配置"""
+    """获取可视化阈值配置 - 使用安全的环境变量访问"""
     return {
-        'warning': int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85)),
-        'critical': int(os.getenv('SUCCESS_RATE_THRESHOLD', 95)),
-        'io_warning': int(os.getenv('BOTTLENECK_NETWORK_THRESHOLD', 80)),
-        'memory': int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))
+        'warning': safe_get_env_int('BOTTLENECK_CPU_THRESHOLD', 85),
+        'critical': safe_get_env_int('SUCCESS_RATE_THRESHOLD', 95),
+        'io_warning': safe_get_env_int('BOTTLENECK_NETWORK_THRESHOLD', 80),
+        'memory': safe_get_env_int('BOTTLENECK_MEMORY_THRESHOLD', 90)
     }
 
 class ReportGenerator:
@@ -1248,15 +1263,14 @@ class ReportGenerator:
         """✅ 改进的EBS基准分析部分"""
         try:
             # ✅ 安全的环境变量获取
-            def safe_get_env_float(env_name, default_value=None):
+            def safe_get_env_float(env_name, default_value=0.0):
                 """安全获取环境变量并转换为浮点数"""
                 try:
                     value = os.getenv(env_name)
-                    if value and value != 'N/A':
+                    if value and value != 'N/A' and value.strip():
                         return float(value)
                     return default_value
                 except (ValueError, TypeError):
-                    print(f"⚠️  环境变量 {env_name} 格式错误: {value}")
                     return default_value
             
             # 获取EBS基准配置
@@ -1459,10 +1473,10 @@ class ReportGenerator:
             """
     
     def _generate_ena_warnings_section(self, df):
-        """生成ENA网络警告section"""
+        """生成ENA网络警告section - 使用 ENAFieldAccessor"""
         try:
-            # 检查ENA数据可用性
-            ena_columns = [col for col in df.columns if col.startswith('ena_')]
+            # 检查ENA数据可用性 - 使用配置驱动
+            ena_columns = ENAFieldAccessor.get_available_ena_fields(df)
             if not ena_columns:
                 return ""
             
@@ -1513,76 +1527,72 @@ class ReportGenerator:
             return f'<div class="error">ENA警告生成失败: {str(e)}</div>'
 
     def _analyze_ena_limitations(self, df):
-        """分析ENA限制发生情况"""
-        ena_fields = {
-            'ena_pps_exceeded': 'PPS超限',
-            'ena_bw_in_exceeded': '入站带宽超限', 
-            'ena_bw_out_exceeded': '出站带宽超限',
-            'ena_conntrack_exceeded': '连接跟踪超限',
-            'ena_linklocal_exceeded': '本地代理超限'
-        }
-        
+        """分析ENA限制发生情况 - 使用 ENAFieldAccessor"""
         limitations = []
+        available_fields = ENAFieldAccessor.get_available_ena_fields(df)
         
-        for field, description in ena_fields.items():
-            if field in df.columns:
-                # 筛选限制发生的记录 (值 > 0)
-                limited_records = df[df[field] > 0]
-                
-                if not limited_records.empty:
-                    limitations.append({
-                        'type': description,
-                        'field': field,
-                        'first_time': limited_records['timestamp'].min(),
-                        'last_time': limited_records['timestamp'].max(),
-                        'occurrences': len(limited_records),
-                        'max_value': limited_records[field].max(),
-                        'total_affected': limited_records[field].sum()
-                    })
+        # 分析 exceeded 类型字段
+        for field in available_fields:
+            if 'exceeded' in field and field in df.columns:
+                # 获取字段分析信息
+                field_analysis = ENAFieldAccessor.analyze_ena_field(df, field)
+                if field_analysis:
+                    # 筛选限制发生的记录 (值 > 0)
+                    limited_records = df[df[field] > 0]
+                    
+                    if not limited_records.empty:
+                        limitations.append({
+                            'type': field_analysis['description'],
+                            'field': field,
+                            'first_time': limited_records['timestamp'].min(),
+                            'last_time': limited_records['timestamp'].max(),
+                            'occurrences': len(limited_records),
+                            'max_value': limited_records[field].max(),
+                            'total_affected': limited_records[field].sum()
+                        })
         
-        # 特殊处理: 连接容量不足预警
-        if 'ena_conntrack_available' in df.columns:
+        # 特殊处理: 连接容量不足预警 - 查找 available 类型字段
+        available_field = None
+        for field in available_fields:
+            if 'available' in field and 'conntrack' in field:
+                available_field = field
+                break
+        
+        if available_field and available_field in df.columns:
             # 使用动态阈值：基于网络阈值和数据最大值计算
             thresholds = get_visualization_thresholds()
-            max_available = df['ena_conntrack_available'].max() if not df['ena_conntrack_available'].empty else 50000
+            max_available = df[available_field].max() if not df[available_field].empty else 50000
             # 当可用量低于最大值的(100-网络阈值)%时预警
             low_connection_threshold = int(max_available * (100 - thresholds['io_warning']) / 100)
-            low_connection_records = df[df['ena_conntrack_available'] < low_connection_threshold]
+            low_connection_records = df[df[available_field] < low_connection_threshold]
             if not low_connection_records.empty:
                 limitations.append({
                     'type': '连接容量不足预警',
-                    'field': 'ena_conntrack_available',
+                    'field': available_field,
                     'first_time': low_connection_records['timestamp'].min(),
                     'last_time': low_connection_records['timestamp'].max(),
                     'occurrences': len(low_connection_records),
-                    'max_value': f"最少剩余 {low_connection_records['ena_conntrack_available'].min()} 个连接",
-                    'total_affected': f"平均剩余 {low_connection_records['ena_conntrack_available'].mean():.0f} 个连接" if 'ena_conntrack_available' in low_connection_records.columns else "Data Not Available"
+                    'max_value': f"最少剩余 {low_connection_records[available_field].min()} 个连接",
+                    'total_affected': f"平均剩余 {low_connection_records[available_field].mean():.0f} 个连接" if available_field in low_connection_records.columns else "Data Not Available"
                 })
         
         return limitations
 
     def _generate_ena_data_table(self, df):
-        """生成ENA数据统计表格"""
+        """生成ENA数据统计表格 - 使用 ENAFieldAccessor"""
         try:
-            ena_columns = [col for col in df.columns if col.startswith('ena_')]
+            ena_columns = ENAFieldAccessor.get_available_ena_fields(df)
             if not ena_columns:
                 return ""
             
-            # 生成统计数据
+            # 生成统计数据 - 使用 ENAFieldAccessor 获取字段描述
             ena_stats = {}
-            field_descriptions = {
-                'ena_bw_in_exceeded': '入站带宽超限',
-                'ena_bw_out_exceeded': '出站带宽超限',
-                'ena_pps_exceeded': 'PPS超限',
-                'ena_conntrack_exceeded': '连接跟踪超限',
-                'ena_linklocal_exceeded': '本地代理超限',
-                'ena_conntrack_available': '可用连接数'
-            }
             
             for col in ena_columns:
-                if col in field_descriptions:
+                field_analysis = ENAFieldAccessor.analyze_ena_field(df, col)
+                if field_analysis:
                     ena_stats[col] = {
-                        'description': field_descriptions[col],
+                        'description': field_analysis['description'],
                         'max': df[col].max(),
                         'mean': df[col].mean(),
                         'current': df[col].iloc[-1] if len(df) > 0 else 0
@@ -1591,21 +1601,23 @@ class ReportGenerator:
             # 生成HTML表格
             table_rows = ""
             for field, stats in ena_stats.items():
+                field_analysis = ENAFieldAccessor.analyze_ena_field(df, field)
+                
                 # 为不同类型的字段设置不同的格式
-                if field == 'ena_conntrack_available':
+                if field_analysis and field_analysis['type'] == 'gauge':  # available 类型字段
                     current_val = f"{stats['current']:,.0f}"
                     max_val = f"{stats['max']:,.0f}"
                     mean_val = f"{stats['mean']:,.0f}"
-                else:
+                else:  # counter 类型字段 (exceeded)
                     current_val = f"{stats['current']}"
                     max_val = f"{stats['max']}"
                     mean_val = f"{stats['mean']:.1f}"
                 
                 # 状态指示
                 status_class = "normal"
-                if field != 'ena_conntrack_available' and stats['current'] > 0:
+                if field_analysis and field_analysis['type'] == 'counter' and stats['current'] > 0:
                     status_class = "warning"
-                elif field == 'ena_conntrack_available':
+                elif field_analysis and field_analysis['type'] == 'gauge':
                     # 使用动态阈值判断连接容量状态
                     thresholds = get_visualization_thresholds()
                     max_available = max(stats['max'], 50000)  # 使用最大值或默认值

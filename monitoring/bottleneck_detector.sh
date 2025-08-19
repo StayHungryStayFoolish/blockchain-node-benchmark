@@ -298,8 +298,8 @@ check_ena_network_bottleneck() {
         return 1  # 未启用ENA监控
     fi
     
-    if [[ ! -f "$performance_csv" ]]; then
-        return 1  # 性能数据文件不存在
+    if [[ ! -f "$performance_csv" ]] || [[ ! -s "$performance_csv" ]]; then
+        return 1  # 性能数据文件不存在或为空
     fi
     
     # 获取最新的ENA数据
@@ -310,36 +310,70 @@ check_ena_network_bottleneck() {
     
     local header=$(head -1 "$performance_csv")
     
-    # 查找ENA字段索引
-    local ena_network_limited_idx=$(echo "$header" | tr ',' '\n' | grep -n "ena_network_limited" | cut -d: -f1)
-    local ena_pps_exceeded_idx=$(echo "$header" | tr ',' '\n' | grep -n "ena_pps_exceeded" | cut -d: -f1)
-    local ena_bw_in_exceeded_idx=$(echo "$header" | tr ',' '\n' | grep -n "ena_bw_in_exceeded" | cut -d: -f1)
-    local ena_bw_out_exceeded_idx=$(echo "$header" | tr ',' '\n' | grep -n "ena_bw_out_exceeded" | cut -d: -f1)
+    # 配置驱动：动态查找所有ENA字段索引
+    declare -A ena_field_indices
+    declare -A ena_field_values
     
-    if [[ -z "$ena_network_limited_idx" ]]; then
-        return 1  # 没有ENA数据
+    # 遍历配置中的字段，不硬编码
+    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+        local field_idx=$(echo "$header" | tr ',' '\n' | grep -n "^$field$" | cut -d: -f1)
+        if [[ -n "$field_idx" ]]; then
+            ena_field_indices["$field"]=$field_idx
+            local fields=($(echo "$latest_data" | tr ',' ' '))
+            ena_field_values["$field"]="${fields[$((field_idx - 1))]:-0}"
+        fi
+    done
+    
+    # 检查是否找到任何ENA字段
+    if [[ ${#ena_field_values[@]} -eq 0 ]]; then
+        return 1  # 没有找到ENA数据
     fi
     
-    # 提取ENA数据
-    local fields=($(echo "$latest_data" | tr ',' ' '))
-    local ena_network_limited="${fields[$((ena_network_limited_idx - 1))]:-false}"
-    local ena_pps_exceeded="${fields[$((ena_pps_exceeded_idx - 1))]:-0}"
-    local ena_bw_in_exceeded="${fields[$((ena_bw_in_exceeded_idx - 1))]:-0}"
-    local ena_bw_out_exceeded="${fields[$((ena_bw_out_exceeded_idx - 1))]:-0}"
+    # 检测exceeded类型的字段 (基于字段名模式，不硬编码字段列表)
+    local exceeded_detected=false
+    local exceeded_summary=""
+    local exceeded_count=0
     
-    # 检测ENA网络限制
-    if [[ "$ena_network_limited" == "true" ]] || [[ "$ena_pps_exceeded" -gt 0 ]] || [[ "$ena_bw_in_exceeded" -gt 0 ]] || [[ "$ena_bw_out_exceeded" -gt 0 ]]; then
+    for field in "${!ena_field_values[@]}"; do
+        if [[ "$field" == *"exceeded"* ]] && [[ "${ena_field_values[$field]}" -gt 0 ]]; then
+            exceeded_detected=true
+            ((exceeded_count++))
+            if [[ -n "$exceeded_summary" ]]; then
+                exceeded_summary="$exceeded_summary, $field=${ena_field_values[$field]}"
+            else
+                exceeded_summary="$field=${ena_field_values[$field]}"
+            fi
+        fi
+    done
+    
+    # 检测available类型字段的异常低值 (可选的额外检测)
+    for field in "${!ena_field_values[@]}"; do
+        if [[ "$field" == *"available"* ]]; then
+            local available_value="${ena_field_values[$field]}"
+            # 如果available值为0，也可能表示资源耗尽
+            if [[ "$available_value" -eq 0 ]]; then
+                if [[ -n "$exceeded_summary" ]]; then
+                    exceeded_summary="$exceeded_summary, $field=0(耗尽)"
+                else
+                    exceeded_summary="$field=0(耗尽)"
+                fi
+                exceeded_detected=true
+            fi
+        fi
+    done
+    
+    if [[ "$exceeded_detected" == "true" ]]; then
         BOTTLENECK_COUNTERS["ena_limit"]=$((${BOTTLENECK_COUNTERS["ena_limit"]} + 1))
-        echo "⚠️  ENA网络限制检测: PPS=${ena_pps_exceeded}, BW_IN=${ena_bw_in_exceeded}, BW_OUT=${ena_bw_out_exceeded} (${BOTTLENECK_COUNTERS["ena_limit"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  ENA网络限制检测: $exceeded_summary (${BOTTLENECK_COUNTERS["ena_limit"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["ena_limit"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            return 0  # 检测到ENA网络限制瓶颈
+            return 0  # 检测到ENA瓶颈
         fi
     else
         BOTTLENECK_COUNTERS["ena_limit"]=0  # 重置计数器
     fi
     
-    return 1  # 未检测到ENA网络限制瓶颈
+    return 1  # 未检测到ENA瓶颈
 }
 
 # 检测通用网络瓶颈 (基于网络利用率阈值)
@@ -777,6 +811,7 @@ detect_bottleneck() {
         "ebs_aws_iops": ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0},
         "ebs_aws_throughput": ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0},
         "network": ${BOTTLENECK_COUNTERS["network"]},
+        "ena_limit": ${BOTTLENECK_COUNTERS["ena_limit"]},
         "error_rate": ${BOTTLENECK_COUNTERS["error_rate"]},
         "rpc_latency": ${BOTTLENECK_COUNTERS["rpc_latency"]}
     }
@@ -817,6 +852,7 @@ EOF
         "ebs_aws_iops": ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0},
         "ebs_aws_throughput": ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0},
         "network": ${BOTTLENECK_COUNTERS["network"]},
+        "ena_limit": ${BOTTLENECK_COUNTERS["ena_limit"]},
         "error_rate": ${BOTTLENECK_COUNTERS["error_rate"]},
         "rpc_latency": ${BOTTLENECK_COUNTERS["rpc_latency"]}
     }

@@ -18,6 +18,10 @@ import os
 import sys
 from pathlib import Path
 
+# 添加项目根目录到路径，以便导入 utils 模块
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.ena_field_accessor import ENAFieldAccessor
+
 # Import unified CSV data processor
 current_dir = Path(__file__).parent
 utils_dir = current_dir.parent / 'utils'
@@ -646,17 +650,18 @@ class AdvancedChartGenerator(CSVDataProcessor):
             return "Very Weak"
     
     def generate_ena_network_analysis_charts(self) -> List[str]:
-        """Generate ENA network limitation analysis charts"""
+        """Generate ENA network limitation analysis charts - 使用 ENAFieldAccessor 统一接口"""
         if not self.load_data():
             return []
         
         print("🌐 Generating ENA network limitation analysis charts...")
         chart_files = []
         
-        # 检查是否有ENA数据
-        ena_columns = [col for col in self.df.columns if col.startswith('ena_')]
+        # 使用 ENAFieldAccessor 检查ENA数据 - 配置驱动
+        ena_columns = ENAFieldAccessor.get_available_ena_fields(self.df)
         if not ena_columns:
-            print("  ⚠️ No ENA network data, skipping ENA analysis charts")
+            print("  ⚠️ No ENA network data available, skipping ENA analysis charts")
+            print("  💡 Tip: Ensure ENA_MONITOR_ENABLED=true and ENA_ALLOWANCE_FIELDS is configured")
             return []
         
         # 检查Time戳列
@@ -685,16 +690,25 @@ class AdvancedChartGenerator(CSVDataProcessor):
         return chart_files
 
     def _generate_ena_limitation_trends_chart(self):
-        """Generate ENA limitation trend charts"""
+        """Generate ENA limitation trend charts - 使用真实字段名"""
         try:
-            # 定义ENA限制字段 (exceeded类型)
-            limitation_fields = {
-                'ena_pps_exceeded': {'label': 'PPS Exceeded', 'color': 'red'},
-                'ena_bw_in_exceeded': {'label': 'Inbound BW Exceeded', 'color': 'orange'}, 
-                'ena_bw_out_exceeded': {'label': 'Outbound BW Exceeded', 'color': 'blue'},
-                'ena_conntrack_exceeded': {'label': 'Connection Tracking Exceeded', 'color': 'purple'},
-                'ena_linklocal_exceeded': {'label': 'Link Local Exceeded', 'color': 'green'}
-            }
+            # 使用 ENAFieldAccessor 获取可用的 ENA 字段
+            available_ena_fields = ENAFieldAccessor.get_available_ena_fields(self.df)
+            
+            # 动态构建限制字段配置 - 基于实际可用字段
+            limitation_fields = {}
+            field_colors = ['red', 'orange', 'blue', 'purple', 'green', 'brown']
+            color_index = 0
+            
+            for field in available_ena_fields:
+                if 'exceeded' in field:  # 只处理 exceeded 类型字段
+                    field_analysis = ENAFieldAccessor.analyze_ena_field(self.df, field)
+                    if field_analysis:
+                        limitation_fields[field] = {
+                            'label': field_analysis['display_name'],
+                            'color': field_colors[color_index % len(field_colors)]
+                        }
+                        color_index += 1
             
             # 检查是否有任何限制数据
             has_limitation_data = False
@@ -753,13 +767,20 @@ class AdvancedChartGenerator(CSVDataProcessor):
             return None
 
     def _generate_ena_connection_capacity_chart(self):
-        """Generate ENA connection capacity charts"""
+        """Generate ENA connection capacity charts - 使用真实字段名"""
         try:
-            if 'ena_conntrack_available' not in self.df.columns:
+            # 查找 conntrack_allowance_available 字段
+            available_field = None
+            for field in ENAFieldAccessor.get_available_ena_fields(self.df):
+                if 'available' in field and 'conntrack' in field:
+                    available_field = field
+                    break
+            
+            if not available_field:
                 return None
             
             # 检查是否有连接容量数据
-            if self.df['ena_conntrack_available'].max() == 0:
+            if self.df[available_field].max() == 0:
                 print("  ℹ️ No ENA connection capacity data, skipping connection capacity chart")
                 return None
             
@@ -767,7 +788,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             fig, ax = plt.subplots(1, 1, figsize=(16, 6))
             
             # 绘制连接容量趋势
-            ax.plot(self.df['timestamp'], self.df['ena_conntrack_available'], 
+            ax.plot(self.df['timestamp'], self.df[available_field], 
                    color='green', linewidth=2, marker='o', markersize=2, alpha=0.8)
             
             # 添加警告线 (连接容量不足阈值)
@@ -802,14 +823,12 @@ class AdvancedChartGenerator(CSVDataProcessor):
             return None
 
     def _generate_ena_comprehensive_status_chart(self):
-        """Generate ENA comprehensive status charts"""
+        """Generate ENA comprehensive status charts - 使用 ENAFieldAccessor"""
         try:
-            # 检查是否有足够的ENA数据
-            ena_fields = ['ena_pps_exceeded', 'ena_bw_in_exceeded', 'ena_bw_out_exceeded', 
-                         'ena_conntrack_exceeded', 'ena_linklocal_exceeded', 'ena_conntrack_available']
-            
-            available_fields = [field for field in ena_fields if field in self.df.columns]
+            # 使用 ENAFieldAccessor 获取可用的ENA字段
+            available_fields = ENAFieldAccessor.get_available_ena_fields(self.df)
             if len(available_fields) < 3:
+                print("  ℹ️ Insufficient ENA fields for comprehensive analysis")
                 return None
             
             # 创建2x2子图布局
@@ -820,19 +839,15 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 1. 限制类型分布 (左上)
             ax1 = axes[0, 0]
             limitation_counts = {}
-            field_labels = {
-                'ena_pps_exceeded': 'PPS Exceeded',
-                'ena_bw_in_exceeded': 'Inbound BW Exceeded',
-                'ena_bw_out_exceeded': 'Outbound BW Exceeded',
-                'ena_conntrack_exceeded': 'Connection Tracking Exceeded',
-                'ena_linklocal_exceeded': 'Link Local Exceeded'
-            }
             
-            for field, label in field_labels.items():
-                if field in self.df.columns:
-                    count = (self.df[field] > 0).sum()
-                    if count > 0:
-                        limitation_counts[label] = count
+            # 使用 ENAFieldAccessor 动态获取字段标签
+            for field in available_fields:
+                if 'exceeded' in field:  # 只处理 exceeded 类型字段
+                    field_analysis = ENAFieldAccessor.analyze_ena_field(self.df, field)
+                    if field_analysis and field in self.df.columns:
+                        count = (self.df[field] > 0).sum()
+                        if count > 0:
+                            limitation_counts[field_analysis['display_name']] = count
             
             if limitation_counts:
                 ax1.pie(limitation_counts.values(), labels=limitation_counts.keys(), 
@@ -845,8 +860,15 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # 2. 连接容量状态 (右上)
             ax2 = axes[0, 1]
-            if 'ena_conntrack_available' in self.df.columns:
-                capacity_data = self.df['ena_conntrack_available']
+            # 查找 available 类型字段
+            available_field = None
+            for field in available_fields:
+                if 'available' in field:
+                    available_field = field
+                    break
+            
+            if available_field and available_field in self.df.columns:
+                capacity_data = self.df[available_field]
                 ax2.hist(capacity_data, bins=20, alpha=0.7, color='green', edgecolor='black')
                 ax2.axvline(capacity_data.mean(), color='red', linestyle='--', 
                            label=f'Average: {capacity_data.mean():,.0f}')
@@ -859,11 +881,10 @@ class AdvancedChartGenerator(CSVDataProcessor):
                         transform=ax2.transAxes, fontsize=12)
                 ax2.set_title('Connection Capacity Distribution')
             
-            # 3. 限制严重程度Time线 (左下)
+            # 3. 限制严重程度时间线 (左下)
             ax3 = axes[1, 0]
-            # 计算每个Time点的总限制严重程度
-            severity_fields = ['ena_pps_exceeded', 'ena_bw_in_exceeded', 'ena_bw_out_exceeded', 
-                              'ena_conntrack_exceeded', 'ena_linklocal_exceeded']
+            # 计算每个时间点的总限制严重程度 - 使用 exceeded 类型字段
+            severity_fields = [field for field in available_fields if 'exceeded' in field]
             
             severity_score = pd.Series(0, index=self.df.index)
             for field in severity_fields:
@@ -884,25 +905,24 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # 4. ENA状态汇总 (右下)
             ax4 = axes[1, 1]
-            # 创建状态汇总表格
+            # 创建状态汇总表格 - 使用 ENAFieldAccessor
             summary_data = []
-            for field in ena_fields:
+            for field in available_fields:
                 if field in self.df.columns:
-                    if field == 'ena_conntrack_available':
-                        if field in self.df.columns:
+                    field_analysis = ENAFieldAccessor.analyze_ena_field(self.df, field)
+                    if field_analysis:
+                        if field_analysis['type'] == 'gauge':  # available 类型字段
                             field_mean = self.df[field].mean()
                             field_min = self.df[field].min()
-                            summary_data.append([field_labels.get(field, field), 
+                            summary_data.append([field_analysis['display_name'], 
                                                f'{field_mean:,.0f}', 
                                                f'{field_min:,.0f}'])
-                        else:
-                            summary_data.append([field_labels.get(field, field), 'N/A', 'N/A'])
-                    else:
-                        max_val = self.df[field].max()
-                        total_events = (self.df[field] > 0).sum()
-                        summary_data.append([field_labels.get(field, field), 
-                                           f'{max_val}', 
-                                           f'{total_events} events'])
+                        else:  # counter 类型字段 (exceeded)
+                            max_val = self.df[field].max()
+                            total_events = (self.df[field] > 0).sum()
+                            summary_data.append([field_analysis['display_name'], 
+                                               f'{max_val}', 
+                                               f'{total_events} events'])
             
             if summary_data:
                 table = ax4.table(cellText=summary_data,

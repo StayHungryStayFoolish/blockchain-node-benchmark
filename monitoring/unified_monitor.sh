@@ -274,26 +274,47 @@ get_network_data() {
 
 get_ena_allowance_data() {
     if [[ "$ENA_MONITOR_ENABLED" != "true" ]]; then
-        echo "0,0,0,0,0,0"
+        # 生成与配置字段数量匹配的默认值
+        local default_values=""
+        for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+            if [[ -n "$default_values" ]]; then
+                default_values="$default_values,0"
+            else
+                default_values="0"
+            fi
+        done
+        echo "$default_values"
         return
     fi
 
     if ! command -v ethtool >/dev/null 2>&1; then
-        echo "0,0,0,0,0,0"
+        # 生成与配置字段数量匹配的默认值
+        local default_values=""
+        for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+            if [[ -n "$default_values" ]]; then
+                default_values="$default_values,0"
+            else
+                default_values="0"
+            fi
+        done
+        echo "$default_values"
         return
     fi
 
     local ethtool_output=$(ethtool -S "$NETWORK_INTERFACE" 2>/dev/null || echo "")
 
-    # 获取ENA allowance统计
-    local bw_in_exceeded=$(echo "$ethtool_output" | grep "bw_in_allowance_exceeded:" | awk '{print $2}' || echo "0")
-    local bw_out_exceeded=$(echo "$ethtool_output" | grep "bw_out_allowance_exceeded:" | awk '{print $2}' || echo "0")
-    local pps_exceeded=$(echo "$ethtool_output" | grep "pps_allowance_exceeded:" | awk '{print $2}' || echo "0")
-    local conntrack_exceeded=$(echo "$ethtool_output" | grep "conntrack_allowance_exceeded:" | awk '{print $2}' || echo "0")
-    local linklocal_exceeded=$(echo "$ethtool_output" | grep "linklocal_allowance_exceeded:" | awk '{print $2}' || echo "0")
-    local conntrack_available=$(echo "$ethtool_output" | grep "conntrack_allowance_available:" | awk '{print $2}' || echo "0")
+    # 配置驱动的ENA allowance统计获取
+    local ena_values=""
+    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+        local value=$(echo "$ethtool_output" | grep "$field:" | awk '{print $2}' || echo "0")
+        if [[ -n "$ena_values" ]]; then
+            ena_values="$ena_values,$value"
+        else
+            ena_values="$value"
+        fi
+    done
 
-    echo "$bw_in_exceeded,$bw_out_exceeded,$pps_exceeded,$conntrack_exceeded,$linklocal_exceeded,$conntrack_available"
+    echo "$ena_values"
 }
 
 # 加载iostat收集器函数
@@ -1383,7 +1404,11 @@ generate_health_fix_suggestions() {
                 log_info "  - 清理旧日志文件或扩展磁盘空间"
                 ;;
             *"内存使用率过高"*)
-                log_info "  - 检查内存泄漏
+                log_info "  - 检查内存泄漏或重启相关服务"
+                ;;
+        esac
+    done
+}
 
 # 获取当前进程资源使用（用于性能监控）
 get_current_process_resources() {
@@ -1606,6 +1631,20 @@ get_monitoring_overhead_legacy() {
     echo "$monitoring_iops_per_sec,$monitoring_throughput_mibs_per_sec"
 }
 
+# 动态生成ENA表头 - 基于ENA_ALLOWANCE_FIELDS配置
+build_ena_header() {
+    local header=""
+    # 直接使用配置中的字段名，不硬编码
+    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+        if [[ -n "$header" ]]; then
+            header="$header,$field"
+        else
+            header="$field"
+        fi
+    done
+    echo "$header"
+}
+
 # 生成完整 CSV 表头 - 支持条件性ENA字段
 generate_csv_header() {
     local basic_header="timestamp,cpu_usage,cpu_usr,cpu_sys,cpu_iowait,cpu_soft,cpu_idle,mem_used,mem_total,mem_usage"
@@ -1613,9 +1652,9 @@ generate_csv_header() {
     local network_header="net_interface,net_rx_mbps,net_tx_mbps,net_total_mbps,net_rx_gbps,net_tx_gbps,net_total_gbps,net_rx_pps,net_tx_pps,net_total_pps"
     local overhead_header="monitoring_iops_per_sec,monitoring_throughput_mibs_per_sec"
 
-    # 条件性添加ENA allowance监控字段
+    # 配置驱动的ENA表头生成
     if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
-        local ena_header="ena_bw_in_exceeded,ena_bw_out_exceeded,ena_pps_exceeded,ena_conntrack_exceeded,ena_linklocal_exceeded,ena_conntrack_available"
+        local ena_header=$(build_ena_header)
         echo "$basic_header,$device_header,$network_header,$ena_header,$overhead_header"
     else
         echo "$basic_header,$device_header,$network_header,$overhead_header"
