@@ -274,9 +274,10 @@ get_network_data() {
 
 get_ena_allowance_data() {
     if [[ "$ENA_MONITOR_ENABLED" != "true" ]]; then
-        # 生成与配置字段数量匹配的默认值
+        # 生成与配置字段数量匹配的默认值 - 使用标准化数组访问方式
         local default_values=""
-        for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+        ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+        for field in "${ena_fields[@]}"; do
             if [[ -n "$default_values" ]]; then
                 default_values="$default_values,0"
             else
@@ -288,9 +289,10 @@ get_ena_allowance_data() {
     fi
 
     if ! command -v ethtool >/dev/null 2>&1; then
-        # 生成与配置字段数量匹配的默认值
+        # 生成与配置字段数量匹配的默认值 - 使用标准化数组访问方式
         local default_values=""
-        for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+        ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+        for field in "${ena_fields[@]}"; do
             if [[ -n "$default_values" ]]; then
                 default_values="$default_values,0"
             else
@@ -303,9 +305,10 @@ get_ena_allowance_data() {
 
     local ethtool_output=$(ethtool -S "$NETWORK_INTERFACE" 2>/dev/null || echo "")
 
-    # 配置驱动的ENA allowance统计获取
+    # 配置驱动的ENA allowance统计获取 - 使用标准化数组访问方式
     local ena_values=""
-    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+    ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+    for field in "${ena_fields[@]}"; do
         local value=$(echo "$ethtool_output" | grep "$field:" | awk '{print $2}' || echo "0")
         if [[ -n "$ena_values" ]]; then
             ena_values="$ena_values,$value"
@@ -327,15 +330,10 @@ discover_monitoring_processes() {
     local start_time=$(date +%s%3N 2>/dev/null || date +%s)
     local pattern=""
 
-    # 构建进程名模式字符串
-    if [[ -n "${MONITORING_PROCESS_NAMES[@]}" ]]; then
-        pattern=$(IFS='|'; echo "${MONITORING_PROCESS_NAMES[*]}")
-        log_debug "使用配置的监控进程名模式: $pattern"
-    else
-        # 使用默认值作为fallback
-        pattern="iostat|mpstat|sar|vmstat|unified_monitor|bottleneck_detector"
-        log_debug "使用默认监控进程名模式: $pattern"
-    fi
+    # 构建进程名模式字符串 - 使用标准化数组访问方式
+    monitoring_processes=($MONITORING_PROCESS_NAMES_STR)
+    pattern=$(IFS='|'; echo "${monitoring_processes[*]}")
+    log_debug "使用配置的监控进程名模式: $pattern"
 
     # 获取监控进程列表，排除当前脚本避免自引用
     local monitoring_pids=$(pgrep -f "$pattern" 2>/dev/null | grep -v "^$$\$" | tr '\n' ' ')
@@ -526,15 +524,10 @@ get_system_dynamic_resources() {
 discover_blockchain_processes() {
     local pattern=""
 
-    # 构建区块链进程名模式字符串
-    if [[ -n "${BLOCKCHAIN_PROCESS_NAMES[@]}" ]]; then
-        pattern=$(IFS='|'; echo "${BLOCKCHAIN_PROCESS_NAMES[*]}")
-        log_debug "使用配置的区块链进程名模式: $pattern"
-    else
-        # 使用默认值作为fallback
-        pattern="solana-validator|solana|blockchain"
-        log_debug "使用默认区块链进程名模式: $pattern"
-    fi
+    # 构建区块链进程名模式字符串 - 使用标准化数组访问方式
+    blockchain_processes=($BLOCKCHAIN_PROCESS_NAMES_STR)
+    pattern=$(IFS='|'; echo "${blockchain_processes[*]}")
+    log_debug "使用配置的区块链进程名模式: $pattern"
 
     # 获取区块链进程列表
     local blockchain_pids=$(pgrep -f "$pattern" 2>/dev/null | tr '\n' ' ')
@@ -1211,10 +1204,10 @@ initiate_error_recovery() {
 recover_process_discovery() {
     log_info "🔧 恢复进程发现功能..."
 
-    # 检查进程名配置
-    if [[ -z "${MONITORING_PROCESS_NAMES[@]}" ]]; then
+    # 检查进程名配置 - 使用标准化数组访问方式
+    if [[ -z "$MONITORING_PROCESS_NAMES_STR" ]]; then
         log_warn "监控进程名配置为空，使用默认配置"
-        MONITORING_PROCESS_NAMES=("iostat" "mpstat" "sar" "vmstat" "unified_monitor")
+        export MONITORING_PROCESS_NAMES_STR="iostat mpstat sar vmstat netstat unified_monitor bottleneck_detector ena_network_monitor slot_monitor performance_visualizer overhead_monitor adaptive_frequency error_recovery report_generator"
     fi
 
     # 检查pgrep命令是否可用
@@ -1521,13 +1514,13 @@ validate_monitoring_overhead_config() {
     local validation_errors=()
     local validation_warnings=()
 
-    # 检查必要的配置变量
-    if [[ -z "${MONITORING_PROCESS_NAMES[@]}" ]]; then
-        validation_errors+=("MONITORING_PROCESS_NAMES数组未定义或为空")
+    # 检查必要的配置变量 - 使用标准化数组访问方式
+    if [[ -z "$MONITORING_PROCESS_NAMES_STR" ]]; then
+        validation_errors+=("MONITORING_PROCESS_NAMES_STR未定义或为空")
     fi
 
-    if [[ -z "${BLOCKCHAIN_PROCESS_NAMES[@]}" ]]; then
-        validation_errors+=("BLOCKCHAIN_PROCESS_NAMES数组未定义或为空")
+    if [[ -z "$BLOCKCHAIN_PROCESS_NAMES_STR" ]]; then
+        validation_errors+=("BLOCKCHAIN_PROCESS_NAMES_STR未定义或为空")
     fi
 
     if [[ -z "$MONITORING_OVERHEAD_LOG" ]]; then
@@ -1634,8 +1627,9 @@ get_monitoring_overhead_legacy() {
 # 动态生成ENA表头 - 基于ENA_ALLOWANCE_FIELDS配置
 build_ena_header() {
     local header=""
-    # 直接使用配置中的字段名，不硬编码
-    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+    # 直接使用配置中的字段名，不硬编码 - 使用标准化数组访问方式
+    ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+    for field in "${ena_fields[@]}"; do
         if [[ -n "$header" ]]; then
             header="$header,$field"
         else
@@ -2169,8 +2163,8 @@ monitoring_system_integrity_check() {
         fi
     done
 
-    # 检查进程配置
-    if [[ -z "${MONITORING_PROCESS_NAMES[@]}" ]]; then
+    # 检查进程配置 - 使用标准化数组访问方式
+    if [[ -z "$MONITORING_PROCESS_NAMES_STR" ]]; then
         integrity_issues+=("监控进程名配置为空")
     fi
 

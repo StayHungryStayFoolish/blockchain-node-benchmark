@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================================
-# 智能瓶颈检测器 - 极限测试专用 (统一日志版本)
+# 智能瓶颈检测器 - 极限测试专用
 # =====================================================================
 # 实时监控系统各项指标，自动检测性能瓶颈
 # 用于极限测试模式的自动停止条件判断
@@ -188,12 +188,11 @@ check_memory_bottleneck() {
     return 1  # 未检测到瓶颈
 }
 
-# 检测EBS瓶颈 - 升级版，使用AWS基准
 check_ebs_bottleneck() {
     local ebs_util="$1"
     local ebs_latency="$2"
-    local ebs_aws_iops="$3"      # AWS标准IOPS
-    local ebs_throughput="$4"    # 实际吞吐量
+    local ebs_aws_iops="$3"
+    local ebs_throughput="$4"
     local device_type="${5:-data}" # 设备类型: "data" 或 "accounts"，默认为 "data"
     
     local bottleneck_detected=false
@@ -314,8 +313,9 @@ check_ena_network_bottleneck() {
     declare -A ena_field_indices
     declare -A ena_field_values
     
-    # 遍历配置中的字段，不硬编码
-    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+    # 遍历配置中的字段，不硬编码 - 使用标准化数组访问方式
+    ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+    for field in "${ena_fields[@]}"; do
         local field_idx=$(echo "$header" | tr ',' '\n' | grep -n "^$field$" | cut -d: -f1)
         if [[ -n "$field_idx" ]]; then
             ena_field_indices["$field"]=$field_idx

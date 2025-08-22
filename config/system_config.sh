@@ -1,8 +1,7 @@
 #!/bin/bash
 # =====================================================================
-# Solana QPS 测试框架 - 系统配置层
+# Blockchain Node Benchmark Framework - 系统配置层
 # =====================================================================
-# 版本: 3.0 - 分层配置架构
 # 目标用户: 系统管理员和高级用户
 # 配置内容: AWS参数、日志配置、高级瓶颈检测阈值
 # 修改频率: 偶尔修改
@@ -59,6 +58,7 @@ TEMP_FILE_PREFIX="blockchain-node-qps"                                 # 临时�
 # ----- AWS相关配置 -----
 # AWS EBS基准配置
 AWS_EBS_BASELINE_IO_SIZE_KIB=16                               # AWS EBS基准IO大小 (KiB)
+AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB=128                      # AWS EBS基准Throughput大小 (KiB)
 
 # AWS元数据服务端点配置
 AWS_METADATA_ENDPOINT="http://169.254.169.254"                # AWS实例元数据端点
@@ -109,5 +109,5 @@ export ENA_ALLOWANCE_FIELDS MONITORING_PROCESS_NAMES DEPLOYMENT_PLATFORM
 export LOG_LEVEL LOG_FORMAT MAX_LOG_SIZE MAX_LOG_FILES LOG_JSON PYTHON_LOG_LEVEL
 export ERROR_RECOVERY_ENABLED ERROR_RECOVERY_DELAY
 export ERROR_LOG_SUBDIR PYTHON_ERROR_LOG_SUBDIR TEMP_FILE_PREFIX
-export AWS_EBS_BASELINE_IO_SIZE_KIB AWS_METADATA_ENDPOINT AWS_METADATA_TOKEN_TTL AWS_METADATA_API_VERSION
+export AWS_EBS_BASELINE_IO_SIZE_KIB AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB AWS_METADATA_ENDPOINT AWS_METADATA_TOKEN_TTL AWS_METADATA_API_VERSION
 export TIMESTAMP_FORMAT SILENT_MODE MONITORING_OVERHEAD_LOG

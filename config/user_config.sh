@@ -1,8 +1,7 @@
 #!/bin/bash
 # =====================================================================
-# Solana QPS 测试框架 - 用户配置层
+# Blockchain Node Benchmark Framework - 用户配置层
 # =====================================================================
-# 版本: 3.0 - 分层配置架构
 # 目标用户: 所有使用框架的用户
 # 配置内容: RPC连接、测试参数、EBS设备、监控基础配置
 # 修改频率: 经常修改
@@ -36,6 +35,7 @@ ENA_MONITOR_ENABLED=true
 # ----- 监控配置 -----
 # 统一监控间隔 (秒) - 所有监控任务使用相同间隔
 MONITOR_INTERVAL=5              # 统一监控间隔，适用于系统资源、区块链节点和监控开销统计
+EBS_MONITOR_INTERVAL=1          # EBS 单独监控
 
 # ----- QPS 基准测试配置 -----
 # 快速基准测试模式 (验证基本QPS能力)
@@ -108,7 +108,7 @@ fi
 export LEDGER_DEVICE ACCOUNTS_DEVICE
 export DATA_VOL_TYPE DATA_VOL_SIZE DATA_VOL_MAX_IOPS DATA_VOL_MAX_THROUGHPUT
 export ACCOUNTS_VOL_TYPE ACCOUNTS_VOL_SIZE ACCOUNTS_VOL_MAX_IOPS ACCOUNTS_VOL_MAX_THROUGHPUT
-export NETWORK_MAX_BANDWIDTH_GBPS ENA_MONITOR_ENABLED MONITOR_INTERVAL
+export NETWORK_MAX_BANDWIDTH_GBPS ENA_MONITOR_ENABLED MONITOR_INTERVAL EBS_MONITOR_INTERVAL
 export QUICK_INITIAL_QPS QUICK_MAX_QPS QUICK_QPS_STEP QUICK_DURATION
 export STANDARD_INITIAL_QPS STANDARD_MAX_QPS STANDARD_QPS_STEP STANDARD_DURATION
 export INTENSIVE_INITIAL_QPS INTENSIVE_MAX_QPS INTENSIVE_QPS_STEP INTENSIVE_DURATION INTENSIVE_AUTO_STOP

@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================================
-# ENA网络监控器 - 基于AWS ENA文档的网络限制监控 (统一日志版本)
+# ENA网络监控器 - 基于AWS ENA文档的网络限制监控
 # =====================================================================
 # 监控ENA网络接口的allowance exceeded指标
 # 替代假设的PPS阈值，使用实际的AWS网络限制数据
@@ -9,10 +9,8 @@
 
 # 严格错误处理 - 但允许在交互式环境中安全使用
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # 脚本直接执行时使用严格模式
     set -euo pipefail
 else
-    # 被source时使用宽松模式，避免退出shell
     set -uo pipefail
 fi
 
@@ -60,9 +58,10 @@ init_ena_monitoring() {
         return 1
     fi
     
-    # 检查是否有ENA allowance字段
+    # 检查是否有ENA allowance字段 - 使用标准化数组访问方式
     local ena_fields_found=0
-    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+    ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+    for field in "${ena_fields[@]}"; do
         if ethtool -S "$NETWORK_INTERFACE" 2>/dev/null | grep -q "$field"; then
             ((ena_fields_found++))
         fi
@@ -75,7 +74,7 @@ init_ena_monitoring() {
     
     log_info "ENA监控初始化成功"
     echo "   接口: $NETWORK_INTERFACE"
-    echo "   支持的ENA字段: $ena_fields_found/${#ENA_ALLOWANCE_FIELDS[@]}"
+    echo "   支持的ENA字段: $ena_fields_found/${#ena_fields[@]}"
     
     # 创建CSV表头
     generate_ena_csv_header > "$ENA_LOG"
@@ -90,8 +89,8 @@ generate_ena_csv_header() {
     # 添加基础网络统计
     header="$header,interface,rx_bytes,tx_bytes,rx_packets,tx_packets"
     
-    # 添加ENA allowance字段
-    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+    ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+    for field in "${ena_fields[@]}"; do
         header="$header,$field"
     done
     
@@ -116,7 +115,8 @@ get_ena_network_stats() {
     local ena_stats=""
     local ethtool_output=$(ethtool -S "$interface" 2>/dev/null || echo "")
     
-    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+    ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+    for field in "${ena_fields[@]}"; do
         local value=$(echo "$ethtool_output" | grep "$field:" | awk '{print $2}' || echo "0")
         ena_stats="$ena_stats,$value"
     done
@@ -198,7 +198,8 @@ analyze_ena_limits() {
     # 检查最大allowance exceeded值
     echo ""
     echo "最大allowance exceeded值:"
-    for field in "${ENA_ALLOWANCE_FIELDS[@]}"; do
+    ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+    for field in "${ena_fields[@]}"; do
         local field_index=$(head -1 "$ena_csv" | tr ',' '\n' | grep -n "^$field$" | cut -d: -f1)
         if [[ -n "$field_index" ]]; then
             local max_value=$(tail -n +2 "$ena_csv" | cut -d',' -f"$field_index" | sort -n | tail -1)

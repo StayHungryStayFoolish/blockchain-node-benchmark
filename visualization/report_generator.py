@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 报告生成器 - 增强版 + 瓶颈模式支持
-集成监控开销分析、配置状态检查、Solana特定分析等功能
+集成监控开销分析、配置状态检查、特定分析等功能
 支持瓶颈检测结果展示和专项分析报告
 """
 
@@ -230,7 +230,7 @@ class ReportGenerator:
             blockchain_cpu_ratio = overhead_data.get('blockchain_cpu_ratio', 0) * 100
             blockchain_memory_ratio = overhead_data.get('blockchain_memory_ratio', 0) * 100
             
-            # 兼容旧版字段
+            # 当前正在使用的I/O监控字段
             monitoring_iops_avg = overhead_data.get('monitoring_iops_avg', 0)
             monitoring_iops_max = overhead_data.get('monitoring_iops_max', 0)
             monitoring_throughput_avg = overhead_data.get('monitoring_throughput_mibs_avg', 0)
