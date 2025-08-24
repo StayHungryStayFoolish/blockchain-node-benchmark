@@ -109,9 +109,6 @@ init_bottleneck_detection() {
     # 初始化计数器
     initialize_bottleneck_counters
     
-    # 计算EBS性能基准值
-    calculate_ebs_performance_baselines
-    
     echo "📊 瓶颈检测阈值:" | tee -a "$BOTTLENECK_LOG"
     echo "  CPU使用率: ${BOTTLENECK_CPU_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
     echo "  内存使用率: ${BOTTLENECK_MEMORY_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
@@ -121,11 +118,13 @@ init_bottleneck_detection() {
     echo "  错误率: ${BOTTLENECK_ERROR_RATE_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
     
     # 显示EBS基准配置
-    if [[ -n "$DATA_BASELINE_IOPS" ]]; then
+    if [[ -n "$DATA_VOL_MAX_IOPS" ]]; then
         echo "📋 EBS性能基准:" | tee -a "$BOTTLENECK_LOG"
-        echo "  DATA设备基准: ${DATA_BASELINE_IOPS} IOPS, ${DATA_BASELINE_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
-        if [[ -n "$ACCOUNTS_BASELINE_IOPS" ]]; then
-            echo "  ACCOUNTS设备基准: ${ACCOUNTS_BASELINE_IOPS} IOPS, ${ACCOUNTS_BASELINE_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
+        echo "  DATA设备基准: ${DATA_VOL_MAX_IOPS} IOPS, ${DATA_VOL_MAX_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
+        
+        # 修正：使用完整的ACCOUNTS检查逻辑，与其他地方保持一致
+        if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" && -n "$ACCOUNTS_VOL_MAX_IOPS" && -n "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
+            echo "  ACCOUNTS设备基准: ${ACCOUNTS_VOL_MAX_IOPS} IOPS, ${ACCOUNTS_VOL_MAX_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
         fi
     fi
     echo "  连续检测次数: ${BOTTLENECK_CONSECUTIVE_COUNT}" | tee -a "$BOTTLENECK_LOG"
@@ -198,15 +197,15 @@ check_ebs_bottleneck() {
     local bottleneck_detected=false
     
     # 根据设备类型选择正确的基准值和计数器前缀
-    local baseline_iops="$DATA_BASELINE_IOPS"
-    local baseline_throughput="$DATA_BASELINE_THROUGHPUT"
+    local baseline_iops="$DATA_VOL_MAX_IOPS"
+    local baseline_throughput="$DATA_VOL_MAX_THROUGHPUT"
     local counter_prefix="ebs"
     
     if [[ "$device_type" == "accounts" ]]; then
         # 检查ACCOUNTS设备的基准值是否已配置
-        if [[ -n "$ACCOUNTS_BASELINE_IOPS" && -n "$ACCOUNTS_BASELINE_THROUGHPUT" ]]; then
-            baseline_iops="$ACCOUNTS_BASELINE_IOPS"
-            baseline_throughput="$ACCOUNTS_BASELINE_THROUGHPUT"
+        if [[ -n "$ACCOUNTS_VOL_MAX_IOPS" && -n "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
+            baseline_iops="$ACCOUNTS_VOL_MAX_IOPS"
+            baseline_throughput="$ACCOUNTS_VOL_MAX_THROUGHPUT"
             counter_prefix="accounts_ebs"
             log_debug "使用ACCOUNTS设备基准: IOPS=$baseline_iops, 吞吐量=$baseline_throughput"
         else
@@ -685,11 +684,11 @@ detect_bottleneck() {
         fi
         if [[ ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             bottleneck_types+=("EBS_AWS_IOPS")
-            bottleneck_values+=("${ebs_aws_iops}/${DATA_BASELINE_IOPS}")
+            bottleneck_values+=("${ebs_aws_iops}/${DATA_VOL_MAX_IOPS}")
         fi
         if [[ ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             bottleneck_types+=("EBS_AWS_Throughput")
-            bottleneck_values+=("${ebs_throughput}/${DATA_BASELINE_THROUGHPUT}MiB/s")
+            bottleneck_values+=("${ebs_throughput}/${DATA_VOL_MAX_THROUGHPUT}MiB/s")
         fi
     fi
     
@@ -739,11 +738,11 @@ detect_bottleneck() {
             fi
             if [[ ${BOTTLENECK_COUNTERS["accounts_ebs_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_types+=("ACCOUNTS_EBS_AWS_IOPS")
-                bottleneck_values+=("${accounts_aws_iops}/${ACCOUNTS_BASELINE_IOPS}")
+                bottleneck_values+=("${accounts_aws_iops}/${ACCOUNTS_VOL_MAX_IOPS}")
             fi
             if [[ ${BOTTLENECK_COUNTERS["accounts_ebs_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_types+=("ACCOUNTS_EBS_AWS_Throughput")
-                bottleneck_values+=("${accounts_throughput}/${ACCOUNTS_BASELINE_THROUGHPUT}MiB/s")
+                bottleneck_values+=("${accounts_throughput}/${ACCOUNTS_VOL_MAX_THROUGHPUT}MiB/s")
             fi
         fi
     fi
@@ -798,10 +797,10 @@ detect_bottleneck() {
         "error_rate": $error_rate
     },
     "ebs_baselines": {
-        "data_baseline_iops": ${DATA_BASELINE_IOPS:-0},
-        "data_baseline_throughput": ${DATA_BASELINE_THROUGHPUT:-0},
-        "accounts_baseline_iops": ${ACCOUNTS_BASELINE_IOPS:-0},
-        "accounts_baseline_throughput": ${ACCOUNTS_BASELINE_THROUGHPUT:-0}
+        "data_baseline_iops": ${DATA_VOL_MAX_IOPS:-0},
+        "data_baseline_throughput": ${DATA_VOL_MAX_THROUGHPUT:-0},
+        "accounts_baseline_iops": ${ACCOUNTS_VOL_MAX_IOPS:-0},
+        "accounts_baseline_throughput": ${ACCOUNTS_VOL_MAX_THROUGHPUT:-0}
     },
     "counters": {
         "cpu": ${BOTTLENECK_COUNTERS["cpu"]},
@@ -839,10 +838,10 @@ EOF
         "error_rate": $error_rate
     },
     "ebs_baselines": {
-        "data_baseline_iops": ${DATA_BASELINE_IOPS:-0},
-        "data_baseline_throughput": ${DATA_BASELINE_THROUGHPUT:-0},
-        "accounts_baseline_iops": ${ACCOUNTS_BASELINE_IOPS:-0},
-        "accounts_baseline_throughput": ${ACCOUNTS_BASELINE_THROUGHPUT:-0}
+        "data_baseline_iops": ${DATA_VOL_MAX_IOPS:-0},
+        "data_baseline_throughput": ${DATA_VOL_MAX_THROUGHPUT:-0},
+        "accounts_baseline_iops": ${ACCOUNTS_VOL_MAX_IOPS:-0},
+        "accounts_baseline_throughput": ${ACCOUNTS_VOL_MAX_THROUGHPUT:-0}
     },
     "counters": {
         "cpu": ${BOTTLENECK_COUNTERS["cpu"]},
