@@ -29,7 +29,7 @@ declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
     ["slot"]="slot_monitor.sh"
     ["ena_network"]="ena_network_monitor.sh"
-    ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
+    ["ebs_bottleneck"]="bottleneck_detector.sh"
 )
 
 # 初始化监控协调器
@@ -123,7 +123,7 @@ start_monitor() {
         "ebs_bottleneck")
             # QPS测试模式：不传递duration，无限运行
             # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
-            (cd "${script_dir}/../tools" && ./"${script_name}" -b) &
+            (cd "${script_dir}" && ./"${script_name}" -b) &
             ;;
         *)
             echo "❌ 不支持的监控任务: $monitor_name"

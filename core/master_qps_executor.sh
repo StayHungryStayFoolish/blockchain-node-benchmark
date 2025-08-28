@@ -484,7 +484,10 @@ trigger_immediate_bottleneck_analysis() {
         local performance_csv="${LOGS_DIR}/performance_latest.csv"
         if [[ -f "$performance_csv" ]]; then
             "${QPS_SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" \
-                detect "$qps" "$performance_csv" &
+                detect "$qps" "$performance_csv"
+            
+            # 等待瓶颈检测完成后再继续
+            sleep 1
             
             local analysis_pid=$!
             echo "📊 瓶颈分析进程启动 (PID: $analysis_pid)"

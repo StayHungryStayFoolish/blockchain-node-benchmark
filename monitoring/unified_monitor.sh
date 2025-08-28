@@ -1532,12 +1532,12 @@ validate_monitoring_overhead_config() {
     fi
 
     # 检查EBS基准值配置
-    if [[ -z "$DATA_BASELINE_IOPS" || -z "$DATA_BASELINE_THROUGHPUT" ]]; then
+    if [[ -z "$DATA_VOL_MAX_IOPS" || -z "$DATA_VOL_MAX_THROUGHPUT" ]]; then
         validation_warnings+=("DATA设备基准值未完全配置")
     fi
 
     if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
-        if [[ -z "$ACCOUNTS_BASELINE_IOPS" || -z "$ACCOUNTS_BASELINE_THROUGHPUT" ]]; then
+        if [[ -z "$ACCOUNTS_VOL_MAX_IOPS" || -z "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
             validation_warnings+=("ACCOUNTS设备已配置但基准值缺失")
         fi
     fi

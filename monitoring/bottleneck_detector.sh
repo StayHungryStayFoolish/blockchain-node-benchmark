@@ -71,6 +71,103 @@ trap 'handle_detector_error $LINENO' ERR
 
 readonly BOTTLENECK_STATUS_FILE="${MEMORY_SHARE_DIR}/bottleneck_status.json"
 
+# 创建性能指标的JSON字符串
+create_performance_metrics_json() {
+    local cpu_usage="$1"
+    local memory_usage="$2"
+    local ebs_util="$3"
+    local ebs_latency="$4"
+    local ebs_aws_iops="$5"
+    local ebs_throughput="$6"
+    local network_util="$7"
+    local error_rate="$8"
+    
+    cat << EOF
+{
+    "cpu_usage": ${cpu_usage:-null},
+    "memory_usage": ${memory_usage:-null},
+    "ebs_util": ${ebs_util:-null},
+    "ebs_latency": ${ebs_latency:-null},
+    "ebs_aws_iops": ${ebs_aws_iops:-null},
+    "ebs_throughput": ${ebs_throughput:-null},
+    "network_util": ${network_util:-null},
+    "error_rate": ${error_rate:-null}
+}
+EOF
+}
+
+# 统一的瓶颈状态JSON生成函数
+generate_bottleneck_status_json() {
+    local status="$1"
+    local detected="$2"
+    local types_csv="$3"
+    local values_csv="$4"
+    local current_qps="$5"
+    local metrics_json="$6"
+    
+    # 从JSON中提取值
+    local cpu_usage=$(echo "$metrics_json" | jq -r '.cpu_usage // null' 2>/dev/null || echo "null")
+    local memory_usage=$(echo "$metrics_json" | jq -r '.memory_usage // null' 2>/dev/null || echo "null")
+    local ebs_util=$(echo "$metrics_json" | jq -r '.ebs_util // null' 2>/dev/null || echo "null")
+    local ebs_latency=$(echo "$metrics_json" | jq -r '.ebs_latency // null' 2>/dev/null || echo "null")
+    local ebs_aws_iops=$(echo "$metrics_json" | jq -r '.ebs_aws_iops // null' 2>/dev/null || echo "null")
+    local ebs_throughput=$(echo "$metrics_json" | jq -r '.ebs_throughput // null' 2>/dev/null || echo "null")
+    local network_util=$(echo "$metrics_json" | jq -r '.network_util // null' 2>/dev/null || echo "null")
+    local error_rate=$(echo "$metrics_json" | jq -r '.error_rate // null' 2>/dev/null || echo "null")
+    
+    # 构建JSON数组
+    local types_array="[]"
+    local values_array="[]"
+    local summary=""
+    
+    if [[ -n "$types_csv" ]]; then
+        types_array="[\"$(echo "$types_csv" | sed 's/,/","/g')\"]"
+        values_array="[\"$(echo "$values_csv" | sed 's/,/","/g')\"]"
+        summary="$types_csv"
+    fi
+    
+    # 生成统一的JSON结构
+    cat > "$BOTTLENECK_STATUS_FILE" << EOF
+{
+    "status": "$status",
+    "bottleneck_detected": $detected,
+    "bottleneck_types": $types_array,
+    "bottleneck_values": $values_array,
+    "bottleneck_summary": "$summary",
+    "detection_time": $(if [[ "$detected" == "true" ]]; then echo "\"$(get_unified_timestamp)\""; else echo "null"; fi),
+    "current_qps": $current_qps,
+    "performance_metrics": {
+        "cpu_usage": $cpu_usage,
+        "memory_usage": $memory_usage,
+        "ebs_util": $ebs_util,
+        "ebs_latency": $ebs_latency,
+        "ebs_aws_iops": $ebs_aws_iops,
+        "ebs_throughput": $ebs_throughput,
+        "network_util": $network_util,
+        "error_rate": $error_rate
+    },
+    "ebs_baselines": {
+        "data_baseline_iops": ${DATA_VOL_MAX_IOPS:-0},
+        "data_baseline_throughput": ${DATA_VOL_MAX_THROUGHPUT:-0},
+        "accounts_baseline_iops": ${ACCOUNTS_VOL_MAX_IOPS:-0},
+        "accounts_baseline_throughput": ${ACCOUNTS_VOL_MAX_THROUGHPUT:-0}
+    },
+    "counters": {
+        "cpu": ${BOTTLENECK_COUNTERS["cpu"]:-0},
+        "memory": ${BOTTLENECK_COUNTERS["memory"]:-0},
+        "ebs_util": ${BOTTLENECK_COUNTERS["ebs_util"]:-0},
+        "ebs_latency": ${BOTTLENECK_COUNTERS["ebs_latency"]:-0},
+        "ebs_aws_iops": ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0},
+        "ebs_aws_throughput": ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0},
+        "network": ${BOTTLENECK_COUNTERS["network"]:-0},
+        "ena_limit": ${BOTTLENECK_COUNTERS["ena_limit"]:-0},
+        "error_rate": ${BOTTLENECK_COUNTERS["error_rate"]:-0},
+        "rpc_latency": ${BOTTLENECK_COUNTERS["rpc_latency"]:-0}
+    }
+}
+EOF
+}
+
 # 瓶颈检测计数器 (动态初始化)
 declare -A BOTTLENECK_COUNTERS
 
@@ -131,24 +228,8 @@ init_bottleneck_detection() {
     echo ""
     
     # 初始化状态文件
-    cat > "$BOTTLENECK_STATUS_FILE" << EOF
-{
-    "status": "monitoring",
-    "bottleneck_detected": false,
-    "bottleneck_types": [],
-    "bottleneck_values": [],
-    "detection_time": null,
-    "current_qps": null,
-    "counters": {
-        "cpu": 0,
-        "memory": 0,
-        "ebs_util": 0,
-        "ebs_latency": 0,
-        "network": 0,
-        "error_rate": 0
-    }
-}
-EOF
+    local empty_metrics=$(create_performance_metrics_json "null" "null" "null" "null" "null" "null" "null" "null")
+    generate_bottleneck_status_json "monitoring" "false" "" "" "null" "$empty_metrics"
 }
 
 # 检测CPU瓶颈
@@ -654,6 +735,9 @@ detect_bottleneck() {
     
     echo "📊 当前QPS: $current_qps, 性能指标: CPU=${cpu_usage}%, MEM=${memory_usage}%, EBS=${ebs_util}%/${ebs_latency}ms, AWS_IOPS=${ebs_aws_iops}, THROUGHPUT=${ebs_throughput}MiB/s, NET=${network_util}%, ERR=${error_rate}%" | tee -a "$BOTTLENECK_LOG"
     
+    # 创建性能指标JSON
+    local metrics_json=$(create_performance_metrics_json "$cpu_usage" "$memory_usage" "$ebs_util" "$ebs_latency" "$ebs_aws_iops" "$ebs_throughput" "$network_util" "$error_rate")
+    
     # 检测各种瓶颈
     local bottleneck_detected=false
     local bottleneck_types=()
@@ -774,89 +858,11 @@ detect_bottleneck() {
         echo "🚨 检测到系统瓶颈: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
         echo "   瓶颈值: $value_list" | tee -a "$BOTTLENECK_LOG"
         
-        # 验证器日志关联分析已删除（依赖失效脚本）
-        local detection_time=$(get_unified_timestamp)
-        
-        cat > "$BOTTLENECK_STATUS_FILE" << EOF
-{
-    "status": "bottleneck_detected",
-    "bottleneck_detected": true,
-    "bottleneck_types": [$(echo "$bottleneck_list" | sed 's/,/","/g' | sed 's/^/"/' | sed 's/$/"/')],
-    "bottleneck_values": [$(echo "$value_list" | sed 's/,/","/g' | sed 's/^/"/' | sed 's/$/"/')],
-    "bottleneck_summary": "$bottleneck_list",
-    "detection_time": "$(get_unified_timestamp)",
-    "current_qps": $current_qps,
-    "performance_metrics": {
-        "cpu_usage": $cpu_usage,
-        "memory_usage": $memory_usage,
-        "ebs_util": $ebs_util,
-        "ebs_latency": $ebs_latency,
-        "ebs_aws_iops": $ebs_aws_iops,
-        "ebs_throughput": $ebs_throughput,
-        "network_util": $network_util,
-        "error_rate": $error_rate
-    },
-    "ebs_baselines": {
-        "data_baseline_iops": ${DATA_VOL_MAX_IOPS:-0},
-        "data_baseline_throughput": ${DATA_VOL_MAX_THROUGHPUT:-0},
-        "accounts_baseline_iops": ${ACCOUNTS_VOL_MAX_IOPS:-0},
-        "accounts_baseline_throughput": ${ACCOUNTS_VOL_MAX_THROUGHPUT:-0}
-    },
-    "counters": {
-        "cpu": ${BOTTLENECK_COUNTERS["cpu"]},
-        "memory": ${BOTTLENECK_COUNTERS["memory"]},
-        "ebs_util": ${BOTTLENECK_COUNTERS["ebs_util"]},
-        "ebs_latency": ${BOTTLENECK_COUNTERS["ebs_latency"]},
-        "ebs_aws_iops": ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0},
-        "ebs_aws_throughput": ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0},
-        "network": ${BOTTLENECK_COUNTERS["network"]},
-        "ena_limit": ${BOTTLENECK_COUNTERS["ena_limit"]},
-        "error_rate": ${BOTTLENECK_COUNTERS["error_rate"]},
-        "rpc_latency": ${BOTTLENECK_COUNTERS["rpc_latency"]}
-    }
-}
-EOF
+        generate_bottleneck_status_json "bottleneck_detected" "true" "$bottleneck_list" "$value_list" "$current_qps" "$metrics_json"
         return 0  # 检测到瓶颈
     else
         # 更新计数器状态 - 保持格式一致性
-        cat > "$BOTTLENECK_STATUS_FILE" << EOF
-{
-    "status": "monitoring",
-    "bottleneck_detected": false,
-    "bottleneck_types": [],
-    "bottleneck_values": [],
-    "detection_time": null,
-    "current_qps": $current_qps,
-    "performance_metrics": {
-        "cpu_usage": $cpu_usage,
-        "memory_usage": $memory_usage,
-        "ebs_util": $ebs_util,
-        "ebs_latency": $ebs_latency,
-        "ebs_aws_iops": $ebs_aws_iops,
-        "ebs_throughput": $ebs_throughput,
-        "network_util": $network_util,
-        "error_rate": $error_rate
-    },
-    "ebs_baselines": {
-        "data_baseline_iops": ${DATA_VOL_MAX_IOPS:-0},
-        "data_baseline_throughput": ${DATA_VOL_MAX_THROUGHPUT:-0},
-        "accounts_baseline_iops": ${ACCOUNTS_VOL_MAX_IOPS:-0},
-        "accounts_baseline_throughput": ${ACCOUNTS_VOL_MAX_THROUGHPUT:-0}
-    },
-    "counters": {
-        "cpu": ${BOTTLENECK_COUNTERS["cpu"]},
-        "memory": ${BOTTLENECK_COUNTERS["memory"]},
-        "ebs_util": ${BOTTLENECK_COUNTERS["ebs_util"]},
-        "ebs_latency": ${BOTTLENECK_COUNTERS["ebs_latency"]},
-        "ebs_aws_iops": ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0},
-        "ebs_aws_throughput": ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0},
-        "network": ${BOTTLENECK_COUNTERS["network"]},
-        "ena_limit": ${BOTTLENECK_COUNTERS["ena_limit"]},
-        "error_rate": ${BOTTLENECK_COUNTERS["error_rate"]},
-        "rpc_latency": ${BOTTLENECK_COUNTERS["rpc_latency"]}
-    }
-}
-EOF
+        generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
         return 1  # 未检测到瓶颈
     fi
 }

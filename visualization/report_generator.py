@@ -1274,10 +1274,10 @@ class ReportGenerator:
                     return default_value
             
             # 获取EBS基准配置
-            data_baseline_iops = safe_get_env_float('DATA_BASELINE_IOPS')
-            data_baseline_throughput = safe_get_env_float('DATA_BASELINE_THROUGHPUT')
-            accounts_baseline_iops = safe_get_env_float('ACCOUNTS_BASELINE_IOPS')
-            accounts_baseline_throughput = safe_get_env_float('ACCOUNTS_BASELINE_THROUGHPUT')
+            data_baseline_iops = safe_get_env_float('DATA_VOL_MAX_IOPS')
+            data_baseline_throughput = safe_get_env_float('DATA_VOL_MAX_THROUGHPUT')
+            accounts_baseline_iops = safe_get_env_float('ACCOUNTS_VOL_MAX_IOPS')
+            accounts_baseline_throughput = safe_get_env_float('ACCOUNTS_VOL_MAX_THROUGHPUT')
             
             # ✅ 安全的利用率计算函数
             def safe_calculate_utilization(actual_value, baseline_value, metric_name):
@@ -1449,7 +1449,7 @@ class ReportGenerator:
                         <li><strong>利用率</strong>: 实际性能占基准性能的百分比</li>
                         <li><strong>Warning Threshold</strong>: 利用率超过{get_visualization_thresholds()['warning']}%时显示警告</li>
                     </ul>
-                    <p><strong>配置方法</strong>: 设置环境变量 DATA_BASELINE_IOPS, DATA_BASELINE_THROUGHPUT, ACCOUNTS_BASELINE_IOPS, ACCOUNTS_BASELINE_THROUGHPUT</p>
+                    <p><strong>配置方法</strong>: 设置环境变量 DATA_VOL_MAX_IOPS, DATA_VOL_MAX_THROUGHPUT, ACCOUNTS_VOL_MAX_IOPS, ACCOUNTS_VOL_MAX_THROUGHPUT</p>
                 </div>
             </div>
             """
