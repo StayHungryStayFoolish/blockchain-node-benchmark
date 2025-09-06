@@ -37,15 +37,234 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     trap 'handle_monitor_error $LINENO' ERR
 fi
 
+# =====================================================================
+# 性能优化模块 - 缓存系统
+# =====================================================================
+# 避免重复的系统调用，提升监控性能
+
+# 命令可用性缓存 - 性能优化：避免重复的command -v调用
+declare -A COMMAND_CACHE
+
+# 检查命令是否可用（带缓存）
+# 参数: $1 - 命令名称
+# 返回: 0=可用, 1=不可用
+# 说明: 首次检查后结果会被缓存，后续调用直接返回缓存结果
+is_command_available() {
+    local cmd="$1"
+    
+    # 参数验证
+    if [[ -z "$cmd" ]]; then
+        log_error "is_command_available: 命令名称不能为空"
+        return 1
+    fi
+    
+    # 检查缓存 - 避免重复的command -v调用
+    if [[ -n "${COMMAND_CACHE[$cmd]:-}" ]]; then
+        [[ "${COMMAND_CACHE[$cmd]}" == "1" ]]
+        return $?
+    fi
+    
+    # 执行检查并缓存结果
+    if command -v "$cmd" >/dev/null 2>&1; then
+        COMMAND_CACHE[$cmd]="1"
+        log_debug "命令可用并已缓存: $cmd"
+        return 0
+    else
+        COMMAND_CACHE[$cmd]="0"
+        log_debug "命令不可用并已缓存: $cmd"
+        return 1
+    fi
+}
+
+# 初始化命令缓存
+# 说明: 在监控启动时预先检查所有需要的命令，避免运行时重复检查
+# 性能影响: 启动时一次性开销，运行时零开销
+init_command_cache() {
+    # 定义所有可能用到的系统命令
+    local commands=(
+        "mpstat"    # CPU统计
+        "free"      # 内存统计  
+        "sar"       # 网络统计
+        "ethtool"   # 网络接口统计
+        "nproc"     # CPU核数
+        "sysctl"    # 系统参数(macOS)
+        "df"        # 磁盘使用
+        "top"       # 进程统计
+        "vm_stat"   # 内存统计(macOS)
+        "ps"        # 进程信息
+        "pgrep"     # 进程查找
+        "bc"        # 数学计算
+        "uptime"    # 系统负载
+    )
+    
+    log_info "🔧 初始化命令可用性缓存 (${#commands[@]} 个命令)..."
+    
+    local available_count=0
+    for cmd in "${commands[@]}"; do
+        if is_command_available "$cmd" >/dev/null; then
+            available_count=$((available_count + 1))
+        fi
+    done
+    
+    log_info "✅ 命令缓存初始化完成: $available_count/${#commands[@]} 个命令可用"
+}
+
+# =====================================================================
+# 系统信息缓存模块
+# =====================================================================
+# 缓存静态系统信息，避免重复获取CPU核数、内存大小等不变信息
+
+# 系统信息缓存存储
+declare -A SYSTEM_INFO_CACHE
+declare SYSTEM_INFO_CACHE_TIME=0
+
+# 获取缓存的系统信息
+# 说明: 静态系统信息(CPU核数、总内存、磁盘大小)变化频率极低，使用5分钟缓存
+# 性能影响: 减少90%以上的系统信息获取调用
+get_cached_system_info() {
+    local current_time=$(date +%s)
+    local cache_ttl=300  # 5分钟缓存TTL
+    
+    # 检查缓存是否过期或未初始化
+    if [[ $((current_time - SYSTEM_INFO_CACHE_TIME)) -gt $cache_ttl ]]; then
+        log_debug "🔄 刷新系统信息缓存 (TTL: ${cache_ttl}s)..."
+        
+        # 获取并缓存CPU核数
+        local cpu_cores="1"  # 默认值
+        if is_command_available "nproc"; then
+            cpu_cores=$(nproc 2>/dev/null || echo "1")
+            log_debug "CPU核数获取方式: nproc"
+        elif [[ -r "/proc/cpuinfo" ]]; then
+            cpu_cores=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo "1")
+            log_debug "CPU核数获取方式: /proc/cpuinfo"
+        elif is_command_available "sysctl"; then
+            cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
+            log_debug "CPU核数获取方式: sysctl (macOS)"
+        else
+            log_warn "无法获取CPU核数，使用默认值: 1"
+        fi
+        SYSTEM_INFO_CACHE["cpu_cores"]="$cpu_cores"
+        
+        # 获取并缓存总内存
+        local memory_gb="0.00"  # 默认值
+        if is_command_available "free"; then
+            local memory_kb=$(free | awk '/^Mem:/{print $2}' 2>/dev/null || echo "0")
+            memory_gb=$(echo "scale=2; $memory_kb / 1024 / 1024" | bc 2>/dev/null || echo "0.00")
+            log_debug "内存大小获取方式: free"
+        elif [[ -r "/proc/meminfo" ]]; then
+            local memory_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+            memory_gb=$(echo "scale=2; $memory_kb / 1024" | bc 2>/dev/null || echo "0.00")
+            log_debug "内存大小获取方式: /proc/meminfo"
+        elif is_command_available "sysctl"; then
+            local memory_bytes=$(sysctl -n hw.memsize 2>/dev/null || echo "0")
+            memory_gb=$(echo "scale=2; $memory_bytes / 1024 / 1024 / 1024" | bc 2>/dev/null || echo "0.00")
+            log_debug "内存大小获取方式: sysctl (macOS)"
+        else
+            log_warn "无法获取内存大小，使用默认值: 0.00GB"
+        fi
+        SYSTEM_INFO_CACHE["memory_gb"]="$memory_gb"
+        
+        # 获取并缓存磁盘大小
+        local disk_gb="0.00"  # 默认值
+        if is_command_available "df"; then
+            disk_gb=$(df / 2>/dev/null | awk 'NR==2{printf "%.2f", $2/1024/1024}' || echo "0.00")
+            log_debug "磁盘大小获取方式: df"
+        else
+            log_warn "无法获取磁盘大小，使用默认值: 0.00GB"
+        fi
+        SYSTEM_INFO_CACHE["disk_gb"]="$disk_gb"
+        
+        # 更新缓存时间戳
+        SYSTEM_INFO_CACHE_TIME=$current_time
+        
+        log_info "✅ 系统信息缓存已更新: CPU=${cpu_cores}核, 内存=${memory_gb}GB, 磁盘=${disk_gb}GB"
+    else
+        local remaining_ttl=$((cache_ttl - (current_time - SYSTEM_INFO_CACHE_TIME)))
+        log_debug "使用缓存的系统信息 (剩余TTL: ${remaining_ttl}s)"
+    fi
+}
+
+# =====================================================================
+# 数据验证和工具函数模块
+# =====================================================================
+
+# 验证数值是否有效
+# 参数: $1 - 待验证的数值, $2 - 默认值(可选)
+# 返回: 有效数值或默认值
+validate_numeric_value() {
+    local value="$1"
+    local default_value="${2:-0}"
+    
+    # 检查是否为有效数字(支持整数和小数)
+    if [[ "$value" =~ ^[0-9]+\.?[0-9]*$ ]] || [[ "$value" =~ ^[0-9]*\.[0-9]+$ ]]; then
+        echo "$value"
+    else
+        log_debug "数值验证失败: '$value' -> 使用默认值: $default_value"
+        echo "$default_value"
+    fi
+}
+
+# 格式化百分比数值
+# 参数: $1 - 原始数值, $2 - 小数位数(默认1位)
+# 返回: 格式化后的百分比数值
+format_percentage() {
+    local value="$1"
+    local decimal_places="${2:-1}"
+    
+    # 验证输入
+    value=$(validate_numeric_value "$value" "0")
+    
+    # 确保百分比在0-100范围内
+    if (( $(echo "$value > 100" | bc -l 2>/dev/null || echo "0") )); then
+        value="100"
+    elif (( $(echo "$value < 0" | bc -l 2>/dev/null || echo "0") )); then
+        value="0"
+    fi
+    
+    # 格式化输出
+    printf "%.${decimal_places}f" "$value" 2>/dev/null || echo "$value"
+}
+
+# 安全的进程名称清理
+# 参数: $1 - 原始进程名称
+# 返回: 清理后的进程名称(移除特殊字符，防止CSV注入)
+sanitize_process_name() {
+    local process_name="$1"
+    
+    # 移除可能导致CSV解析问题的字符
+    process_name=$(echo "$process_name" | tr -d '",' | tr -s ' ' | head -c 50)
+    
+    # 如果为空，使用默认值
+    if [[ -z "$process_name" ]]; then
+        process_name="unknown"
+    fi
+    
+    echo "$process_name"
+}
+
 # 监控进程清理函数
 cleanup_monitor_processes() {
-    log_info "清理监控进程..."
+    log_info "🧹 清理监控进程和资源..."
+    
     # 停止可能的后台进程
-    jobs -p | xargs -r kill 2>/dev/null || true
-    # 清理临时文件
-    [[ -n "${UNIFIED_LOG:-}" ]] && [[ -f "$UNIFIED_LOG" ]] && {
-        log_info "监控数据已保存到: $UNIFIED_LOG"
-    }
+    local job_count=$(jobs -p | wc -l)
+    if [[ $job_count -gt 0 ]]; then
+        log_debug "终止 $job_count 个后台作业"
+        jobs -p | xargs -r kill 2>/dev/null || true
+    fi
+    
+    # 清理临时文件和报告保存位置
+    if [[ -n "${UNIFIED_LOG:-}" ]] && [[ -f "$UNIFIED_LOG" ]]; then
+        local file_size=$(du -h "$UNIFIED_LOG" 2>/dev/null | cut -f1 || echo "未知")
+        log_info "📊 监控数据已保存: $UNIFIED_LOG (大小: $file_size)"
+    fi
+    
+    # 显示缓存统计
+    local cache_hits=0
+    for cmd in "${!COMMAND_CACHE[@]}"; do
+        [[ "${COMMAND_CACHE[$cmd]}" == "1" ]] && cache_hits=$((cache_hits + 1))
+    done
+    log_info "📈 缓存统计: 命令缓存 ${cache_hits}/${#COMMAND_CACHE[@]} 命中"
 }
 
 source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh"
@@ -55,6 +274,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/iostat_collector.sh"
 if [[ -z "${UNIFIED_LOG:-}" ]]; then
     UNIFIED_LOG="${LOGS_DIR}/performance_$(date +%Y%m%d_%H%M%S).csv"
 fi
+
 # MONITORING_OVERHEAD_LOG 已在 config_loader.sh 的 detect_deployment_paths() 函数中设置
 
 # 监控开销CSV表头定义 - 从 config_loader.sh 中加载
@@ -64,9 +284,33 @@ MONITOR_PIDS=()
 START_TIME=""
 END_TIME=""
 
+# I/O状态管理 - 用于真实I/O监控
+declare -A LAST_IO_STATS
+
+# 清理已退出进程的I/O状态数据
+cleanup_dead_process_io_stats() {
+    local cleaned_count=0
+    
+    for key in "${!LAST_IO_STATS[@]}"; do
+        local pid=$(echo "$key" | cut -d'_' -f1)
+        if ! kill -0 "$pid" 2>/dev/null; then
+            unset LAST_IO_STATS["$key"]
+            ((cleaned_count++))
+        fi
+    done
+    
+    [[ $cleaned_count -gt 0 ]] && log_debug "清理了 $cleaned_count 个死进程的I/O状态"
+}
+
 # 初始化监控环境
 init_monitoring() {
     echo "🔧 初始化统一监控环境..."
+
+    # 基本配置验证
+    if ! basic_config_check; then
+        echo "❌ 监控系统启动失败：配置验证不通过" >&2
+        return 1
+    fi
 
     # 验证配置
     if ! validate_config; then
@@ -109,66 +353,116 @@ init_monitoring() {
 }
 
 # CPU 监控 - 统一使用mpstat命令
+# =====================================================================
+# 核心数据收集函数模块
+# =====================================================================
+
+# CPU数据收集器
+# 返回: "cpu_usage,cpu_usr,cpu_sys,cpu_iowait,cpu_soft,cpu_idle" 格式的字符串
+# 说明: 优先使用mpstat获取详细CPU统计，fallback到/proc/stat
 get_cpu_data() {
-    # 统一使用mpstat命令采集CPU指标
-    if command -v mpstat >/dev/null 2>&1; then
+    log_debug "🔍 收集CPU性能数据..."
+    
+    # 优先使用mpstat命令采集CPU指标 - 提供最详细的CPU统计
+    if is_command_available "mpstat"; then
         local mpstat_output=$(mpstat 1 1 2>/dev/null)
 
         if [[ -n "$mpstat_output" ]]; then
-            # mpstat可用，使用原有逻辑
+            log_debug "✅ mpstat命令执行成功，解析CPU数据"
+            
+            # 查找包含CPU统计的行
             local avg_line=$(echo "$mpstat_output" | grep "Average.*all" | tail -1)
             if [[ -n "$avg_line" ]]; then
                 local fields=($avg_line)
                 local start_idx=2
 
+                # 智能检测字段起始位置 - 适配不同mpstat版本
                 if [[ "${fields[0]}" =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
-                    start_idx=2
+                    start_idx=2  # 有时间戳的格式
+                    log_debug "检测到时间戳格式的mpstat输出"
                 elif [[ "${fields[0]}" == "Average" ]]; then
-                    start_idx=2
+                    start_idx=2  # Average开头的格式
+                    log_debug "检测到Average格式的mpstat输出"
                 else
+                    # 查找"all"字段来确定起始位置
                     for i in "${!fields[@]}"; do
                         if [[ "${fields[$i]}" == "all" ]]; then
                             start_idx=$((i + 1))
+                            log_debug "在位置$i找到'all'字段，起始索引设为$start_idx"
                             break
                         fi
                     done
                 fi
 
-                local cpu_usr=${fields[$start_idx]:-0}
-                local cpu_sys=${fields[$((start_idx + 2))]:-0}
-                local cpu_iowait=${fields[$((start_idx + 3))]:-0}
-                local cpu_soft=${fields[$((start_idx + 5))]:-0}
-                local cpu_idle=${fields[$((start_idx + 9))]:-0}
+                # 提取并验证CPU指标数据
+                local cpu_usr=$(validate_numeric_value "${fields[$start_idx]:-0}")
+                local cpu_sys=$(validate_numeric_value "${fields[$((start_idx + 2))]:-0}")
+                local cpu_iowait=$(validate_numeric_value "${fields[$((start_idx + 3))]:-0}")
+                local cpu_soft=$(validate_numeric_value "${fields[$((start_idx + 5))]:-0}")
+                local cpu_idle=$(validate_numeric_value "${fields[$((start_idx + 9))]:-0}")
+                
+                # 计算总CPU使用率并验证
                 local cpu_usage=$(echo "scale=2; 100 - $cpu_idle" | bc 2>/dev/null || echo "0")
+                cpu_usage=$(validate_numeric_value "$cpu_usage")
 
+                log_debug "📊 CPU指标解析成功: 使用率=${cpu_usage}%, 用户=${cpu_usr}%, 系统=${cpu_sys}%, IO等待=${cpu_iowait}%, 软中断=${cpu_soft}%, 空闲=${cpu_idle}%"
                 echo "$cpu_usage,$cpu_usr,$cpu_sys,$cpu_iowait,$cpu_soft,$cpu_idle"
                 return
+            else
+                log_warn "⚠️ mpstat输出中未找到CPU统计行"
             fi
+        else
+            log_warn "⚠️ mpstat命令执行失败或无输出"
         fi
     fi
 
-    # 如果mpstat不可用或失败，返回默认值避免解析错误
+    # Fallback: 如果mpstat不可用或失败，返回安全的默认值
+    log_warn "🔄 CPU数据获取失败，使用默认值"
     echo "0,0,0,0,0,100"
 }
 
-# 内存监控 - 支持free命令和/proc/meminfo替代方案
+# 内存数据收集器
+# 返回: "mem_used_mb,mem_total_mb,mem_usage_percent" 格式的字符串
+# 说明: 优先使用free命令，fallback到/proc/meminfo
 get_memory_data() {
-    # 优先使用free命令
-    if command -v free >/dev/null 2>&1; then
+    log_debug "🔍 收集内存使用数据..."
+    
+    # 优先使用free命令 - 最直接的内存统计方式
+    if is_command_available "free"; then
         local mem_info=$(free -m 2>/dev/null)
         if [[ -n "$mem_info" ]]; then
+            log_debug "✅ free命令执行成功，解析内存数据"
+            
             local mem_line=$(echo "$mem_info" | grep "^Mem:")
-            local mem_used=$(echo "$mem_line" | awk '{print $3}')
-            local mem_total=$(echo "$mem_line" | awk '{print $2}')
-            local mem_usage=$(echo "scale=2; $mem_used * 100 / $mem_total" | bc 2>/dev/null || echo "0")
-            echo "$mem_used,$mem_total,$mem_usage"
-            return
+            if [[ -n "$mem_line" ]]; then
+                # 提取并验证内存数据
+                local mem_used=$(echo "$mem_line" | awk '{print $3}' 2>/dev/null || echo "0")
+                local mem_total=$(echo "$mem_line" | awk '{print $2}' 2>/dev/null || echo "1")
+                
+                mem_used=$(validate_numeric_value "$mem_used")
+                mem_total=$(validate_numeric_value "$mem_total" "1")  # 避免除零
+                
+                # 计算内存使用率
+                local mem_usage="0"
+                if [[ "$mem_total" != "0" ]]; then
+                    mem_usage=$(echo "scale=2; $mem_used * 100 / $mem_total" | bc 2>/dev/null || echo "0")
+                    mem_usage=$(format_percentage "$mem_usage" 2)
+                fi
+                
+                log_debug "📊 内存数据: 已用=${mem_used}MB, 总计=${mem_total}MB, 使用率=${mem_usage}%"
+                echo "$mem_used,$mem_total,$mem_usage"
+                return
+            else
+                log_warn "⚠️ free命令输出格式异常"
+            fi
+        else
+            log_warn "⚠️ free命令执行失败"
         fi
     fi
 
-    # 替代方案：使用/proc/meminfo
+    # 使用/proc/meminfo
     if [[ -r "/proc/meminfo" ]]; then
-        local mem_total_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+        local mem_total_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "1")
         local mem_free_kb=$(grep "^MemFree:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
         local mem_available_kb=$(grep "^MemAvailable:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "$mem_free_kb")
 
@@ -194,13 +488,13 @@ get_network_data() {
     fi
 
     # 优先使用 sar 获取网络统计
-    if command -v sar >/dev/null 2>&1; then
+    if is_command_available "sar"; then
         local sar_output=$(sar -n DEV 1 1 2>/dev/null | grep "$NETWORK_INTERFACE" | tail -1)
 
         if [[ -n "$sar_output" ]]; then
             local fields=($sar_output)
 
-            # 修复：正确处理sar输出格式
+            # 正确处理sar输出格式
             # sar -n DEV输出格式: Time IFACE rxpck/s txpck/s rxkB/s txkB/s rxcmp/s txcmp/s rxmcst/s
             local start_idx=1  # 默认从接口名开始
 
@@ -229,7 +523,7 @@ get_network_data() {
             local rx_kbs=${fields[$((start_idx + 3))]:-0}    # rxkB/s
             local tx_kbs=${fields[$((start_idx + 4))]:-0}    # txkB/s
 
-            # 修复：正确转换为AWS标准的网络带宽单位
+            # 正确转换为AWS标准的网络带宽单位
             # sar输出的是kB/s (实际是KB/s，十进制)
             # 转换步骤: kB/s -> bytes/s -> bits/s -> Mbps -> Gbps
             local rx_mbps=$(echo "scale=3; $rx_kbs * 8 / 1000" | bc 2>/dev/null || echo "0")
@@ -288,7 +582,7 @@ get_ena_allowance_data() {
         return
     fi
 
-    if ! command -v ethtool >/dev/null 2>&1; then
+    if ! is_command_available "ethtool"; then
         # 生成与配置字段数量匹配的默认值 - 使用标准化数组访问方式
         local default_values=""
         ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
@@ -354,71 +648,19 @@ discover_monitoring_processes() {
     echo "$monitoring_pids"
 }
 
-# 系统静态资源收集器
+# 系统静态资源收集器 - 性能优化版本
 get_system_static_resources() {
-    # 缓存文件路径
-    local cache_file="${MEMORY_SHARE_DIR}/system_static_resources.cache"
-    local cache_ttl=3600  # 1小时缓存
+    # 使用内存缓存替代文件缓存 - 性能优化
+    get_cached_system_info
+    
+    local cpu_cores="${SYSTEM_INFO_CACHE["cpu_cores"]}"
+    local memory_gb="${SYSTEM_INFO_CACHE["memory_gb"]}"
+    local disk_gb="${SYSTEM_INFO_CACHE["disk_gb"]}"
 
-    # 检查缓存是否存在且未过期
-    if [[ -f "$cache_file" ]]; then
-        local cache_time=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)
-        local current_time=$(date +%s)
-        local cache_age=$((current_time - cache_time))
-
-        if [[ $cache_age -lt $cache_ttl ]]; then
-            log_debug "使用缓存的系统静态资源信息"
-            cat "$cache_file"
-            return
-        fi
-    fi
-
-    log_debug "收集系统静态资源信息"
-
-    # 获取CPU核数
-    local cpu_cores=1
-    if command -v nproc >/dev/null 2>&1; then
-        cpu_cores=$(nproc 2>/dev/null || echo 1)
-    elif [[ -r "/proc/cpuinfo" ]]; then
-        cpu_cores=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1)
-    elif command -v sysctl >/dev/null 2>&1; then
-        # macOS fallback
-        cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo 1)
-    fi
-
-    # 获取总内存 (GB)
-    local memory_gb=0
-    if command -v free >/dev/null 2>&1; then
-        # Linux
-        local memory_kb=$(free | awk '/^Mem:/{print $2}' 2>/dev/null || echo 0)
-        memory_gb=$(echo "scale=2; $memory_kb / 1024 / 1024" | bc 2>/dev/null || echo 0)
-    elif [[ -r "/proc/meminfo" ]]; then
-        # Linux fallback
-        local memory_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo 0)
-        memory_gb=$(echo "scale=2; $memory_kb / 1024" | bc 2>/dev/null || echo 0)
-    elif command -v sysctl >/dev/null 2>&1; then
-        # macOS
-        local memory_bytes=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
-        memory_gb=$(echo "scale=2; $memory_bytes / 1024 / 1024 / 1024" | bc 2>/dev/null || echo 0)
-    fi
-
-    # 获取根分区总磁盘空间 (GB)
-    local disk_gb=0
-    if command -v df >/dev/null 2>&1; then
-        # 获取根分区大小，转换为GB
-        disk_gb=$(df / 2>/dev/null | awk 'NR==2{printf "%.2f", $2/1024/1024}' || echo 0)
-    fi
-
-    # 格式化结果
+    # 格式化结果 - 使用缓存数据
     local result="${cpu_cores},${memory_gb},${disk_gb}"
-
-    # 缓存结果
-    if [[ -n "$MEMORY_SHARE_DIR" ]]; then
-        mkdir -p "$MEMORY_SHARE_DIR" 2>/dev/null
-        echo "$result" > "$cache_file" 2>/dev/null
-        log_debug "系统静态资源已缓存: CPU=${cpu_cores}核, 内存=${memory_gb}GB, 磁盘=${disk_gb}GB"
-    fi
-
+    
+    log_debug "系统静态资源: CPU=${cpu_cores}核, 内存=${memory_gb}GB, 磁盘=${disk_gb}GB (缓存)"
     echo "$result"
 }
 
@@ -428,7 +670,7 @@ get_system_dynamic_resources() {
 
     # 获取系统CPU使用率
     local cpu_usage=0
-    if command -v mpstat >/dev/null 2>&1; then
+    if is_command_available "mpstat"; then
         # 使用mpstat获取CPU使用率 (1秒采样)
         cpu_usage=$(mpstat 1 1 2>/dev/null | awk '/Average:/ && /all/ {print 100-$NF}' | head -1)
         # 验证结果是否为数字
@@ -459,32 +701,32 @@ get_system_dynamic_resources() {
             local total_diff=$((total2 - total1))
 
             if [[ $total_diff -gt 0 ]]; then
-                cpu_usage=$(echo "scale=1; 100 - ($idle_diff * 100 / $total_diff)" | bc 2>/dev/null || echo 0)
+                cpu_usage=$(echo "scale=1; 100 - ($idle_diff * 100 / $total_diff)" | bc 2>/dev/null || echo "0.0")
             fi
         fi
-    elif command -v top >/dev/null 2>&1; then
+    elif is_command_available "top"; then
         # macOS/通用fallback
-        cpu_usage=$(top -l 2 -n 0 2>/dev/null | grep "CPU usage" | tail -1 | awk '{print $3}' | sed 's/%//' || echo 0)
+        cpu_usage=$(top -l 2 -n 0 2>/dev/null | grep "CPU usage" | tail -1 | awk '{print $3}' | sed 's/%//' || echo "0.0")
     fi
 
     # 获取系统内存使用率
     local memory_usage=0
-    if command -v free >/dev/null 2>&1; then
+    if is_command_available "free"; then
         # Linux
-        memory_usage=$(free 2>/dev/null | awk '/^Mem:/{printf "%.1f", $3/$2*100}' || echo 0)
+        memory_usage=$(free 2>/dev/null | awk '/^Mem:/{printf "%.1f", $3/$2*100}' || echo "0.0")
     elif [[ -r "/proc/meminfo" ]]; then
         # Linux fallback
-        local mem_total_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo 1)
+        local mem_total_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "1")
         local mem_available_kb=$(grep "^MemAvailable:" /proc/meminfo | awk '{print $2}' 2>/dev/null)
         if [[ -z "$mem_available_kb" ]]; then
-            local mem_free_kb=$(grep "^MemFree:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo 0)
-            local mem_buffers_kb=$(grep "^Buffers:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo 0)
-            local mem_cached_kb=$(grep "^Cached:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo 0)
+            local mem_free_kb=$(grep "^MemFree:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+            local mem_buffers_kb=$(grep "^Buffers:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+            local mem_cached_kb=$(grep "^Cached:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
             mem_available_kb=$((mem_free_kb + mem_buffers_kb + mem_cached_kb))
         fi
         local mem_used_kb=$((mem_total_kb - mem_available_kb))
-        memory_usage=$(echo "scale=1; $mem_used_kb * 100 / $mem_total_kb" | bc 2>/dev/null || echo 0)
-    elif command -v vm_stat >/dev/null 2>&1; then
+        memory_usage=$(echo "scale=1; $mem_used_kb * 100 / $mem_total_kb" | bc 2>/dev/null || echo "0.0")
+    elif is_command_available "vm_stat"; then
         # macOS
         local vm_stat_output=$(vm_stat 2>/dev/null)
         if [[ -n "$vm_stat_output" ]]; then
@@ -499,15 +741,15 @@ get_system_dynamic_resources() {
             local used_pages=$((pages_active + pages_inactive + pages_speculative + pages_wired))
 
             if [[ $total_pages -gt 0 ]]; then
-                memory_usage=$(echo "scale=1; $used_pages * 100 / $total_pages" | bc 2>/dev/null || echo 0)
+                memory_usage=$(echo "scale=1; $used_pages * 100 / $total_pages" | bc 2>/dev/null || echo "0.0")
             fi
         fi
     fi
 
     # 获取磁盘使用率 (根分区)
     local disk_usage=0
-    if command -v df >/dev/null 2>&1; then
-        disk_usage=$(df / 2>/dev/null | awk 'NR==2{print $5}' | sed 's/%//' || echo 0)
+    if is_command_available "df"; then
+        disk_usage=$(df / 2>/dev/null | awk 'NR==2{print $5}' | sed 's/%//' || echo "0")
     fi
 
     # 验证所有数值
@@ -558,7 +800,7 @@ calculate_process_resources() {
 
     # 使用单次ps命令批量查询所有进程 (跨平台兼容)
     local proc_stats=""
-    if command -v ps >/dev/null 2>&1; then
+    if is_command_available "ps"; then
         # 检测操作系统类型
         if [[ "$(uname -s)" == "Linux" ]]; then
             # Linux格式
@@ -592,16 +834,16 @@ calculate_process_resources() {
 
         # 数值验证和累加
         if [[ "$cpu" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-            total_cpu=$(echo "$total_cpu + $cpu" | bc -l 2>/dev/null || echo $total_cpu)
+            total_cpu=$(echo "$total_cpu + $cpu" | bc -l 2>/dev/null || echo "$total_cpu")
         fi
 
         if [[ "$mem" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-            total_memory=$(echo "$total_memory + $mem" | bc -l 2>/dev/null || echo $total_memory)
+            total_memory=$(echo "$total_memory + $mem" | bc -l 2>/dev/null || echo "$total_memory")
         fi
 
         if [[ "$rss" =~ ^[0-9]+$ ]]; then
-            local rss_mb=$(echo "scale=2; $rss / 1024" | bc -l 2>/dev/null || echo 0)
-            total_memory_mb=$(echo "$total_memory_mb + $rss_mb" | bc -l 2>/dev/null || echo $total_memory_mb)
+            local rss_mb=$(echo "scale=2; $rss / 1024" | bc -l 2>/dev/null || echo "0.00")
+            total_memory_mb=$(echo "$total_memory_mb + $rss_mb" | bc -l 2>/dev/null || echo "$total_memory_mb")
         fi
 
         count=$((count + 1))
@@ -619,8 +861,34 @@ calculate_process_resources() {
     echo "$total_cpu,$total_memory,$total_memory_mb,$count"
 }
 
-# 监控开销统计 (重写版 - 使用配置化进程发现)
+# 监控开销统计
 get_monitoring_overhead() {
+    # 简单的递归检测
+    if [[ "${MONITORING_SELF:-false}" == "true" ]]; then
+        echo "0,0"
+        return 0
+    fi
+    
+    # 设置递归标志
+    export MONITORING_SELF=true
+    
+    # 执行实际监控逻辑 - 调用监控开销计算
+    local result=$(get_monitoring_overhead_legacy)
+    
+    # 清除递归标志
+    unset MONITORING_SELF
+    
+    echo "$result"
+}
+
+get_monitoring_overhead_legacy() {
+    # I/O状态清理计数器
+    call_count=${call_count:-0}
+    ((call_count++))
+    if (( call_count % 50 == 0 )); then
+        cleanup_dead_process_io_stats
+    fi
+    
     # 使用新的进程发现引擎
     local monitoring_pids=$(discover_monitoring_processes)
 
@@ -639,116 +907,84 @@ get_monitoring_overhead() {
     local monitoring_memory_mb=$(echo "$monitoring_resources" | cut -d',' -f3)
     local process_count=$(echo "$monitoring_resources" | cut -d',' -f4)
 
-    # 改进的I/O估算 - 基于实际进程数量和类型
-    # 不同类型的监控进程有不同的I/O特征
-    local base_iops_per_process=0.2  # 每个监控进程的基础IOPS
-    local base_throughput_per_process=0.0005  # 每个监控进程的基础吞吐量(MiB/s)
+    # 真实I/O测量 - 基于 /proc/pid/io 数据
+    local total_read_bytes_diff=0
+    local total_write_bytes_diff=0
+    local total_read_ops_diff=0
+    local total_write_ops_diff=0
 
-    # 根据进程数量计算I/O开销
-    local estimated_iops=$(echo "scale=2; $process_count * $base_iops_per_process" | bc 2>/dev/null || echo "0.00")
-    local estimated_throughput=$(echo "scale=6; $process_count * $base_throughput_per_process" | bc 2>/dev/null || echo "0.000000")
+    for pid in $monitoring_pids; do
+        if [[ -f "/proc/$pid/io" ]]; then
+            local io_stats=$(cat "/proc/$pid/io" 2>/dev/null)
+            if [[ -n "$io_stats" ]]; then
+                local current_read_bytes=$(echo "$io_stats" | grep "read_bytes" | awk '{print $2}' || echo "0")
+                local current_write_bytes=$(echo "$io_stats" | grep "write_bytes" | awk '{print $2}' || echo "0")
+                local current_syscr=$(echo "$io_stats" | grep "syscr" | awk '{print $2}' || echo "0")
+                local current_syscw=$(echo "$io_stats" | grep "syscw" | awk '{print $2}' || echo "0")
 
-    # 如果CPU使用率较高，增加I/O估算
-    if (( $(echo "$monitoring_cpu > 5.0" | bc -l 2>/dev/null || echo 0) )); then
-        estimated_iops=$(echo "scale=2; $estimated_iops * 1.5" | bc 2>/dev/null || echo "$estimated_iops")
-        estimated_throughput=$(echo "scale=6; $estimated_throughput * 1.5" | bc 2>/dev/null || echo "$estimated_throughput")
-    fi
+                # 获取上次记录的值
+                local last_read_bytes=${LAST_IO_STATS["${pid}_read_bytes"]:-$current_read_bytes}
+                local last_write_bytes=${LAST_IO_STATS["${pid}_write_bytes"]:-$current_write_bytes}
+                local last_syscr=${LAST_IO_STATS["${pid}_syscr"]:-$current_syscr}
+                local last_syscw=${LAST_IO_STATS["${pid}_syscw"]:-$current_syscw}
+
+                # 计算差值（本次监控周期的增量）
+                local read_bytes_diff=$((current_read_bytes - last_read_bytes))
+                local write_bytes_diff=$((current_write_bytes - last_write_bytes))
+                local syscr_diff=$((current_syscr - last_syscr))
+                local syscw_diff=$((current_syscw - last_syscw))
+
+                # 确保差值为正数（处理进程重启等情况）
+                if [[ $read_bytes_diff -lt 0 ]]; then
+                    log_debug "进程 $pid read_bytes 重置 ($last_read_bytes -> $current_read_bytes)，可能重启"
+                    read_bytes_diff=0
+                fi
+                if [[ $write_bytes_diff -lt 0 ]]; then
+                    log_debug "进程 $pid write_bytes 重置 ($last_write_bytes -> $current_write_bytes)，可能重启"
+                    write_bytes_diff=0
+                fi
+                if [[ $syscr_diff -lt 0 ]]; then
+                    log_debug "进程 $pid syscr 重置 ($last_syscr -> $current_syscr)，可能重启"
+                    syscr_diff=0
+                fi
+                if [[ $syscw_diff -lt 0 ]]; then
+                    log_debug "进程 $pid syscw 重置 ($last_syscw -> $current_syscw)，可能重启"
+                    syscw_diff=0
+                fi
+
+                # 更新状态
+                LAST_IO_STATS["${pid}_read_bytes"]=$current_read_bytes
+                LAST_IO_STATS["${pid}_write_bytes"]=$current_write_bytes
+                LAST_IO_STATS["${pid}_syscr"]=$current_syscr
+                LAST_IO_STATS["${pid}_syscw"]=$current_syscw
+
+                # 累加差值
+                total_read_bytes_diff=$((total_read_bytes_diff + read_bytes_diff))
+                total_write_bytes_diff=$((total_write_bytes_diff + write_bytes_diff))
+                total_read_ops_diff=$((total_read_ops_diff + syscr_diff))
+                total_write_ops_diff=$((total_write_ops_diff + syscw_diff))
+            fi
+        fi
+    done
+
+    # 计算每秒真实速率
+    local real_iops=$(echo "scale=2; ($total_read_ops_diff + $total_write_ops_diff) / $MONITOR_INTERVAL" | bc 2>/dev/null || echo "0.00")
+    local real_throughput=$(echo "scale=6; ($total_read_bytes_diff + $total_write_bytes_diff) / $MONITOR_INTERVAL / 1024 / 1024" | bc 2>/dev/null || echo "0.000000")
 
     # 确保数值格式正确
-    estimated_iops=$(printf "%.2f" "$estimated_iops" 2>/dev/null || echo "0.00")
-    estimated_throughput=$(printf "%.6f" "$estimated_throughput" 2>/dev/null || echo "0.000000")
+    real_iops=$(printf "%.2f" "$real_iops" 2>/dev/null || echo "0.00")
+    real_throughput=$(printf "%.6f" "$real_throughput" 2>/dev/null || echo "0.000000")
 
-    log_debug "监控开销统计: 进程数=${process_count}, CPU=${monitoring_cpu}%, 内存=${monitoring_memory_percent}%(${monitoring_memory_mb}MB), 估算IOPS=${estimated_iops}, 估算吞吐量=${estimated_throughput}MiB/s"
+    log_debug "监控开销统计: 进程数=${process_count}, CPU=${monitoring_cpu}%, 内存=${monitoring_memory_percent}%(${monitoring_memory_mb}MB), 真实IOPS=${real_iops}, 真实吞吐量=${real_throughput}MiB/s"
 
     # 保持原有返回格式 (IOPS, 吞吐量)
-    echo "$estimated_iops,$estimated_throughput"
+    echo "$real_iops,$real_throughput"
 }
 
-# 系统静态资源收集器
-get_system_static_resources() {
-    # 获取系统静态资源信息（不经常变化的信息）
-    local cpu_cores=$(nproc 2>/dev/null || echo 1)
 
-    # 获取内存总量
-    local memory_gb=0
-    if command -v free >/dev/null 2>&1; then
-        # Linux
-        local memory_kb=$(free -k 2>/dev/null | awk '/^Mem:/{print $2}')
-        if [[ -n "$memory_kb" && "$memory_kb" -gt 0 ]]; then
-            memory_gb=$(echo "scale=2; $memory_kb / 1024 / 1024" | bc 2>/dev/null || echo 0)
-        fi
-    elif [[ -r "/proc/meminfo" ]]; then
-        # Linux fallback
-        local memory_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo 0)
-        if [[ "$memory_kb" -gt 0 ]]; then
-            memory_gb=$(echo "scale=2; $memory_kb / 1024 / 1024" | bc 2>/dev/null || echo 0)
-        fi
-    elif command -v system_profiler >/dev/null 2>&1; then
-        # macOS
-        local memory_bytes=$(system_profiler SPHardwareDataType 2>/dev/null | grep "Memory:" | awk '{print $2}' | sed 's/GB//')
-        if [[ -n "$memory_bytes" ]]; then
-            memory_gb="$memory_bytes"
-        fi
-    fi
-
-    # 获取根分区总空间
-    local disk_gb=0
-    if command -v df >/dev/null 2>&1; then
-        local disk_kb=$(df / 2>/dev/null | awk 'NR==2{print $2}')
-        if [[ -n "$disk_kb" && "$disk_kb" -gt 0 ]]; then
-            disk_gb=$(echo "scale=2; $disk_kb / 1024 / 1024" | bc 2>/dev/null || echo 0)
-        fi
-    fi
-
-    log_debug "系统静态资源: CPU=${cpu_cores}核, 内存=${memory_gb}GB, 磁盘=${disk_gb}GB"
-
-    echo "$cpu_cores,$memory_gb,$disk_gb"
-}
 
 # 系统动态资源收集器
-get_system_dynamic_resources() {
-    # 获取系统当前资源使用率
-    local cpu_usage=0
-    local memory_usage=0
-    local disk_usage=0
 
-    # 获取CPU使用率
-    if command -v mpstat >/dev/null 2>&1; then
-        cpu_usage=$(mpstat 1 1 2>/dev/null | awk '/Average:/ && /all/ {print 100-$NF}' | head -1)
-        if [[ -z "$cpu_usage" ]]; then
-            cpu_usage=0
-        fi
-    elif command -v top >/dev/null 2>&1; then
-        # 使用top作为fallback (macOS/Linux兼容)
-        cpu_usage=$(top -l 1 -n 0 2>/dev/null | grep "CPU usage" | awk '{print $3}' | sed 's/%//' || echo 0)
-        if [[ -z "$cpu_usage" ]]; then
-            cpu_usage=0
-        fi
-    fi
-
-    # 获取内存使用率
-    if command -v free >/dev/null 2>&1; then
-        memory_usage=$(free 2>/dev/null | awk '/^Mem:/{printf "%.1f", $3/$2*100}' || echo 0)
-    elif [[ -r "/proc/meminfo" ]]; then
-        local mem_total_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo 1)
-        local mem_available_kb=$(grep "^MemAvailable:" /proc/meminfo | awk '{print $2}' 2>/dev/null)
-        if [[ -z "$mem_available_kb" ]]; then
-            local mem_free_kb=$(grep "^MemFree:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo 0)
-            mem_available_kb="$mem_free_kb"
-        fi
-        local mem_used_kb=$((mem_total_kb - mem_available_kb))
-        memory_usage=$(echo "scale=1; $mem_used_kb * 100 / $mem_total_kb" | bc 2>/dev/null || echo 0)
-    fi
-
-    # 获取磁盘使用率
-    if command -v df >/dev/null 2>&1; then
-        disk_usage=$(df / 2>/dev/null | awk 'NR==2{print $5}' | sed 's/%//' || echo 0)
-    fi
-
-    log_debug "系统动态资源: CPU=${cpu_usage}%, 内存=${memory_usage}%, 磁盘=${disk_usage}%"
-
-    echo "$cpu_usage,$memory_usage,$disk_usage"
-}
 
 # 区块链节点资源统计
 get_blockchain_node_resources() {
@@ -804,13 +1040,16 @@ monitor_performance_impact() {
     fi
 
     # 检查CPU使用率
-    if (( $(echo "$cpu_usage > $BOTTLENECK_CPU_THRESHOLD" | bc -l 2>/dev/null || echo 0) )); then
+    if (( $(echo "$cpu_usage > $BOTTLENECK_CPU_THRESHOLD" | bc -l 2>/dev/null || echo "0") )); then
         warnings+=("CPU使用率超标: ${cpu_usage}% > ${BOTTLENECK_CPU_THRESHOLD}%")
     fi
 
     # 检查内存使用
-    if (( $(echo "$memory_usage > $BOTTLENECK_MEMORY_THRESHOLD" | bc -l 2>/dev/null || echo 0) )); then
-        warnings+=("内存使用超标: ${memory_usage}MB > ${BOTTLENECK_MEMORY_THRESHOLD}MB")
+    local total_memory_mb=$(get_cached_total_memory)
+    local memory_usage_percent=$(calculate_memory_percentage "$memory_usage" "$total_memory_mb")
+    
+    if (( $(echo "$memory_usage_percent > $BOTTLENECK_MEMORY_THRESHOLD" | bc -l 2>/dev/null || echo "0") )); then
+        warnings+=("内存使用超标: ${memory_usage}MB (${memory_usage_percent}%) > ${BOTTLENECK_MEMORY_THRESHOLD}%")
     fi
 
     # 记录性能数据
@@ -821,7 +1060,7 @@ monitor_performance_impact() {
     if [[ ! -f "$PERFORMANCE_LOG" ]]; then
         echo "timestamp,function_name,execution_time_ms,cpu_percent,memory_mb" > "$PERFORMANCE_LOG"
     fi
-    echo "$performance_entry" >> "$PERFORMANCE_LOG"
+    safe_write_csv "$PERFORMANCE_LOG" "$performance_entry"
 
     # 如果有警告，记录到主日志
     if [[ ${#warnings[@]} -gt 0 ]]; then
@@ -921,18 +1160,23 @@ generate_performance_impact_report() {
 
         # 性能警告统计
         echo "## 性能警告分析"
-        local warning_count=$(tail -n +2 "$PERFORMANCE_LOG" | awk -F',' -v max_time="$MAX_COLLECTION_TIME_MS" -v max_cpu="$BOTTLENECK_CPU_THRESHOLD" -v max_mem="$BOTTLENECK_MEMORY_THRESHOLD" '
+        local total_memory_mb=$(get_cached_total_memory)
+        local memory_threshold_mb=$(echo "scale=0; $total_memory_mb * $BOTTLENECK_MEMORY_THRESHOLD / 100" | bc)
+        
+        local warning_count=$(tail -n +2 "$PERFORMANCE_LOG" | awk -F',' -v max_time="$MAX_COLLECTION_TIME_MS" -v max_cpu="$BOTTLENECK_CPU_THRESHOLD" -v max_mem="$memory_threshold_mb" '
             $3 > max_time || $4 > max_cpu || $5 > max_mem {count++}
             END {print count+0}')
 
         echo "超标记录数: $warning_count / $total_records"
+        echo "内存阈值: ${BOTTLENECK_MEMORY_THRESHOLD}% (${memory_threshold_mb}MB / ${total_memory_mb}MB)"
 
         if [[ $warning_count -gt 0 ]]; then
             echo ""
             echo "### 超标记录详情"
-            tail -n +2 "$PERFORMANCE_LOG" | awk -F',' -v max_time="$MAX_COLLECTION_TIME_MS" -v max_cpu="$BOTTLENECK_CPU_THRESHOLD" -v max_mem="$BOTTLENECK_MEMORY_THRESHOLD" '
+            tail -n +2 "$PERFORMANCE_LOG" | awk -F',' -v max_time="$MAX_COLLECTION_TIME_MS" -v max_cpu="$BOTTLENECK_CPU_THRESHOLD" -v max_mem="$memory_threshold_mb" -v total_mem="$total_memory_mb" '
                 $3 > max_time || $4 > max_cpu || $5 > max_mem {
-                    printf "- %s %s: 执行时间=%sms CPU=%s%% 内存=%sMB\n", $1, $2, $3, $4, $5
+                    mem_percent = ($5 * 100 / total_mem)
+                    printf "- %s %s: 执行时间=%sms CPU=%s%% 内存=%sMB(%.1f%%)\n", $1, $2, $3, $4, $5, mem_percent
                 }'
         fi
 
@@ -983,7 +1227,7 @@ auto_performance_optimization_advisor() {
     local avg_time=$(tail -n +2 "$PERFORMANCE_LOG" | cut -d',' -f3 | awk '{sum+=$1} END {print sum/NR}')
     local max_time=$(tail -n +2 "$PERFORMANCE_LOG" | cut -d',' -f3 | sort -n | tail -1)
 
-    if (( $(echo "$avg_time > $MAX_COLLECTION_TIME_MS * 0.8" | bc -l 2>/dev/null || echo 0) )); then
+    if (( $(echo "$avg_time > $MAX_COLLECTION_TIME_MS * 0.8" | bc -l 2>/dev/null || echo "0") )); then
         log_warn "⚠️  平均执行时间接近阈值 (${avg_time}ms vs ${MAX_COLLECTION_TIME_MS}ms)"
         log_info "💡 建议: 考虑将MONITOR_INTERVAL从${MONITOR_INTERVAL}s增加到$((MONITOR_INTERVAL * 2))s"
     fi
@@ -991,7 +1235,7 @@ auto_performance_optimization_advisor() {
     # 分析CPU使用趋势
     local avg_cpu=$(tail -n +2 "$PERFORMANCE_LOG" | cut -d',' -f4 | awk '{sum+=$1} END {print sum/NR}')
 
-    if (( $(echo "$avg_cpu > $BOTTLENECK_CPU_THRESHOLD * 0.8" | bc -l 2>/dev/null || echo 0) )); then
+    if (( $(echo "$avg_cpu > $BOTTLENECK_CPU_THRESHOLD * 0.8" | bc -l 2>/dev/null || echo "0") )); then
         log_warn "⚠️  平均CPU使用率接近阈值 (${avg_cpu}% vs ${BOTTLENECK_CPU_THRESHOLD}%)"
         log_info "💡 建议: 减少监控进程数量或优化进程发现算法"
     fi
@@ -999,8 +1243,12 @@ auto_performance_optimization_advisor() {
     # 分析内存使用趋势
     local avg_memory=$(tail -n +2 "$PERFORMANCE_LOG" | cut -d',' -f5 | awk '{sum+=$1} END {print sum/NR}')
 
-    if (( $(echo "$avg_memory > $BOTTLENECK_MEMORY_THRESHOLD * 0.8" | bc -l 2>/dev/null || echo 0) )); then
-        log_warn "⚠️  平均内存使用接近阈值 (${avg_memory}MB vs ${BOTTLENECK_MEMORY_THRESHOLD}MB)"
+    # 将MB转换为百分比进行比较
+    local total_memory_mb=$(get_cached_total_memory)
+    local avg_memory_percent=$(calculate_memory_percentage "$avg_memory" "$total_memory_mb")
+    
+    if (( $(echo "$avg_memory_percent > $BOTTLENECK_MEMORY_THRESHOLD * 0.8" | bc -l 2>/dev/null || echo "0") )); then
+        log_warn "⚠️  平均内存使用接近阈值 (${avg_memory}MB, ${avg_memory_percent}% vs ${BOTTLENECK_MEMORY_THRESHOLD}%)"
         log_info "💡 建议: 优化数据结构或增加内存清理逻辑"
     fi
 
@@ -1008,7 +1256,7 @@ auto_performance_optimization_advisor() {
     local slowest_func=$(tail -n +2 "$PERFORMANCE_LOG" | sort -t',' -k3 -n | tail -1 | cut -d',' -f2)
     local slowest_time=$(tail -n +2 "$PERFORMANCE_LOG" | sort -t',' -k3 -n | tail -1 | cut -d',' -f3)
 
-    if [[ -n "$slowest_func" ]] && (( $(echo "$slowest_time > $MAX_COLLECTION_TIME_MS" | bc -l 2>/dev/null || echo 0) )); then
+    if [[ -n "$slowest_func" ]] && (( $(echo "$slowest_time > $MAX_COLLECTION_TIME_MS" | bc -l 2>/dev/null || echo "0") )); then
         log_warn "🐌 最慢函数: $slowest_func (${slowest_time}ms)"
 
         case "$slowest_func" in
@@ -1027,15 +1275,7 @@ auto_performance_optimization_advisor() {
         esac
     fi
 
-    # 生成配置优化建议
-    log_info "📋 当前配置优化建议:"
-    log_info "  - MONITOR_INTERVAL: ${MONITOR_INTERVAL}s (当前) -> 建议范围: 5-30s"
-    log_info "  - MAX_COLLECTION_TIME_MS: ${MAX_COLLECTION_TIME_MS}ms (当前) -> 建议范围: 500-2000ms"
-    log_info "  - BOTTLENECK_CPU_THRESHOLD: ${BOTTLENECK_CPU_THRESHOLD}% (当前) -> 建议范围: 80-95%"
-    log_info "  - BOTTLENECK_MEMORY_THRESHOLD: ${BOTTLENECK_MEMORY_THRESHOLD}% (当前) -> 建议范围: 85-95%"
 }
-
-# 自适应频率调整功能已被移除，使用固定监控间隔
 
 # 当前动态监控间隔（全局变量）
 CURRENT_MONITOR_INTERVAL=${MONITOR_INTERVAL}
@@ -1047,23 +1287,23 @@ assess_system_load() {
     local load_average=0
 
     # 获取CPU使用率
-    if command -v mpstat >/dev/null 2>&1; then
-        cpu_usage=$(mpstat 1 1 | awk '/Average/ && /all/ {print 100-$NF}' 2>/dev/null || echo 0)
-    elif command -v top >/dev/null 2>&1; then
+    if is_command_available "mpstat"; then
+        cpu_usage=$(mpstat 1 1 | awk '/Average/ && /all/ {print 100-$NF}' 2>/dev/null || echo "0.0")
+    elif is_command_available "top"; then
         # 使用top命令获取CPU使用率
-        cpu_usage=$(top -l 1 -n 0 | grep "CPU usage" | awk '{print $3}' | sed 's/%//' 2>/dev/null || echo 0)
+        cpu_usage=$(top -l 1 -n 0 | grep "CPU usage" | awk '{print $3}' | sed 's/%//' 2>/dev/null || echo "0.0")
     fi
 
     # 获取内存使用率
-    if command -v free >/dev/null 2>&1; then
-        memory_usage=$(free | awk '/^Mem:/ {printf "%.1f", $3/$2 * 100}' 2>/dev/null || echo 0)
+    if is_command_available "free"; then
+        memory_usage=$(free | awk '/^Mem:/ {printf "%.1f", $3/$2 * 100}' 2>/dev/null || echo "0.0")
     elif [[ -f /proc/meminfo ]]; then
         local mem_total=$(grep MemTotal /proc/meminfo | awk '{print $2}')
         local mem_available=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
         if [[ -n "$mem_total" && -n "$mem_available" ]]; then
-            memory_usage=$(echo "scale=1; ($mem_total - $mem_available) * 100 / $mem_total" | bc -l 2>/dev/null || echo 0)
+            memory_usage=$(echo "scale=1; ($mem_total - $mem_available) * 100 / $mem_total" | bc -l 2>/dev/null || echo "0.0")
         fi
-    elif command -v vm_stat >/dev/null 2>&1; then
+    elif is_command_available "vm_stat"; then
         # macOS系统
         local vm_stat_output=$(vm_stat)
         local pages_free=$(echo "$vm_stat_output" | grep "Pages free" | awk '{print $3}' | sed 's/\.//')
@@ -1074,49 +1314,44 @@ assess_system_load() {
         if [[ -n "$pages_free" && -n "$pages_active" && -n "$pages_inactive" && -n "$pages_wired" ]]; then
             local total_pages=$((pages_free + pages_active + pages_inactive + pages_wired))
             local used_pages=$((pages_active + pages_inactive + pages_wired))
-            memory_usage=$(echo "scale=1; $used_pages * 100 / $total_pages" | bc -l 2>/dev/null || echo 0)
+            memory_usage=$(echo "scale=1; $used_pages * 100 / $total_pages" | bc -l 2>/dev/null || echo "0.0")
         fi
     fi
 
     # 获取系统负载平均值
     if [[ -f /proc/loadavg ]]; then
-        load_average=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo 0)
-    elif command -v uptime >/dev/null 2>&1; then
-        load_average=$(uptime | awk -F'load average:' '{print $2}' | awk -F',' '{print $1}' | tr -d ' ' 2>/dev/null || echo 0)
+        load_average=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo "0.0")
+    elif is_command_available "uptime"; then
+        load_average=$(uptime | awk -F'load average:' '{print $2}' | awk -F',' '{print $1}' | tr -d ' ' 2>/dev/null || echo "0.0")
     fi
 
     # 计算综合负载分数 (0-100)
-    local cpu_score=$(echo "scale=0; $cpu_usage" | bc -l 2>/dev/null || echo 0)
-    local memory_score=$(echo "scale=0; $memory_usage" | bc -l 2>/dev/null || echo 0)
+    local cpu_score=$(echo "scale=0; $cpu_usage" | bc -l 2>/dev/null || echo "0")
+    local memory_score=$(echo "scale=0; $memory_usage" | bc -l 2>/dev/null || echo "0")
 
     # 负载平均值转换为分数 (假设4核系统，负载4.0为100%)
-    local cpu_cores=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-    local load_score=$(echo "scale=0; $load_average * 100 / $cpu_cores" | bc -l 2>/dev/null || echo 0)
+    local cpu_cores=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "4")
+    local load_score=$(echo "scale=0; $load_average * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
 
     # 取最高分数作为系统负载
     local system_load=$cpu_score
-    if (( $(echo "$memory_score > $system_load" | bc -l 2>/dev/null || echo 0) )); then
+    if (( $(echo "$memory_score > $system_load" | bc -l 2>/dev/null || echo "0") )); then
         system_load=$memory_score
     fi
-    if (( $(echo "$load_score > $system_load" | bc -l 2>/dev/null || echo 0) )); then
+    if (( $(echo "$load_score > $system_load" | bc -l 2>/dev/null || echo "0") )); then
         system_load=$load_score
     fi
 
     # 确保负载值在合理范围内
-    if (( $(echo "$system_load < 0" | bc -l 2>/dev/null || echo 0) )); then
+    if (( $(echo "$system_load < 0" | bc -l 2>/dev/null || echo "0") )); then
         system_load=0
-    elif (( $(echo "$system_load > 100" | bc -l 2>/dev/null || echo 0) )); then
+    elif (( $(echo "$system_load > 100" | bc -l 2>/dev/null || echo "0") )); then
         system_load=100
     fi
 
     log_debug "系统负载评估: CPU=${cpu_usage}% 内存=${memory_usage}% 负载=${load_average} 综合=${system_load}%"
     echo "$system_load"
 }
-
-# 自适应频率调整函数 - 已禁用
-# 自适应频率调整功能已被移除，使用固定监控间隔
-
-# 优雅降级功能已被移除，与极限测试目标冲突
 
 # 错误处理和恢复机制配置 - 使用system_config.sh中的配置，避免重复定义
 # ERROR_RECOVERY_ENABLED, MAX_CONSECUTIVE_ERRORS, ERROR_RECOVERY_DELAY 已在system_config.sh中定义
@@ -1162,7 +1397,7 @@ log_error_to_file() {
         echo "timestamp,function_name,error_code,error_message,consecutive_count" > "$ERROR_LOG"
     fi
 
-    echo "$timestamp,$function_name,$error_code,\"$error_message\",${ERROR_COUNTERS["$function_name"]}" >> "$ERROR_LOG"
+    safe_write_csv "$ERROR_LOG" "$timestamp,$function_name,$error_code,\"$error_message\",${ERROR_COUNTERS["$function_name"]}"
 }
 
 # 启动错误恢复
@@ -1211,7 +1446,7 @@ recover_process_discovery() {
     fi
 
     # 检查pgrep命令是否可用
-    if ! command -v pgrep >/dev/null 2>&1; then
+    if ! is_command_available "pgrep"; then
         log_error "pgrep命令不可用，尝试使用ps命令替代"
         # 可以在这里实现ps命令的替代方案
     fi
@@ -1226,15 +1461,14 @@ recover_resource_calculation() {
     log_info "🔧 恢复资源计算功能..."
 
     # 检查ps命令是否可用
-    if ! command -v ps >/dev/null 2>&1; then
+    if ! is_command_available "ps"; then
         log_error "ps命令不可用，这是严重问题"
         return 1
     fi
 
     # 检查bc命令是否可用
-    if ! command -v bc >/dev/null 2>&1; then
+    if ! is_command_available "bc"; then
         log_warn "bc命令不可用，将使用简化的数学计算"
-        # 可以实现不依赖bc的计算方法
     fi
 
     # 清理可能的临时文件
@@ -1269,19 +1503,19 @@ recover_system_load_assessment() {
     # 检查系统监控命令可用性
     local available_commands=()
 
-    if command -v mpstat >/dev/null 2>&1; then
+    if is_command_available "mpstat"; then
         available_commands+=("mpstat")
     fi
 
-    if command -v top >/dev/null 2>&1; then
+    if is_command_available "top"; then
         available_commands+=("top")
     fi
 
-    if command -v free >/dev/null 2>&1; then
+    if is_command_available "free"; then
         available_commands+=("free")
     fi
 
-    if command -v vm_stat >/dev/null 2>&1; then
+    if is_command_available "vm_stat"; then
         available_commands+=("vm_stat")
     fi
 
@@ -1374,38 +1608,12 @@ safe_execute() {
     fi
 }
 
-# 监控系统健康检查功能已删除 - 与极限测试理念冲突
-
 # 生成健康修复建议
-generate_health_fix_suggestions() {
-    local issues=("$@")
 
-    log_info "🔧 健康修复建议:"
-
-    for issue in "${issues[@]}"; do
-        case "$issue" in
-            *"关键命令不可用"*)
-                log_info "  - 安装缺失的系统工具包"
-                ;;
-            *"日志目录不存在"*)
-                log_info "  - 创建日志目录: mkdir -p $LOGS_DIR"
-                ;;
-            *"日志目录不可写"*)
-                log_info "  - 修复目录权限: chmod 755 $LOGS_DIR"
-                ;;
-            *"磁盘空间不足"*)
-                log_info "  - 清理旧日志文件或扩展磁盘空间"
-                ;;
-            *"内存使用率过高"*)
-                log_info "  - 检查内存泄漏或重启相关服务"
-                ;;
-        esac
-    done
-}
 
 # 获取当前进程资源使用（用于性能监控）
 get_current_process_resources() {
-    local pid=${1:-$$}  # 默认使用当前进程PID
+    local pid=${1:-$$}
 
     # 获取CPU和内存使用率
     local process_info=$(ps -p "$pid" -o %cpu,%mem,rss --no-headers 2>/dev/null || echo "0.0 0.0 0")
@@ -1502,7 +1710,7 @@ write_monitoring_overhead_log() {
 
     # 写入数据行
     if [[ -n "$overhead_data_line" ]]; then
-        echo "$overhead_data_line" >> "$MONITORING_OVERHEAD_LOG"
+        safe_write_csv "$MONITORING_OVERHEAD_LOG" "$overhead_data_line"
         log_debug "写入监控开销数据: $(echo "$overhead_data_line" | cut -d',' -f1-5)..."
     else
         log_debug "监控开销数据收集失败，跳过写入"
@@ -1545,7 +1753,7 @@ validate_monitoring_overhead_config() {
     # 检查必要命令的可用性
     local required_commands=("pgrep" "ps" "bc" "cut" "grep" "awk")
     for cmd in "${required_commands[@]}"; do
-        if ! command -v "$cmd" >/dev/null 2>&1; then
+        if ! is_command_available "$cmd"; then
             validation_errors+=("必要命令不可用: $cmd")
         fi
     done
@@ -1578,51 +1786,8 @@ validate_monitoring_overhead_config() {
     return 0
 }
 
-# 监控开销系统健康检查功能已删除 - 与极限测试理念冲突
 
-# 兼容性函数 - 保持原有的基于MONITOR_PIDS的逻辑作为备用
-get_monitoring_overhead_legacy() {
-    local total_read_bytes=0
-    local total_write_bytes=0
-    local total_read_ops=0
-    local total_write_ops=0
 
-    # 统计所有监控进程的开销
-    for pid in "${MONITOR_PIDS[@]}"; do
-        if [[ -f "/proc/$pid/io" ]]; then
-            local io_stats=$(cat "/proc/$pid/io" 2>/dev/null)
-            if [[ -n "$io_stats" ]]; then
-                local read_bytes=$(echo "$io_stats" | grep "read_bytes" | awk '{print $2}' || echo "0")
-                local write_bytes=$(echo "$io_stats" | grep "write_bytes" | awk '{print $2}' || echo "0")
-                local syscr=$(echo "$io_stats" | grep "syscr" | awk '{print $2}' || echo "0")
-                local syscw=$(echo "$io_stats" | grep "syscw" | awk '{print $2}' || echo "0")
-
-                # 确保变量为数值，如果为空则设为0
-                read_bytes=${read_bytes:-0}
-                write_bytes=${write_bytes:-0}
-                syscr=${syscr:-0}
-                syscw=${syscw:-0}
-
-                # 验证是否为数值
-                [[ "$read_bytes" =~ ^[0-9]+$ ]] || read_bytes=0
-                [[ "$write_bytes" =~ ^[0-9]+$ ]] || write_bytes=0
-                [[ "$syscr" =~ ^[0-9]+$ ]] || syscr=0
-                [[ "$syscw" =~ ^[0-9]+$ ]] || syscw=0
-
-                total_read_bytes=$((total_read_bytes + read_bytes))
-                total_write_bytes=$((total_write_bytes + write_bytes))
-                total_read_ops=$((total_read_ops + syscr))
-                total_write_ops=$((total_write_ops + syscw))
-            fi
-        fi
-    done
-
-    # 计算每秒开销 - 使用统一的监控间隔
-    local monitoring_iops_per_sec=$(echo "scale=2; ($total_read_ops + $total_write_ops) / $MONITOR_INTERVAL" | bc 2>/dev/null || echo "0")
-    local monitoring_throughput_mibs_per_sec=$(echo "scale=6; ($total_read_bytes + $total_write_bytes) / $MONITOR_INTERVAL / 1024 / 1024" | bc 2>/dev/null || echo "0")
-
-    echo "$monitoring_iops_per_sec,$monitoring_throughput_mibs_per_sec"
-}
 
 # 动态生成ENA表头 - 基于ENA_ALLOWANCE_FIELDS配置
 build_ena_header() {
@@ -1681,9 +1846,9 @@ generate_json_metrics() {
     local ebs_util=0
     local ebs_latency=0
     if [[ -n "$device_data" ]]; then
-        # 假设设备数据格式为: device1_util,device1_latency,device2_util,device2_latency...
-        ebs_util=$(echo "$device_data" | cut -d',' -f2 2>/dev/null || echo "0")
-        ebs_latency=$(echo "$device_data" | cut -d',' -f4 2>/dev/null || echo "0")
+        # 设备数据格式（21个字段）：r_s,w_s,rkb_s,wkb_s,r_await,w_await,avg_await,aqu_sz,util...
+        ebs_util=$(echo "$device_data" | cut -d',' -f9 2>/dev/null || echo "0")      # f9=util
+        ebs_latency=$(echo "$device_data" | cut -d',' -f7 2>/dev/null || echo "0")   # f7=avg_await
     fi
 
     # 原子写入latest_metrics.json (核心指标)
@@ -1749,8 +1914,13 @@ log_performance_data() {
         echo "$csv_header" > "$UNIFIED_LOG"
     fi
 
-    # 写入CSV文件
-    echo "$data_line" >> "$UNIFIED_LOG"
+    # 使用并发安全的CSV写入
+    if safe_write_csv "$UNIFIED_LOG" "$data_line"; then
+        log_debug "CSV数据已安全写入: $UNIFIED_LOG"
+    else
+        log_error "CSV数据写入失败: $UNIFIED_LOG"
+        return 1
+    fi
 
     # 写入独立的监控开销日志
     write_monitoring_overhead_log
@@ -1760,7 +1930,7 @@ log_performance_data() {
     local current_count=1
 
     if [[ -f "$sample_count_file" ]]; then
-        current_count=$(cat "$sample_count_file" 2>/dev/null || echo 1)
+        current_count=$(cat "$sample_count_file" 2>/dev/null || echo "1")
         current_count=$((current_count + 1))
     fi
 
@@ -1788,24 +1958,43 @@ start_unified_monitoring() {
     local interval=${2:-$MONITOR_INTERVAL}
     local follow_qps_test="${3:-false}"
 
-    # 初始化错误处理系统
+    # =====================================================================
+    # 监控系统初始化阶段
+    # =====================================================================
+    
+    log_info "🚀 启动统一性能监控系统..."
+    
+    # 第一步: 初始化命令缓存 - 性能优化关键步骤
+    log_info "📋 第1步: 初始化系统命令缓存"
+    init_command_cache
+
+    # 第二步: 初始化错误处理系统
+    log_info "🛡️ 第2步: 初始化错误处理系统"
     initialize_error_handling_system
 
     START_TIME=$(get_unified_timestamp)
 
-    echo "🚀 启动统一性能监控..."
-    echo "  开始时间: $START_TIME"
-    echo "  监控间隔: ${interval}秒"
+    # =====================================================================
+    # 监控配置信息显示
+    # =====================================================================
+    
+    echo ""
+    echo "🎯 ===== 统一性能监控系统 ====="
+    echo "📅 开始时间: $START_TIME"
+    echo "⏱️  监控间隔: ${interval}秒"
 
     if [[ "$follow_qps_test" == "true" ]]; then
-        echo "  模式: 跟随QPS测试 无时间限制"
-        echo "  控制文件: ${MEMORY_SHARE_DIR}/qps_monitor_control.flag"
+        echo "🔄 运行模式: 跟随QPS测试 (无时间限制)"
+        echo "🎛️  控制文件: ${MEMORY_SHARE_DIR}/qps_monitor_control.flag"
     else
-        echo "  监控时长: ${duration}秒"
+        echo "⏰ 运行模式: 定时监控 (${duration}秒)"
     fi
 
-    echo "  数据文件: $UNIFIED_LOG"
+    echo "📊 数据文件: $UNIFIED_LOG"
+    
+    # 显示系统能力检测结果
     echo ""
+    echo "🔧 ===== 系统能力检测 ====="
 
     # 显示配置状态
     log_info "DATA设备: $LEDGER_DEVICE"
@@ -1842,9 +2031,17 @@ start_unified_monitoring() {
     # 记录监控进程PID
     MONITOR_PIDS+=($BASHPID)
 
-    # 开始监控循环 - 修复：支持跟随QPS测试模式
+    # =====================================================================
+    # 主监控循环
+    # =====================================================================
+    
+    echo ""
+    echo "🔄 ===== 开始监控循环 ====="
+    
     local start_time=$(date +%s)
     local sample_count=0
+    local last_status_time=0
+    local status_interval=30  # 每30秒显示一次状态
 
     echo "⏰ 开始数据收集..."
 
@@ -1858,17 +2055,27 @@ start_unified_monitoring() {
                 break
             fi
 
-            # 自适应频率调整和优雅降级功能已被移除，使用固定监控间隔
+            # 收集统一监控数据
+            log_debug "📊 第${sample_count}次数据收集开始..."
             local current_system_load=$(assess_system_load)
 
             log_performance_data
             sample_count=$((sample_count + 1))
+            
+            # 定期显示监控状态
+            local current_time=$(date +%s)
+            if [[ $((current_time - last_status_time)) -ge $status_interval ]]; then
+                local elapsed=$((current_time - start_time))
+                echo "📈 监控状态: 已收集 $sample_count 次数据, 运行时间 ${elapsed}s (跟随QPS测试中)"
+                last_status_time=$current_time
+            fi
 
-            # 进度报告
+            # 进度报告 - 增强版统计信息
             if (( sample_count % 12 == 0 )); then
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))
-                echo "📈 已收集 $sample_count 个样本，已运行 ${elapsed}s 跟随QPS测试中"
+                local avg_interval=$(echo "scale=2; $elapsed / $sample_count" | bc 2>/dev/null || echo "N/A")
+                echo "📈 监控状态: 已收集 $sample_count 个样本，运行时间 ${elapsed}s，平均间隔 ${avg_interval}s (跟随QPS测试中)"
             fi
 
             sleep "$CURRENT_MONITOR_INTERVAL"
@@ -1878,20 +2085,31 @@ start_unified_monitoring() {
         local end_time=$((start_time + duration))
 
         while [[ $(date +%s) -lt $end_time ]]; do
-            # 自适应频率调整和优雅降级功能已被移除，使用固定监控间隔
+            # 收集统一监控数据
+            log_debug "📊 第${sample_count}次数据收集开始..."
             local current_system_load=$(assess_system_load)
 
             log_performance_data
             sample_count=$((sample_count + 1))
-
-            # 监控开销统计已在 log_performance_data 中每次调用时执行
-            # 无需额外的时间间隔控制
-
-            # 进度报告
-            if (( sample_count % 12 == 0 )); then
+            
+            # 定期显示监控状态
+            local current_time=$(date +%s)
+            if [[ $((current_time - last_status_time)) -ge $status_interval ]]; then
                 local elapsed=$((current_time - start_time))
                 local remaining=$((end_time - current_time))
-                echo "📈 已收集 $sample_count 个样本，已运行 ${elapsed}s，剩余 ${remaining}s"
+                local progress_percent=$(echo "scale=1; $elapsed * 100 / $duration" | bc 2>/dev/null || echo "N/A")
+                echo "📈 监控状态: 已收集 $sample_count 次数据, 进度 ${progress_percent}%, 运行时间 ${elapsed}s, 剩余 ${remaining}s"
+                last_status_time=$current_time
+            fi
+
+            # 进度报告 - 增强版统计信息
+            if (( sample_count % 12 == 0 )); then
+                local current_time=$(date +%s)
+                local elapsed=$((current_time - start_time))
+                local remaining=$((end_time - current_time))
+                local avg_interval=$(echo "scale=2; $elapsed / $sample_count" | bc 2>/dev/null || echo "N/A")
+                local progress_percent=$(echo "scale=1; $elapsed * 100 / $duration" | bc 2>/dev/null || echo "N/A")
+                echo "📈 监控状态: 已收集 $sample_count 个样本，进度 ${progress_percent}%，运行 ${elapsed}s，剩余 ${remaining}s，平均间隔 ${avg_interval}s"
             fi
 
             sleep "$CURRENT_MONITOR_INTERVAL"
@@ -1900,12 +2118,40 @@ start_unified_monitoring() {
 
     END_TIME=$(get_unified_timestamp)
 
+    # =====================================================================
+    # 监控完成统计报告
+    # =====================================================================
+    
+    local final_time=$(date +%s)
+    local total_elapsed=$((final_time - start_time))
+    local avg_sample_interval=$(echo "scale=2; $total_elapsed / $sample_count" | bc 2>/dev/null || echo "N/A")
+    local file_size=$(du -h "$UNIFIED_LOG" 2>/dev/null | cut -f1 || echo "未知")
+    local line_count=$(wc -l < "$UNIFIED_LOG" 2>/dev/null || echo "未知")
+    
     echo ""
-    log_info "统一性能监控完成"
-    echo "  结束时间: $END_TIME"
-    log_info "总样本数: $sample_count"
+    echo "✅ ===== 统一性能监控完成 ====="
+    echo "📅 开始时间: $START_TIME"
+    echo "📅 结束时间: $END_TIME"
+    echo "⏱️  总运行时间: ${total_elapsed}秒"
+    echo "📊 总采样次数: $sample_count 次"
+    echo "📈 平均采样间隔: ${avg_sample_interval}秒"
     echo "📄 数据文件: $UNIFIED_LOG"
-    echo "📁 文件大小: $(du -h "$UNIFIED_LOG" | cut -f1)"
+    echo "📋 数据统计: $line_count 行，文件大小 $file_size"
+    
+    # 性能效率评估
+    if [[ "$sample_count" -gt 0 ]] && [[ "$total_elapsed" -gt 0 ]]; then
+        local efficiency=$(echo "scale=1; $sample_count * 100 / $total_elapsed" | bc 2>/dev/null || echo "N/A")
+        echo "⚡ 监控效率: ${efficiency} 样本/秒"
+    fi
+    
+    # 数据质量评估
+    if [[ "$line_count" != "未知" ]] && [[ "$sample_count" -gt 0 ]]; then
+        local data_integrity=$(echo "scale=1; ($line_count - 1) * 100 / $sample_count" | bc 2>/dev/null || echo "N/A")
+        echo "📊 数据完整性: ${data_integrity}% (${line_count}行数据/${sample_count}次采样)"
+    fi
+    
+    echo ""
+    echo "🧹 ===== 清理系统资源 ====="
 }
 
 # 停止监控 - 防止重复调用
@@ -1918,19 +2164,36 @@ stop_unified_monitoring() {
     STOP_MONITORING_CALLED=true
 
     echo "🛑 停止统一监控..."
+    
+    local cleanup_count=0
+    local cleanup_errors=0
 
     # 终止所有相关进程
+    echo "🔄 清理监控进程..."
     for pid in "${MONITOR_PIDS[@]}"; do
         if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null || true
+            if kill "$pid" 2>/dev/null; then
+                cleanup_count=$((cleanup_count + 1))
+                log_debug "✅ 已终止进程 PID: $pid"
+            else
+                cleanup_errors=$((cleanup_errors + 1))
+                log_debug "❌ 无法终止进程 PID: $pid"
+            fi
         fi
     done
 
     # 生成错误恢复报告
     if [[ "$ERROR_RECOVERY_ENABLED" == "true" ]]; then
+        echo "📋 生成错误恢复报告..."
         generate_error_recovery_report
     fi
 
+    # 清理完成总结
+    echo "✅ 资源清理完成: 终止了 $cleanup_count 个进程"
+    if [[ "$cleanup_errors" -gt 0 ]]; then
+        echo "⚠️  清理警告: $cleanup_errors 个进程无法正常终止"
+    fi
+    
     log_info "统一监控已停止"
 }
 
@@ -2019,10 +2282,166 @@ main() {
     fi
 }
 
+# 内存计算辅助函数
+get_cached_total_memory() {
+    if [[ -z "${SYSTEM_TOTAL_MEMORY_MB:-}" ]]; then
+        SYSTEM_TOTAL_MEMORY_MB=$(free -m | awk 'NR==2{print $2}' 2>/dev/null || echo "8192")
+        export SYSTEM_TOTAL_MEMORY_MB
+        log_debug "缓存系统总内存: ${SYSTEM_TOTAL_MEMORY_MB}MB"
+    fi
+    echo "$SYSTEM_TOTAL_MEMORY_MB"
+}
+
+# 内存百分比计算函数
+calculate_memory_percentage() {
+    local memory_usage_mb="$1"
+    local total_memory_mb="$2"
+    
+    if [[ "$total_memory_mb" -eq 0 ]]; then
+        echo "0"
+        return
+    fi
+    
+    local memory_percent=$(echo "scale=2; $memory_usage_mb * 100 / $total_memory_mb" | bc 2>/dev/null || echo "0")
+    echo "$memory_percent"
+}
+
+# 基本配置验证机制
+basic_config_check() {
+    local errors=()
+    
+    # 检查关键配置变量
+    [[ -z "$LEDGER_DEVICE" ]] && errors+=("LEDGER_DEVICE未配置")
+    [[ -z "$DATA_VOL_MAX_IOPS" ]] && errors+=("DATA_VOL_MAX_IOPS未配置")
+    [[ -z "$DATA_VOL_MAX_THROUGHPUT" ]] && errors+=("DATA_VOL_MAX_THROUGHPUT未配置")
+    [[ -z "$OVERHEAD_CSV_HEADER" ]] && errors+=("OVERHEAD_CSV_HEADER未配置")
+    
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        echo "❌ 配置验证失败:" >&2
+        printf '  - %s\n' "${errors[@]}" >&2
+        return 1
+    fi
+    
+    echo "✅ 基本配置验证通过"
+    
+    # 执行EBS阈值验证
+    if ! validate_ebs_thresholds; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# 高级技术问题解决 - 配置验证增强
+validate_ebs_thresholds() {
+    local errors=()
+    
+    # 验证EBS阈值配置
+    if [[ -n "${BOTTLENECK_EBS_IOPS_THRESHOLD:-}" ]]; then
+        if ! [[ "$BOTTLENECK_EBS_IOPS_THRESHOLD" =~ ^[0-9]+$ ]] || [[ "$BOTTLENECK_EBS_IOPS_THRESHOLD" -lt 50 ]] || [[ "$BOTTLENECK_EBS_IOPS_THRESHOLD" -gt 100 ]]; then
+            errors+=("BOTTLENECK_EBS_IOPS_THRESHOLD值无效: $BOTTLENECK_EBS_IOPS_THRESHOLD (应为50-100)")
+        fi
+    fi
+    
+    if [[ -n "${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-}" ]]; then
+        if ! [[ "$BOTTLENECK_EBS_THROUGHPUT_THRESHOLD" =~ ^[0-9]+$ ]] || [[ "$BOTTLENECK_EBS_THROUGHPUT_THRESHOLD" -lt 50 ]] || [[ "$BOTTLENECK_EBS_THROUGHPUT_THRESHOLD" -gt 100 ]]; then
+            errors+=("BOTTLENECK_EBS_THROUGHPUT_THRESHOLD值无效: $BOTTLENECK_EBS_THROUGHPUT_THRESHOLD (应为50-100)")
+        fi
+    fi
+    
+    if [[ -n "${BOTTLENECK_MEMORY_THRESHOLD:-}" ]]; then
+        if ! [[ "$BOTTLENECK_MEMORY_THRESHOLD" =~ ^[0-9]+$ ]] || [[ "$BOTTLENECK_MEMORY_THRESHOLD" -lt 70 ]] || [[ "$BOTTLENECK_MEMORY_THRESHOLD" -gt 95 ]]; then
+            errors+=("BOTTLENECK_MEMORY_THRESHOLD值无效: $BOTTLENECK_MEMORY_THRESHOLD (应为70-95)")
+        fi
+    fi
+    
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        echo "❌ EBS阈值配置验证失败:" >&2
+        printf '  - %s\n' "${errors[@]}" >&2
+        return 1
+    fi
+    
+    echo "✅ EBS阈值配置验证通过"
+    return 0
+}
+
+# 内存泄漏检测和清理
+detect_memory_leaks() {
+    local current_memory=$(ps -o pid,vsz,rss,comm -p $$ | tail -1 | awk '{print $3}')
+    
+    if [[ -n "${LAST_MEMORY_USAGE:-}" ]]; then
+        local memory_growth=$((current_memory - LAST_MEMORY_USAGE))
+        
+        if [[ $memory_growth -gt 10240 ]]; then  # 10MB增长
+            log_warning "检测到内存增长: ${memory_growth}KB，当前: ${current_memory}KB"
+            
+            # 触发垃圾回收建议
+            if [[ $memory_growth -gt 51200 ]]; then  # 50MB增长
+                log_warning "内存增长过快，建议重启监控进程"
+                return 1
+            fi
+        fi
+    fi
+    
+    export LAST_MEMORY_USAGE="$current_memory"
+    return 0
+}
+
+# 并发安全CSV写入函数
+safe_write_csv() {
+    local csv_file="$1"
+    local csv_data="$2"
+    local lock_file="${csv_file}.lock"
+    local max_wait=30
+    local wait_count=0
+    
+    # 检查参数
+    if [[ -z "$csv_file" || -z "$csv_data" ]]; then
+        log_error "safe_write_csv: 缺少必需参数"
+        return 1
+    fi
+    
+    # 等待锁释放
+    while [[ -f "$lock_file" && $wait_count -lt $max_wait ]]; do
+        sleep 0.1
+        ((wait_count++))
+    done
+    
+    # 如果等待超时，检测僵尸锁并强制删除
+    if [[ $wait_count -ge $max_wait ]]; then
+        local lock_pid=$(cat "$lock_file" 2>/dev/null)
+        if [[ -n "$lock_pid" ]] && ! kill -0 "$lock_pid" 2>/dev/null; then
+            log_warning "检测到僵尸锁文件，强制删除: $lock_file (PID: $lock_pid)"
+            rm -f "$lock_file"
+        else
+            log_warning "CSV写入锁超时，强制删除锁文件: $lock_file"
+            rm -f "$lock_file"
+        fi
+    fi
+    
+    # 创建锁文件
+    echo $$ > "$lock_file"
+    
+    # 原子写入CSV数据
+    {
+        echo "$csv_data" >> "$csv_file"
+    } 2>/dev/null
+    
+    local write_result=$?
+    
+    # 删除锁文件
+    rm -f "$lock_file"
+    
+    if [[ $write_result -eq 0 ]]; then
+        log_debug "CSV数据安全写入: $csv_file"
+        return 0
+    else
+        log_error "CSV写入失败: $csv_file"
+        return 1
+    fi
+}
+
 # 如果直接执行此脚本
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
 # 生成健康修复建议
 generate_health_fix_suggestions() {
     local issues=("$@")
@@ -2267,3 +2686,8 @@ initialize_error_handling_system() {
 
     log_info "✅ Error handling system initialization completed"
 }
+
+# 脚本入口点 - 只在直接执行时调用main函数
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

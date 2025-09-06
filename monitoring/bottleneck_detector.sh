@@ -203,6 +203,10 @@ initialize_bottleneck_counters() {
 init_bottleneck_detection() {
     echo "🔍 初始化智能瓶颈检测器..." | tee -a "$BOTTLENECK_LOG"
     
+    # 确保状态文件目录存在
+    mkdir -p "$(dirname "$BOTTLENECK_STATUS_FILE")"
+    log_info "状态文件目录已创建: $(dirname "$BOTTLENECK_STATUS_FILE")"
+    
     # 初始化计数器
     initialize_bottleneck_counters
     
@@ -229,7 +233,19 @@ init_bottleneck_detection() {
     
     # 初始化状态文件
     local empty_metrics=$(create_performance_metrics_json "null" "null" "null" "null" "null" "null" "null" "null")
-    generate_bottleneck_status_json "monitoring" "false" "" "" "null" "$empty_metrics"
+    generate_bottleneck_status_json "initialized" "false" "" "" "null" "$empty_metrics"
+    
+    echo "✅ 瓶颈检测器初始化完成"
+    echo "📄 状态文件: $BOTTLENECK_STATUS_FILE"
+    
+    # 验证状态文件是否创建成功
+    if [[ -f "$BOTTLENECK_STATUS_FILE" ]]; then
+        log_info "瓶颈状态文件已成功创建: $BOTTLENECK_STATUS_FILE"
+        echo "📊 初始状态文件内容:"
+        cat "$BOTTLENECK_STATUS_FILE" | jq . 2>/dev/null || cat "$BOTTLENECK_STATUS_FILE"
+    else
+        log_error "瓶颈状态文件创建失败: $BOTTLENECK_STATUS_FILE"
+    fi
 }
 
 # 检测CPU瓶颈
@@ -303,7 +319,7 @@ check_ebs_bottleneck() {
         baseline_throughput=""
     fi
     
-    # 检测EBS利用率瓶颈 (传统方法)
+    # 检测EBS利用率瓶颈
     if (( $(echo "$ebs_util > $BOTTLENECK_EBS_UTIL_THRESHOLD" | bc -l 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["${counter_prefix}_util"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_util"]:-0} + 1))
         echo "⚠️  EBS利用率瓶颈检测 (${device_type}): ${ebs_util}% > ${BOTTLENECK_EBS_UTIL_THRESHOLD}% (${BOTTLENECK_COUNTERS["${counter_prefix}_util"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
@@ -312,7 +328,7 @@ check_ebs_bottleneck() {
             bottleneck_detected=true
         fi
     else
-        BOTTLENECK_COUNTERS["${counter_prefix}_util"]=0  # 重置计数器
+        BOTTLENECK_COUNTERS["${counter_prefix}_util"]=0
     fi
     
     # 检测EBS延迟瓶颈
@@ -324,13 +340,14 @@ check_ebs_bottleneck() {
             bottleneck_detected=true
         fi
     else
-        BOTTLENECK_COUNTERS["${counter_prefix}_latency"]=0  # 重置计数器
+        BOTTLENECK_COUNTERS["${counter_prefix}_latency"]=0
     fi
     
     # AWS基准IOPS瓶颈检测 (使用设备特定的基准值)
     if [[ -n "$ebs_aws_iops" && -n "$baseline_iops" ]]; then
         local aws_iops_utilization=$(echo "scale=4; $ebs_aws_iops / $baseline_iops" | bc 2>/dev/null || echo "0")
-        local aws_iops_threshold=0.85  # 85%阈值
+        local aws_iops_threshold=$(echo "scale=2; ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} / 100" | bc)
+        log_debug "EBS IOPS瓶颈检测阈值: ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90}% (${aws_iops_threshold})"
         
         if (( $(echo "$aws_iops_utilization > $aws_iops_threshold" | bc -l 2>/dev/null || echo 0) )); then
             BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0} + 1))
@@ -347,7 +364,8 @@ check_ebs_bottleneck() {
     # AWS基准吞吐量瓶颈检测 (使用设备特定的基准值)
     if [[ -n "$ebs_throughput" && -n "$baseline_throughput" ]]; then
         local aws_throughput_utilization=$(echo "scale=4; $ebs_throughput / $baseline_throughput" | bc 2>/dev/null || echo "0")
-        local aws_throughput_threshold=0.85  # 85%阈值
+        local aws_throughput_threshold=$(echo "scale=2; ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} / 100" | bc)
+        log_debug "EBS Throughput瓶颈检测阈值: ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90}% (${aws_throughput_threshold})"
         
         if (( $(echo "$aws_throughput_utilization > $aws_throughput_threshold" | bc -l 2>/dev/null || echo 0) )); then
             BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0} + 1))
@@ -362,9 +380,9 @@ check_ebs_bottleneck() {
     fi
     
     if [[ "$bottleneck_detected" == "true" ]]; then
-        return 0  # 检测到瓶颈
+        return 0
     else
-        return 1  # 未检测到瓶颈
+        return 1
     fi
 }
 
@@ -374,11 +392,11 @@ check_ena_network_bottleneck() {
     
     # 检查是否启用ENA监控
     if [[ "$ENA_MONITOR_ENABLED" != "true" ]]; then
-        return 1  # 未启用ENA监控
+        return 1
     fi
     
     if [[ ! -f "$performance_csv" ]] || [[ ! -s "$performance_csv" ]]; then
-        return 1  # 性能数据文件不存在或为空
+        return 1
     fi
     
     # 获取最新的ENA数据
@@ -452,8 +470,9 @@ check_ena_network_bottleneck() {
     else
         BOTTLENECK_COUNTERS["ena_limit"]=0  # 重置计数器
     fi
-    
-    return 1  # 未检测到ENA瓶颈
+
+    # 未检测到ENA瓶颈
+    return 1
 }
 
 # 检测通用网络瓶颈 (基于网络利用率阈值)
@@ -495,7 +514,7 @@ get_latest_qps_error_rate() {
     fi
 }
 
-# 检测PPS (QPS) 瓶颈
+# 检测QPS瓶颈 (错误率和RPC延迟)
 check_qps_bottleneck() {
     local current_qps="$1"
     local error_rate="$2"
@@ -728,8 +747,8 @@ detect_bottleneck() {
     local memory_usage=$(echo "$metrics" | cut -d',' -f2)
     local ebs_util=$(echo "$metrics" | cut -d',' -f3)
     local ebs_latency=$(echo "$metrics" | cut -d',' -f4)
-    local ebs_aws_iops=$(echo "$metrics" | cut -d',' -f5)      # 新增
-    local ebs_throughput=$(echo "$metrics" | cut -d',' -f6)    # 新增
+    local ebs_aws_iops=$(echo "$metrics" | cut -d',' -f5)
+    local ebs_throughput=$(echo "$metrics" | cut -d',' -f6)
     local network_util=$(echo "$metrics" | cut -d',' -f7)
     local error_rate=$(echo "$metrics" | cut -d',' -f8)
     
@@ -776,7 +795,7 @@ detect_bottleneck() {
         fi
     fi
     
-    # 检测ACCOUNTS设备EBS瓶颈 (如果配置了)
+    # 检测ACCOUNTS设备EBS瓶颈 (如果配置)
     if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
         # 获取ACCOUNTS设备的性能指标
         local accounts_util=0

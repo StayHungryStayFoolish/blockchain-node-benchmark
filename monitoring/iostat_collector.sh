@@ -54,6 +54,32 @@ get_iostat_data() {
     local total_iops=$(echo "scale=2; $r_s + $w_s" | bc 2>/dev/null || echo "0")
     local total_throughput_kbs=$(echo "scale=2; $rkb_s + $wkb_s" | bc 2>/dev/null || echo "0")
     local total_throughput_mibs=$(echo "scale=2; $total_throughput_kbs / 1024" | bc 2>/dev/null || echo "0")
+    
+    # 计算读写吞吐量分离 (KB/s → MiB/s)
+    local read_throughput_mibs=$(echo "scale=2; $rkb_s / 1024" | bc 2>/dev/null || echo "0")
+    local write_throughput_mibs=$(echo "scale=2; $wkb_s / 1024" | bc 2>/dev/null || echo "0")
+    
+    # 计算AWS标准throughput
+    local aws_standard_throughput_mibs="0"
+    if command -v convert_to_aws_standard_throughput >/dev/null 2>&1; then
+        # 计算加权平均IO大小
+        local weighted_avg_io_kib
+        if [[ $(echo "$total_iops > 0" | bc 2>/dev/null) -eq 1 ]]; then
+            weighted_avg_io_kib=$(echo "scale=2; $total_throughput_kbs / $total_iops" | bc 2>/dev/null || echo "0")
+        else
+            weighted_avg_io_kib="0"
+        fi
+        
+        if [[ "$weighted_avg_io_kib" != "0" ]]; then
+            aws_standard_throughput_mibs=$(convert_to_aws_standard_throughput "$total_throughput_mibs" "$weighted_avg_io_kib")
+        else
+            aws_standard_throughput_mibs="$total_throughput_mibs"  # 如果无法计算平均IO大小，使用原始值
+        fi
+    else
+        log_debug "convert_to_aws_standard_throughput函数不可用，使用原始throughput值"
+        aws_standard_throughput_mibs="$total_throughput_mibs"
+    fi
+    
     local avg_await=$(echo "scale=2; ($r_await + $w_await) / 2" | bc 2>/dev/null || echo "0")
     
     # 计算平均 I/O 大小 (基于实时数据)
@@ -72,8 +98,8 @@ get_iostat_data() {
         aws_standard_iops="$total_iops"
     fi
     
-    # 返回完整数据 (18个字段)
-    echo "$r_s,$w_s,$rkb_s,$wkb_s,$r_await,$w_await,$avg_await,$aqu_sz,$util,$rrqm_s,$wrqm_s,$rrqm_pct,$wrqm_pct,$rareq_sz,$wareq_sz,$total_iops,$aws_standard_iops,$total_throughput_mibs"
+    # 返回完整数据 (21个字段)
+    echo "$r_s,$w_s,$rkb_s,$wkb_s,$r_await,$w_await,$avg_await,$aqu_sz,$util,$rrqm_s,$wrqm_s,$rrqm_pct,$wrqm_pct,$rareq_sz,$wareq_sz,$total_iops,$aws_standard_iops,$read_throughput_mibs,$write_throughput_mibs,$total_throughput_mibs,$aws_standard_throughput_mibs"
 }
 
 # 生成设备的 CSV 表头
@@ -90,7 +116,7 @@ generate_device_header() {
         *) prefix="${logical_name}_${device}" ;;
     esac
     
-    echo "${prefix}_r_s,${prefix}_w_s,${prefix}_rkb_s,${prefix}_wkb_s,${prefix}_r_await,${prefix}_w_await,${prefix}_avg_await,${prefix}_aqu_sz,${prefix}_util,${prefix}_rrqm_s,${prefix}_wrqm_s,${prefix}_rrqm_pct,${prefix}_wrqm_pct,${prefix}_rareq_sz,${prefix}_wareq_sz,${prefix}_total_iops,${prefix}_aws_standard_iops,${prefix}_throughput_mibs"
+    echo "${prefix}_r_s,${prefix}_w_s,${prefix}_rkb_s,${prefix}_wkb_s,${prefix}_r_await,${prefix}_w_await,${prefix}_avg_await,${prefix}_aqu_sz,${prefix}_util,${prefix}_rrqm_s,${prefix}_wrqm_s,${prefix}_rrqm_pct,${prefix}_wrqm_pct,${prefix}_rareq_sz,${prefix}_wareq_sz,${prefix}_total_iops,${prefix}_aws_standard_iops,${prefix}_read_throughput_mibs,${prefix}_write_throughput_mibs,${prefix}_total_throughput_mibs,${prefix}_aws_standard_throughput_mibs"
 }
 
 # 获取所有配置设备的数据

@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # AWS EBS IOPS/Throughput标准转换脚本
 # 用于将实际的IOPS和I/O大小转换为AWS EBS标准基准
 
@@ -8,9 +9,15 @@
 if [[ -z "${AWS_EBS_BASELINE_IO_SIZE_KIB:-}" ]]; then
     readonly AWS_EBS_BASELINE_IO_SIZE_KIB=16
 fi
+
+if [[ -z "${AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB:-}" ]]; then
+    readonly AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB=128
+fi
+
 if [[ -z "${IO2_THROUGHPUT_RATIO:-}" ]]; then
     readonly IO2_THROUGHPUT_RATIO=0.256
 fi
+
 if [[ -z "${IO2_MAX_THROUGHPUT:-}" ]]; then
     readonly IO2_MAX_THROUGHPUT=4000
 fi
@@ -39,15 +46,38 @@ convert_to_aws_standard_iops() {
     echo "$aws_standard_iops"
 }
 
+# 转换实际throughput为AWS标准throughput
+# 参数: actual_throughput_mibs actual_avg_io_size_kib
+# 返回: AWS标准throughput (基于128 KiB)
+convert_to_aws_standard_throughput() {
+    local actual_throughput_mibs="$1"
+    local actual_avg_io_size_kib="$2"
+    
+    # 输入验证
+    if [[ -z "$actual_throughput_mibs" || -z "$actual_avg_io_size_kib" ]]; then
+        echo "错误: convert_to_aws_standard_throughput需要2个参数" >&2
+        return 1
+    fi
+    
+    # 避免除零错误
+    if [[ $(echo "$actual_avg_io_size_kib == 0" | bc 2>/dev/null) -eq 1 ]]; then
+        echo "$actual_throughput_mibs"  # IO大小为0时，返回原始值
+        return 0
+    fi
+    
+    # 使用system_config.sh中定义的AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB变量
+    local aws_standard_throughput=$(echo "scale=2; $actual_throughput_mibs * ($actual_avg_io_size_kib / $AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB)" | bc)
+    
+    echo "$aws_standard_throughput"
+}
+
 # 计算io2 Block Express自动吞吐量
 # 参数: iops
 # 返回: 自动计算的吞吐量 (MiB/s)
 calculate_io2_throughput() {
     local iops=$1
-    
     local calculated_throughput=$(echo "scale=2; $iops * $IO2_THROUGHPUT_RATIO" | bc)
     local actual_throughput=$(echo "if ($calculated_throughput > $IO2_MAX_THROUGHPUT) $IO2_MAX_THROUGHPUT else $calculated_throughput" | bc)
-    
     echo "$actual_throughput"
 }
 
@@ -180,12 +210,23 @@ convert_ebs_performance() {
 EOF
 }
 
+# 导出函数
+export -f convert_to_aws_standard_iops
+export -f convert_to_aws_standard_throughput
+export -f calculate_io2_throughput
+export -f recommend_ebs_type
+export -f calculate_weighted_avg_io_size
+export -f sectors_to_kib
+export -f convert_ebs_performance
+export -f analyze_instance_store_performance
+
 # 如果直接执行此脚本，显示帮助信息
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "AWS EBS IOPS/Throughput标准转换脚本"
     echo "用法示例:"
     echo "  source ebs_converter.sh"
     echo "  convert_to_aws_standard_iops 1000 32"
+    echo "  convert_to_aws_standard_throughput 100 64"
     echo "  calculate_io2_throughput 20000"
     echo "  convert_ebs_performance nvme1n1 6687.17 7657.43 43668.93 282862.29 6.53 36.94"
 fi

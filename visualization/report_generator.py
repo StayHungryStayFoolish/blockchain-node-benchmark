@@ -45,10 +45,13 @@ class ReportGenerator:
         self.config_file = config_file
         self.overhead_csv = overhead_csv
         self.bottleneck_info = bottleneck_info
-        self.output_dir = os.path.dirname(performance_csv)
+        self.output_dir = os.getenv('REPORTS_DIR', os.path.dirname(performance_csv))
         self.config = self._load_config()
         self.overhead_data = self._load_overhead_data()
         self.bottleneck_data = self._load_bottleneck_data()
+        
+        # 执行数据完整性验证
+        self.validation_results = self.validate_data_integrity()
         
     def _load_config(self):
         config = {}
@@ -63,14 +66,53 @@ class ReportGenerator:
         return config
     
     def _load_bottleneck_data(self):
-        """加载瓶颈检测数据"""
-        if self.bottleneck_info and os.path.exists(self.bottleneck_info):
+        """加载瓶颈检测数据 - 增强容错处理"""
+        # 默认瓶颈数据结构
+        default_data = {
+            "timestamp": datetime.now().isoformat(),
+            "status": "no_bottleneck_detected",
+            "bottleneck_detected": False,
+            "bottlenecks": [],
+            "bottleneck_types": [],
+            "bottleneck_values": [],
+            "bottleneck_summary": "未检测到瓶颈",
+            "detection_time": "",
+            "current_qps": 0,
+            "last_check": datetime.now().isoformat(),
+            "version": "1.0"
+        }
+        
+        # 尝试从多个可能的位置加载瓶颈数据
+        bottleneck_files = []
+        if self.bottleneck_info:
+            bottleneck_files.append(self.bottleneck_info)
+        
+        # 添加默认位置
+        memory_share_dir = os.getenv('MEMORY_SHARE_DIR', '/tmp/blockchain_monitoring')
+        bottleneck_files.extend([
+            os.path.join(memory_share_dir, "bottleneck_status.json"),
+            os.path.join(self.output_dir, "bottleneck_status.json"),
+            "logs/bottleneck_status.json"
+        ])
+        
+        for bottleneck_file in bottleneck_files:
             try:
-                with open(self.bottleneck_info, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"⚠️ 瓶颈信息加载失败: {e}")
-        return None
+                if os.path.exists(bottleneck_file):
+                    with open(bottleneck_file, 'r') as f:
+                        data = json.load(f)
+                        # 验证数据结构
+                        if isinstance(data, dict) and 'bottlenecks' in data:
+                            print(f"✅ 成功加载瓶颈数据: {bottleneck_file}")
+                            return data
+                        else:
+                            print(f"⚠️ 瓶颈数据格式无效: {bottleneck_file}")
+                            
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"⚠️ 加载瓶颈数据失败 {bottleneck_file}: {e}")
+                continue
+        
+        print(f"ℹ️ 未找到有效的瓶颈数据文件，使用默认数据")
+        return default_data
 
     def _load_overhead_data(self):
         """加载监控开销数据 - 增强版支持完整资源分析"""
@@ -143,6 +185,96 @@ class ReportGenerator:
             print(f"Error loading overhead data: {e}")
             return None
     
+    def _validate_overhead_csv_format(self):
+        """验证监控开销CSV格式"""
+        if not self.overhead_csv:
+            print("⚠️ 未指定监控开销CSV文件")
+            return False
+            
+        if not os.path.exists(self.overhead_csv):
+            print(f"⚠️ 监控开销CSV文件不存在: {self.overhead_csv}")
+            return False
+        
+        try:
+            with open(self.overhead_csv, 'r') as f:
+                header = f.readline().strip()
+                if not header:
+                    print("⚠️ 监控开销CSV文件缺少头部")
+                    return False
+                
+                field_count = len(header.split(','))
+                expected_fields = 15  # 根据配置的字段数量
+                
+                if field_count < 10:  # 最少应该有10个基本字段
+                    print(f"⚠️ 监控开销CSV字段数量过少，期望至少10个，实际{field_count}个")
+                    return False
+                elif field_count != expected_fields:
+                    print(f"ℹ️ 监控开销CSV字段数量: {field_count}个 (期望{expected_fields}个)")
+                
+                # 检查是否有数据行
+                data_line = f.readline().strip()
+                if not data_line:
+                    print("⚠️ 监控开销CSV文件没有数据行")
+                    return False
+                    
+                print(f"✅ 监控开销CSV格式验证通过: {field_count}个字段")
+                return True
+                
+        except Exception as e:
+            print(f"❌ CSV格式验证失败: {e}")
+            return False
+    
+    def validate_data_integrity(self):
+        """验证数据完整性"""
+        validation_results = {
+            'performance_csv': False,
+            'overhead_csv': False,
+            'bottleneck_data': False,
+            'config': False
+        }
+        
+        # 验证性能CSV
+        if os.path.exists(self.performance_csv):
+            try:
+                df = pd.read_csv(self.performance_csv)
+                if not df.empty:
+                    validation_results['performance_csv'] = True
+                    print(f"✅ 性能CSV验证通过: {len(df)}行数据")
+                else:
+                    print("⚠️ 性能CSV文件为空")
+            except Exception as e:
+                print(f"❌ 性能CSV验证失败: {e}")
+        else:
+            print(f"❌ 性能CSV文件不存在: {self.performance_csv}")
+        
+        # 验证开销CSV
+        validation_results['overhead_csv'] = self._validate_overhead_csv_format()
+        
+        # 验证瓶颈数据
+        if self.bottleneck_data and isinstance(self.bottleneck_data, dict):
+            if 'bottlenecks' in self.bottleneck_data:
+                validation_results['bottleneck_data'] = True
+                print("✅ 瓶颈数据验证通过")
+            else:
+                print("⚠️ 瓶颈数据格式不完整")
+        else:
+            print("ℹ️ 瓶颈数据使用默认值")
+            validation_results['bottleneck_data'] = True  # 默认数据也算通过
+        
+        # 验证配置
+        if self.config and isinstance(self.config, dict):
+            validation_results['config'] = True
+            print("✅ 配置数据验证通过")
+        else:
+            print("⚠️ 配置数据验证失败")
+        
+        # 输出验证摘要
+        passed = sum(validation_results.values())
+        total = len(validation_results)
+        print(f"\n📊 数据完整性验证结果: {passed}/{total} 项通过")
+        
+        return validation_results
+    
     def generate_html_report(self):
         """生成HTML报告 - 使用安全的字段访问"""
         try:
@@ -200,29 +332,21 @@ class ReportGenerator:
         if overhead_data:
             # 监控进程资源
             monitoring_cpu_avg = overhead_data.get('monitoring_cpu_percent_avg', 0)
-            monitoring_cpu_max = overhead_data.get('monitoring_cpu_percent_max', 0)
             monitoring_memory_percent_avg = overhead_data.get('monitoring_memory_percent_avg', 0)
-            monitoring_memory_percent_max = overhead_data.get('monitoring_memory_percent_max', 0)
             monitoring_memory_mb_avg = overhead_data.get('monitoring_memory_mb_avg', 0)
-            monitoring_memory_mb_max = overhead_data.get('monitoring_memory_mb_max', 0)
             monitoring_process_count = overhead_data.get('monitoring_process_count_avg', 0)
             
             # 区块链节点资源
             blockchain_cpu_avg = overhead_data.get('blockchain_cpu_percent_avg', 0)
-            blockchain_cpu_max = overhead_data.get('blockchain_cpu_percent_max', 0)
             blockchain_memory_percent_avg = overhead_data.get('blockchain_memory_percent_avg', 0)
-            blockchain_memory_percent_max = overhead_data.get('blockchain_memory_percent_max', 0)
             blockchain_memory_mb_avg = overhead_data.get('blockchain_memory_mb_avg', 0)
-            blockchain_memory_mb_max = overhead_data.get('blockchain_memory_mb_max', 0)
             blockchain_process_count = overhead_data.get('blockchain_process_count_avg', 0)
             
             # 系统资源
             system_cpu_cores = overhead_data.get('system_cpu_cores_avg', 0)
             system_memory_gb = overhead_data.get('system_memory_gb_avg', 0)
             system_cpu_usage_avg = overhead_data.get('system_cpu_usage_avg', 0)
-            system_cpu_usage_max = overhead_data.get('system_cpu_usage_max', 0)
             system_memory_usage_avg = overhead_data.get('system_memory_usage_avg', 0)
-            system_memory_usage_max = overhead_data.get('system_memory_usage_max', 0)
             
             # 资源占比
             monitoring_cpu_ratio = overhead_data.get('monitoring_cpu_ratio', 0) * 100
@@ -824,8 +948,7 @@ class ReportGenerator:
                         bottleneck_component = "存储I/O"
                         break
         
-        # 生成资源规划建议
-        resource_recommendations = self._generate_resource_recommendations(overhead_data, bottleneck_component)
+
         
         section_html = f"""
         <div class="section">
@@ -841,11 +964,7 @@ class ReportGenerator:
                 </ul>
             </div>
             
-            <div class="info-card">
-                <h3>💻 生产环境资源配置建议</h3>
-                {resource_recommendations}
-            </div>
-            
+
             <div class="info-card">
                 <h3>💡 性能优化建议</h3>
                 <table class="data-table">
@@ -890,172 +1009,13 @@ class ReportGenerator:
                 </table>
             </div>
             
-            <div class="info-card">
-                <h3>💰 成本优化建议</h3>
-                {self._generate_cost_optimization_recommendations(overhead_data, bottleneck_component)}
-            </div>
+
         </div>
         """
         return section_html
         
-    def _generate_resource_recommendations(self, overhead_data, bottleneck_component):
-        """生成资源规划建议HTML"""
-        if not overhead_data:
-            return """
-            <div class="warning">
-                <p>缺少监控开销数据，无法生成准确的资源规划建议。</p>
-            </div>
-            """
-        
-        # 提取数据
-        system_cpu_cores = max(1, int(overhead_data.get('system_cpu_cores_avg', 1)))
-        system_memory_gb = max(4, int(overhead_data.get('system_memory_gb_avg', 4)))
-        
-        blockchain_cpu = overhead_data.get('blockchain_cpu_percent_avg', 0)
-        blockchain_memory_mb = overhead_data.get('blockchain_memory_mb_avg', 0)
-        
-        monitoring_cpu = overhead_data.get('monitoring_cpu_percent_avg', 0)
-        monitoring_memory_mb = overhead_data.get('monitoring_memory_mb_avg', 0)
-        monitoring_iops = overhead_data.get('monitoring_iops_avg', 0)
-        
-        # 计算生产环境建议
-        # CPU建议: 区块链CPU + 10% 余量，至少4核
-        if blockchain_cpu > 0:
-            cpu_per_core = 100 / system_cpu_cores
-            blockchain_cores_needed = max(1, blockchain_cpu / cpu_per_core)
-            recommended_cores = max(4, int(blockchain_cores_needed * 1.1))
-            if bottleneck_component == 'CPU':
-                recommended_cores = max(recommended_cores, int(blockchain_cores_needed * 1.5))
-        else:
-            recommended_cores = 4
-        
-        # 内存建议: 区块链内存 + 监控内存 + 2GB系统 + 20% 余量，至少8GB
-        if blockchain_memory_mb > 0:
-            total_memory_needed_mb = blockchain_memory_mb + monitoring_memory_mb + 2048  # 2GB系统内存
-            recommended_memory_gb = max(8, int((total_memory_needed_mb * 1.2) / 1024))
-            if bottleneck_component == '内存':
-                recommended_memory_gb = max(recommended_memory_gb, int((total_memory_needed_mb * 1.5) / 1024))
-        else:
-            recommended_memory_gb = 8
-        
-        # EBS IOPS建议: 区块链需求 + 监控开销 + 50% 余量
-        if monitoring_iops > 0:
-            # 估算区块链节点的IOPS需求（基于CPU使用率推算）
-            estimated_blockchain_iops = max(100, blockchain_cpu * 10)  # 简化估算
-            recommended_iops = int((estimated_blockchain_iops + monitoring_iops) * 1.5)
-            if bottleneck_component == '存储I/O':
-                recommended_iops = int((estimated_blockchain_iops + monitoring_iops) * 2.0)
-        else:
-            recommended_iops = 3000  # 默认GP3基准
-        
-        # 网络带宽建议
-        recommended_network_gbps = 10 if blockchain_cpu > 70 else 5
-        
-        return f"""
-        <table class="data-table">
-            <tr>
-                <th>资源类型</th>
-                <th>测试环境配置</th>
-                <th>实际使用</th>
-                <th>生产环境建议</th>
-                <th>建议理由</th>
-            </tr>
-            <tr>
-                <td>CPU</td>
-                <td>{system_cpu_cores} 核心</td>
-                <td>区块链: {blockchain_cpu:.1f}%<br>监控: {monitoring_cpu:.1f}%</td>
-                <td><strong>{recommended_cores} 核心</strong></td>
-                <td>{'消除CPU瓶颈' if bottleneck_component == 'CPU' else '预留10%性能余量'}</td>
-            </tr>
-            <tr>
-                <td>内存</td>
-                <td>{system_memory_gb} GB</td>
-                <td>区块链: {blockchain_memory_mb:.0f} MB<br>监控: {monitoring_memory_mb:.0f} MB</td>
-                <td><strong>{recommended_memory_gb} GB</strong></td>
-                <td>{'消除内存瓶颈' if bottleneck_component == '内存' else '预留20%内存余量'}</td>
-            </tr>
-            <tr>
-                <td>EBS IOPS</td>
-                <td>当前配置</td>
-                <td>监控开销: {monitoring_iops:.0f} IOPS</td>
-                <td><strong>{recommended_iops} IOPS</strong></td>
-                <td>{'消除存储瓶颈' if bottleneck_component == '存储I/O' else '预留50%IOPS余量'}</td>
-            </tr>
-            <tr>
-                <td>网络带宽</td>
-                <td>当前配置</td>
-                <td>基于CPU负载推算</td>
-                <td><strong>{recommended_network_gbps} Gbps</strong></td>
-                <td>满足高负载时的网络需求</td>
-            </tr>
-        </table>
-        
-        <div class="info">
-            <h4>📋 配置建议摘要</h4>
-            <p>基于测试数据分析，生产环境建议配置:</p>
-            <ul>
-                <li><strong>计算资源</strong>: 建议增加 CPU 和内存资源以提升性能</li>
-                <li><strong>EBS配置</strong>: {recommended_iops} IOPS, 建议使用 {'IO2' if recommended_iops > 16000 else 'GP3'} 类型</li>
-                <li><strong>网络配置</strong>: {recommended_network_gbps} Gbps 网络带宽</li>
-                <li><strong>监控开销</strong>: 预留 {monitoring_cpu:.1f}% CPU 和 {monitoring_memory_mb:.0f} MB 内存用于监控</li>
-            </ul>
-        </div>
-        """
-        
-    def _generate_cost_optimization_recommendations(self, overhead_data, bottleneck_component):
-        """生成成本优化建议"""
-        if not overhead_data:
-            return "<p>缺少数据，无法生成成本优化建议。</p>"
-        
-        # 基于瓶颈类型生成不同的成本优化建议
-        if bottleneck_component == "CPU":
-            return """
-            <div class="cost-optimization">
-                <h4>💰 CPU瓶颈的成本优化策略</h4>
-                <ul>
-                    <li><strong>垂直扩展</strong>: 升级到更高CPU配置的实例类型</li>
-                    <li><strong>CPU优化</strong>: 考虑升级到更高性能的计算资源</li>
-                    <li><strong>成本优化</strong>: 对于非关键环境，考虑使用更经济的资源配置</li>
-                    <li><strong>长期规划</strong>: 长期使用可考虑资源预留或批量采购以降低成本</li>
-                </ul>
-            </div>
-            """
-        elif bottleneck_component == "内存":
-            return """
-            <div class="cost-optimization">
-                <h4>💰 内存瓶颈的成本优化策略</h4>
-                <ul>
-                    <li><strong>内存优化</strong>: 增加系统内存以减少内存瓶颈</li>
-                    <li><strong>数据压缩</strong>: 优化区块链节点配置，减少内存占用</li>
-                    <li><strong>分层存储</strong>: 将部分数据迁移到EBS，减少内存需求</li>
-                    <li><strong>监控优化</strong>: 减少监控数据在内存中的缓存时间</li>
-                </ul>
-            </div>
-            """
-        elif bottleneck_component == "存储I/O":
-            return """
-            <div class="cost-optimization">
-                <h4>💰 存储I/O瓶颈的成本优化策略</h4>
-                <ul>
-                    <li><strong>EBS类型优化</strong>: GP3比IO2成本更低，优先考虑GP3</li>
-                    <li><strong>存储优化</strong>: 对于临时数据，考虑使用高速本地存储</li>
-                    <li><strong>数据分层</strong>: 热数据使用高IOPS EBS，冷数据使用标准EBS</li>
-                    <li><strong>压缩和去重</strong>: 减少存储空间需求，降低EBS成本</li>
-                </ul>
-            </div>
-            """
-        else:
-            return """
-            <div class="cost-optimization">
-                <h4>💰 通用成本优化策略</h4>
-                <ul>
-                    <li><strong>右配置</strong>: 当前配置已较为合理，避免过度配置</li>
-                    <li><strong>监控优化</strong>: 适当降低监控频率，减少监控开销</li>
-                    <li><strong>自动扩缩容</strong>: 根据负载自动调整资源，避免资源浪费</li>
-                    <li><strong>资源规划</strong>: 对于稳定负载，提前规划资源配置以优化成本</li>
-                </ul>
-            </div>
-            """
+
+
     
     def _generate_overhead_data_table(self):
         """✅ 生成完整的监控开销数据表格"""
@@ -1207,30 +1167,7 @@ class ReportGenerator:
             </div>
             """
     
-    def _generate_production_resource_estimation(self):
-        """生成生产环境资源评估"""
-        return """
-        <div class="info-grid">
-            <div class="info-card">
-                <h4>🎯 生产环境部署建议</h4>
-                <ul>
-                    <li><strong>CPU预留</strong>: 在测试结果基础上减去监控开销，即为节点实际需求</li>
-                    <li><strong>内存预留</strong>: 考虑监控开销后的内存需求规划</li>
-                    <li><strong>监控策略</strong>: 生产环境可采用轻量级监控，减少资源消耗</li>
-                    <li><strong>容量规划</strong>: 基于净资源需求进行容量规划和成本估算</li>
-                </ul>
-            </div>
-            <div class="info-card">
-                <h4>📊 资源效率分析</h4>
-                <ul>
-                    <li><strong>监控效率</strong>: 监控开销占总资源的百分比</li>
-                    <li><strong>节点效率</strong>: 节点实际使用资源占总资源的百分比</li>
-                    <li><strong>优化建议</strong>: 如何在保证监控质量的同时降低开销</li>
-                    <li><strong>成本影响</strong>: 监控开销对云服务成本的影响评估</li>
-                </ul>
-            </div>
-        </div>
-        """
+
     
     def _generate_independent_tools_results(self):
         """生成独立分析工具结果展示"""
@@ -1324,11 +1261,11 @@ class ReportGenerator:
             
             # 计算DATA Device指标
             data_actual_iops = safe_get_metric_average(df, ['data_', 'aws_standard_iops'], 'DATA AWS标准IOPS')
-            data_actual_throughput = safe_get_metric_average(df, ['data_', 'throughput_mibs'], 'DATAThroughput')
+            data_actual_throughput = safe_get_metric_average(df, ['data_', 'total_throughput_mibs'], 'DATAThroughput')
             
             # 计算ACCOUNTS Device指标
             accounts_actual_iops = safe_get_metric_average(df, ['accounts_', 'aws_standard_iops'], 'ACCOUNTS AWS标准IOPS')
-            accounts_actual_throughput = safe_get_metric_average(df, ['accounts_', 'throughput_mibs'], 'ACCOUNTSThroughput')
+            accounts_actual_throughput = safe_get_metric_average(df, ['accounts_', 'total_throughput_mibs'], 'ACCOUNTSThroughput')
             
             # 计算利用率
             data_iops_utilization = safe_calculate_utilization(data_actual_iops, data_baseline_iops, 'DATA IOPS')
@@ -1660,29 +1597,7 @@ class ReportGenerator:
             
         except Exception as e:
             return f'<div class="error">ENA数据表格生成失败: {str(e)}</div>'
-        """生成优化建议部分"""
-        return """
-        <div class="section">
-            <h2>💡 优化建议</h2>
-            <div class="success">
-                <h4>🎯 基于分析的建议</h4>
-                <ul>
-                    <li><strong>监控开销:</strong> 当前监控系统开销极小，可放心在生产环境使用</li>
-                    <li><strong>配置完整性:</strong> 建议配置ACCOUNTS_DEVICE以获得完整的存储性能分析</li>
-                    <li><strong>性能基准:</strong> 基于CPU-EBS相关性分析，建立性能基准和告警阈值</li>
-                    <li><strong>持续监控:</strong> 建议在QPS测试期间持续运行监控，获得完整的性能画像</li>
-                </ul>
-            </div>
-            <div class="warning">
-                <h4>⚠️ 注意事项</h4>
-                <ul>
-                    <li>本报告基于测试期间的数据，生产环境性能可能有所不同</li>
-                    <li>建议结合实际业务负载进行性能评估</li>
-                    <li>定期更新EBS配置以匹配实际性能需求</li>
-                </ul>
-            </div>
-        </div>
-        """
+
     def _generate_cpu_ebs_correlation_table(self, df):
         """✅ 改进的CPU与EBS关联分析表格生成"""
         key_correlations = [
@@ -2101,6 +2016,43 @@ class ReportGenerator:
                     'filename': 'reports/qps_performance_analysis.png',
                     'title': '🎯 QPS性能分析',
                     'description': 'QPS性能的专项分析图表，深入分析QPS性能特征'
+                },
+                
+                # EBS专业分析图表组
+                {
+                    'filename': 'ebs_aws_capacity_planning.png',
+                    'title': '📊 EBS AWS容量规划分析',
+                    'description': 'AWS EBS容量规划分析，包括IOPS和吞吐量利用率预测，支持容量规划决策'
+                },
+                {
+                    'filename': 'ebs_iostat_performance.png',
+                    'title': '💾 EBS iostat性能分析',
+                    'description': 'EBS设备的iostat性能分析，包括读写分离、延迟分析和队列深度监控'
+                },
+                {
+                    'filename': 'ebs_bottleneck_correlation.png',
+                    'title': '🔗 EBS瓶颈关联分析',
+                    'description': 'EBS瓶颈关联分析，展示AWS标准视角与iostat视角的关联关系'
+                },
+                {
+                    'filename': 'ebs_performance_overview.png',
+                    'title': '📈 EBS性能概览',
+                    'description': 'EBS综合性能概览，包括AWS标准IOPS、吞吐量与基准线对比'
+                },
+                {
+                    'filename': 'ebs_bottleneck_analysis.png',
+                    'title': '🚨 EBS瓶颈检测分析',
+                    'description': 'EBS瓶颈检测分析，自动识别IOPS、吞吐量和延迟瓶颈点'
+                },
+                {
+                    'filename': 'ebs_aws_standard_comparison.png',
+                    'title': '⚖️ EBS AWS标准对比',
+                    'description': 'AWS标准值与原始iostat数据对比分析，评估性能标准化程度'
+                },
+                {
+                    'filename': 'ebs_time_series_analysis.png',
+                    'title': '📊 EBS时间序列分析',
+                    'description': 'EBS性能时间序列分析，展示多指标时间维度变化趋势'
                 }
             ]
             

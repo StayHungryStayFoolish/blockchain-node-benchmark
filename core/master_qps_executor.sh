@@ -261,7 +261,7 @@ pre_check() {
     echo "✅ 预检查通过"
     return 0
 }
-# 检查瓶颈状态 - 增强版
+# 检查瓶颈状态
 check_bottleneck_during_test() {
     local current_qps=$1
     
@@ -809,7 +809,7 @@ execute_qps_test() {
     if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
         echo "🚨 检测到性能瓶颈，详细信息已保存"
     else
-        # 🚨 新增: 正常完成时写入状态文件
+        # 正常完成时写入状态文件
         cat > "$QPS_STATUS_FILE" << EOF
 {
     "status": "completed",

@@ -43,8 +43,8 @@ export LOG_LEVEL LOG_FORMAT MAX_LOG_SIZE MAX_LOG_FILES
 export LOG_JSON PYTHON_LOG_LEVEL
 
 # ----- 错误处理和恢复配置 -----
-# 错误恢复开关 (true/false) - 启用后会自动处理和恢复监控系统错误
-ERROR_RECOVERY_ENABLED=${ERROR_RECOVERY_ENABLED:-true}
+# 错误恢复开关 (true/false) - 基准测试框架中禁用自动恢复以保证测试准确性
+ERROR_RECOVERY_ENABLED=${ERROR_RECOVERY_ENABLED:-false}
 
 # 错误处理阈值
 ERROR_RECOVERY_DELAY=${ERROR_RECOVERY_DELAY:-10}          # 错误恢复延迟 (秒)
@@ -100,6 +100,25 @@ SILENT_MODE=${SILENT_MODE:-false}
 
 # 监控开销日志存储路径
 MONITORING_OVERHEAD_LOG=""  # 将在路径检测完成后设置
+
+# 监控开销CSV表头定义 - 15个字段 (与unified_monitor.sh实际输出匹配)
+OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage"
+
+# 导出变量
+export OVERHEAD_CSV_HEADER
+
+# 添加配置验证函数
+validate_overhead_csv_header() {
+    if [[ -z "$OVERHEAD_CSV_HEADER" ]]; then
+        echo "错误: OVERHEAD_CSV_HEADER变量未定义" >&2
+        return 1
+    fi
+    
+    local field_count=$(echo "$OVERHEAD_CSV_HEADER" | tr ',' '\n' | wc -l)
+    if [[ $field_count -ne 15 ]]; then
+        echo "警告: OVERHEAD_CSV_HEADER字段数量不正确，期望15个，实际${field_count}个" >&2
+    fi
+}
 
 # 导出系统配置变量
 export -f get_unified_timestamp get_unified_epoch

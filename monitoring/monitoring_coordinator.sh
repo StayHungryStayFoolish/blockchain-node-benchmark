@@ -29,7 +29,7 @@ declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
     ["slot"]="slot_monitor.sh"
     ["ena_network"]="ena_network_monitor.sh"
-    ["ebs_bottleneck"]="bottleneck_detector.sh"
+    ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
 )
 
 # 初始化监控协调器
@@ -112,9 +112,11 @@ start_monitor() {
             return 1
             ;;
         "ena_network")
-            # ENA网络监控器 - 独立运行模式
+            # ENA网络监控器 - 修复参数传递问题
             if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
-                (cd "${script_dir}" && ./"${script_name}" start -i "$MONITOR_INTERVAL") &
+                # 使用正确的参数格式：start [duration] [interval]
+                # duration=0 表示持续运行，interval使用配置值
+                (cd "${script_dir}" && ./"${script_name}" start 0 "$MONITOR_INTERVAL") &
             else
                 echo "⚠️  ENA监控已禁用，跳过ena_network任务"
                 return 0
@@ -123,7 +125,7 @@ start_monitor() {
         "ebs_bottleneck")
             # QPS测试模式：不传递duration，无限运行
             # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
-            (cd "${script_dir}" && ./"${script_name}" -b) &
+            (cd "${script_dir}/../tools" && ./"${script_name}" -b) &
             ;;
         *)
             echo "❌ 不支持的监控任务: $monitor_name"

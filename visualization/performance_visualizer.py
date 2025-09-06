@@ -129,7 +129,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         self.data_file = data_file
         self.overhead_file = overhead_file
-        self.output_dir = os.path.dirname(data_file)
+        self.output_dir = os.getenv('REPORTS_DIR', os.path.dirname(data_file))
         
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
@@ -1082,6 +1082,13 @@ Monitoring Efficiency:
                 if advanced_charts:
                     chart_files.extend(advanced_charts)
             
+            # Generate EBS professional analysis charts (high priority)
+            print("📊 Generating EBS professional analysis charts...")
+            ebs_charts = self.generate_all_ebs_charts()
+            if ebs_charts:
+                chart_files.extend(ebs_charts)
+                print(f"✅ Generated {len(ebs_charts)} EBS professional charts")
+            
             # Generate traditional charts as supplement
             overview_chart = self.create_performance_overview_chart()
             if overview_chart:
@@ -1125,6 +1132,13 @@ Monitoring Efficiency:
             bottleneck_chart = self.create_bottleneck_identification_chart()
             if bottleneck_chart:
                 chart_files.append(bottleneck_chart)
+            
+            # Generate EBS professional analysis charts
+            print("📊 Generating EBS professional analysis charts...")
+            ebs_charts = self.generate_all_ebs_charts()
+            if ebs_charts:
+                chart_files.extend(ebs_charts)
+                print(f"✅ Generated {len(ebs_charts)} EBS professional charts")
             
             util_chart, util_violations = self.create_util_threshold_analysis_chart()
             if util_chart:
@@ -1545,6 +1559,61 @@ Monitoring Efficiency:
         except Exception as e:
             print(f"❌ Bottleneck identification analysis chart generation failed: {e}")
             return None
+
+    # EBS委托方法 - 委托给EBS专用模块
+    def generate_ebs_bottleneck_analysis(self):
+        """委托给EBS专用模块"""
+        try:
+            from .ebs_chart_generator import EBSChartGenerator
+        except ImportError:
+            # 回退到绝对导入
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(__file__))
+            from ebs_chart_generator import EBSChartGenerator
+        
+        try:
+            ebs_generator = EBSChartGenerator(self.df, self.output_dir)
+            return ebs_generator.generate_ebs_bottleneck_analysis()
+        except Exception as e:
+            print(f"⚠️ EBS瓶颈分析失败: {e}")
+            return None
+    
+    def generate_ebs_time_series(self):
+        """委托给EBS专用模块"""
+        try:
+            from .ebs_chart_generator import EBSChartGenerator
+        except ImportError:
+            # 回退到绝对导入
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(__file__))
+            from ebs_chart_generator import EBSChartGenerator
+        
+        try:
+            ebs_generator = EBSChartGenerator(self.df, self.output_dir)
+            return ebs_generator.generate_ebs_time_series()
+        except Exception as e:
+            print(f"⚠️ EBS时间序列分析失败: {e}")
+            return None
+    
+    def generate_all_ebs_charts(self):
+        """生成所有EBS图表"""
+        try:
+            from .ebs_chart_generator import EBSChartGenerator
+        except ImportError:
+            # 回退到绝对导入
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(__file__))
+            from ebs_chart_generator import EBSChartGenerator
+        
+        try:
+            ebs_generator = EBSChartGenerator(self.df, self.output_dir)
+            return ebs_generator.generate_all_ebs_charts()
+        except Exception as e:
+            print(f"⚠️ EBS图表生成失败: {e}")
+            return []
 
 def main():
     parser = argparse.ArgumentParser(description='Performance Visualizer')

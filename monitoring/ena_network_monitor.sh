@@ -148,11 +148,9 @@ get_ena_network_stats() {
 # 启动ENA监控
 start_ena_monitoring() {
     local duration=${1:-3600}
-    local interval=${2:-5}
+    local interval=${2:-${MONITOR_INTERVAL:-5}}
     
     echo "🚀 启动ENA网络监控..."
-    echo "   持续时间: ${duration}秒"
-    echo "   监控间隔: ${interval}秒"
     echo "   日志文件: $ENA_LOG"
     
     if ! init_ena_monitoring; then
@@ -160,16 +158,34 @@ start_ena_monitoring() {
         return 1
     fi
     
-    local start_time=$(date +%s)
-    local end_time=$((start_time + duration))
-    
-    while [[ $(date +%s) -lt $end_time ]]; do
-        get_ena_network_stats >> "$ENA_LOG"
-        sleep "$interval"
-    done
-    
-    log_info "ENA网络监控完成"
-    echo "   数据已保存到: $ENA_LOG"
+    # 支持持续运行模式
+    if [[ "$duration" == "0" ]]; then
+        echo "   运行模式: 持续监控 (适合框架集成)"
+        echo "   监控间隔: ${interval}秒"
+        log_info "ENA持续监控模式启动，间隔: ${interval}秒"
+        
+        # 持续运行模式 - 适合框架需求
+        while true; do
+            get_ena_network_stats >> "$ENA_LOG"
+            sleep "$interval"
+        done
+    else
+        echo "   持续时间: ${duration}秒"
+        echo "   监控间隔: ${interval}秒"
+        log_info "ENA定时监控模式启动，时长: ${duration}秒，间隔: ${interval}秒"
+        
+        # 固定时长模式
+        local start_time=$(date +%s)
+        local end_time=$((start_time + duration))
+        
+        while [[ $(date +%s) -lt $end_time ]]; do
+            get_ena_network_stats >> "$ENA_LOG"
+            sleep "$interval"
+        done
+        
+        log_info "ENA网络监控完成"
+        echo "   数据已保存到: $ENA_LOG"
+    fi
 }
 
 # 分析ENA网络限制
