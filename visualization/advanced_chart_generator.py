@@ -109,6 +109,14 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         # Using English label system directly
         self.font_manager = None
+    
+    def _log_error(self, operation: str, error: Exception) -> None:
+        """统一错误日志格式"""
+        logger.error(f"❌ {operation} failed: {str(error)}")
+    
+    def _log_success(self, operation: str) -> None:
+        """统一成功日志格式"""
+        logger.info(f"✅ {operation} completed successfully")
             
     def _get_localized_text(self, chinese_text: str, english_text: str) -> str:
         """Get localized text"""
@@ -131,16 +139,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             return []
         
         return self.get_device_columns_safe(logical_name, metric_suffix)
-    
-    def _get_configured_devices(self) -> List[str]:
-        """Get list of configured devices"""
-        devices = []
-        if self._check_device_configured('data'):
-            devices.append('data')
-        if self._check_device_configured('accounts'):
-            devices.append('accounts')
-        return devices
-        
+
     def load_data(self) -> bool:
         """Load data"""
         try:
@@ -763,7 +762,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             return chart_file
             
         except Exception as e:
-            print(f"  ❌ ENA limitation trend chart generation failed: {str(e)}")
+            self._log_error("ENA limitation trend chart generation", e)
             return None
 
     def _generate_ena_connection_capacity_chart(self):
@@ -819,7 +818,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             return chart_file
             
         except Exception as e:
-            print(f"  ❌ ENA connection capacity chart generation failed: {str(e)}")
+            self._log_error("ENA connection capacity chart generation", e)
             return None
 
     def _generate_ena_comprehensive_status_chart(self):
@@ -950,7 +949,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             return chart_file
             
         except Exception as e:
-            print(f"  ❌ ENA comprehensive status chart generation failed: {str(e)}")
+            self._log_error("ENA comprehensive status chart generation", e)
             return None
 
     def generate_all_charts(self) -> List[str]:
@@ -1053,7 +1052,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             return [chart_file]
             
         except Exception as e:
-            print(f"❌ Correlation heatmap generation failed: {e}")
+            self._log_error("Correlation heatmap generation", e)
             return []
 
     def _generate_correlation_insights(self, correlation_matrix: pd.DataFrame, chart_file: str):

@@ -425,34 +425,12 @@ except:
 
 # 获取实时指标
 get_realtime_metrics() {
-    local metrics="{}"
-    
-    # 获取CPU使用率
-    local cpu_usage=$(top -l 1 -n 0 | grep "CPU usage" | awk '{print $3}' | sed 's/%//' 2>/dev/null || echo "0")
-    
-    # 获取内存使用率
-    local mem_info=$(vm_stat 2>/dev/null)
-    local mem_usage="0"
-    if [[ -n "$mem_info" ]]; then
-        mem_usage=$(echo "$mem_info" | awk '
-            /Pages free/ { free = $3 }
-            /Pages active/ { active = $3 }
-            /Pages inactive/ { inactive = $3 }
-            /Pages speculative/ { spec = $3 }
-            /Pages wired down/ { wired = $4 }
-            END {
-                if (free && active && inactive && spec && wired) {
-                    total = free + active + inactive + spec + wired
-                    used = active + inactive + spec + wired
-                    if (total > 0) print (used * 100 / total)
-                    else print 0
-                } else print 0
-            }
-        ' 2>/dev/null || echo "0")
-    fi
+    # Linux环境下的实时指标获取
+    local cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | sed 's/%us,//' 2>/dev/null || echo "0")
+    local mem_usage=$(free | awk '/^Mem:/ {if($2>0) printf "%.1f", $3/$2 * 100; else print "0"}' 2>/dev/null || echo "0")
     
     # 构建JSON
-    metrics=$(cat << EOF
+    local metrics=$(cat << EOF
 {
     "timestamp": "$(date -Iseconds)",
     "cpu_usage": $cpu_usage,
@@ -603,37 +581,7 @@ get_detailed_system_context() {
 EOF
 )
     
-    # 在macOS环境下，提供基础信息
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        local cpu_count=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
-        local mem_total=$(sysctl -n hw.memsize 2>/dev/null | awk '{print int($1/1024/1024/1024)}' || echo "8")
-        local load_avg=$(uptime | awk -F'load averages:' '{print $2}' | xargs || echo "0.0 0.0 0.0")
-        
-        context=$(cat << EOF
-{
-    "cpu_info": {
-        "usage": 0,
-        "load_avg": "$load_avg",
-        "core_count": $cpu_count
-    },
-    "memory_info": {
-        "usage_percent": 0,
-        "available_gb": $mem_total,
-        "total_gb": $mem_total
-    },
-    "disk_info": {
-        "ebs_util": 0,
-        "ebs_latency": 0,
-        "iops": 0
-    },
-    "network_info": {
-        "utilization": 0,
-        "connections": 0
-    }
-}
-EOF
-)
-    fi
+
     
     echo "$context"
 }

@@ -14,6 +14,13 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
 fi
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
 
+# 加载日志函数
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh" 2>/dev/null || {
+    # 如果日志函数不可用，提供简单的替代
+    log_warn() { echo "⚠️ $*" >&2; }
+    log_debug() { echo "🔍 $*" >&2; }
+}
+
 # 获取完整的 iostat 数据
 get_iostat_data() {
     local device="$1"
@@ -24,8 +31,32 @@ get_iostat_data() {
         return
     fi
     
-    local iostat_output=$(iostat -dx 1 1 2>/dev/null)
-    local device_stats=$(echo "$iostat_output" | awk "/^${device}[[:space:]]/ {print; exit}")
+    # 实现真正的iostat持续采样
+    local monitor_rate=${EBS_MONITOR_RATE:-1}
+    local iostat_pid_file="/tmp/iostat_${device}_${logical_name}.pid"
+    local iostat_data_file="/tmp/iostat_${device}_${logical_name}.data"
+    
+    # 检查是否已有持续采样进程
+    if [[ ! -f "$iostat_pid_file" ]] || ! kill -0 "$(cat "$iostat_pid_file" 2>/dev/null)" 2>/dev/null; then
+        # 启动持续采样进程 - Linux专用实现
+        # 注意: 此功能仅在Linux环境下工作，macOS环境下会模拟数据
+        if [[ "$(uname -s)" == "Linux" ]]; then
+            # Linux: iostat -dx interval 0 (无限次输出)
+            iostat -dx "$monitor_rate" 0 > "$iostat_data_file" &
+        else
+            # 非Linux环境: 生成模拟数据用于开发测试
+            log_warn "当前环境不是Linux，生成模拟iostat数据用于测试"
+            (while true; do
+                echo "$device 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00"
+                sleep "$monitor_rate"
+            done) > "$iostat_data_file" &
+        fi
+        echo $! > "$iostat_pid_file"
+        log_debug "启动iostat持续采样: $device, PID: $!, 频率: ${monitor_rate}秒, 数据文件: $iostat_data_file"
+    fi
+    
+    # 获取最新的设备数据行
+    local device_stats=$(tail -n 20 "$iostat_data_file" 2>/dev/null | awk "/^${device}[[:space:]]/ {latest=\$0} END {print latest}")
     
     if [[ -z "$device_stats" ]]; then
         echo "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"

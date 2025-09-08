@@ -25,11 +25,14 @@ if [[ -z "${MONITOR_STATUS_FILE:-}" ]]; then
 fi
 
 # 监控任务定义 - 包含所有必要的监控脚本
+# 注意：iostat功能由unified_monitor.sh统一管理，避免重复启动和进程冲突
+# 用户仍可通过 'start iostat' 命令启动，但会自动重定向到unified_monitor.sh
 declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
     ["slot"]="slot_monitor.sh"
     ["ena_network"]="ena_network_monitor.sh"
     ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
+    ["iostat"]="iostat_collector.sh"  # 通过unified_monitor.sh管理
 )
 
 # 初始化监控协调器
@@ -106,10 +109,23 @@ start_monitor() {
             (cd "${script_dir}" && ./"${script_name}" -b) &
             ;;
         "iostat")
-            # iostat收集器 - 独立运行模式，生成自己的CSV文件
-            # 注意：这个脚本目前只有测试模式，需要添加持续监控模式
-            echo "⚠️  iostat_collector.sh 需要持续监控模式支持"
-            return 1
+            # iostat功能由unified_monitor.sh统一管理，避免重复启动
+            echo "🔗 iostat功能由unified_monitor.sh统一管理"
+            if is_monitor_running "unified"; then
+                echo "✅ iostat功能已通过unified_monitor.sh启动"
+                # 验证iostat进程是否真正运行
+                if pgrep -f "iostat.*-dx" >/dev/null 2>&1; then
+                    echo "✅ iostat进程确认运行中"
+                else
+                    echo "⚠️  unified_monitor运行中但iostat进程未检测到，可能正在启动"
+                fi
+                return 0
+            else
+                echo "⚠️  需要先启动unified监控器以启用iostat功能"
+                echo "🚀 自动启动unified监控器..."
+                start_monitor "unified"
+                return $?
+            fi
             ;;
         "ena_network")
             # ENA网络监控器 - 修复参数传递问题
@@ -211,6 +227,14 @@ stop_all_monitors() {
         pkill -f "$script" 2>/dev/null || true
     done
     
+    # 停止iostat持续采样进程（由unified_monitor.sh启动）
+    echo "🧹 清理iostat进程..."
+    # 使用更精确的进程匹配模式
+    pkill -f "iostat.*-dx.*[0-9]" 2>/dev/null || true
+    # 清理iostat相关的临时文件
+    rm -f /tmp/iostat_*.pid /tmp/iostat_*.data 2>/dev/null || true
+    echo "✅ iostat进程已清理"
+    
     # 清理PID文件
     > "$MONITOR_PIDS_FILE"
     
@@ -225,11 +249,18 @@ show_monitor_status() {
     
     for monitor in "${!MONITOR_TASKS[@]}"; do
         local script_name="${MONITOR_TASKS[$monitor]}"
-        if is_monitor_running "$monitor"; then
-            local pid=$(pgrep -f "$script_name" | head -1)
-            echo "✅ $monitor ($script_name) - 运行中 (PID: $pid)"
+        
+        # iostat任务特殊处理：显示其通过unified_monitor.sh的管理状态
+        if [[ "$monitor" == "iostat" ]]; then
+            show_iostat_status
         else
-            echo "❌ $monitor ($script_name) - 已停止"
+            # 其他任务的标准处理
+            if is_monitor_running "$monitor"; then
+                local pid=$(pgrep -f "$script_name" | head -1)
+                echo "✅ $monitor ($script_name) - 运行中 (PID: $pid)"
+            else
+                echo "❌ $monitor ($script_name) - 已停止"
+            fi
         fi
     done
     
@@ -238,6 +269,34 @@ show_monitor_status() {
     echo "  状态文件: $MONITOR_STATUS_FILE"
     echo "  PID文件: $MONITOR_PIDS_FILE"
     echo "  日志目录: $LOGS_DIR"
+}
+
+# 显示iostat详细状态
+show_iostat_status() {
+    echo "📊 iostat (iostat_collector.sh) - 通过unified_monitor.sh管理"
+    
+    if is_monitor_running "unified"; then
+        echo "  └─ unified_monitor: ✅ 运行中"
+        
+        # 检查真正的iostat进程（Linux环境）
+        if pgrep -f "iostat.*-dx.*[0-9]" >/dev/null 2>&1; then
+            local iostat_pid=$(pgrep -f "iostat.*-dx.*[0-9]" | head -1)
+            echo "  └─ iostat进程: ✅ 运行中 (PID: $iostat_pid)"
+        else
+            echo "  └─ iostat进程: ⚠️  未检测到 (可能在非Linux环境或未配置EBS设备)"
+        fi
+        
+        # 检查iostat数据文件
+        if ls /tmp/iostat_*.data >/dev/null 2>&1; then
+            local data_files=$(ls /tmp/iostat_*.data 2>/dev/null | wc -l)
+            echo "  └─ 数据文件: ✅ $data_files 个设备数据文件"
+        else
+            echo "  └─ 数据文件: ❌ 未找到数据文件"
+        fi
+    else
+        echo "  └─ unified_monitor: ❌ 未运行"
+        echo "  └─ iostat进程: ❌ 未运行"
+    fi
 }
 
 # 更新监控状态

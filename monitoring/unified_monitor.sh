@@ -614,8 +614,6 @@ get_ena_allowance_data() {
     echo "$ena_values"
 }
 
-# 加载iostat收集器函数
-source "$(dirname "${BASH_SOURCE[0]}")/iostat_collector.sh"
 # 加载ENA网络监控器
 source "$(dirname "${BASH_SOURCE[0]}")/ena_network_monitor.sh"
 

@@ -57,6 +57,11 @@ class NodeQPSAnalyzer:
         self.reports_dir = os.path.join(output_dir, 'reports')
         os.makedirs(self.reports_dir, exist_ok=True)
         
+        # 瓶颈检测阈值配置
+        self.cpu_threshold = int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85))
+        self.memory_threshold = int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))
+        self.rpc_threshold = int(os.getenv('MAX_LATENCY_THRESHOLD', 1000))
+        
         # 初始化CSV文件路径 - 修复缺失的属性
         self.csv_file = self.get_latest_csv()
 
@@ -427,53 +432,58 @@ class NodeQPSAnalyzer:
 
     def load_and_clean_data(self) -> pd.DataFrame:
         """加载和清理监控数据，改进错误处理"""
-        if not self.csv_file:
-            print("⚠️  No CSV monitoring file found, proceeding with log analysis only")
+        try:
+            if not self.csv_file:
+                print("⚠️  No CSV monitoring file found, proceeding with log analysis only")
+                return pd.DataFrame()
+
+            print(f"📊 Loading QPS monitoring data from: {os.path.basename(self.csv_file)}")
+            
+            # 直接使用pandas读取CSV - 字段映射器已移除
+            df = pd.read_csv(self.csv_file)
+
+            print(f"📋 Raw data shape: {df.shape}")
+
+            # 检查是否有QPS相关数据
+            qps_columns = ['current_qps', 'qps', 'target_qps']
+            qps_column = None
+            for col in qps_columns:
+                if col in df.columns:
+                    qps_column = col
+                    break
+            
+            if qps_column is None:
+                print("⚠️  No QPS data found in CSV, this appears to be system monitoring data only")
+                print("📊 Available columns:", ', '.join(df.columns[:10]))
+                # 仍然返回数据，用于系统性能分析
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+                return df
+
+            # 处理current_qps列
+            df['current_qps'] = df[qps_column].astype(str)
+            numeric_mask = df['current_qps'].str.isdigit()
+            numeric_df = df[numeric_mask].copy()
+
+            if len(numeric_df) == 0:
+                print("⚠️  No numeric QPS data found")
+                return df
+
+            # 数据类型转换
+            numeric_df['current_qps'] = pd.to_numeric(numeric_df['current_qps'])
+            numeric_df['timestamp'] = pd.to_datetime(numeric_df['timestamp'], errors='coerce')
+
+            # 清理数值列 - 使用映射后的标准字段名
+            numeric_cols = ['cpu_usage', 'mem_usage', 'rpc_latency_ms', 'elapsed_time', 'remaining_time']
+            for col in numeric_cols:
+                if col in numeric_df.columns:
+                    numeric_df[col] = pd.to_numeric(numeric_df[col], errors='coerce')
+
+            print(f"📊 Processed {len(numeric_df)} QPS monitoring data points")
+            return numeric_df
+            
+        except Exception as e:
+            logger.error(f"❌ Data loading and cleaning failed: {e}")
             return pd.DataFrame()
-
-        print(f"📊 Loading QPS monitoring data from: {os.path.basename(self.csv_file)}")
-        
-        # 直接使用pandas读取CSV - 字段映射器已移除
-        df = pd.read_csv(self.csv_file)
-
-        print(f"📋 Raw data shape: {df.shape}")
-
-        # 检查是否有QPS相关数据
-        qps_columns = ['current_qps', 'qps', 'target_qps']
-        qps_column = None
-        for col in qps_columns:
-            if col in df.columns:
-                qps_column = col
-                break
-        
-        if qps_column is None:
-            print("⚠️  No QPS data found in CSV, this appears to be system monitoring data only")
-            print("📊 Available columns:", ', '.join(df.columns[:10]))
-            # 仍然返回数据，用于系统性能分析
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            return df
-
-        # 处理current_qps列
-        df['current_qps'] = df[qps_column].astype(str)
-        numeric_mask = df['current_qps'].str.isdigit()
-        numeric_df = df[numeric_mask].copy()
-
-        if len(numeric_df) == 0:
-            print("⚠️  No numeric QPS data found")
-            return df
-
-        # 数据类型转换
-        numeric_df['current_qps'] = pd.to_numeric(numeric_df['current_qps'])
-        numeric_df['timestamp'] = pd.to_datetime(numeric_df['timestamp'], errors='coerce')
-
-        # 清理数值列 - 使用映射后的标准字段名
-        numeric_cols = ['cpu_usage', 'mem_usage', 'rpc_latency_ms', 'elapsed_time', 'remaining_time']
-        for col in numeric_cols:
-            if col in numeric_df.columns:
-                numeric_df[col] = pd.to_numeric(numeric_df[col], errors='coerce')
-
-        print(f"📊 Processed {len(numeric_df)} QPS monitoring data points")
-        return numeric_df
 
     def analyze_performance_metrics(self, df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], int]:
         """分析关键性能指标"""
@@ -516,17 +526,17 @@ class NodeQPSAnalyzer:
 
         # CPU瓶颈
         if 'cpu_usage' in df.columns and 'current_qps' in df.columns:
-            cpu_bottleneck = df[df['cpu_usage'] > 85]['current_qps'].min()
+            cpu_bottleneck = df[df['cpu_usage'] > self.cpu_threshold]['current_qps'].min()
             if pd.notna(cpu_bottleneck):
                 bottlenecks['CPU'] = cpu_bottleneck
 
         # 内存瓶颈
-        mem_bottleneck = df[df['mem_usage'] > 90]['current_qps'].min()
+        mem_bottleneck = df[df['mem_usage'] > self.memory_threshold]['current_qps'].min()
         if pd.notna(mem_bottleneck):
             bottlenecks['Memory'] = mem_bottleneck
 
         # RPC延迟瓶颈
-        rpc_bottleneck = df[df['rpc_latency_ms'] > 1000]['current_qps'].min()
+        rpc_bottleneck = df[df['rpc_latency_ms'] > self.rpc_threshold]['current_qps'].min()
         if pd.notna(rpc_bottleneck):
             bottlenecks['RPC_Latency'] = rpc_bottleneck
 
@@ -746,11 +756,11 @@ class NodeQPSAnalyzer:
             
             # 根据具体指标调整严重程度
             severity_multiplier = 1.0
-            if bottleneck_type == 'CPU' and avg_cpu > 90:
+            if bottleneck_type == 'CPU' and avg_cpu > (self.cpu_threshold + 5):
                 severity_multiplier = 1.5
-            elif bottleneck_type == 'Memory' and avg_mem > 95:
+            elif bottleneck_type == 'Memory' and avg_mem > (self.memory_threshold + 5):
                 severity_multiplier = 1.5
-            elif bottleneck_type == 'RPC' and avg_rpc > 2000:
+            elif bottleneck_type == 'RPC' and avg_rpc > (self.rpc_threshold * 2):
                 severity_multiplier = 1.5
             
             total_score += weight * severity_multiplier
