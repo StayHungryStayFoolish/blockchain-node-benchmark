@@ -647,7 +647,7 @@ execute_single_qps_test() {
         echo "📈 测试结果: 成功率 ${success_rate}%, 平均延迟 ${avg_latency_ms}ms"
         
         # 检查测试是否成功
-        local success_rate_num=$(echo "$success_rate * 100" | bc 2>/dev/null || echo "0")
+        local success_rate_num=$(echo "$success_rate" | bc 2>/dev/null || echo "0")
         local avg_latency_num=$(echo "$avg_latency_ms" | bc 2>/dev/null || echo "0")
         
         if (( $(echo "$success_rate_num >= $SUCCESS_RATE_THRESHOLD" | bc -l) )) && \

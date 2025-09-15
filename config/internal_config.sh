@@ -15,12 +15,25 @@ CONFIG_LOADED=true
 # 瓶颈检测阈值 (极限测试用)
 BOTTLENECK_CPU_THRESHOLD=85               # CPU使用率超过85%视为瓶颈
 BOTTLENECK_MEMORY_THRESHOLD=90            # 内存使用率超过90%视为瓶颈
+# EBS 瓶颈检测阈值 (用于瓶颈检测系统)
 BOTTLENECK_EBS_UTIL_THRESHOLD=90          # EBS利用率超过90%视为瓶颈
 BOTTLENECK_EBS_LATENCY_THRESHOLD=50       # EBS延迟超过50ms视为瓶颈
 BOTTLENECK_NETWORK_THRESHOLD=80           # 网络利用率超过80%视为瓶颈
 BOTTLENECK_ERROR_RATE_THRESHOLD=5         # 错误率超过5%视为瓶颈
 BOTTLENECK_EBS_IOPS_THRESHOLD=90          # EBS 的 IOPS 利用率超过90%视为瓶颈
 BOTTLENECK_EBS_THROUGHPUT_THRESHOLD=90    # EBS 的 Throughput 利用率超过90%视为瓶颈
+
+# 多层次监控阈值说明:
+# - ebs_bottleneck_detector.sh (实时瓶颈检测):
+#   * HIGH级别: 使用上述基准阈值 (90%, 50ms)
+#   * CRITICAL级别: 基准阈值 + 5% (95%) 或 基准阈值 * 2 (100ms)
+# - ebs_analyzer.sh (离线性能分析):
+#   * WARNING级别: 利用率 = BOTTLENECK_EBS_UTIL_THRESHOLD * 0.8 (72%)
+#   * WARNING级别: 延迟 = BOTTLENECK_EBS_LATENCY_THRESHOLD * 0.4 (20ms)
+# 
+# 注意: EBS性能分析器(ebs_analyzer.sh)使用计算方式避免变量膨胀:
+# 利用率警告级别 = BOTTLENECK_EBS_UTIL_THRESHOLD * 0.8 (90% * 0.8 = 72%)
+# 延迟警告级别 = BOTTLENECK_EBS_LATENCY_THRESHOLD * 0.4 (50ms * 0.4 = 20ms)
 
 
 # 瓶颈检测连续次数 (避免偶发性波动)

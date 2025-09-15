@@ -46,6 +46,7 @@ class ReportGenerator:
         self.overhead_csv = overhead_csv
         self.bottleneck_info = bottleneck_info
         self.output_dir = os.getenv('REPORTS_DIR', os.path.dirname(performance_csv))
+        self.ebs_log_path = os.path.join(os.getenv('LOGS_DIR', '/tmp/blockchain-node-benchmark/logs'), 'ebs_analyzer.log')
         self.config = self._load_config()
         self.overhead_data = self._load_overhead_data()
         self.bottleneck_data = self._load_bottleneck_data()
@@ -274,6 +275,155 @@ class ReportGenerator:
         print(f"\n📊 数据完整性验证结果: {passed}/{total} 项通过")
         
         return validation_results
+    
+    def parse_ebs_analyzer_log(self):
+        """解析EBS分析器日志文件"""
+        warnings = []
+        performance_metrics = {}
+        
+        if not os.path.exists(self.ebs_log_path):
+            return warnings, performance_metrics
+        
+        try:
+            with open(self.ebs_log_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    
+                    # 解析警告信息
+                    if '[WARN]' in line and ('高利用率警告' in line or '高延迟警告' in line):
+                        timestamp = line.split(']')[0].replace('[', '') if ']' in line else ''
+                        
+                        if '高利用率警告:' in line:
+                            parts = line.split(']')[-1].split('高利用率警告:')
+                            device = parts[0].strip()
+                            value_part = parts[1].strip() if len(parts) > 1 else '0%'
+                            
+                            # 提取数值和数据时间
+                            if '(数据时间:' in value_part:
+                                value = value_part.split('(数据时间:')[0].strip().replace('%', '')
+                                data_time = value_part.split('(数据时间:')[1].replace(')', '').strip()
+                            else:
+                                value = value_part.replace('%', '')
+                                data_time = timestamp
+                            
+                            warnings.append({
+                                'type': '高利用率',
+                                'device': device,
+                                'value': value,
+                                'timestamp': timestamp,
+                                'data_time': data_time
+                            })
+                        elif '高延迟警告:' in line:
+                            parts = line.split(']')[-1].split('高延迟警告:')
+                            device = parts[0].strip()
+                            value_part = parts[1].strip() if len(parts) > 1 else '0ms'
+                            
+                            # 提取数值和数据时间
+                            if '(数据时间:' in value_part:
+                                value = value_part.split('(数据时间:')[0].strip().replace('ms', '')
+                                data_time = value_part.split('(数据时间:')[1].replace(')', '').strip()
+                            else:
+                                value = value_part.replace('ms', '')
+                                data_time = timestamp
+                            
+                            warnings.append({
+                                'type': '高延迟',
+                                'device': device,
+                                'value': value,
+                                'timestamp': timestamp,
+                                'data_time': data_time
+                            })
+                    
+                    # 解析性能指标
+                    elif '[INFO]' in line and 'PERF:' in line:
+                        try:
+                            perf_part = line.split('PERF:')[1].strip()
+                            if '=' in perf_part:
+                                metric_name = perf_part.split('=')[0].strip()
+                                metric_value = perf_part.split('=')[1].strip().split()[0]
+                                performance_metrics[metric_name] = metric_value
+                        except (IndexError, ValueError):
+                            continue
+        
+        except Exception as e:
+            print(f"⚠️ 解析EBS日志时出错: {e}")
+        
+        return warnings, performance_metrics
+    
+    def generate_ebs_analysis_section(self, warnings, performance_metrics):
+        """生成EBS分析报告HTML片段"""
+        if not warnings and not performance_metrics:
+            return ""
+        
+        html = """
+        <div class="section">
+            <h2>📊 EBS性能分析结果</h2>
+            
+            <div class="subsection">
+                <h3>⚠️ 性能警告</h3>
+        """
+        
+        if warnings:
+            html += '<div class="warning-list" style="margin: 15px 0;">'
+            for warning in warnings:
+                color = "#dc3545" if warning['type'] == '高利用率' else "#fd7e14"
+                unit = "%" if warning['type'] == '高利用率' else "ms"
+                html += f'''
+                <div style="border-left: 4px solid {color}; padding: 12px; margin: 8px 0; background: #f8f9fa; border-radius: 4px;">
+                    <strong style="color: {color};">{warning['device']}</strong> - {warning['type']}: <strong>{warning['value']}{unit}</strong>
+                    <small style="color: #6c757d; display: block; margin-top: 4px;">发生时间: {warning.get('data_time', warning['timestamp'])}</small>
+                </div>
+                '''
+            html += '</div>'
+        else:
+            html += '<p style="color: #28a745; font-weight: bold;">✅ 未发现性能异常</p>'
+        
+        html += '''
+            </div>
+            
+            <div class="subsection">
+                <h3>📈 性能统计</h3>
+        '''
+        
+        if performance_metrics:
+            html += '''
+                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
+                    <thead>
+                        <tr>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">指标名称</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">数值</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            
+            for metric, value in performance_metrics.items():
+                unit = ""
+                if "util" in metric:
+                    unit = " %"
+                elif "iops" in metric:
+                    unit = " IOPS"
+                
+                html += f'''
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{metric}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{value}{unit}</td>
+                        </tr>
+                '''
+            
+            html += '''
+                    </tbody>
+                </table>
+            '''
+        else:
+            html += '<p style="color: #6c757d;">暂无性能统计数据</p>'
+        
+        html += '''
+            </div>
+        </div>
+        '''
+        
+        return html
     
     def generate_html_report(self):
         """生成HTML报告 - 使用安全的字段访问"""
@@ -1861,11 +2011,15 @@ class ReportGenerator:
             # 生成图片展示部分
             charts_section = self._generate_charts_section()
             
+            # 生成EBS分析结果
+            ebs_warnings, ebs_metrics = self.parse_ebs_analyzer_log()
+            ebs_analysis_section = self.generate_ebs_analysis_section(ebs_warnings, ebs_metrics)
+            
             return f"""
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Solana QPS 性能分析报告</title>
+                <title>Blockchain Node QPS 性能分析报告</title>
                 <meta charset="utf-8">
                 <style>
                     {self._get_css_styles()}
@@ -1873,12 +2027,14 @@ class ReportGenerator:
             </head>
             <body>
                 <div class="container">
-                    <h1>🚀 Solana QPS 性能分析报告 - 增强版</h1>
+                    <h1>🚀 Blockchain Node QPS 性能分析报告 - 增强版</h1>
+                    <h1>🚀 Blockchain Node QPS 性能分析报告 - 增强版</h1>
                     <p>生成Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                     <p>✅ 统一字段命名 | 完整Device支持 | 监控开销分析 | Solana特定分析 | 瓶颈检测分析</p>
                     
                     {bottleneck_section}
                     {performance_summary}
+                    {ebs_analysis_section}
                     {charts_section}
                     {monitoring_overhead_analysis}
                     {monitoring_overhead_detailed}

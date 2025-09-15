@@ -140,37 +140,46 @@ class CPUEBSCorrelationAnalyzer:
         
         # 1-4: CPU I/O wait vs 设备利用率/队列长度/延迟 (DATA设备)
         if data_util_cols and 'cpu_iowait' in self.df.columns:
-            corr, p_value = stats.pearsonr(self.df['cpu_iowait'], self.df[data_util_cols[0]])
-            results['iowait_vs_data_util'] = {
-                'correlation': corr,
-                'p_value': p_value,
-                'description': 'CPU I/O等待 vs DATA设备利用率',
-                'strength': self._interpret_correlation_strength(corr),
-                'method': 'pearson'
-            }
-            print(f"  ✅ CPU I/O等待 vs DATA设备利用率: {corr:.4f} (p={p_value:.4f})")
+            try:
+                corr, p_value = stats.pearsonr(self.df['cpu_iowait'], self.df[data_util_cols[0]])
+                results['iowait_vs_data_util'] = {
+                    'correlation': corr,
+                    'p_value': p_value,
+                    'description': 'CPU I/O等待 vs DATA设备利用率',
+                    'strength': self._interpret_correlation_strength(corr),
+                    'method': 'pearson'
+                }
+                print(f"  ✅ CPU I/O等待 vs DATA设备利用率: {corr:.4f} (p={p_value:.4f})")
+            except Exception as e:
+                logger.warning(f"⚠️ CPU I/O等待 vs DATA设备利用率分析失败: {e}")
         
         if data_aqu_cols and 'cpu_iowait' in self.df.columns:
-            corr, p_value = stats.pearsonr(self.df['cpu_iowait'], self.df[data_aqu_cols[0]])
-            results['iowait_vs_data_queue'] = {
-                'correlation': corr,
-                'p_value': p_value,
-                'description': 'CPU I/O等待 vs DATA设备队列长度',
-                'strength': self._interpret_correlation_strength(corr),
-                'method': 'pearson'
-            }
-            print(f"  ✅ CPU I/O等待 vs DATA设备队列长度: {corr:.4f} (p={p_value:.4f})")
+            try:
+                corr, p_value = stats.pearsonr(self.df['cpu_iowait'], self.df[data_aqu_cols[0]])
+                results['iowait_vs_data_queue'] = {
+                    'correlation': corr,
+                    'p_value': p_value,
+                    'description': 'CPU I/O等待 vs DATA设备队列长度',
+                    'strength': self._interpret_correlation_strength(corr),
+                    'method': 'pearson'
+                }
+                print(f"  ✅ CPU I/O等待 vs DATA设备队列长度: {corr:.4f} (p={p_value:.4f})")
+            except Exception as e:
+                logger.warning(f"⚠️ CPU I/O等待 vs DATA设备队列长度分析失败: {e}")
         
         if data_await_cols and 'cpu_iowait' in self.df.columns:
-            corr, p_value = stats.pearsonr(self.df['cpu_iowait'], self.df[data_await_cols[0]])
-            results['iowait_vs_data_latency'] = {
-                'correlation': corr,
-                'p_value': p_value,
-                'description': 'CPU I/O等待 vs DATA设备延迟',
-                'strength': self._interpret_correlation_strength(corr),
-                'method': 'pearson'
-            }
-            print(f"  ✅ CPU I/O等待 vs DATA设备延迟: {corr:.4f} (p={p_value:.4f})")
+            try:
+                corr, p_value = stats.pearsonr(self.df['cpu_iowait'], self.df[data_await_cols[0]])
+                results['iowait_vs_data_latency'] = {
+                    'correlation': corr,
+                    'p_value': p_value,
+                    'description': 'CPU I/O等待 vs DATA设备延迟',
+                    'strength': self._interpret_correlation_strength(corr),
+                    'method': 'pearson'
+                }
+                print(f"  ✅ CPU I/O等待 vs DATA设备延迟: {corr:.4f} (p={p_value:.4f})")
+            except Exception as e:
+                logger.warning(f"⚠️ CPU I/O等待 vs DATA设备延迟分析失败: {e}")
         
         # 5-8: 同样的分析用于ACCOUNTS设备 (仅在ACCOUNTS设备配置时执行)
         accounts_configured = self._check_device_configured('accounts')
@@ -186,7 +195,7 @@ class CPUEBSCorrelationAnalyzer:
             }
             print(f"  ✅ CPU I/O等待 vs ACCOUNTS设备利用率: {corr:.4f} (p={p_value:.4f})")
         
-        # 添加缺失的ACCOUNTS设备队列长度分析 (仅在ACCOUNTS设备配置时执行)
+        # ACCOUNTS设备队列长度分析 (仅在ACCOUNTS设备配置时执行)
         if accounts_configured and accounts_aqu_cols and 'cpu_iowait' in self.df.columns:
             corr, p_value = stats.pearsonr(self.df['cpu_iowait'], self.df[accounts_aqu_cols[0]])
             results['iowait_vs_accounts_queue'] = {
@@ -198,7 +207,7 @@ class CPUEBSCorrelationAnalyzer:
             }
             print(f"  ✅ CPU I/O等待 vs ACCOUNTS设备队列长度: {corr:.4f} (p={p_value:.4f})")
         
-        # 添加缺失的ACCOUNTS设备延迟分析 (仅在ACCOUNTS设备配置时执行)
+        # ACCOUNTS设备延迟分析 (仅在ACCOUNTS设备配置时执行)
         if accounts_configured and accounts_await_cols and 'cpu_iowait' in self.df.columns:
             corr, p_value = stats.pearsonr(self.df['cpu_iowait'], self.df[accounts_await_cols[0]])
             results['iowait_vs_accounts_latency'] = {
@@ -288,7 +297,7 @@ class CPUEBSCorrelationAnalyzer:
             }
             print(f"  ✅ User CPU vs ACCOUNTS读请求: R²={r2:.4f}, 系数={model.coef_[0]:.4f}")
         
-        # 添加缺失的ACCOUNTS设备写请求分析 (仅在ACCOUNTS设备配置时执行)
+        # ACCOUNTS设备写请求分析 (仅在ACCOUNTS设备配置时执行)
         if accounts_configured and accounts_w_cols and 'cpu_sys' in self.df.columns:
             X = self.df[['cpu_sys']].values
             y = self.df[accounts_w_cols[0]].values

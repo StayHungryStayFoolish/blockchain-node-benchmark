@@ -1,8 +1,7 @@
 #!/bin/bash
 # =====================================================================
-# EBS 性能分析器 - 统一日志版本
+# EBS 离线性能分析器
 # =====================================================================
-# 消除经验值，使用统一监控数据进行分析
 # 使用统一日志管理器
 # =====================================================================
 
@@ -39,11 +38,13 @@ analyze_ebs_performance() {
     local data_await_idx=-1
     
     for i in "${!field_names[@]}"; do
-        case "${field_names[$i]}" in
-            data_*_util) data_util_idx=$i ;;
-            data_*_total_iops) data_iops_idx=$i ;;
-            data_*_throughput_mibs) data_throughput_idx=$i ;;
-            data_*_avg_await) data_await_idx=$i ;;
+        local field="${field_names[$i]}"
+        case "$field" in
+            # 框架标准格式: data_{设备名}_{指标}
+            data_${LEDGER_DEVICE}_util) data_util_idx=$i ;;
+            data_${LEDGER_DEVICE}_total_iops) data_iops_idx=$i ;;
+            data_${LEDGER_DEVICE}_throughput_mibs) data_throughput_idx=$i ;;
+            data_${LEDGER_DEVICE}_avg_await) data_await_idx=$i ;;
         esac
     done
     
@@ -53,14 +54,21 @@ analyze_ebs_performance() {
     local accounts_throughput_idx=-1
     local accounts_await_idx=-1
     
-    for i in "${!field_names[@]}"; do
-        case "${field_names[$i]}" in
-            accounts_*_util) accounts_util_idx=$i ;;
-            accounts_*_total_iops) accounts_iops_idx=$i ;;
-            accounts_*_throughput_mibs) accounts_throughput_idx=$i ;;
-            accounts_*_avg_await) accounts_await_idx=$i ;;
-        esac
-    done
+    # 如果ACCOUNTS_DEVICE未配置，跳过ACCOUNTS字段匹配
+    if [[ -n "${ACCOUNTS_DEVICE:-}" ]]; then
+        for i in "${!field_names[@]}"; do
+            local field="${field_names[$i]}"
+            case "$field" in
+                # 框架标准格式: accounts_{设备名}_{指标}
+                accounts_${ACCOUNTS_DEVICE}_util) accounts_util_idx=$i ;;
+                accounts_${ACCOUNTS_DEVICE}_total_iops) accounts_iops_idx=$i ;;
+                accounts_${ACCOUNTS_DEVICE}_throughput_mibs) accounts_throughput_idx=$i ;;
+                accounts_${ACCOUNTS_DEVICE}_avg_await) accounts_await_idx=$i ;;
+            esac
+        done
+    else
+        log_debug "ACCOUNTS_DEVICE未配置，跳过ACCOUNTS字段匹配"
+    fi
     
     # 分析DATA设备
     if [[ $data_util_idx -ge 0 && $data_iops_idx -ge 0 ]]; then
@@ -94,26 +102,27 @@ analyze_device_performance() {
     
     # 跳过表头，分析数据
     tail -n +2 "$csv_file" | while IFS=',' read -r line_data; do
-        local fields=($line_data)
+        # 使用cut命令安全地获取字段值，与统计分析保持一致
+        local timestamp=$(echo "$line_data" | cut -d',' -f1)
+        local util=$(echo "$line_data" | cut -d',' -f"$util_field")
+        local iops=$(echo "$line_data" | cut -d',' -f"$iops_field")
+        local throughput=$(echo "$line_data" | cut -d',' -f"$throughput_field")
+        local await_time=$(echo "$line_data" | cut -d',' -f"$await_field")
         
-        # 安全地获取字段值
-        local util=${fields[$((util_field - 1))]:-0}
-        local iops=${fields[$((iops_field - 1))]:-0}
-        local throughput=${fields[$((throughput_field - 1))]:-0}
-        local await_time=${fields[$((await_field - 1))]:-0}
+        # 调试输出
+        log_debug "处理数据行: util=$util, await_time=$await_time, util_field=$util_field, await_field=$await_field"
         
-        # 检查高利用率
-        if (( $(echo "$util > 80" | bc -l 2>/dev/null || echo 0) )); then
-            log_warn "$device_name 高利用率警告: ${util}%"
+        # 检查高利用率 (使用瓶颈阈值的80%作为警告级别)
+        local warning_util_threshold=$(echo "scale=2; ${BOTTLENECK_EBS_UTIL_THRESHOLD:-90} * 0.8" | bc)
+        if (( $(echo "$util > $warning_util_threshold" | bc -l 2>/dev/null || echo 0) )); then
+            log_warn "$device_name 高利用率警告: ${util}% (警告阈值: ${warning_util_threshold}%, 数据时间: $timestamp)"
         fi
         
-        # 检查高延迟
-        if (( $(echo "$await_time > 20" | bc -l 2>/dev/null || echo 0) )); then
-            log_warn "$device_name 高延迟警告: ${await_time}ms"
+        # 检查高延迟 (使用瓶颈阈值的40%作为警告级别，保持合理的预警距离)
+        local warning_latency_threshold=$(echo "scale=2; ${BOTTLENECK_EBS_LATENCY_THRESHOLD:-50} * 0.4" | bc)
+        if (( $(echo "$await_time > $warning_latency_threshold" | bc -l 2>/dev/null || echo 0) )); then
+            log_warn "$device_name 高延迟警告: ${await_time}ms (警告阈值: ${warning_latency_threshold}ms, 数据时间: $timestamp)"
         fi
-        
-        # 只处理第一行作为示例，避免输出过多
-        break
     done
     
     # 统计分析

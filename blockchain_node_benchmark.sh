@@ -249,15 +249,39 @@ execute_core_qps_test() {
         echo "[WARN] QPS test status marker file does not exist, may have been deleted"
     fi
     
-    # 检查是否检测到瓶颈
-    if [[ -f "${MEMORY_SHARE_DIR}/bottleneck_status.json" ]]; then
-        local status_data=$(cat "${MEMORY_SHARE_DIR}/bottleneck_status.json" 2>/dev/null)
-        if [[ -n "$status_data" ]] && echo "$status_data" | grep -q "bottleneck_detected.*true"; then
-            BOTTLENECK_DETECTED=true
-            # 从瓶颈状态文件获取瓶颈摘要
-            BOTTLENECK_INFO=$(echo "$status_data" | jq -r '.bottleneck_summary // "Unknown bottleneck"' 2>/dev/null || echo "Unknown bottleneck")
-            echo "🚨 检测到性能瓶颈: $BOTTLENECK_INFO"
+    # 检查是否检测到瓶颈 - 智能合并多个瓶颈数据源
+    local bottleneck_sources=(
+        "${QPS_STATUS_FILE}"                              # 优先QPS测试期间的瓶颈
+        "${MEMORY_SHARE_DIR}/bottleneck_status.json"      # 然后是监控期间的瓶颈
+    )
+    
+    local bottleneck_found=false
+    local all_bottleneck_info=""
+    
+    for bottleneck_file in "${bottleneck_sources[@]}"; do
+        if [[ -f "$bottleneck_file" ]]; then
+            local status_data=$(cat "$bottleneck_file" 2>/dev/null)
+            if [[ -n "$status_data" ]] && echo "$status_data" | grep -q "bottleneck_detected.*true"; then
+                local source_info=$(echo "$status_data" | jq -r '.bottleneck_summary // "Unknown bottleneck"' 2>/dev/null || echo "Unknown bottleneck")
+                local source_name=$(basename "$bottleneck_file")
+                
+                if [[ "$bottleneck_found" == "false" ]]; then
+                    BOTTLENECK_DETECTED=true
+                    BOTTLENECK_INFO="$source_info"
+                    all_bottleneck_info="$source_name: $source_info"
+                    bottleneck_found=true
+                else
+                    all_bottleneck_info="$all_bottleneck_info; $source_name: $source_info"
+                fi
+                
+                echo "🚨 检测到性能瓶颈: $source_info (来源: $source_name)"
+            fi
         fi
+    done
+    
+    # 如果发现多个瓶颈源，记录完整信息
+    if [[ "$bottleneck_found" == "true" ]]; then
+        echo "[INFO] 完整瓶颈信息: $all_bottleneck_info"
     fi
     
     return $test_result
@@ -332,26 +356,86 @@ process_test_results() {
 execute_data_analysis() {
     echo "🔍 执行数据分析..."
     
-    # 查找最新的性能数据文件 - 修复文件名模式 (跨平台兼容)
-    local latest_csv
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        # macOS版本 - 使用stat命令
-        latest_csv=$(find "$LOGS_DIR" -name "unified_monitor_*.csv" -type f -exec stat -f "%m %N" {} \; 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
-    else
-        # Linux版本 - 使用printf
-        latest_csv=$(find "$LOGS_DIR" -name "unified_monitor_*.csv" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
-    fi
+    # 使用软链接获取最新的性能数据文件
+    local latest_csv="${LOGS_DIR}/performance_latest.csv"
     
-    if [[ -z "$latest_csv" ]]; then
-        echo "[ERROR] No unified_monitor CSV file found in $LOGS_DIR"
+    if [[ ! -f "$latest_csv" ]]; then
+        echo "[ERROR] Performance data file not found: $latest_csv"
         echo "[DEBUG] Available CSV files:"
         ls -la "$LOGS_DIR"/*.csv 2>/dev/null || echo "  No CSV files found"
         echo "[DEBUG] LOGS_DIR = $LOGS_DIR"
         return 1
     fi
     
+    # 验证文件完整性和软链接目标
+    if [[ -L "$latest_csv" ]]; then
+        local target_file=$(readlink "$latest_csv")
+        local full_target="${LOGS_DIR}/$target_file"
+        if [[ ! -f "$full_target" ]]; then
+            echo "[ERROR] Symlink target does not exist: $full_target"
+            return 1
+        fi
+        echo "[INFO] Using symlinked file: $target_file"
+    fi
+    
+    local line_count=$(wc -l < "$latest_csv")
+    if [[ $line_count -lt 2 ]]; then
+        echo "[ERROR] Performance data file is empty or only contains header: $line_count lines"
+        return 1
+    fi
+    
+    # 验证CSV表头完整性和必需字段
+    local header=$(head -1 "$latest_csv")
+    local field_count=$(echo "$header" | tr ',' '\n' | wc -l)
+    if [[ $field_count -lt 10 ]]; then
+        echo "[ERROR] CSV header appears incomplete: only $field_count fields"
+        return 1
+    fi
+    
+    # 验证关键字段存在
+    local required_fields=("timestamp" "cpu_usage" "mem_usage")
+    local missing_fields=()
+    
+    for field in "${required_fields[@]}"; do
+        if ! echo "$header" | grep -q "$field"; then
+            missing_fields+=("$field")
+        fi
+    done
+    
+    if [[ ${#missing_fields[@]} -gt 0 ]]; then
+        echo "[ERROR] Required fields missing from CSV: ${missing_fields[*]}"
+        echo "[DEBUG] Available fields: $header"
+        return 1
+    fi
+    
+    # 检查设备相关字段的存在性（用于分析脚本兼容性）
+    local has_data_device=false
+    local has_accounts_device=false
+    local has_ena_fields=false
+    
+    if echo "$header" | grep -q "data_.*_util"; then
+        has_data_device=true
+        echo "[INFO] DATA device fields detected"
+    fi
+    
+    if echo "$header" | grep -q "accounts_.*_util"; then
+        has_accounts_device=true
+        echo "[INFO] ACCOUNTS device fields detected"
+    fi
+    
+    if echo "$header" | grep -q "ena_"; then
+        has_ena_fields=true
+        echo "[INFO] ENA fields detected (AWS environment)"
+    fi
+    
+    # 警告：如果没有设备字段，某些分析可能受限
+    if [[ "$has_data_device" == "false" && "$has_accounts_device" == "false" ]]; then
+        echo "[WARN] No EBS device fields detected - storage analysis may be limited"
+    fi
+    
     echo "[INFO] Using monitoring data file: $(basename "$latest_csv")"
-    echo "[INFO] File size: $(wc -l < "$latest_csv") lines"
+    echo "[INFO] File size: $line_count lines, $field_count fields"
+    echo "[INFO] Required fields verified: ${required_fields[*]}"
     
     # 如果检测到瓶颈，执行瓶颈专项分析
     if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
@@ -377,20 +461,26 @@ execute_data_analysis() {
                 --bottleneck-info "$bottleneck_details"
         fi
         
-        # EBS瓶颈专项分析
-        if [[ -f "${SCRIPT_DIR}/tools/ebs_bottleneck_detector.sh" ]]; then
-            echo "💾 执行EBS瓶颈专项分析..."
-            "${SCRIPT_DIR}/tools/ebs_bottleneck_detector.sh" \
-                --post-analysis \
-                --csv-file "$latest_csv" \
-                --bottleneck-mode
-        fi
+        # EBS瓶颈专项分析已通过实时监控完成
+        # ebs_bottleneck_detector.sh在测试期间通过monitoring_coordinator.sh实时运行
+        # 瓶颈检测结果已记录在ebs_analyzer.log中，无需重复调用
+        echo "💾 EBS瓶颈检测已通过实时监控完成"
         
         # 瓶颈时间窗口分析
         execute_bottleneck_window_analysis "$latest_csv" "$bottleneck_details"
         
         # 性能悬崖分析
         execute_performance_cliff_analysis "$latest_csv" "$bottleneck_details"
+    fi
+    
+    # 执行EBS性能分析 (生成ebs_analyzer.log)
+    if [[ -f "${SCRIPT_DIR}/tools/ebs_analyzer.sh" ]]; then
+        echo "🔍 执行EBS性能分析: ebs_analyzer.sh"
+        if ! bash "${SCRIPT_DIR}/tools/ebs_analyzer.sh" "$latest_csv"; then
+            echo "⚠️ EBS分析执行失败，HTML报告中可能缺少EBS分析部分"
+        fi
+    else
+        echo "⚠️ EBS分析脚本不存在: tools/ebs_analyzer.sh"
     fi
     
     # 执行所有标准分析脚本
@@ -407,9 +497,13 @@ execute_data_analysis() {
             
             # 如果检测到瓶颈，传递瓶颈模式参数
             if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
-                python3 "${SCRIPT_DIR}/$script" "$latest_csv" --bottleneck-mode
+                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --bottleneck-mode; then
+                    echo "⚠️ 分析脚本执行失败: $(basename "$script")"
+                fi
             else
-                python3 "${SCRIPT_DIR}/$script" "$latest_csv"
+                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv"; then
+                    echo "⚠️ 分析脚本执行失败: $(basename "$script")"
+                fi
             fi
         else
             echo "⚠️ 分析脚本不存在: $script"
@@ -488,18 +582,11 @@ execute_performance_cliff_analysis() {
 generate_final_reports() {
     echo "📊 生成最终报告..."
     
-    # 查找最新的性能数据文件 - 修复文件名模式 (跨平台兼容)
-    local latest_csv
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        # macOS版本 - 使用stat命令
-        latest_csv=$(find "$LOGS_DIR" -name "unified_monitor_*.csv" -type f -exec stat -f "%m %N" {} \; 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
-    else
-        # Linux版本 - 使用printf
-        latest_csv=$(find "$LOGS_DIR" -name "unified_monitor_*.csv" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
-    fi
+    # 使用软链接获取最新的性能数据文件
+    local latest_csv="${LOGS_DIR}/performance_latest.csv"
     
-    if [[ -z "$latest_csv" ]]; then
-        echo "⚠️ 警告: 没有找到性能数据文件"
+    if [[ ! -f "$latest_csv" ]]; then
+        echo "⚠️ 警告: 没有找到性能数据文件: $latest_csv"
         return 1
     fi
     
@@ -521,7 +608,10 @@ generate_final_reports() {
     # 生成HTML报告
     if [[ -f "${SCRIPT_DIR}/visualization/report_generator.py" ]]; then
         echo "📄 生成HTML报告..."
-        python3 "${SCRIPT_DIR}/visualization/report_generator.py" "${report_params[@]}"
+        if ! python3 "${SCRIPT_DIR}/visualization/report_generator.py" "${report_params[@]}"; then
+            echo "❌ HTML报告生成失败"
+            return 1
+        fi
         echo "✅ HTML报告已生成"
     else
         echo "⚠️ HTML报告生成器不存在"
@@ -530,8 +620,11 @@ generate_final_reports() {
     # 生成性能图表
     if [[ -f "${SCRIPT_DIR}/visualization/performance_visualizer.py" ]]; then
         echo "📈 生成性能图表..."
-        python3 "${SCRIPT_DIR}/visualization/performance_visualizer.py" "${report_params[@]}"
-        echo "✅ 性能图表已生成"
+        if ! python3 "${SCRIPT_DIR}/visualization/performance_visualizer.py" "${report_params[@]}"; then
+            echo "⚠️ 性能图表生成失败"
+        else
+            echo "✅ 性能图表已生成"
+        fi
     else
         echo "⚠️ 性能图表生成器不存在"
     fi
@@ -539,8 +632,11 @@ generate_final_reports() {
     # 生成高级图表
     if [[ -f "${SCRIPT_DIR}/visualization/advanced_chart_generator.py" ]]; then
         echo "📊 生成高级图表..."
-        python3 "${SCRIPT_DIR}/visualization/advanced_chart_generator.py" "${report_params[@]}"
-        echo "✅ 高级图表已生成"
+        if ! python3 "${SCRIPT_DIR}/visualization/advanced_chart_generator.py" "${report_params[@]}"; then
+            echo "⚠️ 高级图表生成失败"
+        else
+            echo "✅ 高级图表已生成"
+        fi
     else
         echo "⚠️ 高级图表生成器不存在"
     fi
@@ -617,7 +713,7 @@ EOF
 
 - **详细瓶颈分析**: $QPS_STATUS_FILE
 - **瓶颈事件日志**: ${LOGS_DIR}/bottleneck_events.jsonl
-- **性能数据**: $(find "$LOGS_DIR" -name "unified_monitor_*.csv" | head -1)
+- **性能数据**: ${LOGS_DIR}/performance_latest.csv
 
 ## 🎯 下一步行动
 
@@ -769,11 +865,17 @@ main() {
     
     # 阶段6: 执行数据分析
     echo "📋 阶段6: 执行数据分析"
-    execute_data_analysis
+    if ! execute_data_analysis; then
+        echo "❌ 数据分析失败，测试终止"
+        exit 1
+    fi
     
     # 阶段7: 生成最终报告
     echo "📋 阶段7: 生成最终报告"
-    generate_final_reports
+    if ! generate_final_reports; then
+        echo "❌ 报告生成失败，测试终止"
+        exit 1
+    fi
     
     echo ""
     echo "🎉 区块链节点性能基准测试完成！"

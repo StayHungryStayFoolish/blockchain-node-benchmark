@@ -1275,8 +1275,8 @@ auto_performance_optimization_advisor() {
 
 }
 
-# 当前动态监控间隔（全局变量）
-CURRENT_MONITOR_INTERVAL=${MONITOR_INTERVAL}
+# 当前动态监控间隔（全局变量）- 使用EBS专用监控频率实现1秒精确采集
+CURRENT_MONITOR_INTERVAL=${EBS_MONITOR_RATE}
 
 # 系统负载评估函数
 assess_system_load() {
@@ -1950,7 +1950,7 @@ log_performance_data() {
     generate_json_metrics "$timestamp" "$cpu_data" "$memory_data" "$device_data" "$network_data" "$ena_data" "$overhead_data"
 }
 
-# 启动统一监控 - 修复：支持跟随QPS测试模式
+# 启动统一监控 - 支持跟随QPS测试模式
 start_unified_monitoring() {
     local duration="$1"
     local interval=${2:-$MONITOR_INTERVAL}
@@ -2076,7 +2076,12 @@ start_unified_monitoring() {
                 echo "📈 监控状态: 已收集 $sample_count 个样本，运行时间 ${elapsed}s，平均间隔 ${avg_interval}s (跟随QPS测试中)"
             fi
 
-            sleep "$CURRENT_MONITOR_INTERVAL"
+            # 等待至下次预定时间
+            local now=$(date +%s)
+            local next_run=$((start_time + sample_count * CURRENT_MONITOR_INTERVAL))
+            if (( now < next_run )); then
+                sleep $((next_run - now))
+            fi
         done
     else
         # 固定时长模式
@@ -2110,7 +2115,12 @@ start_unified_monitoring() {
                 echo "📈 监控状态: 已收集 $sample_count 个样本，进度 ${progress_percent}%，运行 ${elapsed}s，剩余 ${remaining}s，平均间隔 ${avg_interval}s"
             fi
 
-            sleep "$CURRENT_MONITOR_INTERVAL"
+            # 等待至下次预定时间
+            local now=$(date +%s)
+            local next_run=$((start_time + sample_count * CURRENT_MONITOR_INTERVAL))
+            if (( now < next_run )); then
+                sleep $((next_run - now))
+            fi
         done
     fi
 
@@ -2212,7 +2222,7 @@ main() {
         exit 1
     fi
 
-    # 解析参数 - 修复：添加跟随QPS测试模式
+    # 解析参数 - 添加跟随QPS测试模式
     local duration=0  # 0表示无限运行，由外部控制停止
     local interval=$MONITOR_INTERVAL
     local background=false
