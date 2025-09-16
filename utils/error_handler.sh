@@ -37,47 +37,6 @@ mkdir -p "$ERROR_LOG_DIR" 2>/dev/null || {
     echo "⚠️ 使用后备错误日志目录: $ERROR_LOG_DIR" >&2
 }
 
-# =====================================================================
-# 改进的错误处理函数
-# =====================================================================
-
-# 标准化错误处理函数
-handle_error_enhanced() {
-    local exit_code=$?
-    local line_number=${1:-"unknown"}
-    local script_name=${2:-$(basename "$0")}
-    local error_context=${3:-""}
-    
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local error_msg="[$timestamp] ERROR in $script_name:$line_number (exit_code: $exit_code)"
-    
-    if [[ -n "$error_context" ]]; then
-        error_msg="$error_msg - Context: $error_context"
-    fi
-    
-    # 输出到stderr和日志文件
-    echo "❌ $error_msg" >&2
-    log_info "$error_msg" 2>/dev/null || true
-    
-    # 调用清理函数（如果存在）
-    if declare -f cleanup_on_error >/dev/null; then
-        echo "🧹 执行错误清理..." >&2
-        cleanup_on_error || true
-    fi
-    
-    # 提供调试信息
-    if [[ "${DEBUG:-false}" == "true" ]]; then
-        echo "🔍 调试信息:" >&2
-        echo "  脚本: $script_name" >&2
-        echo "  行号: $line_number" >&2
-        echo "  退出码: $exit_code" >&2
-        echo "  时间: $timestamp" >&2
-        [[ -n "$error_context" ]] && echo "  上下文: $error_context" >&2
-    fi
-    
-    exit $exit_code
-}
-
 # 通用错误处理函数
 handle_framework_error() {
     local exit_code=$?

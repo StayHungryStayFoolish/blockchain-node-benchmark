@@ -6,123 +6,7 @@
 # =====================================================================
 
 # 检查 Slot 差异
-check_slot_diff() {
-    local slot_cache_file="$1"
-    local slot_diff_threshold="$2"
-    local slot_time_threshold="$3"
-    local slot_diff_start_time="$4"
-    
-    echo "Checking Slot difference..."
-    
-    # 检查缓存文件是否存在
-    if [[ ! -f "$slot_cache_file" ]]; then
-        echo "Warning: Slot monitor cache file not found"
-        return 0
-    fi
-    
-    # 读取缓存数据
-    local cache_data=$(cat "$slot_cache_file")
-    local slot_diff=$(echo "$cache_data" | jq -r '.slot_diff')
-    local timestamp=$(echo "$cache_data" | jq -r '.timestamp')
-    
-    # 检查 Slot 差异是否超过阈值
-    if [[ "$slot_diff" != "null" && $slot_diff -gt $slot_diff_threshold ]]; then
-        if [[ -z "$slot_diff_start_time" ]]; then
-            # 记录开始时间
-            slot_diff_start_time=$(date +"%Y-%m-%d %H:%M:%S")
-            echo "⚠️ WARNING: Slot difference ($slot_diff) exceeds threshold, starting timer at $slot_diff_start_time"
-            echo "$slot_diff_start_time"  # 返回开始时间
-            return 0
-        else
-            # 计算持续时间
-            local start_seconds=$(date -d "$slot_diff_start_time" +%s)
-            local current_seconds=$(date +%s)
-            local duration=$((current_seconds - start_seconds))
-            
-            if [[ $duration -gt $slot_time_threshold ]]; then
-                echo "🚨 CRITICAL: Slot difference ($slot_diff) has exceeded threshold for ${duration}s (> ${slot_time_threshold}s)"
-                echo "🚨 CRITICAL: Pausing QPS test until Slot difference is resolved"
-                return 1
-            else
-                echo "⚠️ WARNING: Slot difference ($slot_diff) exceeds threshold, but duration (${duration}s) is still within time threshold"
-                echo "$slot_diff_start_time"  # 返回开始时间
-                return 0
-            fi
-        fi
-    else
-        # 重置开始时间
-        echo ""  # 返回空字符串，表示重置开始时间
-        return 0
-    fi
-}
-
-# 等待 Slot 恢复
-wait_for_slot_recovery() {
-    local slot_cache_file="$1"
-    local slot_diff_threshold="$2"
-    
-    echo "Waiting for Slot difference to recover..."
-    
-    while true; do
-        if check_slot_recovery "$slot_cache_file" "$slot_diff_threshold"; then
-            echo "Slot difference recovered, resuming test"
-            return 0
-        fi
-        
-        echo "Still waiting for Slot recovery..."
-        sleep 30
-    done
-}
-
-# 检查 Slot 是否恢复
-check_slot_recovery() {
-    local slot_cache_file="$1"
-    local slot_diff_threshold="$2"
-    
-    # 读取缓存数据
-    if [[ ! -f "$slot_cache_file" ]]; then
-        echo "Warning: Slot monitor cache file not found"
-        return 1
-    fi
-    
-    local cache_data=$(cat "$slot_cache_file")
-    local slot_diff=$(echo "$cache_data" | jq -r '.slot_diff')
-    
-    if [[ "$slot_diff" != "null" && $slot_diff -le $slot_diff_threshold ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-# 更新 QPS 测试状态
-update_qps_status() {
-    local status_file="$1"
-    local status="$2"
-    local current_qps="$3"
-    local message="$4"
-    
-    # 创建状态 JSON
-    local status_json="{\"status\":\"$status\",\"current_qps\":$current_qps,\"message\":\"$message\",\"timestamp\":\"$(get_unified_timestamp)\"}"
-    
-    # 写入状态文件
-    echo "$status_json" > "$status_file"
-}
-
-# 检查测试状态
-check_qps_status() {
-    local status_file="$1"
-    
-    if [[ ! -f "$status_file" ]]; then
-        echo "No QPS test status found"
-        return 1
-    fi
-    
-    cat "$status_file"
-    return 0
-}
-
-# 缓冲数据写入（增强版，带错误处理）
+# 缓冲数据写入
 buffered_write() {
     local file="$1"
     local data="$2"
@@ -179,44 +63,6 @@ buffered_write() {
     fi
     
     return 0
-}
-
-# 刷新缓冲（增强版）
-flush_buffer() {
-    local file="$1"
-    local buffer_file="${file}.buffer"
-    
-    # 检查文件是否存在
-    if [[ ! -f "$file" ]]; then
-        echo "Warning: File $file does not exist, cannot flush buffer" >&2
-        return 1
-    fi
-    
-    # 刷新文件
-    sync "$file" 2>/dev/null || true
-    
-    # 重置缓冲计数
-    if [[ -f "$buffer_file" ]]; then
-        echo "0" > "$buffer_file" 2>/dev/null || true
-    fi
-    
-    return 0
-}
-
-# 获取统一时间戳（毫秒）
-get_unified_timestamp_ms() {
-    if command -v date >/dev/null 2>&1; then
-        # Linux/macOS兼容的毫秒时间戳
-        if [[ "$(uname -s)" == "Darwin" ]]; then
-            # macOS
-            echo $(($(date +%s) * 1000))
-        else
-            # Linux
-            date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000))
-        fi
-    else
-        echo $(($(date +%s) * 1000))
-    fi
 }
 
 # 获取带缓存的 Slot 数据
@@ -287,7 +133,7 @@ get_cached_slot_data() {
     fi
     
     # 创建新的缓存数据（带毫秒时间戳）
-    local timestamp_ms=$(get_unified_timestamp_ms)
+    local timestamp_ms=$(date +%s)000
     local new_data="{\"timestamp_ms\":$timestamp_ms,\"timestamp\":\"$(get_unified_timestamp)\",\"local_slot\":$local_slot,\"mainnet_slot\":$mainnet_slot,\"slot_diff\":$slot_diff,\"local_health\":\"$local_health\",\"mainnet_health\":\"$mainnet_health\",\"data_loss\":\"$data_loss\"}"
     
     # 更新缓存
