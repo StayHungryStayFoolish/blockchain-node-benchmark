@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================================
-# 统一监控器 - 消除重复监控，统一时间管理 (统一日志版本)
+# 统一监控器 - 统一时间管理 (统一日志版本)
 # =====================================================================
 # 单一监控入口，避免多个脚本重复调用 iostat/mpstat
 # 统一时间格式，支持完整的性能指标监控
@@ -87,10 +87,10 @@ init_command_cache() {
         "sar"       # 网络统计
         "ethtool"   # 网络接口统计
         "nproc"     # CPU核数
-        "sysctl"    # 系统参数(macOS)
+        "sysctl"    # 系统参数
         "df"        # 磁盘使用
         "top"       # 进程统计
-        "vm_stat"   # 内存统计(macOS)
+        "vm_stat"   # 内存统计
         "ps"        # 进程信息
         "pgrep"     # 进程查找
         "bc"        # 数学计算
@@ -139,7 +139,7 @@ get_cached_system_info() {
             log_debug "CPU核数获取方式: /proc/cpuinfo"
         elif is_command_available "sysctl"; then
             cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
-            log_debug "CPU核数获取方式: sysctl (macOS)"
+            log_debug "CPU核数获取方式: sysctl"
         else
             log_warn "无法获取CPU核数，使用默认值: 1"
         fi
@@ -158,7 +158,7 @@ get_cached_system_info() {
         elif is_command_available "sysctl"; then
             local memory_bytes=$(sysctl -n hw.memsize 2>/dev/null || echo "0")
             memory_gb=$(echo "scale=2; $memory_bytes / 1024 / 1024 / 1024" | bc 2>/dev/null || echo "0.00")
-            log_debug "内存大小获取方式: sysctl (macOS)"
+            log_debug "内存大小获取方式: sysctl"
         else
             log_warn "无法获取内存大小，使用默认值: 0.00GB"
         fi
@@ -703,7 +703,7 @@ get_system_dynamic_resources() {
             fi
         fi
     elif is_command_available "top"; then
-        # macOS/通用fallback
+        # 通用fallback
         cpu_usage=$(top -l 2 -n 0 2>/dev/null | grep "CPU usage" | tail -1 | awk '{print $3}' | sed 's/%//' || echo "0.0")
     fi
 
@@ -724,24 +724,7 @@ get_system_dynamic_resources() {
         fi
         local mem_used_kb=$((mem_total_kb - mem_available_kb))
         memory_usage=$(echo "scale=1; $mem_used_kb * 100 / $mem_total_kb" | bc 2>/dev/null || echo "0.0")
-    elif is_command_available "vm_stat"; then
-        # macOS
-        local vm_stat_output=$(vm_stat 2>/dev/null)
-        if [[ -n "$vm_stat_output" ]]; then
-            local page_size=4096
-            local pages_free=$(echo "$vm_stat_output" | grep "Pages free" | awk '{print $3}' | sed 's/\.//')
-            local pages_active=$(echo "$vm_stat_output" | grep "Pages active" | awk '{print $3}' | sed 's/\.//')
-            local pages_inactive=$(echo "$vm_stat_output" | grep "Pages inactive" | awk '{print $3}' | sed 's/\.//')
-            local pages_speculative=$(echo "$vm_stat_output" | grep "Pages speculative" | awk '{print $3}' | sed 's/\.//')
-            local pages_wired=$(echo "$vm_stat_output" | grep "Pages wired down" | awk '{print $4}' | sed 's/\.//')
 
-            local total_pages=$((pages_free + pages_active + pages_inactive + pages_speculative + pages_wired))
-            local used_pages=$((pages_active + pages_inactive + pages_speculative + pages_wired))
-
-            if [[ $total_pages -gt 0 ]]; then
-                memory_usage=$(echo "scale=1; $used_pages * 100 / $total_pages" | bc 2>/dev/null || echo "0.0")
-            fi
-        fi
     fi
 
     # 获取磁盘使用率 (根分区)
@@ -804,7 +787,7 @@ calculate_process_resources() {
             # Linux格式
             proc_stats=$(ps -p $pids -o %cpu,%mem,rss --no-headers 2>/dev/null)
         else
-            # macOS/BSD格式
+            # BSD格式
             proc_stats=$(ps -p $pids -o pcpu,pmem,rss 2>/dev/null | tail -n +2)
         fi
 
@@ -1296,19 +1279,7 @@ assess_system_load() {
         if [[ -n "$mem_total" && -n "$mem_available" ]]; then
             memory_usage=$(echo "scale=1; ($mem_total - $mem_available) * 100 / $mem_total" | bc -l 2>/dev/null || echo "0.0")
         fi
-    elif is_command_available "vm_stat"; then
-        # macOS系统
-        local vm_stat_output=$(vm_stat)
-        local pages_free=$(echo "$vm_stat_output" | grep "Pages free" | awk '{print $3}' | sed 's/\.//')
-        local pages_active=$(echo "$vm_stat_output" | grep "Pages active" | awk '{print $3}' | sed 's/\.//')
-        local pages_inactive=$(echo "$vm_stat_output" | grep "Pages inactive" | awk '{print $3}' | sed 's/\.//')
-        local pages_wired=$(echo "$vm_stat_output" | grep "Pages wired down" | awk '{print $4}' | sed 's/\.//')
 
-        if [[ -n "$pages_free" && -n "$pages_active" && -n "$pages_inactive" && -n "$pages_wired" ]]; then
-            local total_pages=$((pages_free + pages_active + pages_inactive + pages_wired))
-            local used_pages=$((pages_active + pages_inactive + pages_wired))
-            memory_usage=$(echo "scale=1; $used_pages * 100 / $total_pages" | bc -l 2>/dev/null || echo "0.0")
-        fi
     fi
 
     # 获取系统负载平均值

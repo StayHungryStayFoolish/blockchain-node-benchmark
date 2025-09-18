@@ -27,7 +27,7 @@ readonly LOG_LEVEL_WARN=2
 readonly LOG_LEVEL_ERROR=3
 readonly LOG_LEVEL_FATAL=4
 
-# 日志级别名称映射 (兼容macOS)
+# 日志级别名称映射
 LOG_LEVEL_NAMES_0="DEBUG"
 LOG_LEVEL_NAMES_1="INFO"
 LOG_LEVEL_NAMES_2="WARN"
@@ -44,7 +44,7 @@ readonly COLOR_PURPLE='\033[0;35m'
 readonly COLOR_CYAN='\033[0;36m'
 readonly COLOR_WHITE='\033[0;37m'
 
-# 日志级别颜色映射 (兼容macOS)
+# 日志级别颜色映射
 LOG_LEVEL_COLORS_0="\033[0;36m"    # 青色 - DEBUG
 LOG_LEVEL_COLORS_1="\033[0;32m"    # 绿色 - INFO
 LOG_LEVEL_COLORS_2="\033[0;33m"    # 黄色 - WARN

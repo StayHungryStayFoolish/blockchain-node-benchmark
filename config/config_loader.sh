@@ -173,11 +173,7 @@ detect_network_interface() {
     
     # 如果仍然没有找到，使用系统默认
     if [[ -z "$interface" ]]; then
-        case "$(uname -s)" in
-            "Darwin") interface="en0" ;;  # macOS默认
-            "Linux") interface="eth0" ;;   # Linux默认
-            *) interface="eth0" ;;         # 其他系统默认
-        esac
+        interface="eth0"  # Linux默认
     fi
     
     NETWORK_INTERFACE="$interface"
@@ -197,17 +193,10 @@ detect_deployment_paths() {
     echo "   部署目录: $deployment_dir" >&2
     
     # 设置内存共享目录 (独立于数据目录，保持系统级路径)
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        # macOS 开发环境
-        BASE_MEMORY_DIR="${TMPDIR:-/tmp}/blockchain-node-benchmark"
-        DEPLOYMENT_ENV="development"
-        echo "🔧 检测到开发环境 (macOS)" >&2
-    else
-        # Linux 生产环境 - 使用系统 tmpfs
-        BASE_MEMORY_DIR="/dev/shm/blockchain-node-benchmark"
-        DEPLOYMENT_ENV="production"
-        echo "🐧 检测到Linux生产环境" >&2
-    fi
+    # Linux 生产环境 - 使用系统 tmpfs
+    BASE_MEMORY_DIR="/dev/shm/blockchain-node-benchmark"
+    DEPLOYMENT_ENV="production"
+    echo "🐧 Linux生产环境" >&2
     
     # 标准化路径配置
     BASE_FRAMEWORK_DIR="$framework_dir"
