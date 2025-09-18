@@ -1942,54 +1942,51 @@ class ReportGenerator:
         
         return table_html
 
-    def _analyze_slot_performance(self, df, slot_fields):
-        """分析Slot数据处理性能 - 用于账户地址生成等核心功能"""
-        if not slot_fields:
-            return """
-            <div class="info">
-                <p>未找到Slot相关数据字段。</p>
-            </div>
-            """
+    def _analyze_block_height_performance(self, df, block_height_fields):
+        """分析区块高度性能数据"""
+        if not block_height_fields or df.empty:
+            return "<div class='info-card'><h4>区块高度监控</h4><p>暂无区块高度数据</p></div>"
         
         try:
-            slot_stats = {}
-            for field in slot_fields[:3]:
+            analysis_cards = []
+            
+            for field in block_height_fields:
                 if field in df.columns:
-                    data = df[field].dropna()
-                    if len(data) > 0:
-                        slot_stats[field] = {
-                            'current': data.iloc[-1],
-                            'avg': data.mean(),
-                            'max': data.max(),
-                            'min': data.min()
-                        }
+                    # 过滤非数值数据
+                    numeric_data = pd.to_numeric(df[field], errors='coerce').dropna()
+                    if not numeric_data.empty:
+                        current_val = numeric_data.iloc[-1] if len(numeric_data) > 0 else 0
+                        avg_val = numeric_data.mean()
+                        min_val = numeric_data.min()
+                        max_val = numeric_data.max()
+                        
+                        # 格式化字段名
+                        display_name = field.replace('_', ' ').title()
+                        
+                        card_html = f"""
+                        <div class="info-card">
+                            <h4>{display_name}</h4>
+                            <div style="font-size: 1.2em; font-weight: bold;">Current: {current_val}</div>
+                            <div>Average: {avg_val:.2f}</div>
+                            <div>Range: {min_val} - {max_val}</div>
+                        </div>
+                        """
+                        analysis_cards.append(card_html)
             
-            if not slot_stats:
-                return "<p>Slot数据为空或无效</p>"
-            
-            stats_html = '<div class="info-grid">'
-            for field, stats in slot_stats.items():
-                stats_html += f"""
-                <div class="info-card">
-                    <h4>{field.replace('_', ' ').title()}</h4>
-                    <div style="font-size: 1.2em; font-weight: bold;">Current: {stats['current']}</div>
-                    <div>Average: {stats['avg']:.2f}</div>
-                    <div>Range: {stats['min']:.0f} - {stats['max']:.0f}</div>
-                </div>
-                """
-            stats_html += '</div>'
-            return stats_html
-            
+            if analysis_cards:
+                return f'<div class="info-grid">{"".join(analysis_cards)}</div>'
+            else:
+                return "<div class='info-card'><h4>区块高度监控</h4><p>无有效的数值数据</p></div>"
+                
         except Exception as e:
-            return f"<p>Slot analysis failed: {str(e)[:50]}</p>"
-    
-
-
-
+            return f"<div class='error'>区块高度分析失败: {str(e)}</div>"
 
     def _generate_html_content(self, df):
         """生成HTML内容 + 瓶颈信息展示 + 图片引用"""
         try:
+            # 识别block_height相关字段
+            block_height_fields = [col for col in df.columns if 'block_height' in col.lower() or 'height' in col.lower()]
+            
             # 生成各个部分 - 使用实际存在的方法
             ebs_analysis = self._generate_ebs_baseline_analysis_section(df)
             ebs_bottleneck_analysis = self._generate_ebs_bottleneck_section()  # 新增EBS瓶颈根因分析
@@ -1998,6 +1995,9 @@ class ReportGenerator:
             production_resource_planning = self._generate_production_resource_planning_section()  # 生产环境资源规划
             ena_warnings = self._generate_ena_warnings_section(df)  # 新增ENA警告
             ena_data_table = self._generate_ena_data_table(df)     # 新增ENA数据表
+            
+            # 新增：区块高度性能分析
+            block_height_analysis = self._analyze_block_height_performance(df, block_height_fields)
 
             correlation_table = self._generate_cpu_ebs_correlation_table(df)
             overhead_table = self._generate_overhead_data_table()
@@ -2034,6 +2034,7 @@ class ReportGenerator:
                     
                     {bottleneck_section}
                     {performance_summary}
+                    {block_height_analysis}
                     {ebs_analysis_section}
                     {charts_section}
                     {monitoring_overhead_analysis}

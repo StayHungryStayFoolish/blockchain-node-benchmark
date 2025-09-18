@@ -29,7 +29,7 @@ fi
 # 用户仍可通过 'start iostat' 命令启动，但会自动重定向到unified_monitor.sh
 declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
-    ["slot"]="slot_monitor.sh"
+    ["block_height"]="block_height_monitor.sh"
     ["ena_network"]="ena_network_monitor.sh"
     ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
     ["iostat"]="iostat_collector.sh"  # 通过unified_monitor.sh管理
@@ -103,7 +103,7 @@ start_monitor() {
             # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
             (cd "${script_dir}" && ./"${script_name}" -i "$MONITOR_INTERVAL") &
             ;;
-        "slot")
+        "block_height")
             # QPS测试模式：不传递duration，无限运行
             # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
             (cd "${script_dir}" && ./"${script_name}" -b) &
@@ -201,7 +201,7 @@ start_all_monitors() {
     echo "🚀 启动所有监控任务 (监控间隔: ${MONITOR_INTERVAL}秒)"
     
     # 按优先级启动监控任务 - 启动所有必要的监控脚本
-    local monitors_to_start=("unified" "ena_network" "slot" "ebs_bottleneck")
+    local monitors_to_start=("unified" "ena_network" "block_height" "ebs_bottleneck")
     
     for monitor in "${monitors_to_start[@]}"; do
         start_monitor "$monitor"
@@ -479,7 +479,7 @@ main() {
             init_coordinator
             echo "[START] Starting all monitoring tasks (QPS test mode)"
             start_monitor "unified" "${2:-follow_qps_test}"
-            start_monitor "slot" "${2:-follow_qps_test}"
+            start_monitor "block_height" "${2:-follow_qps_test}"
             start_monitor "bottleneck" "${2:-follow_qps_test}"
             echo "[OK] All monitoring tasks started"
             ;;

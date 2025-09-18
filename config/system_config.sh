@@ -76,7 +76,7 @@ MONITORING_PROCESS_NAMES=(
     "unified_monitor"
     "bottleneck_detector"
     "ena_network_monitor"
-    "slot_monitor"
+    "block_height_monitor"
     "performance_visualizer"
     "overhead_monitor"
     "adaptive_frequency"

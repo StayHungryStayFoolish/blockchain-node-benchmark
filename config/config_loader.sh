@@ -12,8 +12,6 @@
 # ----- 基础配置 -----
 # Blockchain Node Local RPC Endpoint
 LOCAL_RPC_URL="${LOCAL_RPC_URL:-http://localhost:8899}"
-# Mainnet RPC Endpoint
-MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
 
 # ----- 区块链节点配置 -----
 BLOCKCHAIN_NODE="${BLOCKCHAIN_NODE:-solana}"
@@ -254,8 +252,8 @@ detect_deployment_paths() {
     MEMORY_SHARE_DIR="${BASE_MEMORY_DIR}"
     
     # 设置动态路径变量
-    SLOT_CACHE_FILE="${MEMORY_SHARE_DIR}/slot_monitor_cache.json"
-    SLOT_DATA_FILE="${LOGS_DIR}/slot_monitor_$(date +%Y%m%d_%H%M%S).csv"
+    BLOCK_HEIGHT_CACHE_FILE="${MEMORY_SHARE_DIR}/block_height_monitor_cache.json"
+    BLOCK_HEIGHT_DATA_FILE="${LOGS_DIR}/block_height_monitor_$(date +%Y%m%d_%H%M%S).csv"
     ACCOUNTS_OUTPUT_FILE="${TMP_DIR}/${ACCOUNT_OUTPUT_FILE}"
     SINGLE_METHOD_TARGETS_FILE="${TMP_DIR}/targets_single.json"
     MIXED_METHOD_TARGETS_FILE="${TMP_DIR}/targets_mixed.json"
@@ -344,6 +342,39 @@ create_directories_safely "$DATA_DIR" "$CURRENT_TEST_DIR" "$LOGS_DIR" "$REPORTS_
 # =====================================================================
 # 统一区块链配置 - 集成所有8个区块链的完整配置
 # =====================================================================
+# ----- 多链主网端点动态配置 -----
+# 根据BLOCKCHAIN_NODE动态设置MAINNET_RPC_URL
+case "${BLOCKCHAIN_NODE,,}" in
+    solana)
+        MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
+        ;;
+    ethereum)
+        MAINNET_RPC_URL="https://eth.llamarpc.com"
+        ;;
+    bsc)
+        MAINNET_RPC_URL="https://bsc-dataseed.bnbchain.org"
+        ;;
+    base)
+        MAINNET_RPC_URL="https://mainnet.base.org"
+        ;;
+    polygon)
+        MAINNET_RPC_URL="https://polygon-rpc.com"
+        ;;
+    scroll)
+        MAINNET_RPC_URL="https://rpc.scroll.io"
+        ;;
+    starknet)
+        MAINNET_RPC_URL="https://starknet-mainnet.public.blastapi.io"
+        ;;
+    sui)
+        MAINNET_RPC_URL="https://fullnode.mainnet.sui.io:443"
+        ;;
+    *)
+        echo "⚠️ 警告: 未知的区块链类型 '${BLOCKCHAIN_NODE}'，使用默认Solana端点" >&2
+        MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
+        ;;
+esac
+
 UNIFIED_BLOCKCHAIN_CONFIG=$(cat <<'EOF'
 {
   "blockchains": {
@@ -812,7 +843,7 @@ export CURRENT_RPC_METHODS_STRING
 
 export DATA_DIR CURRENT_TEST_DIR LOGS_DIR REPORTS_DIR VEGETA_RESULTS_DIR TMP_DIR ARCHIVES_DIR
 export ERROR_LOG_DIR PYTHON_ERROR_LOG_DIR MEMORY_SHARE_DIR
-export SLOT_CACHE_FILE SLOT_DATA_FILE QPS_STATUS_FILE TEST_SESSION_DIR
+export BLOCK_HEIGHT_CACHE_FILE BLOCK_HEIGHT_DATA_FILE QPS_STATUS_FILE TEST_SESSION_DIR
 export MONITORING_OVERHEAD_LOG PERFORMANCE_LOG ERROR_LOG TEMP_FILE_PATTERN
 
 export NETWORK_MAX_BANDWIDTH_MBPS DEPLOYMENT_PLATFORM ENA_MONITOR_ENABLED

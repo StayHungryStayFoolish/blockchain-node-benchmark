@@ -33,8 +33,8 @@ init_event_manager() {
 
 # 记录异常事件开始
 record_event_start() {
-    local event_type="$1"      # slot_diff, cpu_high, ebs_bottleneck, etc.
-    local event_source="$2"    # slot_monitor, unified_monitor, bottleneck_detector
+    local event_type="$1"      # block_height_diff, cpu_high, ebs_bottleneck, etc.
+    local event_source="$2"    # block_height_monitor, unified_monitor, bottleneck_detector
     local event_details="$3"   # 详细信息
     local current_qps="${4:-0}" # 当前QPS (如果适用)
     
@@ -256,7 +256,7 @@ main() {
             echo "  help                     显示帮助"
             echo ""
             echo "事件类型:"
-            echo "  slot_diff                Slot差异异常"
+            echo "  block_height_diff        区块高度差异异常"
             echo "  cpu_high                 CPU使用率过高"
             echo "  memory_high              内存使用率过高"
             echo "  ebs_bottleneck           EBS性能瓶颈"

@@ -979,11 +979,6 @@ get_monitoring_overhead_legacy() {
     echo "$real_iops,$real_throughput"
 }
 
-
-
-# 系统动态资源收集器
-
-
 # 区块链节点资源统计
 get_blockchain_node_resources() {
     # 使用新的进程发现引擎获取区块链进程
@@ -1440,7 +1435,7 @@ recover_process_discovery() {
     # 检查进程名配置 - 使用标准化数组访问方式
     if [[ -z "$MONITORING_PROCESS_NAMES_STR" ]]; then
         log_warn "监控进程名配置为空，使用默认配置"
-        export MONITORING_PROCESS_NAMES_STR="iostat mpstat sar vmstat netstat unified_monitor bottleneck_detector ena_network_monitor slot_monitor performance_visualizer overhead_monitor adaptive_frequency error_recovery report_generator"
+        export MONITORING_PROCESS_NAMES_STR="iostat mpstat sar vmstat netstat unified_monitor bottleneck_detector ena_network_monitor block_height_monitor performance_visualizer overhead_monitor adaptive_frequency error_recovery report_generator"
     fi
 
     # 检查pgrep命令是否可用
@@ -1808,13 +1803,14 @@ generate_csv_header() {
     local device_header=$(generate_all_devices_header)
     local network_header="net_interface,net_rx_mbps,net_tx_mbps,net_total_mbps,net_rx_gbps,net_tx_gbps,net_total_gbps,net_rx_pps,net_tx_pps,net_total_pps"
     local overhead_header="monitoring_iops_per_sec,monitoring_throughput_mibs_per_sec"
+    local block_height_header="local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss"
 
     # 配置驱动的ENA表头生成
     if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
         local ena_header=$(build_ena_header)
-        echo "$basic_header,$device_header,$network_header,$ena_header,$overhead_header"
+        echo "$basic_header,$device_header,$network_header,$ena_header,$overhead_header,$block_height_header"
     else
-        echo "$basic_header,$device_header,$network_header,$overhead_header"
+        echo "$basic_header,$device_header,$network_header,$overhead_header,$block_height_header"
     fi
 }
 
@@ -1897,13 +1893,28 @@ log_performance_data() {
     local network_data=$(get_network_data)
     local overhead_data=$(get_monitoring_overhead)
 
+    # 获取区块高度数据 (如果启用了block_height监控)
+    local block_height_data=""
+    if [[ -n "$BLOCK_HEIGHT_DATA_FILE" && -f "$BLOCK_HEIGHT_DATA_FILE" ]]; then
+        # 读取最新的block_height数据
+        local latest_block_data=$(tail -1 "$BLOCK_HEIGHT_DATA_FILE" 2>/dev/null)
+        if [[ -n "$latest_block_data" && "$latest_block_data" != *"timestamp"* ]]; then
+            # 提取block_height相关字段 (跳过timestamp)
+            block_height_data=$(echo "$latest_block_data" | cut -d',' -f2-7)
+        else
+            block_height_data="N/A,N/A,N/A,healthy,healthy,false"
+        fi
+    else
+        block_height_data="N/A,N/A,N/A,healthy,healthy,false"
+    fi
+
     # 条件性添加ENA数据
     local ena_data=""
     if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
         ena_data=$(get_ena_allowance_data)
-        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data"
+        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data,$block_height_data"
     else
-        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data"
+        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data,$block_height_data"
     fi
 
     # 如果CSV文件不存在或为空，先写入头部

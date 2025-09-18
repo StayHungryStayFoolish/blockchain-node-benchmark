@@ -31,15 +31,15 @@ class RpcAnalysisConfig:
     SIGMA_MULTIPLIER = 2  # 标准差倍数
     
     # 同步分析配置
-    SLOT_SYNC_THRESHOLD = 20  # Slot同步偏移阈值
+    BLOCK_HEIGHT_SYNC_THRESHOLD = 20  # 区块高度同步偏移阈值
     
     # 性能悬崖检测配置
     CLIFF_THRESHOLD_ABSOLUTE = 10  # 绝对延迟增长阈值(ms)
     CLIFF_THRESHOLD_PERCENTAGE = 50  # 相对延迟增长阈值(%)
     
     # 瓶颈分类配置
-    HIGH_CPU_THRESHOLD = 85  # 高CPU使用率阈值(%)
-    HIGH_MEMORY_THRESHOLD = 90  # 高内存使用率阈值(%)
+    HIGH_CPU_THRESHOLD = int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85))     # 高CPU使用率阈值(%)
+    HIGH_MEMORY_THRESHOLD = int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))       # 高内存使用率阈值(%)
     LOW_CPU_THRESHOLD = 30  # 低CPU使用率阈值(%)
     HIGH_LATENCY_THRESHOLD = 50  # 高延迟阈值(ms)
     VERY_HIGH_LATENCY_THRESHOLD = 100  # 极高延迟阈值(ms)
@@ -118,7 +118,7 @@ class RpcDeepAnalyzer:
         analysis_results = {
             'latency_trend': self._analyze_latency_trends(numeric_df),
             'anomaly_detection': self._detect_latency_anomalies(numeric_df),
-            'slot_sync_analysis': self._analyze_slot_synchronization(numeric_df),
+            'block_height_sync_analysis': self._analyze_block_height_synchronization(numeric_df),
             'correlation_analysis': self._analyze_qps_latency_correlation(numeric_df),
             'performance_cliff': self._detect_performance_cliff(numeric_df),
             'bottleneck_classification': self._classify_bottleneck_type(numeric_df)
@@ -231,40 +231,40 @@ class RpcDeepAnalyzer:
 
         return anomaly_analysis
 
-    def _analyze_slot_synchronization(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """分析Slot同步状态"""
-        slot_analysis = {
+    def _analyze_block_height_synchronization(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """分析区块高度同步状态"""
+        block_height_analysis = {
             'sync_data_available': False,
             'sync_issues_count': 0,
-            'avg_slot_offset': 0,
-            'max_slot_offset': 0,
+            'avg_block_height_offset': 0,
+            'max_block_height_offset': 0,
             'sync_issues_samples': []
         }
 
-        # 处理slot_diff数据
-        if 'slot_diff' in df.columns:
-            slot_data = df[df['slot_diff'] != 'N/A'].copy()
+        # 处理block_height_diff数据
+        if 'block_height_diff' in df.columns:
+            block_height_data = df[df['block_height_diff'] != 'N/A'].copy()
 
-            if len(slot_data) > 0:
-                slot_data['slot_diff_numeric'] = pd.to_numeric(slot_data['slot_diff'], errors='coerce')
-                slot_data = slot_data.dropna(subset=['slot_diff_numeric'])
+            if len(block_height_data) > 0:
+                block_height_data['block_height_diff_numeric'] = pd.to_numeric(block_height_data['block_height_diff'], errors='coerce')
+                block_height_data = block_height_data.dropna(subset=['block_height_diff_numeric'])
 
-                if len(slot_data) > 0:
-                    slot_analysis['sync_data_available'] = True
-                    slot_analysis['avg_slot_offset'] = slot_data['slot_diff_numeric'].mean()
-                    slot_analysis['max_slot_offset'] = slot_data['slot_diff_numeric'].max()
+                if len(block_height_data) > 0:
+                    block_height_analysis['sync_data_available'] = True
+                    block_height_analysis['avg_block_height_offset'] = block_height_data['block_height_diff_numeric'].mean()
+                    block_height_analysis['max_block_height_offset'] = block_height_data['block_height_diff_numeric'].max()
 
                     # 检查同步问题（偏移 > 配置阈值）
-                    sync_issues = slot_data[slot_data['slot_diff_numeric'] > self.config.SLOT_SYNC_THRESHOLD]
-                    slot_analysis['sync_issues_count'] = len(sync_issues)
+                    sync_issues = block_height_data[block_height_data['block_height_diff_numeric'] > self.config.BLOCK_HEIGHT_SYNC_THRESHOLD]
+                    block_height_analysis['sync_issues_count'] = len(sync_issues)
 
                     if len(sync_issues) > 0:
-                        slot_analysis['sync_issues_samples'] = sync_issues[
-                            ['current_qps', 'slot_diff_numeric', 'rpc_latency_ms']
+                        block_height_analysis['sync_issues_samples'] = sync_issues[
+                            ['current_qps', 'block_height_diff_numeric', 'rpc_latency_ms']
                         ].to_dict('records')
-                        print(f"\n⚠️  Found {len(sync_issues)} sync delay samples (Slot offset >{self.config.SLOT_SYNC_THRESHOLD}):")
+                        print(f"\n⚠️  Found {len(sync_issues)} sync delay samples (Block height offset >{self.config.BLOCK_HEIGHT_SYNC_THRESHOLD}):")
 
-        return slot_analysis
+        return block_height_analysis
 
     def _analyze_qps_latency_correlation(self, df: pd.DataFrame) -> Dict[str, Any]:
         """分析QPS与延迟的相关性"""
