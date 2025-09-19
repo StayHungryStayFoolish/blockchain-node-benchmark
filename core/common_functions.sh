@@ -6,8 +6,8 @@
 # =====================================================================
 
 # 加载系统配置以获取时间戳函数
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/../config/system_config.sh" 2>/dev/null || {
+LOCAL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${LOCAL_SCRIPT_DIR}/../config/system_config.sh" 2>/dev/null || {
     # 如果无法加载系统配置，提供备用时间戳函数
     get_unified_timestamp() {
         date +"%Y-%m-%d %H:%M:%S"

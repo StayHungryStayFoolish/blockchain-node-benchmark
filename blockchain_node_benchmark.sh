@@ -64,8 +64,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 加载配置和共享函数
 source "${SCRIPT_DIR}/config/config_loader.sh"
-source "${SCRIPT_DIR}/core/common_functions.sh"
 source "${SCRIPT_DIR}/utils/error_handler.sh"
+source "${SCRIPT_DIR}/core/common_functions.sh"
 
 # 设置错误处理
 setup_error_handling "$(basename "$0")" "区块链节点基准测试框架"
