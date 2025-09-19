@@ -301,7 +301,7 @@ check_node_health() {
     
     # 检查缓存文件是否存在且是最近的（60秒内）
     if [[ -f "$health_cache_file" ]]; then
-        local cache_age=$(($(date +%s) - $(stat -f %m "$health_cache_file" 2>/dev/null || echo 0)))
+        local cache_age=$(($(date +%s) - $(stat -c %Y "$health_cache_file" 2>/dev/null || echo 0)))
         if [[ $cache_age -lt 60 ]]; then
             # 使用缓存的健康状态
             cat "$health_cache_file" 2>/dev/null || echo "unhealthy"

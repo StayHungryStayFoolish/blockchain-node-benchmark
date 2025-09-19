@@ -236,7 +236,7 @@ check_log_rotation() {
     fi
     
     # 检查文件大小
-    local file_size=$(stat -f%z "$log_file" 2>/dev/null || stat -c%s "$log_file" 2>/dev/null || echo "0")
+    local file_size=$(stat -c%s "$log_file" 2>/dev/null || echo "0")
     local max_size_bytes=$(convert_size_to_bytes "$DEFAULT_MAX_LOG_SIZE")
     
     if [[ $file_size -gt $max_size_bytes ]]; then

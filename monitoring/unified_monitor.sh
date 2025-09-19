@@ -312,11 +312,6 @@ init_monitoring() {
         return 1
     fi
 
-    # 验证配置
-    if ! validate_config; then
-        return 1
-    fi
-
     # 验证设备
     if ! validate_devices; then
         return 1
