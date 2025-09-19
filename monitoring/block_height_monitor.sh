@@ -9,7 +9,7 @@
 # 安全加载配置文件，避免readonly变量冲突
 if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
     echo "警告: 配置文件加载失败，使用默认配置"
-    MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
+    BLOCK_HEIGHT_MONITOR_RATE=${BLOCK_HEIGHT_MONITOR_RATE:-1}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 
@@ -61,8 +61,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -h, --help                 Show this help message"
-    echo "  -i, --interval SECONDS     Set monitoring interval (default: ${BLOCK_HEIGHT_MONITOR_INTERVAL}s)"
-    echo "  -d, --duration SECONDS     Set monitoring duration (for standalone use)"
+    echo "  -r, --rate RATE            Set monitoring rate (times per second, default: ${BLOCK_HEIGHT_MONITOR_RATE})"
     echo "  --diff BLOCKS              Set block height difference threshold (default: ${BLOCK_HEIGHT_DIFF_THRESHOLD})"
     echo "  -t, --time SECONDS         Set time difference threshold (default: ${BLOCK_HEIGHT_TIME_THRESHOLD}s)"
     echo "  -o, --output FILE          Set output file (default: ${BLOCK_HEIGHT_DATA_FILE})"
@@ -81,12 +80,8 @@ parse_args() {
                 show_help
                 exit 0
                 ;;
-            -i|--interval)
-                BLOCK_HEIGHT_MONITOR_INTERVAL="$2"
-                shift 2
-                ;;
-            -d|--duration)
-                BLOCK_HEIGHT_MONITOR_DURATION="$2"
+            -r|--rate)
+                BLOCK_HEIGHT_MONITOR_RATE="$2"
                 shift 2
                 ;;
             --diff)
@@ -359,7 +354,7 @@ stop_monitor() {
 # 启动监控
 start_monitoring() {
     echo "Starting Block Height monitor..."
-    echo "Monitoring interval: ${BLOCK_HEIGHT_MONITOR_INTERVAL}s"
+    echo "Monitoring rate: ${BLOCK_HEIGHT_MONITOR_RATE}/s"
     echo "Block height difference threshold: ${BLOCK_HEIGHT_DIFF_THRESHOLD}"
     echo "Block height time difference threshold: ${BLOCK_HEIGHT_TIME_THRESHOLD}s"
     echo "Output file: $BLOCK_HEIGHT_DATA_FILE"
@@ -375,52 +370,36 @@ start_monitoring() {
     # 写入 CSV 头
     echo "timestamp,local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss" > "$BLOCK_HEIGHT_DATA_FILE"
     
-    # 如果是后台模式，启动后台进程
+    # 统一的监控循环 - 跟随框架生命周期
     if [[ "$BACKGROUND" == "true" ]]; then
         (
             # 在后台进程中设置信号处理
             trap 'cleanup_and_exit' SIGTERM SIGINT SIGQUIT EXIT
             
-            # 检查是否有duration参数（单独运行模式）
-            if [[ -n "$BLOCK_HEIGHT_MONITOR_DURATION" ]]; then
-                local start_time=$(date +%s)
-                local end_time=$((start_time + BLOCK_HEIGHT_MONITOR_DURATION))
-                
-                while [[ $(date +%s) -lt $end_time ]]; do
-                    monitor_block_height_diff
-                    sleep "$BLOCK_HEIGHT_MONITOR_INTERVAL"
-                done
-            else
-                # QPS测试模式：无限运行
-                while true; do
-                    monitor_block_height_diff
-                    sleep "$BLOCK_HEIGHT_MONITOR_INTERVAL"
-                done
-            fi
+            # 频率转换：计算sleep间隔
+            local sleep_interval=$(echo "scale=3; 1/$BLOCK_HEIGHT_MONITOR_RATE" | bc 2>/dev/null || echo "1")
+            
+            # 跟随框架生命周期
+            while [[ -f "$TMP_DIR/qps_test_status" ]]; do
+                monitor_block_height_diff
+                sleep "$sleep_interval"
+            done
         ) &
         MONITOR_PID=$!
         echo "Monitor started in background with PID: $MONITOR_PID"
         echo "$MONITOR_PID" > "${TMP_DIR}/block_height_monitor.pid"
     else
-        # 前台模式 - 设置信号处理
+        # 前台模式（保留用于调试）
         trap 'cleanup_and_exit' SIGTERM SIGINT SIGQUIT
         
-        # 检查是否有duration参数（单独运行模式）
-        if [[ -n "$BLOCK_HEIGHT_MONITOR_DURATION" ]]; then
-            local start_time=$(date +%s)
-            local end_time=$((start_time + BLOCK_HEIGHT_MONITOR_DURATION))
-            
-            while [[ $(date +%s) -lt $end_time ]]; do
-                monitor_block_height_diff
-                sleep "$BLOCK_HEIGHT_MONITOR_INTERVAL"
-            done
-        else
-            # QPS测试模式：无限运行
-            while true; do
-                monitor_block_height_diff
-                sleep "$BLOCK_HEIGHT_MONITOR_INTERVAL"
-            done
-        fi
+        # 频率转换：计算sleep间隔
+        local sleep_interval=$(echo "scale=3; 1/$BLOCK_HEIGHT_MONITOR_RATE" | bc 2>/dev/null || echo "1")
+        
+        # 跟随框架生命周期
+        while [[ -f "$TMP_DIR/qps_test_status" ]]; do
+            monitor_block_height_diff
+            sleep "$sleep_interval"
+        done
     fi
 }
 

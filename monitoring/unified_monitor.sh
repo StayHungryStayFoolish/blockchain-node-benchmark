@@ -1248,8 +1248,8 @@ auto_performance_optimization_advisor() {
 
 }
 
-# 当前动态监控间隔（全局变量）- 使用EBS专用监控频率实现1秒精确采集
-CURRENT_MONITOR_INTERVAL=${EBS_MONITOR_RATE}
+# 当前动态监控间隔（全局变量）- 使用通用监控间隔，EBS 专用监控使用 EBS_MONITOR_RATE 通过iostat后台高频采集
+CURRENT_MONITOR_INTERVAL=${MONITOR_INTERVAL}
 
 # 系统负载评估函数
 assess_system_load() {
@@ -1567,9 +1567,6 @@ safe_execute() {
     fi
 }
 
-# 生成健康修复建议
-
-
 # 获取当前进程资源使用（用于性能监控）
 get_current_process_resources() {
     local pid=${1:-$$}
@@ -1744,9 +1741,6 @@ validate_monitoring_overhead_config() {
     log_debug "监控开销配置验证通过"
     return 0
 }
-
-
-
 
 # 动态生成ENA表头 - 基于ENA_ALLOWANCE_FIELDS配置
 build_ena_header() {
@@ -1931,7 +1925,6 @@ log_performance_data() {
 start_unified_monitoring() {
     local duration="$1"
     local interval=${2:-$MONITOR_INTERVAL}
-    local follow_qps_test="${3:-false}"
 
     # =====================================================================
     # 监控系统初始化阶段
@@ -1958,9 +1951,9 @@ start_unified_monitoring() {
     echo "📅 开始时间: $START_TIME"
     echo "⏱️  监控间隔: ${interval}秒"
 
-    if [[ "$follow_qps_test" == "true" ]]; then
-        echo "🔄 运行模式: 跟随QPS测试 (无时间限制)"
-        echo "🎛️  控制文件: ${MEMORY_SHARE_DIR}/qps_monitor_control.flag"
+    if [[ "$duration" -eq 0 ]]; then
+        echo "🔄 运行模式: 跟随框架生命周期 (无时间限制)"
+        echo "🎛️  控制文件: $TMP_DIR/qps_test_status"
     else
         echo "⏰ 运行模式: 定时监控 (${duration}秒)"
     fi
@@ -2020,16 +2013,10 @@ start_unified_monitoring() {
 
     echo "⏰ 开始数据收集..."
 
-    if [[ "$follow_qps_test" == "true" ]]; then
-        # 跟随QPS测试模式 - 监控直到控制文件状态改变
-        while [[ -f "${MEMORY_SHARE_DIR}/qps_monitor_control.flag" ]]; do
-            local control_status=$(cat "${MEMORY_SHARE_DIR}/qps_monitor_control.flag" 2>/dev/null || echo "STOPPED")
-
-            if [[ "$control_status" != "RUNNING" ]]; then
-                echo "📢 收到QPS测试停止信号: $control_status"
-                break
-            fi
-
+    # 统一的监控循环逻辑 - 根据duration参数选择控制方式
+    if [[ "$duration" -eq 0 ]]; then
+        # duration=0表示跟随框架生命周期 - 检查状态文件
+        while [[ -f "$TMP_DIR/qps_test_status" ]]; do
             # 收集统一监控数据
             log_debug "📊 第${sample_count}次数据收集开始..."
             local current_system_load=$(assess_system_load)
@@ -2041,7 +2028,7 @@ start_unified_monitoring() {
             local current_time=$(date +%s)
             if [[ $((current_time - last_status_time)) -ge $status_interval ]]; then
                 local elapsed=$((current_time - start_time))
-                echo "📈 监控状态: 已收集 $sample_count 次数据, 运行时间 ${elapsed}s (跟随QPS测试中)"
+                echo "📈 监控状态: 已收集 $sample_count 次数据, 运行时间 ${elapsed}s (跟随框架生命周期)"
                 last_status_time=$current_time
             fi
 
@@ -2050,7 +2037,7 @@ start_unified_monitoring() {
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))
                 local avg_interval=$(echo "scale=2; $elapsed / $sample_count" | bc 2>/dev/null || echo "N/A")
-                echo "📈 监控状态: 已收集 $sample_count 个样本，运行时间 ${elapsed}s，平均间隔 ${avg_interval}s (跟随QPS测试中)"
+                echo "📈 监控状态: 已收集 $sample_count 个样本，运行时间 ${elapsed}s，平均间隔 ${avg_interval}s (跟随框架生命周期)"
             fi
 
             # 等待至下次预定时间
@@ -2061,10 +2048,10 @@ start_unified_monitoring() {
             fi
         done
     else
-        # 固定时长模式
-        local end_time=$((start_time + duration))
+            # 固定时长逻辑
+            local end_time=$((start_time + duration))
 
-        while [[ $(date +%s) -lt $end_time ]]; do
+            while [[ $(date +%s) -lt $end_time ]]; do
             # 收集统一监控数据
             log_debug "📊 第${sample_count}次数据收集开始..."
             local current_system_load=$(assess_system_load)
@@ -2099,6 +2086,7 @@ start_unified_monitoring() {
                 sleep $((next_run - now))
             fi
         done
+        fi
     fi
 
     END_TIME=$(get_unified_timestamp)
@@ -2203,7 +2191,6 @@ main() {
     local duration=0  # 0表示无限运行，由外部控制停止
     local interval=$MONITOR_INTERVAL
     local background=false
-    local follow_qps_test=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -2219,18 +2206,13 @@ main() {
                 background=true
                 shift
                 ;;
-            --follow-qps-test)
-                follow_qps_test=true
-                shift
-                ;;
             -h|--help)
                 echo "Usage: $0 [options]"
                 echo ""
                 echo "Options:"
-                echo "  -d, --duration SECONDS    Monitor duration, 0=unlimited, default: 0"
+                echo "  -d, --duration SECONDS    Monitor duration, 0=follow framework lifecycle, default: 0"
                 echo "  -i, --interval SECONDS    Monitor interval, default: $MONITOR_INTERVAL"
                 echo "  -b, --background          后台运行"
-                echo "  --follow-qps-test         Follow QPS test mode, no time limit"
                 echo "  -h, --help               显示帮助"
                 echo ""
                 echo "特性:"
@@ -2251,11 +2233,8 @@ main() {
 
     if [[ "$background" == "true" ]]; then
         echo "🚀 后台模式启动..."
-        if [[ "$follow_qps_test" == "true" ]]; then
-            nohup "$0" --follow-qps-test -i "$interval" > "${LOGS_DIR}/unified_monitor.log" 2>&1 &
-        else
-            nohup "$0" -d "$duration" -i "$interval" > "${LOGS_DIR}/unified_monitor.log" 2>&1 &
-        fi
+        # 后台调用逻辑，统一使用duration=0的跟随框架生命周期模式
+        nohup "$0" -i "$interval" > "${LOGS_DIR}/unified_monitor.log" 2>&1 &
         echo "后台进程PID: $!"
         echo "日志文件: ${LOGS_DIR}/unified_monitor.log"
         echo "数据文件: $UNIFIED_LOG"
@@ -2263,7 +2242,7 @@ main() {
         # 设置信号处理
         trap stop_unified_monitoring EXIT INT TERM
 
-        start_unified_monitoring "$duration" "$interval" "$follow_qps_test"
+        start_unified_monitoring "$duration" "$interval"
     fi
 }
 
@@ -2317,7 +2296,7 @@ basic_config_check() {
     return 0
 }
 
-# 高级技术问题解决 - 配置验证增强
+# EBS 配置验证
 validate_ebs_thresholds() {
     local errors=()
     
@@ -2347,28 +2326,6 @@ validate_ebs_thresholds() {
     fi
     
     echo "✅ EBS阈值配置验证通过"
-    return 0
-}
-
-# 内存泄漏检测和清理
-detect_memory_leaks() {
-    local current_memory=$(ps -o pid,vsz,rss,comm -p $$ | tail -1 | awk '{print $3}')
-    
-    if [[ -n "${LAST_MEMORY_USAGE:-}" ]]; then
-        local memory_growth=$((current_memory - LAST_MEMORY_USAGE))
-        
-        if [[ $memory_growth -gt 10240 ]]; then  # 10MB增长
-            log_warning "检测到内存增长: ${memory_growth}KB，当前: ${current_memory}KB"
-            
-            # 触发垃圾回收建议
-            if [[ $memory_growth -gt 51200 ]]; then  # 50MB增长
-                log_warning "内存增长过快，建议重启监控进程"
-                return 1
-            fi
-        fi
-    fi
-    
-    export LAST_MEMORY_USAGE="$current_memory"
     return 0
 }
 
@@ -2426,68 +2383,11 @@ safe_write_csv() {
     fi
 }
 
-# 如果直接执行此脚本
-# 生成健康修复建议
-generate_health_fix_suggestions() {
-    local issues=("$@")
-
-    log_info "🔧 健康修复建议:"
-
-    for issue in "${issues[@]}"; do
-        case "$issue" in
-            *"关键命令不可用"*)
-                log_info "  - 安装缺失的系统工具包"
-                ;;
-            *"日志目录不存在"*)
-                log_info "  - 创建日志目录: mkdir -p $LOGS_DIR"
-                ;;
-            *"日志目录不可写"*)
-                log_info "  - 修复目录权限: chmod 755 $LOGS_DIR"
-                ;;
-            *"磁盘空间不足"*)
-                log_info "  - 清理旧日志文件或扩展磁盘空间"
-                ;;
-            *"内存使用率过高"*)
-                log_info "  - 检查内存泄漏或重启相关进程"
-                ;;
-            *"最近错误过多"*)
-                log_info "  - 分析错误日志: $ERROR_LOG"
-                log_info "  - 考虑调整监控配置参数"
-                ;;
-        esac
-    done
-}
-
-# 增强的函数包装器 - 为关键函数添加错误处理
-enhanced_discover_monitoring_processes() {
-    if [[ "$ERROR_RECOVERY_ENABLED" == "true" ]]; then
-        safe_execute "discover_monitoring_processes" "$@"
-    else
-        discover_monitoring_processes "$@"
-    fi
-}
-
-enhanced_calculate_process_resources() {
-    if [[ "$ERROR_RECOVERY_ENABLED" == "true" ]]; then
-        safe_execute "calculate_process_resources" "$@"
-    else
-        calculate_process_resources "$@"
-    fi
-}
-
 enhanced_collect_monitoring_overhead_data() {
     if [[ "$ERROR_RECOVERY_ENABLED" == "true" ]]; then
         safe_execute "collect_monitoring_overhead_data" "$@"
     else
         collect_monitoring_overhead_data "$@"
-    fi
-}
-
-enhanced_assess_system_load() {
-    if [[ "$ERROR_RECOVERY_ENABLED" == "true" ]]; then
-        safe_execute "assess_system_load" "$@"
-    else
-        assess_system_load "$@"
     fi
 }
 
