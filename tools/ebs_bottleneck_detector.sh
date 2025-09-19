@@ -200,9 +200,24 @@ start_csv_monitoring() {
     local duration="$1"
     local csv_file="${LOGS_DIR}/performance_latest.csv"
     
+    # 设置清理函数
+    cleanup_csv_monitoring() {
+        log_info "清理CSV监控进程..."
+        # 清理可能的tail进程
+        pkill -P $$ -f "tail.*performance_latest.csv" 2>/dev/null || true
+        exit 0
+    }
+    
+    # 设置信号处理
+    trap cleanup_csv_monitoring EXIT INT TERM
+    
     log_info "🚀 启动CSV事件驱动监控模式"
     log_info "📊 数据源: $csv_file"
-    log_info "⏱️  监控时长: ${duration}s"
+    if [[ "$duration" -eq 0 ]]; then
+        log_info "⏱️  监控模式: 跟随框架生命周期"
+    else
+        log_info "⏱️  监控时长: ${duration}s"
+    fi
     
     # 初始化CSV字段映射
     if ! init_csv_field_mapping "$csv_file"; then
@@ -218,41 +233,85 @@ start_csv_monitoring() {
     
     log_info "📊 事件驱动模式: 监听CSV文件变化"
     
-    # 使用tail -F跟踪文件名，处理文件轮转
-    timeout "$duration" tail -F "$csv_file" 2>/dev/null | while IFS= read -r line; do
-        # 跳过表头和空行
-        [[ "$line" =~ ^timestamp ]] && continue
-        [[ -z "$line" ]] && continue
-        
-        # 检测文件轮转：如果时间戳格式异常，重新初始化字段映射
-        local timestamp=$(echo "$line" | cut -d',' -f1)
-        if [[ ! "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2} ]]; then
-            log_warn "⚠️  检测到CSV格式变化，重新初始化字段映射"
-            init_csv_field_mapping "$csv_file"
-            continue
-        fi
-        
-        # 监控每个配置的设备
-        for device in "$LEDGER_DEVICE" "$ACCOUNTS_DEVICE"; do
-            [[ -z "$device" ]] && continue
+    # 根据duration选择监控模式
+    if [[ "$duration" -eq 0 ]]; then
+        # 框架生命周期模式：不使用timeout
+        log_info "📊 使用框架生命周期控制模式"
+        tail -F "$csv_file" 2>/dev/null | while IFS= read -r line; do
+            # 检查框架状态
+            [[ -f "$TMP_DIR/qps_test_status" ]] || break
             
-            # 从CSV提取EBS数据
-            local metrics=$(get_ebs_data_from_csv "$device" "$line")
+            # 跳过表头和空行
+            [[ "$line" =~ ^timestamp ]] && continue
+            [[ -z "$line" ]] && continue
             
-            if [[ -n "$metrics" && "$metrics" != "0,0,0,0,0,0,0" ]]; then
-                IFS=',' read -r util total_iops aws_standard_iops aws_standard_throughput r_await w_await _ <<< "$metrics"
-                
-                # 计算平均延迟
-                local avg_latency=$(echo "scale=2; ($r_await + $w_await) / 2" | bc 2>/dev/null || echo "0")
-                
-                # 执行瓶颈检测 (使用正确的AWS标准化参数)
-                detect_ebs_bottleneck "$device" "$total_iops" "$aws_standard_iops" "$aws_standard_throughput" "$avg_latency" "$timestamp"
-                
-                local bottleneck_detected=$?
-                log_info "$timestamp,$device,$total_iops,$aws_standard_throughput,$avg_latency,$bottleneck_detected"
+            # 检测文件轮转：如果时间戳格式异常，重新初始化字段映射
+            local timestamp=$(echo "$line" | cut -d',' -f1)
+            if [[ ! "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2} ]]; then
+                log_warn "⚠️  检测到CSV格式变化，重新初始化字段映射"
+                init_csv_field_mapping "$csv_file"
+                continue
             fi
+            
+            # 监控每个配置的设备
+            for device in "$LEDGER_DEVICE" "$ACCOUNTS_DEVICE"; do
+                [[ -z "$device" ]] && continue
+                
+                # 从CSV提取EBS数据
+                local metrics=$(get_ebs_data_from_csv "$device" "$line")
+                
+                if [[ -n "$metrics" && "$metrics" != "0,0,0,0,0,0,0" ]]; then
+                    IFS=',' read -r util total_iops aws_standard_iops aws_standard_throughput r_await w_await _ <<< "$metrics"
+                    
+                    # 计算平均延迟
+                    local avg_latency=$(echo "scale=2; ($r_await + $w_await) / 2" | bc 2>/dev/null || echo "0")
+                    
+                    # 执行瓶颈检测 (使用正确的AWS标准化参数)
+                    detect_ebs_bottleneck "$device" "$total_iops" "$aws_standard_iops" "$aws_standard_throughput" "$avg_latency" "$timestamp"
+                    
+                    local bottleneck_detected=$?
+                    log_info "$timestamp,$device,$total_iops,$aws_standard_throughput,$avg_latency,$bottleneck_detected"
+                fi
+            done
         done
-    done
+    else
+        # 固定时长模式：保持原有timeout逻辑
+        log_info "📊 使用固定时长模式: ${duration}秒"
+        timeout "$duration" tail -F "$csv_file" 2>/dev/null | while IFS= read -r line; do
+            # 跳过表头和空行
+            [[ "$line" =~ ^timestamp ]] && continue
+            [[ -z "$line" ]] && continue
+            
+            # 检测文件轮转：如果时间戳格式异常，重新初始化字段映射
+            local timestamp=$(echo "$line" | cut -d',' -f1)
+            if [[ ! "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2} ]]; then
+                log_warn "⚠️  检测到CSV格式变化，重新初始化字段映射"
+                init_csv_field_mapping "$csv_file"
+                continue
+            fi
+            
+            # 监控每个配置的设备
+            for device in "$LEDGER_DEVICE" "$ACCOUNTS_DEVICE"; do
+                [[ -z "$device" ]] && continue
+                
+                # 从CSV提取EBS数据
+                local metrics=$(get_ebs_data_from_csv "$device" "$line")
+                
+                if [[ -n "$metrics" && "$metrics" != "0,0,0,0,0,0,0" ]]; then
+                    IFS=',' read -r util total_iops aws_standard_iops aws_standard_throughput r_await w_await _ <<< "$metrics"
+                    
+                    # 计算平均延迟
+                    local avg_latency=$(echo "scale=2; ($r_await + $w_await) / 2" | bc 2>/dev/null || echo "0")
+                    
+                    # 执行瓶颈检测 (使用正确的AWS标准化参数)
+                    detect_ebs_bottleneck "$device" "$total_iops" "$aws_standard_iops" "$aws_standard_throughput" "$avg_latency" "$timestamp"
+                    
+                    local bottleneck_detected=$?
+                    log_info "$timestamp,$device,$total_iops,$aws_standard_throughput,$avg_latency,$bottleneck_detected"
+                fi
+            done
+        done
+    fi
     
     # 处理tail -F异常退出
     local exit_code=$?
@@ -404,20 +463,8 @@ start_high_freq_monitoring() {
     # 添加持续运行模式支持
     if [[ "$duration" -eq 0 ]]; then
         log_info "🔄 持续运行模式 (跟随框架生命周期)"
-        duration=2147483647  # 使用最大整数值实现持续运行
     fi
-    
-    # 如果没有指定时长，根据模式决定默认值
-    if [[ -z "$duration" ]]; then
-        if [[ "$qps_test_mode" == "true" ]]; then
-            duration="$QPS_TEST_DURATION"  # 使用QPS测试时长
-            log_info "🔗 EBS监控与QPS测试同步，时长: ${duration}s"
-        else
-            duration=300  # 独立运行时使用默认时长(5分钟)
-            log_info "🔧 EBS独立监控模式，时长: ${duration}s"
-        fi
-    fi
-    
+
     log_info "🚀 启动EBS瓶颈检测 (生产者-消费者模式)"
     log_info "   Duration: ${duration}s"
     log_info "   Data Source: iostat_collector.sh → unified_monitor.sh → performance_latest.csv"

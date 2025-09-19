@@ -164,8 +164,8 @@ start_ena_monitoring() {
         echo "   监控间隔: ${interval}秒"
         log_info "ENA持续监控模式启动，间隔: ${interval}秒"
         
-        # 持续运行模式 - 适合框架需求
-        while true; do
+        # 持续运行模式 - 跟随框架生命周期
+        while [[ -f "$TMP_DIR/qps_test_status" ]]; do
             get_ena_network_stats >> "$ENA_LOG"
             sleep "$interval"
         done

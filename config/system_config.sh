@@ -78,9 +78,6 @@ MONITORING_PROCESS_NAMES=(
     "ena_network_monitor"
     "block_height_monitor"
     "performance_visualizer"
-    "overhead_monitor"
-    "adaptive_frequency"
-    "error_recovery"
     "report_generator"
 )
 

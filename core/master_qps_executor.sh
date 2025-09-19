@@ -20,6 +20,12 @@ source "${QPS_SCRIPT_DIR}/../utils/error_handler.sh"
 setup_error_handling "$(basename "${BASH_SOURCE[0]}")" "QPS测试引擎"
 log_script_start "$(basename "$0")"
 
+# 验证必需的环境变量
+if [[ -z "${MONITOR_PIDS_FILE:-}" ]]; then
+    log_warn "⚠️  MONITOR_PIDS_FILE环境变量未设置，使用默认值"
+    export MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
+fi
+
 # 全局变量
 readonly PROGRAM_NAME="Blockchain Node QPS 基准测试引擎"
 readonly VERSION="v2.1"
@@ -474,14 +480,22 @@ trigger_immediate_bottleneck_analysis() {
         fi
     fi
     
+    # 检查是否已经通过monitoring_coordinator.sh启动
+    if pgrep -f "ebs_bottleneck_detector.sh.*-b" >/dev/null 2>&1; then
+        echo "💾 EBS瓶颈检测器已通过监控协调器启动，跳过重复启动"
+        return 0
+    fi
+    
     # 调用EBS瓶颈检测器
     if [[ -f "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" ]]; then
         echo "💾 执行EBS瓶颈分析..."
         "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" \
-            --background --duration 300 &
-        
+            --background &
         local ebs_analysis_pid=$!
         echo "📊 EBS瓶颈分析进程启动 (PID: $ebs_analysis_pid)"
+        
+        # 记录PID到统一的监控PID文件
+        echo "ebs_analysis:$ebs_analysis_pid" >> "$MONITOR_PIDS_FILE"
     fi
     
     # 记录瓶颈事件
@@ -580,9 +594,6 @@ get_detailed_system_context() {
 }
 EOF
 )
-    
-
-    
     echo "$context"
 }
 
@@ -779,16 +790,14 @@ EOF
 # 清理函数
 cleanup() {
     echo "🧹 执行QPS测试引擎清理..."
-    
-    # 🚨 新增: 清理QPS测试状态标记文件
+
+    # 清理QPS测试状态标记文件
     if [[ -f "$TMP_DIR/qps_test_status" ]]; then
         rm -f "$TMP_DIR/qps_test_status"
         echo "🗑️ QPS测试状态标记文件已清理"
     fi
     
-    # QPS测试引擎只负责清理自己的资源
-    # 监控系统清理由入口脚本负责
-    echo "✅ QPS测试引擎清理完成"
+    echo "✅ QPS执行器清理完成"
 }
 
 # 主函数

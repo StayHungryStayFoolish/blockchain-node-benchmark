@@ -154,6 +154,10 @@ prepare_benchmark_data() {
 start_monitoring_system() {
     echo "📊 启动监控系统..."
     
+    # 导出监控PID文件路径供子进程使用
+    export MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
+    export MONITOR_STATUS_FILE="${TMP_DIR}/monitoring_status.json"
+    
     # 启动监控协调器
     if [[ -f "${SCRIPT_DIR}/monitoring/monitoring_coordinator.sh" ]]; then
         echo "🚀 启动监控协调器..."

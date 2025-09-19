@@ -18,9 +18,11 @@ fi
 setup_error_handling "$(basename "$0")" "监控协调器"
 log_script_start "$(basename "$0")"
 
-# 监控状态文件 - 防止重复定义
+# 监控状态文件 - 优先使用环境变量，否则使用默认值
 if [[ -z "${MONITOR_STATUS_FILE:-}" ]]; then
     readonly MONITOR_STATUS_FILE="${TMP_DIR}/monitoring_status.json"
+fi
+if [[ -z "${MONITOR_PIDS_FILE:-}" ]]; then
     readonly MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
 fi
 
@@ -359,10 +361,19 @@ cleanup_coordinator() {
     echo "🧹 清理监控协调器..."
     stop_all_monitors
     
+    # 增强清理：确保所有相关进程被清理
+    echo "🔍 清理可能的孤儿进程..."
+    pkill -f "ebs_bottleneck_detector" 2>/dev/null || true
+    pkill -f "ena_network_monitor" 2>/dev/null || true
+    pkill -f "block_height_monitor" 2>/dev/null || true
+    pkill -f "tail.*performance_latest.csv" 2>/dev/null || true
+
     # 保留状态文件用于调试
     if [[ -f "$MONITOR_STATUS_FILE" ]]; then
         echo "📊 监控状态文件保留: $MONITOR_STATUS_FILE"
     fi
+    
+    echo "✅ 监控协调器清理完成"
 }
 
 # 信号处理
