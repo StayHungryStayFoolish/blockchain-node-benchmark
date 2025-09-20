@@ -1775,13 +1775,14 @@ generate_csv_header() {
     local network_header="net_interface,net_rx_mbps,net_tx_mbps,net_total_mbps,net_rx_gbps,net_tx_gbps,net_total_gbps,net_rx_pps,net_tx_pps,net_total_pps"
     local overhead_header="monitoring_iops_per_sec,monitoring_throughput_mibs_per_sec"
     local block_height_header="local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss"
+    local qps_header="current_qps,rpc_latency_ms,qps_data_available"
 
     # 配置驱动的ENA表头生成
     if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
         local ena_header=$(build_ena_header)
-        echo "$basic_header,$device_header,$network_header,$ena_header,$overhead_header,$block_height_header"
+        echo "$basic_header,$device_header,$network_header,$ena_header,$overhead_header,$block_height_header,$qps_header"
     else
-        echo "$basic_header,$device_header,$network_header,$overhead_header,$block_height_header"
+        echo "$basic_header,$device_header,$network_header,$overhead_header,$block_height_header,$qps_header"
     fi
 }
 
@@ -1864,19 +1865,52 @@ log_performance_data() {
     local network_data=$(get_network_data)
     local overhead_data=$(get_monitoring_overhead)
 
+    # 收集当前QPS测试数据
+    local current_qps=0
+    local rpc_latency_ms=0.0
+    local qps_data_available=false
+    
+    # 检查是否有活跃的QPS测试
+    if [[ -f "$TMP_DIR/qps_test_status" ]]; then
+        local qps_status_content=$(cat "$TMP_DIR/qps_test_status" 2>/dev/null || echo "")
+        if [[ -n "$qps_status_content" ]]; then
+            # 从状态文件中提取当前QPS值
+            current_qps=$(echo "$qps_status_content" | grep -o "qps:[0-9]*" | cut -d: -f2 || echo "0")
+            qps_data_available=true
+            
+            # 尝试从最新的vegeta结果文件获取延迟数据
+            local latest_vegeta_file=$(ls -t "${LOGS_DIR}"/vegeta_*qps_*.json 2>/dev/null | head -1)
+            if [[ -f "$latest_vegeta_file" ]]; then
+                # 检查文件是否完整（避免读取正在写入的文件）
+                if [[ -s "$latest_vegeta_file" ]] && grep -q "}" "$latest_vegeta_file" 2>/dev/null; then
+                    rpc_latency_ms=$(python3 -c "
+import json, sys
+try:
+    with open('$latest_vegeta_file', 'r') as f:
+        data = json.load(f)
+    latency_ns = data.get('latencies', {}).get('mean', 0)
+    print(latency_ns / 1000000)  # 转换为毫秒
+except:
+    print(0.0)
+" 2>/dev/null || echo "0.0")
+                fi
+            fi
+        fi
+    fi
+
     # 获取区块高度数据 (如果启用了block_height监控)
     local block_height_data=""
     if [[ -n "$BLOCK_HEIGHT_DATA_FILE" && -f "$BLOCK_HEIGHT_DATA_FILE" ]]; then
         # 读取最新的block_height数据
         local latest_block_data=$(tail -1 "$BLOCK_HEIGHT_DATA_FILE" 2>/dev/null)
         if [[ -n "$latest_block_data" && "$latest_block_data" != *"timestamp"* ]]; then
-            # 提取block_height相关字段 (跳过timestamp)
+            # 提取block_height相关字段 (跳过timestamp) - 数据已经是数值格式
             block_height_data=$(echo "$latest_block_data" | cut -d',' -f2-7)
         else
-            block_height_data="N/A,N/A,N/A,healthy,healthy,false"
+            block_height_data="0,0,0,1,1,0"  # 默认值：全部数值，健康状态为1
         fi
     else
-        block_height_data="N/A,N/A,N/A,healthy,healthy,false"
+        block_height_data="0,0,0,1,1,0"  # 默认值：全部数值，健康状态为1
     fi
 
     # 条件性添加ENA数据
@@ -1899,9 +1933,9 @@ log_performance_data() {
             log_error "使用默认ENA数据: '$ena_data'"
         fi
         
-        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data,$block_height_data"
+        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available"
     else
-        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data,$block_height_data"
+        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available"
     fi
     
     # 最终数据行验证
@@ -1909,6 +1943,23 @@ log_performance_data() {
     if [[ ${#data_line} -gt 10000 ]]; then
         log_error "数据行异常长: ${#data_line} 字符"
         log_error "数据行前200字符: '$(echo "$data_line" | cut -c1-200)'"
+    fi
+
+    # 如果CSV文件不存在或为空，先写入头部
+    if [[ $((iteration_count % 10)) -eq 0 ]]; then
+        local monitor_overhead_file="${LOGS_DIR}/monitoring_overhead_${SESSION_TIMESTAMP}.csv"
+        
+        # 创建开销数据文件头部
+        if [[ ! -f "$monitor_overhead_file" ]]; then
+            echo "timestamp,cpu_overhead,memory_overhead,io_overhead" > "$monitor_overhead_file"
+        fi
+        
+        # 收集监控进程的资源使用情况
+        local monitor_cpu=$(ps -p $$ -o %cpu --no-headers 2>/dev/null | tr -d ' ' || echo "0")
+        local monitor_mem=$(ps -p $$ -o %mem --no-headers 2>/dev/null | tr -d ' ' || echo "0")
+        local timestamp_iso=$(date -Iseconds)
+        
+        echo "$timestamp_iso,$monitor_cpu,$monitor_mem,0" >> "$monitor_overhead_file"
     fi
 
     # 如果CSV文件不存在或为空，先写入头部

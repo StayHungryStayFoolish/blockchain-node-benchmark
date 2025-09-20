@@ -635,6 +635,12 @@ execute_single_qps_test() {
     local duration=$2
     local targets_file=$3
     
+    # 更新QPS状态文件，包含当前QPS值（所有模式都需要）
+    if [[ -f "$TMP_DIR/qps_test_status" ]]; then
+        echo "running qps:$qps" > "$TMP_DIR/qps_test_status.tmp"
+        mv "$TMP_DIR/qps_test_status.tmp" "$TMP_DIR/qps_test_status"
+    fi
+    
     echo "🚀 执行QPS测试: ${qps} QPS, 持续 ${duration}秒"
     
     # 构建vegeta命令

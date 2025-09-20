@@ -8,10 +8,23 @@ Supports bottleneck detection mode and time window analysis
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import numpy as np
 import glob
 import os
 import sys
+
+# Configure font support for cross-platform compatibility
+def setup_font():
+    """Configure matplotlib font for cross-platform compatibility"""
+    # Use standard fonts that work across all platforms
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False
+    print("SUCCESS: Comprehensive Analysis using font: DejaVu Sans")
+    return True
+
+# Initialize font configuration
+setup_font()
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -289,8 +302,6 @@ class ComprehensiveAnalyzer:
             logger.error(f"❌ 瓶颈相关性分析失败: {e}")
             return {}
 
-    # generate_bottleneck_analysis_chart方法已删除（基于失效数据）
-
     def generate_ultimate_performance_charts(self, df: pd.DataFrame, 
                                            rpc_deep_analysis: Dict[str, Any]) -> Optional[plt.Figure]:
         """生成终极性能图表，整合所有分析结果"""
@@ -337,7 +348,7 @@ class ComprehensiveAnalyzer:
             axes[0, 1].set_title('Memory Usage vs QPS (No Data)')
 
         # 3. RPC延迟 vs QPS
-        if len(df) > 0 and 'rpc_latency_ms' in df.columns and qps_available and 'current_qps' in df.columns:
+        if len(df) > 0 and 'rpc_latency_ms' in df.columns and qps_available and 'current_qps' in df.columns and df['rpc_latency_ms'].notna().any():
             axes[1, 0].plot(df['current_qps'], df['rpc_latency_ms'], 'ro-', alpha=0.7, markersize=4)
             axes[1, 0].axhline(y=1000, color='orange', linestyle='--', alpha=0.8, label='High Latency (1s)')
             axes[1, 0].set_title('RPC Latency vs QPS')
@@ -366,7 +377,7 @@ class ComprehensiveAnalyzer:
         axes[2, 1].set_title('RPC Methods (Removed)')
 
         # 7. RPC延迟分布
-        if len(df) > 0 and 'rpc_latency_ms' in df.columns:
+        if len(df) > 0 and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
             axes[3, 0].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
             if 'rpc_latency_ms' in df.columns:
                 mean_latency = df['rpc_latency_ms'].mean()
@@ -383,7 +394,7 @@ class ComprehensiveAnalyzer:
 
         # 8. 性能悬崖可视化
         cliff_analysis = rpc_deep_analysis.get('performance_cliff', {})
-        if cliff_analysis and len(df) > 0 and qps_available and 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns:
+        if cliff_analysis and len(df) > 0 and qps_available and 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
             try:
                 qps_latency = df.groupby('current_qps')['rpc_latency_ms'].mean().reset_index()
                 qps_latency = qps_latency.sort_values('current_qps')
@@ -571,7 +582,7 @@ class ComprehensiveAnalyzer:
         # 基本性能指标 - 使用工具类避免重复代码
         avg_cpu = DataProcessor.safe_calculate_mean(df, 'cpu_usage')
         avg_mem = DataProcessor.safe_calculate_mean(df, 'mem_usage')
-        avg_rpc = DataProcessor.safe_calculate_mean(df, 'rpc_latency_ms')
+        avg_rpc = DataProcessor.safe_calculate_mean(df, 'rpc_latency_ms') if 'rpc_latency_ms' in df.columns else 0
 
         # 注意：当前框架只使用实时监控数据，不再依赖区块链节点日志分析
         # RPC分析基于监控数据中的延迟指标，不是日志解析结果
@@ -590,7 +601,7 @@ class ComprehensiveAnalyzer:
         
         max_cpu = DataProcessor.safe_calculate_max(df, 'cpu_usage')
         max_mem = DataProcessor.safe_calculate_max(df, 'mem_usage')
-        max_rpc_latency = DataProcessor.safe_calculate_max(df, 'rpc_latency_ms')
+        max_rpc_latency = DataProcessor.safe_calculate_max(df, 'rpc_latency_ms') if 'rpc_latency_ms' in df.columns else 0
         
         latency_trend = 'Stable' if max_rpc_latency < avg_rpc * 2 else 'Variable'
 

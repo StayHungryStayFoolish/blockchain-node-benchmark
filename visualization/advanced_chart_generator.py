@@ -7,6 +7,7 @@ Fixed CSV field consistency issues, using unified field access interface
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 from matplotlib.axes import Axes
 import seaborn as sns
 import numpy as np
@@ -17,6 +18,18 @@ from typing import Dict, List, Tuple, Optional
 import os
 import sys
 from pathlib import Path
+
+# Configure font support for cross-platform compatibility
+def setup_font():
+    """Configure matplotlib font for cross-platform compatibility"""
+    # Use standard fonts that work across all platforms
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False
+    print("SUCCESS: Advanced Charts using font: DejaVu Sans")
+    return True
+
+# Initialize font configuration
+setup_font()
 
 # 添加项目根目录到路径，以便导入 utils 模块
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))

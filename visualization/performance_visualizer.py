@@ -107,8 +107,6 @@ except ImportError as e:
                     matching_cols.append(col)
             return matching_cols
 
-# Advanced tools import check completed above, duplicate import removed here
-    
     # Define placeholder classes to avoid IDE warnings and runtime errors
     class DummyTool:
         def __init__(self, *args, **kwargs):
@@ -392,16 +390,16 @@ class PerformanceVisualizer(CSVDataProcessor):
         if data_util_col:
             util_data = self.df[data_util_col].dropna()
             if len(util_data) > 0:
-                ax4.plot(self.df['timestamp'], self.df[data_util_col], color='orange', linewidth=2, label='DATADevice Utilization')
+                ax4.plot(self.df['timestamp'], self.df[data_util_col], color='orange', linewidth=2, label='DATA Device iostat %util')
                 thresholds = get_visualization_thresholds()
                 ax4.axhline(y=thresholds['io_warning'], color='red', linestyle='--', alpha=0.7, label=f'{thresholds["io_warning"]}% Warning Line')
-                ax4.set_title('Device Utilization')
-                ax4.set_ylabel('Utilization (%)')
+                ax4.set_title('Device iostat %util')
+                ax4.set_ylabel('iostat %util (%)')
                 ax4.legend()
                 ax4.grid(True, alpha=0.3)
             else:
-                ax4.text(0.5, 0.5, 'Device UtilizationData Not Available', ha='center', va='center', transform=ax4.transAxes)
-                ax4.set_title('Device Utilization (Data Not Available)')
+                ax4.text(0.5, 0.5, 'Device iostat %util Data Not Available', ha='center', va='center', transform=ax4.transAxes)
+                ax4.set_title('Device iostat %util (Data Not Available)')
         else:
             ax4.text(0.5, 0.5, 'Device Utilization Field Missing', ha='center', va='center', transform=ax4.transAxes)
             ax4.set_title('Device Utilization (Field Missing)')
@@ -1180,9 +1178,9 @@ Monitoring Efficiency:
                 print(f"    Critical violations: {violations['critical_violations']}/{violations['total_points']} ({violations['critical_percentage']:.1f}%)")
         
         if 'util_violations' in results:
-            print("\n📈 Device Utilization Threshold Analysis:")
+            print("\n📈 Device iostat %util Threshold Analysis:")
             for device, violations in results['util_violations'].items():
-                print(f"  {device}:")
+                print(f"  {device} (iostat %util):")
                 print(f"    Average: {violations['avg_value']:.1f}%")
                 print(f"    Maximum: {violations['max_value']:.1f}%")
                 print(f"    Warning violations: {violations['warning_violations']}/{violations['total_points']} ({violations['warning_percentage']:.1f}%)")

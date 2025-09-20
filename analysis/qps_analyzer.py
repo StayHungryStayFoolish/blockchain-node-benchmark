@@ -8,6 +8,7 @@ QPS分析器 - 从comprehensive_analysis.py拆分出来的独立模块 + 瓶颈�
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import seaborn as sns
 import glob
 import os
@@ -16,6 +17,18 @@ import argparse
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 from pathlib import Path
+
+# Configure font support for cross-platform compatibility
+def setup_font():
+    """Configure matplotlib font for cross-platform compatibility"""
+    # Use standard fonts that work across all platforms
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False
+    print("SUCCESS: QPS Analyzer using font: DejaVu Sans")
+    return True
+
+# Initialize font configuration
+setup_font()
 
 # 使用统一日志管理器
 import sys
@@ -468,6 +481,9 @@ class NodeQPSAnalyzer:
                 
                 # 为系统监控数据添加虚拟QPS列，避免后续KeyError
                 df['current_qps'] = 0  # 使用数值0而不是字符串'0'
+                df['rpc_latency_ms'] = 0.0  # 添加虚拟RPC延迟字段
+                df['elapsed_time'] = 0.0    # 添加虚拟时间字段
+                df['remaining_time'] = 0.0  # 添加虚拟剩余时间字段
                 df['qps_data_available'] = False
                 df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
                 return df
@@ -517,11 +533,16 @@ class NodeQPSAnalyzer:
         print(f"Number of QPS levels: {len(qps_range)}")
 
         # 按QPS分组统计
-        qps_stats = df.groupby('current_qps').agg({
+        qps_stats_dict = {
             'cpu_usage': ['mean', 'max'],
-            'mem_usage': ['mean', 'max'],
-            'rpc_latency_ms': ['mean', 'max']
-        }).round(2)
+            'mem_usage': ['mean', 'max']
+        }
+        
+        # 只有当rpc_latency_ms字段存在且有有效数据时才添加
+        if 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
+            qps_stats_dict['rpc_latency_ms'] = ['mean', 'max']
+        
+        qps_stats = df.groupby('current_qps').agg(qps_stats_dict).round(2)
 
         print("\nQPS Performance Statistics:")
         print(qps_stats.to_string())
@@ -551,9 +572,10 @@ class NodeQPSAnalyzer:
             bottlenecks['Memory'] = mem_bottleneck
 
         # RPC延迟瓶颈
-        rpc_bottleneck = df[df['rpc_latency_ms'] > self.rpc_threshold]['current_qps'].min()
-        if pd.notna(rpc_bottleneck):
-            bottlenecks['RPC_Latency'] = rpc_bottleneck
+        if 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
+            rpc_bottleneck = df[df['rpc_latency_ms'] > self.rpc_threshold]['current_qps'].min()
+            if pd.notna(rpc_bottleneck):
+                bottlenecks['RPC_Latency'] = rpc_bottleneck
 
         if bottlenecks:
             print("System bottlenecks detected:")
@@ -608,7 +630,7 @@ class NodeQPSAnalyzer:
             axes[1, 0].grid(True, alpha=0.3)
 
         # 4. RPC延迟分布
-        if len(df) > 0 and 'rpc_latency_ms' in df.columns:
+        if len(df) > 0 and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
             axes[1, 1].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
             if 'rpc_latency_ms' in df.columns:
                 mean_latency = df['rpc_latency_ms'].mean()
@@ -833,7 +855,7 @@ class NodeQPSAnalyzer:
         # 基本性能指标
         avg_cpu = df['cpu_usage'].mean() if len(df) > 0 and 'cpu_usage' in df.columns else 0
         avg_mem = df['mem_usage'].mean() if len(df) > 0 and 'mem_usage' in df.columns else 0
-        avg_rpc = df['rpc_latency_ms'].mean() if len(df) > 0 and 'rpc_latency_ms' in df.columns else 0
+        avg_rpc = df['rpc_latency_ms'].mean() if len(df) > 0 and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any() else 0
 
         # 基于基准测试模式和瓶颈分析的性能评估
         performance_evaluation = self._evaluate_performance_by_bottleneck_analysis(
@@ -860,7 +882,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - **Average RPC Latency**: {avg_rpc:.1f}ms
 - **CPU Peak**: {(df['cpu_usage'].max() if len(df) > 0 and 'cpu_usage' in df.columns else 0):.1f}%
 - **Memory Peak**: {(df['mem_usage'].max() if len(df) > 0 and 'mem_usage' in df.columns else 0):.1f}%
-- **RPC Latency Peak**: {(df['rpc_latency_ms'].max() if len(df) > 0 and 'rpc_latency_ms' in df.columns else 0):.1f}ms
+- **RPC Latency Peak**: {(df['rpc_latency_ms'].max() if len(df) > 0 and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any() else 0):.1f}ms
 
 ## Performance Bottlenecks Analysis
 """

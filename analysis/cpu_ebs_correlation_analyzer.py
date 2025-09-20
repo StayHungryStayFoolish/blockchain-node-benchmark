@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CPU-EBS相关性分析器 - 严格按照文档实现18种统计分析方法
+CPU-EBS相关性分析器
 基于 CPU和EBS性能相关性的分析.md 文档的要求实现完整的相关性分析
 """
 
@@ -15,9 +15,22 @@ sys.path.insert(0, project_root)
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import seaborn as sns
 from scipy import stats
 from sklearn.linear_model import LinearRegression
+
+# Configure font support for cross-platform compatibility
+def setup_font():
+    """Configure matplotlib font for cross-platform compatibility"""
+    # Use standard fonts that work across all platforms
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False
+    print("SUCCESS: CPU-EBS Correlation Analyzer using font: DejaVu Sans")
+    return True
+
+# Initialize font configuration
+setup_font()
 from sklearn.metrics import r2_score
 import statsmodels.api as sm
 from typing import Dict, List, Tuple, Optional

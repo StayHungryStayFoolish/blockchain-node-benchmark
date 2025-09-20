@@ -111,14 +111,14 @@ get_cached_block_height_data() {
     fi
     
     # 检测数据丢失 - 改进的逻辑
-    local data_loss="false"
+    local data_loss="0"  # 使用数值：0=false, 1=true
     
     # 更严格的数据丢失检测条件
     # 1. 只有当区块高度数据完全无法获取时才标记为数据丢失
-    # 2. 或者当区块高度差异超过严重阈值时（如 > 1000）
+    # 2. 或者当区块高度差异超过配置阈值时（BLOCK_HEIGHT_DIFF_THRESHOLD）
     if [[ "$local_block_height" == "N/A" && "$mainnet_block_height" == "N/A" ]]; then
         # 两个节点都无法获取区块高度数据
-        data_loss="true"
+        data_loss="1"  # 数值：1=true
     elif [[ "$local_block_height" != "N/A" && "$mainnet_block_height" != "N/A" ]]; then
         # 如果能获取到区块高度数据，检查差异是否过大
         local abs_block_height_diff
@@ -128,16 +128,16 @@ get_cached_block_height_data() {
             abs_block_height_diff=$block_height_diff
         fi
         
-        # 只有当区块高度差异超过1000时才认为是严重的数据丢失
-        if [[ $abs_block_height_diff -gt 1000 ]]; then
-            data_loss="true"
+        # 使用配置的阈值来判断数据丢失
+        if [[ $abs_block_height_diff -gt ${BLOCK_HEIGHT_DIFF_THRESHOLD:-50} ]]; then
+            data_loss="1"  # 数值：1=true
         fi
     elif [[ "$local_block_height" == "N/A" || "$mainnet_block_height" == "N/A" ]]; then
         # 只有一个节点无法获取数据，检查是否持续
         # 这里可以添加更复杂的逻辑，比如检查历史数据
         # 暂时不标记为数据丢失，除非健康状态也异常
-        if [[ "$local_health" == "unhealthy" && "$mainnet_health" == "unhealthy" ]]; then
-            data_loss="true"
+        if [[ "$local_health" == "0" && "$mainnet_health" == "0" ]]; then  # 0=unhealthy
+            data_loss="1"  # 数值：1=true
         fi
     fi
     
@@ -192,7 +192,7 @@ get_block_height() {
     
     # 验证输入参数
     if [[ -z "$rpc_url" ]]; then
-        echo "unhealthy" > "$health_cache_file"
+        echo "0" > "$health_cache_file"  # 缓存数值：0=unhealthy
         echo "N/A"
         return 1
     fi
@@ -208,7 +208,7 @@ get_block_height() {
                 if [[ -n "$result" ]] && echo "$result" | jq -e '.result' >/dev/null 2>&1; then
                     local height=$(echo "$result" | jq -r '.result')
                     if [[ "$height" =~ ^[0-9]+$ ]]; then
-                        echo "healthy" > "$health_cache_file"
+                        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
                         echo "$height"
                         return 0
                     fi
@@ -229,7 +229,7 @@ get_block_height() {
                         # 转换十六进制为十进制 (如: 0x160cda4 → 23256484)
                         local block_num="${block_hex#0x}"
                         local decimal_height=$(printf "%d" "$((16#$block_num))")
-                        echo "healthy" > "$health_cache_file"
+                        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
                         echo "$decimal_height"
                         return 0
                     fi
@@ -247,7 +247,7 @@ get_block_height() {
                 if [[ -n "$result" ]] && echo "$result" | jq -e '.result' >/dev/null 2>&1; then
                     local height=$(echo "$result" | jq -r '.result')
                     if [[ "$height" =~ ^[0-9]+$ ]]; then
-                        echo "healthy" > "$health_cache_file"
+                        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
                         echo "$height"
                         return 0
                     fi
@@ -265,7 +265,7 @@ get_block_height() {
                 if [[ -n "$result" ]] && echo "$result" | jq -e '.result' >/dev/null 2>&1; then
                     local height=$(echo "$result" | jq -r '.result')
                     if [[ "$height" =~ ^[0-9]+$ ]]; then
-                        echo "healthy" > "$health_cache_file"
+                        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
                         echo "$height"
                         return 0
                     fi
@@ -275,13 +275,13 @@ get_block_height() {
             ;;
         *)
             echo "❌ 不支持的区块链类型: $blockchain_type" >&2
-            echo "unhealthy" > "$health_cache_file"
+            echo "0" > "$health_cache_file"  # 缓存数值：0=unhealthy
             echo "N/A"
             return 1
             ;;
     esac
     
-    echo "unhealthy" > "$health_cache_file"
+    echo "0" > "$health_cache_file"  # 缓存数值：0=unhealthy
     echo "N/A"
     return 1
 }
@@ -295,7 +295,7 @@ check_node_health() {
     
     # 验证输入参数
     if [[ -z "$rpc_url" ]]; then
-        echo "unhealthy"
+        echo "0"  # 返回数值：0=unhealthy
         return 1
     fi
     
@@ -304,7 +304,7 @@ check_node_health() {
         local cache_age=$(($(date +%s) - $(stat -c %Y "$health_cache_file" 2>/dev/null || echo 0)))
         if [[ $cache_age -lt 60 ]]; then
             # 使用缓存的健康状态
-            cat "$health_cache_file" 2>/dev/null || echo "unhealthy"
+            cat "$health_cache_file" 2>/dev/null || echo "0"
             return 0
         fi
     fi
@@ -313,12 +313,12 @@ check_node_health() {
     local block_height=$(get_block_height "$rpc_url")
     
     if [[ "$block_height" != "N/A" && "$block_height" =~ ^[0-9]+$ ]]; then
-        echo "healthy" > "$health_cache_file"
-        echo "healthy"
+        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
+        echo "1"  # 返回数值：1=healthy
         return 0
     else
-        echo "unhealthy" > "$health_cache_file"
-        echo "unhealthy"
+        echo "0" > "$health_cache_file"  # 缓存数值：0=unhealthy
+        echo "0"  # 返回数值：0=unhealthy
         return 1
     fi
 }

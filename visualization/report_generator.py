@@ -15,6 +15,24 @@ from datetime import datetime
 import numpy as np
 from scipy.stats import pearsonr
 
+# Configure font support for cross-platform compatibility
+def setup_font():
+    """Configure matplotlib font for cross-platform compatibility"""
+    import matplotlib.pyplot as plt
+    import matplotlib.font_manager as fm
+    # Use standard fonts that work across all platforms
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False
+    print("SUCCESS: Report Generator using font: DejaVu Sans")
+    return True
+
+# Initialize font configuration when matplotlib is used
+try:
+    import matplotlib
+    setup_font()
+except ImportError:
+    pass  # matplotlib not available, skip font setup
+
 # 添加项目根目录到路径，以便导入 utils 模块
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.ena_field_accessor import ENAFieldAccessor
@@ -1942,6 +1960,16 @@ class ReportGenerator:
         
         return table_html
 
+    def _format_block_height_value(self, field_name, value):
+        """将block_height相关字段的数值转换为人类可读格式"""
+        if 'health' in field_name.lower():
+            return 'Healthy' if value == 1 else 'Unhealthy'
+        elif 'data_loss' in field_name.lower():
+            return 'No Data Loss' if value == 0 else 'Data Loss Detected'
+        else:
+            # 对于数值字段（如block_height, block_height_diff），保持原样
+            return f"{value:.0f}" if isinstance(value, (int, float)) else str(value)
+
     def _analyze_block_height_performance(self, df, block_height_fields):
         """分析区块高度性能数据"""
         if not block_height_fields or df.empty:
@@ -1960,16 +1988,34 @@ class ReportGenerator:
                         min_val = numeric_data.min()
                         max_val = numeric_data.max()
                         
-                        # 格式化字段名
+                        # 格式化字段名和数值
                         display_name = field.replace('_', ' ').title()
+                        current_display = self._format_block_height_value(field, current_val)
                         
-                        card_html = f"""
-                        <div class="info-card">
-                            <h4>{display_name}</h4>
-                            <div style="font-size: 1.2em; font-weight: bold;">Current: {current_val}</div>
-                            <div>Average: {avg_val:.2f}</div>
-                            <div>Range: {min_val} - {max_val}</div>
-                        </div>
+                        # 对于health和data_loss字段，显示统计信息
+                        if 'health' in field.lower() or 'data_loss' in field.lower():
+                            healthy_count = (numeric_data == 1).sum() if 'health' in field.lower() else (numeric_data == 0).sum()
+                            total_count = len(numeric_data)
+                            percentage = (healthy_count / total_count * 100) if total_count > 0 else 0
+                            status_label = 'Healthy' if 'health' in field.lower() else 'No Data Loss'
+                            
+                            card_html = f"""
+                            <div class="info-card">
+                                <h4>{display_name}</h4>
+                                <div style="font-size: 1.2em; font-weight: bold;">Current: {current_display}</div>
+                                <div>{status_label}: {healthy_count}/{total_count} ({percentage:.1f}%)</div>
+                            </div>
+                            """
+                        else:
+                            # 数值字段正常显示
+                            card_html = f"""
+                            <div class="info-card">
+                                <h4>{display_name}</h4>
+                                <div style="font-size: 1.2em; font-weight: bold;">Current: {current_display}</div>
+                                <div>Average: {avg_val:.2f}</div>
+                                <div>Range: {min_val} - {max_val}</div>
+                            </div>
+                            """
                         """
                         analysis_cards.append(card_html)
             

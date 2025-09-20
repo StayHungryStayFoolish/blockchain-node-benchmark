@@ -115,7 +115,7 @@ analyze_device_performance() {
         # 检查高利用率 (使用瓶颈阈值的80%作为警告级别)
         local warning_util_threshold=$(echo "scale=2; ${BOTTLENECK_EBS_UTIL_THRESHOLD:-90} * 0.8" | bc)
         if (( $(echo "$util > $warning_util_threshold" | bc -l 2>/dev/null || echo 0) )); then
-            log_warn "$device_name 高利用率警告: ${util}% (警告阈值: ${warning_util_threshold}%, 数据时间: $timestamp)"
+            log_warn "$device_name 高iostat利用率警告: ${util}% (iostat %util, 警告阈值: ${warning_util_threshold}%, 数据时间: $timestamp)"
         fi
         
         # 检查高延迟 (使用瓶颈阈值的40%作为警告级别，保持合理的预警距离)
@@ -131,8 +131,8 @@ analyze_device_performance() {
     local avg_iops=$(tail -n +2 "$csv_file" | cut -d',' -f"$iops_field" | awk '{sum+=$1; count++} END {if(count>0) print sum/count; else print 0}')
     local max_iops=$(tail -n +2 "$csv_file" | cut -d',' -f"$iops_field" | sort -n | tail -1)
     
-    log_performance "${device_name}_avg_util" "$avg_util" "%"
-    log_performance "${device_name}_max_util" "$max_util" "%"
+    log_performance "${device_name}_avg_iostat_util" "$avg_util" "%"
+    log_performance "${device_name}_max_iostat_util" "$max_util" "%"
     log_performance "${device_name}_avg_iops" "$avg_iops" "IOPS"
     log_performance "${device_name}_max_iops" "$max_iops" "IOPS"
 }

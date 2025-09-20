@@ -243,11 +243,10 @@ class RpcDeepAnalyzer:
 
         # 处理block_height_diff数据
         if 'block_height_diff' in df.columns:
-            block_height_data = df[df['block_height_diff'] != 'N/A'].copy()
-
-            if len(block_height_data) > 0:
-                block_height_data['block_height_diff_numeric'] = pd.to_numeric(block_height_data['block_height_diff'], errors='coerce')
-                block_height_data = block_height_data.dropna(subset=['block_height_diff_numeric'])
+            # 转换为数值并过滤无效数据（现在数据都是数值，不再有'N/A'字符串）
+            block_height_data = df.copy()
+            block_height_data['block_height_diff_numeric'] = pd.to_numeric(df['block_height_diff'], errors='coerce')
+            block_height_data = block_height_data.dropna(subset=['block_height_diff_numeric'])
 
                 if len(block_height_data) > 0:
                     block_height_analysis['sync_data_available'] = True

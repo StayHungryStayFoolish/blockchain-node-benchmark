@@ -340,6 +340,13 @@ process_test_results() {
         # 获取最大QPS (从QPS状态文件或跳过归档)
         echo "🔍 QPS状态文件调试:"
         echo "  文件路径: ${QPS_STATUS_FILE}"
+        
+        # 检查并重建共享内存目录
+        if [[ ! -d "$(dirname "${QPS_STATUS_FILE}")" ]]; then
+            echo "  目录不存在，尝试重建..."
+            mkdir -p "$(dirname "${QPS_STATUS_FILE}")" 2>/dev/null || true
+        fi
+        
         echo "  文件存在: $(test -f "${QPS_STATUS_FILE}" && echo "是" || echo "否")"
         
         local max_qps=""

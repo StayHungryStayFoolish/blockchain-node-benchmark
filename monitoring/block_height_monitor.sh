@@ -38,9 +38,11 @@ cleanup_and_exit() {
     # 删除PID文件
     rm -f "${TMP_DIR}/block_height_monitor.pid" 2>/dev/null || true
     
-    # 清理共享内存缓存
+    # 清理共享内存缓存 - 只清理block_height相关文件，保留QPS状态文件
     if [[ -n "$BASE_MEMORY_DIR" ]]; then
-        rm -rf "$BASE_MEMORY_DIR" 2>/dev/null || true
+        # 只清理block_height相关的缓存文件，保留其他进程的状态文件
+        rm -f "$BASE_MEMORY_DIR"/block_height_*.cache 2>/dev/null || true
+        rm -f "$BASE_MEMORY_DIR"/node_health_*.cache 2>/dev/null || true
     fi
     
     echo "Block height monitor cleanup completed"
@@ -228,8 +230,12 @@ monitor_block_height_diff() {
             DATA_LOSS_ALERT=true
             DATA_LOSS_START_TIME=$(get_unified_timestamp)
             DATA_LOSS_PERIODS=$((DATA_LOSS_PERIODS + 1))
+            # 转换数值为人类可读格式
+            local local_health_display=$([ "$local_health" = "1" ] && echo "healthy" || echo "unhealthy")
+            local mainnet_health_display=$([ "$mainnet_health" = "1" ] && echo "healthy" || echo "unhealthy")
+            
             echo "⚠️ ALERT: Data loss or node health issue detected at $DATA_LOSS_START_TIME"
-            echo "    Local health: $local_health, Mainnet health: $mainnet_health"
+            echo "    Local health: $local_health_display, Mainnet health: $mainnet_health_display"
             echo "    Local block height: $local_block_height, Mainnet block height: $mainnet_block_height"
             
             # 记录数据丢失统计到共享文件
@@ -260,7 +266,11 @@ monitor_block_height_diff() {
     
     # 详细输出
     if [[ "$VERBOSE" == "true" ]]; then
-        echo "[$timestamp] Local: $local_block_height, Mainnet: $mainnet_block_height, Diff: $block_height_diff, Local Health: $local_health, Mainnet Health: $mainnet_health, Data Loss: $data_loss"
+        # 转换数值为人类可读格式
+        local local_health_display=$([ "$local_health" = "1" ] && echo "healthy" || echo "unhealthy")
+        local mainnet_health_display=$([ "$mainnet_health" = "1" ] && echo "healthy" || echo "unhealthy")
+        local data_loss_display=$([ "$data_loss" = "1" ] && echo "detected" || echo "none")
+        echo "[$timestamp] Local: $local_block_height, Mainnet: $mainnet_block_height, Diff: $block_height_diff, Local Health: $local_health_display, Mainnet Health: $mainnet_health_display, Data Loss: $data_loss_display"
     fi
     
     # 清理旧的缓存数据
@@ -284,13 +294,18 @@ show_status() {
     local mainnet_health=$(echo "$block_height_data" | jq -r '.mainnet_health')
     local data_loss=$(echo "$block_height_data" | jq -r '.data_loss')
     
+    # 转换数值为人类可读格式
+    local local_health_display=$([ "$local_health" = "1" ] && echo "healthy" || echo "unhealthy")
+    local mainnet_health_display=$([ "$mainnet_health" = "1" ] && echo "healthy" || echo "unhealthy")
+    local data_loss_display=$([ "$data_loss" = "1" ] && echo "detected" || echo "none")
+    
     echo "Last update: $timestamp"
     echo "Local block height: $local_block_height"
     echo "Mainnet block height: $mainnet_block_height"
     echo "Block height difference: $block_height_diff"
-    echo "Local health: $local_health"
-    echo "Mainnet health: $mainnet_health"
-    echo "Data loss: $data_loss"
+    echo "Local health: $local_health_display"
+    echo "Mainnet health: $mainnet_health_display"
+    echo "Data loss: $data_loss_display"
     
     # 检查是否超过阈值
     if [[ "$block_height_diff" != "null" && $block_height_diff -gt $BLOCK_HEIGHT_DIFF_THRESHOLD ]]; then

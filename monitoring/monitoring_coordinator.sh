@@ -375,8 +375,17 @@ health_check() {
     fi
 }
 
+# 清理状态标记
+CLEANUP_COMPLETED=false
+
 # 清理函数
 cleanup_coordinator() {
+    # 防止重复清理
+    if [[ "$CLEANUP_COMPLETED" == "true" ]]; then
+        echo "ℹ️  监控协调器已清理，跳过重复清理"
+        return 0
+    fi
+    
     echo "🧹 清理监控协调器..."
     stop_all_monitors
     
@@ -392,6 +401,8 @@ cleanup_coordinator() {
         echo "📊 监控状态文件保留: $MONITOR_STATUS_FILE"
     fi
     
+    # 标记清理完成
+    CLEANUP_COMPLETED=true
     echo "✅ 监控协调器清理完成"
 }
 

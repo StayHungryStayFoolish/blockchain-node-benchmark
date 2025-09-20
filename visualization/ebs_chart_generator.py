@@ -60,6 +60,39 @@ class EBSChartGenerator:
         self.ebs_latency_threshold = float(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50'))
         self.ebs_iops_threshold = float(os.getenv('BOTTLENECK_EBS_IOPS_THRESHOLD', '90'))
         self.ebs_throughput_threshold = float(os.getenv('BOTTLENECK_EBS_THROUGHPUT_THRESHOLD', '90'))
+        
+        # 添加EBS字段名称动态映射
+        self.field_mapping = self._build_field_mapping()
+    
+    def _build_field_mapping(self):
+        """构建EBS字段名称映射"""
+        mapping = {}
+        
+        # 查找data设备字段
+        for suffix in ['aws_standard_iops', 'aws_standard_throughput_mibs', 'util', 'aqu_sz']:
+            expected_field = f'data_{suffix}'
+            actual_field = self._find_field_by_pattern(f'data_.*_{suffix}')
+            mapping[expected_field] = actual_field
+        
+        # 查找accounts设备字段
+        for suffix in ['aws_standard_iops', 'aws_standard_throughput_mibs', 'util', 'aqu_sz']:
+            expected_field = f'accounts_{suffix}'
+            actual_field = self._find_field_by_pattern(f'accounts_.*_{suffix}')
+            mapping[expected_field] = actual_field
+            
+        return mapping
+    
+    def _find_field_by_pattern(self, pattern):
+        """根据模式查找实际字段名"""
+        import re
+        for col in self.df.columns:
+            if re.match(pattern, col):
+                return col
+        return None
+    
+    def get_mapped_field(self, field_name):
+        """获取映射后的实际字段名"""
+        return self.field_mapping.get(field_name, field_name)
     
     def validate_data_completeness(self):
         """EBS数据完整性验证"""
@@ -209,15 +242,15 @@ class EBSChartGenerator:
         if 'data_util' in self.df.columns and 'data_aqu_sz' in self.df.columns:
             ax3_twin = ax3.twinx()
             
-            line1 = ax3.plot(self.df['timestamp'], self.df['data_util'], 
-                           label='Device Utilization', linewidth=2, color='blue')
+            ax3.plot(self.df['timestamp'], self.df['data_util'], 
+                    label='Device Utilization', linewidth=2, color='blue')
             ax3.axhline(y=self.ebs_util_threshold, color='red', linestyle='--', alpha=0.7,
                        label=f'Util Threshold: {self.ebs_util_threshold}%')
             ax3.set_ylabel('Utilization (%)', color='blue')
             ax3.tick_params(axis='y', labelcolor='blue')
             
-            line2 = ax3_twin.plot(self.df['timestamp'], self.df['data_aqu_sz'], 
-                                label='Queue Depth', linewidth=2, color='red')
+            ax3_twin.plot(self.df['timestamp'], self.df['data_aqu_sz'], 
+                         label='Queue Depth', linewidth=2, color='red')
             ax3_twin.set_ylabel('Average Queue Size', color='red')
             ax3_twin.tick_params(axis='y', labelcolor='red')
             
