@@ -154,6 +154,11 @@ prepare_benchmark_data() {
 start_monitoring_system() {
     echo "📊 启动监控系统..."
     
+    # 在启动监控前创建框架运行状态文件
+    echo "running" > "$TMP_DIR/qps_test_status.tmp"
+    mv "$TMP_DIR/qps_test_status.tmp" "$TMP_DIR/qps_test_status"
+    echo "[STATUS] Framework lifecycle marker created: $TMP_DIR/qps_test_status"
+    
     # 导出监控PID文件路径供子进程使用
     export MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
     export MONITOR_STATUS_FILE="${TMP_DIR}/monitoring_status.json"
@@ -218,10 +223,12 @@ stop_monitoring_system() {
 execute_core_qps_test() {
     echo "[START] Executing core QPS test (RPC mode: $RPC_MODE)..."
     
-    # Create QPS test status marker file - using atomic operation for reliability
-    echo "running" > "$TMP_DIR/qps_test_status.tmp"
-    mv "$TMP_DIR/qps_test_status.tmp" "$TMP_DIR/qps_test_status"
-    echo "[STATUS] QPS test status marker created: $TMP_DIR/qps_test_status"
+    # 🔧 验证框架状态文件存在（已在监控启动时创建）
+    if [[ ! -f "$TMP_DIR/qps_test_status" ]]; then
+        echo "[ERROR] Framework status file not found. Monitoring system may not be running."
+        return 1
+    fi
+    echo "[STATUS] Framework lifecycle marker verified: $TMP_DIR/qps_test_status"
     
     # 构建参数数组，过滤掉RPC模式参数，因为我们会单独添加
     local executor_args=()
@@ -244,6 +251,10 @@ execute_core_qps_test() {
     # 调用master_qps_executor.sh
     "${SCRIPT_DIR}/core/master_qps_executor.sh" "${executor_args[@]}"
     local test_result=$?
+    
+    # 等待监控系统收集最后的数据，确保数据完整性
+    echo "[STATUS] QPS test completed, waiting for monitoring data collection..."
+    sleep 3
     
     # Delete QPS test status marker file - safe deletion
     if [[ -f "$TMP_DIR/qps_test_status" ]]; then
@@ -356,7 +367,7 @@ process_test_results() {
     return 0
 }
 
-# 执行数据分析 - 增强版
+# 执行数据分析
 execute_data_analysis() {
     echo "🔍 执行数据分析..."
     
@@ -582,7 +593,7 @@ execute_performance_cliff_analysis() {
     fi
 }
 
-# 生成最终报告 - 增强版
+# 生成最终报告
 generate_final_reports() {
     echo "📊 生成最终报告..."
     

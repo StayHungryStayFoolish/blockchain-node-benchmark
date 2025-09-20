@@ -787,24 +787,9 @@ EOF
     return 0
 }
 
-# 清理函数
-cleanup() {
-    echo "🧹 执行QPS测试引擎清理..."
-
-    # 清理QPS测试状态标记文件
-    if [[ -f "$TMP_DIR/qps_test_status" ]]; then
-        rm -f "$TMP_DIR/qps_test_status"
-        echo "🗑️ QPS测试状态标记文件已清理"
-    fi
-    
-    echo "✅ QPS执行器清理完成"
-}
-
 # 主函数
 main() {
-    # 设置清理陷阱
-    trap cleanup EXIT INT TERM
-    
+
     # 解析参数
     parse_arguments "$@"
     
