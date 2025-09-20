@@ -2086,7 +2086,6 @@ start_unified_monitoring() {
                 sleep $((next_run - now))
             fi
         done
-        fi
     fi
 
     END_TIME=$(get_unified_timestamp)
