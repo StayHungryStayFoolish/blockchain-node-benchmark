@@ -46,10 +46,13 @@ RPC_MODE="${RPC_MODE:-single}"      # RPC模式: single/mixed (默认single)
 # =====================================================================
 # 高性能配置缓存机制 - 防止重复加载和JSON解析
 # =====================================================================
-CONFIG_CACHE_KEY="${BLOCKCHAIN_NODE}_${RPC_MODE}"
-
 # 直接加载配置
 echo "🔧 开始加载配置..." >&2
+
+# 检查配置是否已加载，避免重复输出
+if [[ "${CONFIG_ALREADY_LOADED:-}" == "true" && "${FORCE_CONFIG_RELOAD:-}" != "true" ]]; then
+    return 0
+fi
 
 # 获取配置目录
 CONFIG_DIR="$(dirname "${BASH_SOURCE[0]}")"
@@ -825,6 +828,8 @@ export NETWORK_MAX_BANDWIDTH_MBPS DEPLOYMENT_PLATFORM ENA_MONITOR_ENABLED
 export NETWORK_INTERFACE BASE_MEMORY_DIR
 export BASE_FRAMEWORK_DIR BASE_DATA_DIR DEPLOYMENT_STRUCTURE
 export BLOCKCHAIN_PROCESS_NAMES_STR="${BLOCKCHAIN_PROCESS_NAMES[*]}"
+
+export CONFIG_ALREADY_LOADED="true"
 
 echo "🔧 RPC方法配置完成:" >&2
 echo "   区块链类型: $BLOCKCHAIN_NODE" >&2

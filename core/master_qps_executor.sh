@@ -643,8 +643,22 @@ execute_single_qps_test() {
     
     # 执行vegeta测试
     echo "📊 执行命令: $vegeta_cmd"
-    if $vegeta_cmd | vegeta report -type=json > "$result_file" 2>/dev/null; then
+    
+    # 先保存attack输出到临时文件
+    local attack_output="${TMP_DIR}/vegeta_attack_${qps}qps_$(date +%Y%m%d_%H%M%S).bin"
+    if $vegeta_cmd > "$attack_output" 2>/dev/null; then
+        # 生成JSON报告（保持现有功能）
+        vegeta report -type=json < "$attack_output" > "$result_file" 2>/dev/null
+        
+        # 生成TXT报告供分析器使用
+        local txt_report_file="${REPORTS_DIR}/vegeta_${qps}qps_$(date +%Y%m%d_%H%M%S).txt"
+        vegeta report -type=text < "$attack_output" > "$txt_report_file" 2>/dev/null
+        
+        # 清理临时文件
+        rm -f "$attack_output"
+        
         echo "✅ QPS测试完成，结果保存到: $(basename "$result_file")"
+        echo "📄 文本报告已生成: $(basename "$txt_report_file")"
         
         # 解析测试结果
         local total_requests=$(jq -r '.requests' "$result_file" 2>/dev/null || echo "1")

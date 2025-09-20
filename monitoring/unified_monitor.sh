@@ -599,6 +599,11 @@ get_ena_allowance_data() {
     ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
     for field in "${ena_fields[@]}"; do
         local value=$(echo "$ethtool_output" | grep "$field:" | awk '{print $2}' || echo "0")
+        # 添加数据验证，确保值是有效数字
+        if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+            log_debug "ENA字段 $field 数据异常: '$value'，使用默认值0"
+            value="0"
+        fi
         if [[ -n "$ena_values" ]]; then
             ena_values="$ena_values,$value"
         else

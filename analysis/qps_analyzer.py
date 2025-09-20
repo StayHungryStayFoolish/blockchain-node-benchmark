@@ -426,9 +426,19 @@ class NodeQPSAnalyzer:
             return None
 
     def get_latest_csv(self) -> Optional[str]:
-        """获取最新的CSV监控文件"""
-        csv_files = glob.glob(f"{self.output_dir}/logs/*.csv")
-        return max(csv_files, key=os.path.getctime) if csv_files else None
+        """改进的CSV文件查找逻辑，支持多种路径模式"""
+        csv_patterns = [
+            f"{self.output_dir}/logs/performance_latest.csv",
+            f"{self.output_dir}/logs/performance_*.csv",
+            f"{self.output_dir}/current/logs/performance_latest.csv",
+            f"{self.output_dir}/current/logs/performance_*.csv"
+        ]
+        
+        for pattern in csv_patterns:
+            csv_files = glob.glob(pattern)
+            if csv_files:
+                return max(csv_files, key=os.path.getctime)
+        return None
 
     def load_and_clean_data(self) -> pd.DataFrame:
         """加载和清理监控数据，改进错误处理"""

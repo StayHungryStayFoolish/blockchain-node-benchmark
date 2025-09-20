@@ -22,7 +22,7 @@ class CSVDataProcessor:
         
     def load_csv_data(self, csv_file: str) -> bool:
         """
-        加载CSV数据
+        增强的CSV数据加载，包含完整验证
         
         Args:
             csv_file: CSV文件路径
@@ -34,17 +34,55 @@ class CSVDataProcessor:
             if not os.path.exists(csv_file):
                 logger.error(f"❌ CSV文件不存在: {csv_file}")
                 return False
+            
+            # 检查文件大小
+            file_size = os.path.getsize(csv_file)
+            if file_size == 0:
+                logger.warning(f"⚠️ CSV文件为空: {csv_file}")
+                return False
+            
+            # 检查文件格式 - 读取前几行验证
+            with open(csv_file, 'r', encoding='utf-8') as f:
+                first_line = f.readline().strip()
+                if not first_line:
+                    logger.error(f"❌ CSV文件无内容: {csv_file}")
+                    return False
                 
+                if ',' not in first_line:
+                    logger.error(f"❌ CSV文件格式无效，缺少逗号分隔符: {csv_file}")
+                    return False
+                
+                # 检查是否有足够的列
+                column_count = len(first_line.split(','))
+                if column_count < 2:
+                    logger.error(f"❌ CSV文件列数不足: {column_count} 列")
+                    return False
+            
+            # 尝试读取CSV
             self.df = pd.read_csv(csv_file)
             self.csv_file = csv_file
             
+            # 验证数据完整性
             if self.df.empty:
-                logger.warning(f"⚠️ CSV文件为空: {csv_file}")
+                logger.warning(f"⚠️ CSV数据为空: {csv_file}")
                 return False
-                
+            
+            if len(self.df.columns) == 0:
+                logger.error(f"❌ CSV文件无有效列: {csv_file}")
+                return False
+            
             logger.info(f"✅ 成功加载CSV数据: {len(self.df)} 行, {len(self.df.columns)} 列")
             return True
             
+        except pd.errors.EmptyDataError:
+            logger.error(f"❌ CSV文件无数据行: {csv_file}")
+            return False
+        except pd.errors.ParserError as e:
+            logger.error(f"❌ CSV解析错误: {e}")
+            return False
+        except UnicodeDecodeError as e:
+            logger.error(f"❌ CSV文件编码错误: {e}")
+            return False
         except Exception as e:
             logger.error(f"❌ 加载CSV数据失败: {e}")
             return False

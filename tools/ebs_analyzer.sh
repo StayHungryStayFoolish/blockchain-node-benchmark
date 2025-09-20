@@ -43,7 +43,7 @@ analyze_ebs_performance() {
             # 框架标准格式: data_{设备名}_{指标}
             data_${LEDGER_DEVICE}_util) data_util_idx=$i ;;
             data_${LEDGER_DEVICE}_total_iops) data_iops_idx=$i ;;
-            data_${LEDGER_DEVICE}_throughput_mibs) data_throughput_idx=$i ;;
+            data_${LEDGER_DEVICE}_total_throughput_mibs) data_throughput_idx=$i ;;
             data_${LEDGER_DEVICE}_avg_await) data_await_idx=$i ;;
         esac
     done
@@ -62,7 +62,7 @@ analyze_ebs_performance() {
                 # 框架标准格式: accounts_{设备名}_{指标}
                 accounts_${ACCOUNTS_DEVICE}_util) accounts_util_idx=$i ;;
                 accounts_${ACCOUNTS_DEVICE}_total_iops) accounts_iops_idx=$i ;;
-                accounts_${ACCOUNTS_DEVICE}_throughput_mibs) accounts_throughput_idx=$i ;;
+                accounts_${ACCOUNTS_DEVICE}_total_throughput_mibs) accounts_throughput_idx=$i ;;
                 accounts_${ACCOUNTS_DEVICE}_avg_await) accounts_await_idx=$i ;;
             esac
         done
