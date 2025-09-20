@@ -1946,23 +1946,6 @@ except:
     fi
 
     # 如果CSV文件不存在或为空，先写入头部
-    if [[ $((iteration_count % 10)) -eq 0 ]]; then
-        local monitor_overhead_file="${LOGS_DIR}/monitoring_overhead_${SESSION_TIMESTAMP}.csv"
-        
-        # 创建开销数据文件头部
-        if [[ ! -f "$monitor_overhead_file" ]]; then
-            echo "timestamp,cpu_overhead,memory_overhead,io_overhead" > "$monitor_overhead_file"
-        fi
-        
-        # 收集监控进程的资源使用情况
-        local monitor_cpu=$(ps -p $$ -o %cpu --no-headers 2>/dev/null | tr -d ' ' || echo "0")
-        local monitor_mem=$(ps -p $$ -o %mem --no-headers 2>/dev/null | tr -d ' ' || echo "0")
-        local timestamp_iso=$(date -Iseconds)
-        
-        echo "$timestamp_iso,$monitor_cpu,$monitor_mem,0" >> "$monitor_overhead_file"
-    fi
-
-    # 如果CSV文件不存在或为空，先写入头部
     if [[ ! -f "$UNIFIED_LOG" ]] || [[ ! -s "$UNIFIED_LOG" ]]; then
         local csv_header=$(generate_csv_header)
         echo "$csv_header" > "$UNIFIED_LOG"
