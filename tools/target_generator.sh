@@ -5,13 +5,10 @@
 # 支持基于 fetch_active_accounts.py 生成的地址文件
 # =====================================================================
 
-# 加载配置文件 - 确保继承父进程的区块链配置
-# 如果配置已经加载且BLOCKCHAIN_NODE匹配，则跳过重新加载
-if [[ "${CONFIG_LOADED:-}" != "true" || "${LAST_BLOCKCHAIN_NODE:-}" != "${BLOCKCHAIN_NODE:-solana}" ]]; then
-    if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
-        echo "❌ 错误: 配置文件加载失败" >&2
-        exit 1
-    fi
+# 加载配置文件
+if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
+    echo "❌ 错误: 配置文件加载失败" >&2
+    exit 1
 fi
 
 # 智能配置检查和修复

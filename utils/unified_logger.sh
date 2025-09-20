@@ -11,10 +11,8 @@ if [[ "${UNIFIED_LOGGER_LOADED:-false}" == "true" ]] && [[ "$(type -t init_logge
     return 0
 fi
 
-# 引入配置 - 防止重复加载
-if [[ -z "${CONFIG_LOADED:-}" ]]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh"
-fi
+# 引入配置
+source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh"
 
 # =====================================================================
 # 日志配置常量

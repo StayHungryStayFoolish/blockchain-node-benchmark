@@ -48,16 +48,8 @@ RPC_MODE="${RPC_MODE:-single}"      # RPC模式: single/mixed (默认single)
 # =====================================================================
 CONFIG_CACHE_KEY="${BLOCKCHAIN_NODE}_${RPC_MODE}"
 
-# 检查是否需要重新加载配置
-NEED_RELOAD="true"
-if [[ "${CONFIG_LOADED:-}" != "true" ]]; then
-    NEED_RELOAD="true"
-elif [[ "${LAST_CONFIG_CACHE_KEY:-}" != "$CONFIG_CACHE_KEY" ]]; then
-    NEED_RELOAD="true"
-fi
-if [[ "$NEED_RELOAD" == "false" ]]; then
-    return 0
-fi
+# 直接加载配置
+echo "🔧 开始加载配置..." >&2
 
 # 获取配置目录
 CONFIG_DIR="$(dirname "${BASH_SOURCE[0]}")"
@@ -671,6 +663,9 @@ validate_config_consistency() {
 
 # 基于BLOCKCHAIN_NODE自动生成配置
 generate_auto_config() {
+    # 清理所有配置缓存，确保环境干净，避免不同区块链配置冲突
+    clear_config_cache
+    
     local blockchain_node="${BLOCKCHAIN_NODE:-solana}"
     local blockchain_node_lower
     # 验证BLOCKCHAIN_NODE值
@@ -744,16 +739,18 @@ generate_auto_config() {
 }
 
 # 清理过期缓存函数
-clear_stale_cache() {
-    local current_blockchain="${BLOCKCHAIN_NODE:-solana}"
-    local current_rpc_mode="${RPC_MODE:-single}"
+clear_config_cache() {
+    local cache_pattern="${1:-CACHED_}"
     
-    # 清理不匹配当前配置的缓存
-    for var in $(env | grep "^CACHED_RPC_METHODS_" | cut -d= -f1); do
-        if [[ "$var" != "CACHED_RPC_METHODS_${current_blockchain}_${current_rpc_mode}" ]]; then
-            unset "$var"
-        fi
+    # 清理缓存变量
+    for var in $(compgen -v | grep "^${cache_pattern}" 2>/dev/null || true); do
+        unset "$var" 2>/dev/null || true
     done
+    
+    # 清理部署路径检测变量
+    unset DEPLOYMENT_PATHS_DETECTED 2>/dev/null || true
+    
+    echo "🧹 配置缓存已清理完成" >&2
 }
 
 # =====================================================================
@@ -811,10 +808,8 @@ fi
 echo "调用generate_auto_config前: BLOCKCHAIN_NODE=$BLOCKCHAIN_NODE" >&2
 generate_auto_config
 
-export -f get_current_rpc_methods get_param_format_from_json clear_config_cache generate_auto_config validate_config_consistency clear_stale_cache
-export CONFIG_LOADED="true"
+export -f get_current_rpc_methods get_param_format_from_json clear_config_cache generate_auto_config validate_config_consistency
 export LAST_BLOCKCHAIN_NODE="${BLOCKCHAIN_NODE:-solana}"
-export LAST_CONFIG_CACHE_KEY="$CONFIG_CACHE_KEY"
 export ACCOUNTS_OUTPUT_FILE SINGLE_METHOD_TARGETS_FILE MIXED_METHOD_TARGETS_FILE
 export LOCAL_RPC_URL MAINNET_RPC_URL BLOCKCHAIN_NODE BLOCKCHAIN_PROCESS_NAMES RPC_MODE
 export ACCOUNT_COUNT ACCOUNT_OUTPUT_FILE ACCOUNT_MAX_SIGNATURES ACCOUNT_TX_BATCH_SIZE ACCOUNT_SEMAPHORE_LIMIT
