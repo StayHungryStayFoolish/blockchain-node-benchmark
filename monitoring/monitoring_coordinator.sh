@@ -224,18 +224,37 @@ stop_all_monitors() {
     done
     
     # 额外清理：强制终止所有相关进程
-    echo "🧹 清理残留的监控进程..."
+    # 检查是否有进程需要清理
+    local processes_to_clean=""
     for script in "${MONITOR_TASKS[@]}"; do
-        pkill -f "$script" 2>/dev/null || true
+        local pids=$(pgrep -f "$script" 2>/dev/null || true)
+        if [[ -n "$pids" ]]; then
+            processes_to_clean="$processes_to_clean $script"
+        fi
     done
     
+    # 只有在有进程需要清理时才输出日志和执行清理
+    if [[ -n "$processes_to_clean" ]]; then
+        echo "🧹 清理残留的监控进程..."
+        for script in "${MONITOR_TASKS[@]}"; do
+            pkill -f "$script" 2>/dev/null || true
+        done
+        echo "✅ 清理了监控进程:$processes_to_clean"
+    else
+        echo "ℹ️  没有发现需要清理的监控进程"
+    fi
+    
     # 停止iostat持续采样进程（由unified_monitor.sh启动）
-    echo "🧹 清理iostat进程..."
-    # 使用更精确的进程匹配模式
-    pkill -f "iostat -dx [0-9]+" 2>/dev/null || true
-    # 清理iostat相关的临时文件
-    rm -f /tmp/iostat_*.pid /tmp/iostat_*.data 2>/dev/null || true
-    echo "✅ iostat进程已清理"
+    local iostat_pids=$(pgrep -f "iostat -dx [0-9]+" 2>/dev/null || true)
+    if [[ -n "$iostat_pids" ]]; then
+        echo "🧹 清理iostat进程..."
+        pkill -f "iostat -dx [0-9]+" 2>/dev/null || true
+        # 清理iostat相关的临时文件
+        rm -f /tmp/iostat_*.pid /tmp/iostat_*.data 2>/dev/null || true
+        echo "✅ iostat进程已清理"
+    else
+        echo "ℹ️  没有发现需要清理的iostat进程"
+    fi
     
     # 清理PID文件
     > "$MONITOR_PIDS_FILE"

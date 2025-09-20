@@ -563,7 +563,7 @@ EOF
     echo "📊 详细瓶颈信息已保存到: $QPS_STATUS_FILE"
     
     # 同时保存到专门的瓶颈分析文件
-    local bottleneck_analysis_file="${LOGS_DIR}/bottleneck_analysis_$(date +%Y%m%d_%H%M%S).json"
+    local bottleneck_analysis_file="${LOGS_DIR}/bottleneck_analysis_${SESSION_TIMESTAMP}.json"
     echo "$bottleneck_data" > "$bottleneck_analysis_file"
     echo "🔍 瓶颈分析文件: $(basename "$bottleneck_analysis_file")"
 }
@@ -639,19 +639,19 @@ execute_single_qps_test() {
     
     # 构建vegeta命令
     local vegeta_cmd="vegeta attack -format=json -targets=$targets_file -rate=$qps -duration=${duration}s"
-    local result_file="${VEGETA_RESULTS_DIR}/vegeta_${qps}qps_$(date +%Y%m%d_%H%M%S).json"
+    local result_file="${VEGETA_RESULTS_DIR}/vegeta_${qps}qps_${SESSION_TIMESTAMP}.json"
     
     # 执行vegeta测试
     echo "📊 执行命令: $vegeta_cmd"
     
     # 先保存attack输出到临时文件
-    local attack_output="${TMP_DIR}/vegeta_attack_${qps}qps_$(date +%Y%m%d_%H%M%S).bin"
+    local attack_output="${TMP_DIR}/vegeta_attack_${qps}qps_${SESSION_TIMESTAMP}.bin"
     if $vegeta_cmd > "$attack_output" 2>/dev/null; then
         # 生成JSON报告（保持现有功能）
         vegeta report -type=json < "$attack_output" > "$result_file" 2>/dev/null
         
         # 生成TXT报告供分析器使用
-        local txt_report_file="${REPORTS_DIR}/vegeta_${qps}qps_$(date +%Y%m%d_%H%M%S).txt"
+        local txt_report_file="${REPORTS_DIR}/vegeta_${qps}qps_${SESSION_TIMESTAMP}.txt"
         vegeta report -type=text < "$attack_output" > "$txt_report_file" 2>/dev/null
         
         # 清理临时文件
@@ -693,7 +693,7 @@ execute_single_qps_test() {
 execute_qps_test() {
     echo "🚀 开始执行QPS测试..."
     
-    local test_start_time=$(date +"%Y%m%d_%H%M%S")
+    local test_start_time=${SESSION_TIMESTAMP}
     
     # 选择目标文件
     local targets_file

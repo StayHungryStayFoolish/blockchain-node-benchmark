@@ -272,7 +272,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/iostat_collector.sh"
 
 # 避免重复定义只读变量 - 使用config_loader.sh中的定义
 if [[ -z "${UNIFIED_LOG:-}" ]]; then
-    UNIFIED_LOG="${LOGS_DIR}/performance_$(date +%Y%m%d_%H%M%S).csv"
+    UNIFIED_LOG="${LOGS_DIR}/performance_${SESSION_TIMESTAMP}.csv"
 fi
 
 # MONITORING_OVERHEAD_LOG 已在 config_loader.sh 的 detect_deployment_paths() 函数中设置
@@ -1081,7 +1081,7 @@ generate_performance_optimization_suggestions() {
 
 # 生成性能影响报告
 generate_performance_impact_report() {
-    local report_file="${LOGS_DIR}/monitoring_performance_report_$(date +%Y%m%d_%H%M%S).txt"
+    local report_file="${LOGS_DIR}/monitoring_performance_report_${SESSION_TIMESTAMP}.txt"
 
     if [[ ! -f "$PERFORMANCE_LOG" ]]; then
         log_warn "性能日志文件不存在，无法生成报告: $PERFORMANCE_LOG"
@@ -1883,9 +1883,32 @@ log_performance_data() {
     local ena_data=""
     if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
         ena_data=$(get_ena_allowance_data)
+        
+        # 添加ENA数据验证和调试
+        log_debug "ENA数据调试: '$ena_data'"
+        log_debug "ENA数据长度: ${#ena_data}"
+        
+        # 验证ENA数据格式（只包含数字和逗号）
+        if [[ ! "$ena_data" =~ ^[0-9,]+$ ]]; then
+            log_error "ENA数据格式异常: '$ena_data'"
+            log_error "前100字符: '$(echo "$ena_data" | cut -c1-100)'"
+            
+            # 使用默认值替换异常数据
+            local field_count=$(echo "$ENA_ALLOWANCE_FIELDS_STR" | wc -w)
+            ena_data=$(printf "0,%.0s" $(seq 1 $field_count) | sed 's/,$//')
+            log_error "使用默认ENA数据: '$ena_data'"
+        fi
+        
         local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data,$block_height_data"
     else
         local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data,$block_height_data"
+    fi
+    
+    # 最终数据行验证
+    log_debug "最终数据行长度: ${#data_line}"
+    if [[ ${#data_line} -gt 10000 ]]; then
+        log_error "数据行异常长: ${#data_line} 字符"
+        log_error "数据行前200字符: '$(echo "$data_line" | cut -c1-200)'"
     fi
 
     # 如果CSV文件不存在或为空，先写入头部
@@ -2403,7 +2426,7 @@ enhanced_collect_monitoring_overhead_data() {
 
 # 错误恢复状态报告
 generate_error_recovery_report() {
-    local report_file="${LOGS_DIR}/error_recovery_report_$(date +%Y%m%d_%H%M%S).txt"
+    local report_file="${LOGS_DIR}/error_recovery_report_${SESSION_TIMESTAMP}.txt"
 
     log_info "生成错误恢复报告: $report_file"
 

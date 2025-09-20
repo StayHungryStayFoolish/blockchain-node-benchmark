@@ -73,7 +73,7 @@ log_script_start "$(basename "$0")"
 
 # 全局变量
 MONITORING_PIDS=()
-TEST_SESSION_ID="session_$(date +%Y%m%d_%H%M%S)"
+TEST_SESSION_ID="session_${SESSION_TIMESTAMP}"
 BOTTLENECK_DETECTED=false
 BOTTLENECK_INFO=""
 
@@ -338,9 +338,22 @@ process_test_results() {
         done
         
         # 获取最大QPS (从QPS状态文件或跳过归档)
+        echo "🔍 QPS状态文件调试:"
+        echo "  文件路径: ${QPS_STATUS_FILE}"
+        echo "  文件存在: $(test -f "${QPS_STATUS_FILE}" && echo "是" || echo "否")"
+        
         local max_qps=""
         if [[ -f "${QPS_STATUS_FILE}" ]]; then
+            echo "  文件大小: $(stat -c%s "${QPS_STATUS_FILE}" 2>/dev/null || stat -f%z "${QPS_STATUS_FILE}" 2>/dev/null || echo "unknown") bytes"
+            echo "  JSON格式: $(jq empty "${QPS_STATUS_FILE}" 2>/dev/null && echo "有效" || echo "无效")"
+            echo "  文件内容:"
+            cat "${QPS_STATUS_FILE}"
+            
             max_qps=$(jq -r '.max_successful_qps // empty' "${QPS_STATUS_FILE}" 2>/dev/null || echo "")
+            echo "  提取的QPS值: '$max_qps'"
+        else
+            echo "  目录内容:"
+            ls -la "$(dirname "${QPS_STATUS_FILE}")" 2>/dev/null || echo "目录不存在"
         fi
         
         # 如果无法获取有效的QPS值，跳过归档
@@ -671,7 +684,7 @@ generate_final_reports() {
 generate_bottleneck_summary_report() {
     echo "🚨 生成瓶颈摘要报告..."
     
-    local bottleneck_summary_file="${REPORTS_DIR}/bottleneck_summary_$(date +%Y%m%d_%H%M%S).md"
+    local bottleneck_summary_file="${REPORTS_DIR}/bottleneck_summary_${SESSION_TIMESTAMP}.md"
     
     # 读取瓶颈信息
     local bottleneck_info=""

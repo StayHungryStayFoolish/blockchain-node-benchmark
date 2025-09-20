@@ -465,17 +465,22 @@ class NodeQPSAnalyzer:
             if qps_column is None:
                 print("⚠️  No QPS data found in CSV, this appears to be system monitoring data only")
                 print("📊 Available columns:", ', '.join(df.columns[:10]))
-                # 仍然返回数据，用于系统性能分析
+                
+                # 为系统监控数据添加虚拟QPS列，避免后续KeyError
+                df['current_qps'] = 0  # 使用数值0而不是字符串'0'
+                df['qps_data_available'] = False
                 df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
                 return df
 
             # 处理current_qps列
             df['current_qps'] = df[qps_column].astype(str)
+            df['qps_data_available'] = True
             numeric_mask = df['current_qps'].str.isdigit()
             numeric_df = df[numeric_mask].copy()
 
             if len(numeric_df) == 0:
                 print("⚠️  No numeric QPS data found")
+                df['qps_data_available'] = False
                 return df
 
             # 数据类型转换

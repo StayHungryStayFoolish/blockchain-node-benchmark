@@ -27,7 +27,7 @@ init_logger "ena_network_monitor" $LOG_LEVEL "${LOGS_DIR}/ena_network_monitor.lo
 
 # ENA监控日志文件 - 避免重复定义只读变量
 if [[ -z "${ENA_LOG:-}" ]]; then
-    readonly ENA_LOG="${LOGS_DIR}/ena_network_$(date +%Y%m%d_%H%M%S).csv"
+    readonly ENA_LOG="${LOGS_DIR}/ena_network_${SESSION_TIMESTAMP}.csv"
 fi
 
 # 初始化ENA监控

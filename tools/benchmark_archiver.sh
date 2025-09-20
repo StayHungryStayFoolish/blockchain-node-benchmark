@@ -187,7 +187,7 @@ archive_current_test() {
     fi
     
     # 生成运行ID
-    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local timestamp=${SESSION_TIMESTAMP}
     local run_number=$(get_next_run_number)
     local run_id="run_${run_number}_${timestamp}"
     

@@ -305,8 +305,11 @@ class ComprehensiveAnalyzer:
         # Using English title directly
         fig.suptitle('Blockchain Node QPS Ultimate Performance Analysis Dashboard', fontsize=16, fontweight='bold')
 
+        # 检查QPS数据可用性
+        qps_available = 'qps_data_available' in df.columns and df['qps_data_available'].iloc[0] if len(df) > 0 else False
+        
         # 1. CPU使用率 vs QPS
-        if len(df) > 0 and 'cpu_usage' in df.columns:
+        if len(df) > 0 and 'cpu_usage' in df.columns and qps_available and 'current_qps' in df.columns:
             axes[0, 0].plot(df['current_qps'], df['cpu_usage'], 'bo-', alpha=0.7, markersize=4)
             axes[0, 0].axhline(y=85, color='red', linestyle='--', alpha=0.8, label='Warning (85%)')
             axes[0, 0].set_title('CPU Usage vs QPS')
@@ -314,9 +317,13 @@ class ComprehensiveAnalyzer:
             axes[0, 0].set_ylabel('CPU %')
             axes[0, 0].legend()
             axes[0, 0].grid(True, alpha=0.3)
+        else:
+            axes[0, 0].text(0.5, 0.5, 'QPS Data Not Available\nfor CPU Analysis', ha='center', va='center',
+                           transform=axes[0, 0].transAxes, fontsize=12)
+            axes[0, 0].set_title('CPU Usage vs QPS (No Data)')
 
         # 2. 内存使用率 vs QPS
-        if len(df) > 0 and 'mem_usage' in df.columns:
+        if len(df) > 0 and 'mem_usage' in df.columns and qps_available and 'current_qps' in df.columns:
             axes[0, 1].plot(df['current_qps'], df['mem_usage'], 'go-', alpha=0.7, markersize=4)
             axes[0, 1].axhline(y=90, color='red', linestyle='--', alpha=0.8, label='Warning (90%)')
             axes[0, 1].set_title('Memory Usage vs QPS')
@@ -324,9 +331,13 @@ class ComprehensiveAnalyzer:
             axes[0, 1].set_ylabel('Memory %')
             axes[0, 1].legend()
             axes[0, 1].grid(True, alpha=0.3)
+        else:
+            axes[0, 1].text(0.5, 0.5, 'QPS Data Not Available\nfor Memory Analysis', ha='center', va='center',
+                           transform=axes[0, 1].transAxes, fontsize=12)
+            axes[0, 1].set_title('Memory Usage vs QPS (No Data)')
 
         # 3. RPC延迟 vs QPS
-        if len(df) > 0 and 'rpc_latency_ms' in df.columns:
+        if len(df) > 0 and 'rpc_latency_ms' in df.columns and qps_available and 'current_qps' in df.columns:
             axes[1, 0].plot(df['current_qps'], df['rpc_latency_ms'], 'ro-', alpha=0.7, markersize=4)
             axes[1, 0].axhline(y=1000, color='orange', linestyle='--', alpha=0.8, label='High Latency (1s)')
             axes[1, 0].set_title('RPC Latency vs QPS')
@@ -334,6 +345,10 @@ class ComprehensiveAnalyzer:
             axes[1, 0].set_ylabel('Latency (ms)')
             axes[1, 0].legend()
             axes[1, 0].grid(True, alpha=0.3)
+        else:
+            axes[1, 0].text(0.5, 0.5, 'QPS Data Not Available\nfor RPC Latency Analysis', ha='center', va='center',
+                           transform=axes[1, 0].transAxes, fontsize=12)
+            axes[1, 0].set_title('RPC Latency vs QPS (No Data)')
 
         # 4. 预留位置（原RPC错误率图表已删除）
         axes[1, 1].text(0.5, 0.5, 'Chart Removed\n(Invalid Data Source)', ha='center', va='center',
@@ -368,26 +383,36 @@ class ComprehensiveAnalyzer:
 
         # 8. 性能悬崖可视化
         cliff_analysis = rpc_deep_analysis.get('performance_cliff', {})
-        if cliff_analysis and len(df) > 0:
-            qps_latency = df.groupby('current_qps')['rpc_latency_ms'].mean().reset_index()
-            qps_latency = qps_latency.sort_values('current_qps')
+        if cliff_analysis and len(df) > 0 and qps_available and 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns:
+            try:
+                qps_latency = df.groupby('current_qps')['rpc_latency_ms'].mean().reset_index()
+                qps_latency = qps_latency.sort_values('current_qps')
 
-            axes[3, 1].plot(qps_latency['current_qps'], qps_latency['rpc_latency_ms'], 'bo-', alpha=0.7)
+                axes[3, 1].plot(qps_latency['current_qps'], qps_latency['rpc_latency_ms'], 'bo-', alpha=0.7)
 
-            # 标记悬崖点
-            cliff_points = cliff_analysis.get('performance_degradation_qps', [])
-            for cliff_qps in cliff_points:
-                cliff_latency = qps_latency[qps_latency['current_qps'] == cliff_qps]['rpc_latency_ms']
-                if len(cliff_latency) > 0:
-                    axes[3, 1].scatter(cliff_qps, cliff_latency.iloc[0], color='red', s=100, marker='x',
-                                       label='Performance Cliff')
+                # 标记悬崖点
+                cliff_points = cliff_analysis.get('performance_degradation_qps', [])
+                for cliff_qps in cliff_points:
+                    cliff_latency = qps_latency[qps_latency['current_qps'] == cliff_qps]['rpc_latency_ms']
+                    if len(cliff_latency) > 0:
+                        axes[3, 1].scatter(cliff_qps, cliff_latency.iloc[0], color='red', s=100, marker='x',
+                                           label='Performance Cliff')
 
-            axes[3, 1].set_title('Performance Cliff Detection')
-            axes[3, 1].set_xlabel('QPS')
-            axes[3, 1].set_ylabel('Average Latency (ms)')
-            axes[3, 1].grid(True, alpha=0.3)
-            if cliff_points:
-                axes[3, 1].legend()
+                axes[3, 1].set_title('Performance Cliff Detection')
+                axes[3, 1].set_xlabel('QPS')
+                axes[3, 1].set_ylabel('Average Latency (ms)')
+                axes[3, 1].grid(True, alpha=0.3)
+                if cliff_points:
+                    axes[3, 1].legend()
+            except Exception as e:
+                logger.warning(f"⚠️ Performance cliff visualization failed: {e}")
+                axes[3, 1].text(0.5, 0.5, 'Performance Cliff Analysis\nData Processing Error', ha='center', va='center',
+                               transform=axes[3, 1].transAxes, fontsize=12)
+                axes[3, 1].set_title('Performance Cliff Detection (Error)')
+        else:
+            axes[3, 1].text(0.5, 0.5, 'QPS Data Not Available\nfor Cliff Analysis', ha='center', va='center',
+                           transform=axes[3, 1].transAxes, fontsize=12)
+            axes[3, 1].set_title('Performance Cliff Detection (No Data)')
 
         plt.tight_layout()
         
