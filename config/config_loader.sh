@@ -680,7 +680,7 @@ generate_auto_config() {
     
     # 性能优化：使用缓存的JSON解析结果
     local cache_var_name="CACHED_CHAIN_CONFIG_${blockchain_node_lower}"
-    local cached_config="${!cache_var_name}"
+    local cached_config="${!cache_var_name:-}"
     
     if [[ -n "$cached_config" ]]; then
         # 使用缓存的配置
@@ -709,7 +709,7 @@ generate_auto_config() {
     
     # 性能优化：使用缓存的RPC方法解析结果
     local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower}_${rpc_mode_lower}"
-    local cached_rpc_methods="${!rpc_cache_var_name}"
+    local cached_rpc_methods="${!rpc_cache_var_name:-}"
     
     if [[ -n "$cached_rpc_methods" ]]; then
         # 使用缓存的RPC方法
@@ -779,7 +779,7 @@ get_param_format_from_json() {
     
     # 性能优化：使用缓存的参数格式
     local param_cache_var_name="CACHED_PARAM_FORMAT_${method}"
-    local cached_format="${!param_cache_var_name}"
+    local cached_format="${!param_cache_var_name:-}"
     
     if [[ -n "$cached_format" ]]; then
         echo "$cached_format"

@@ -2467,7 +2467,7 @@ monitoring_system_integrity_check() {
     # 检查配置完整性
     local required_vars=("LOGS_DIR" "MONITOR_INTERVAL" "LEDGER_DEVICE")
     for var in "${required_vars[@]}"; do
-        if [[ -z "${!var}" ]]; then
+        if [[ -z "${!var:-}" ]]; then
             integrity_issues+=("必需配置变量未设置: $var")
         fi
     done
