@@ -49,7 +49,7 @@ RPC_MODE="${RPC_MODE:-single}"      # RPC模式: single/mixed (默认single)
 CONFIG_CACHE_KEY="${BLOCKCHAIN_NODE}_${RPC_MODE}"
 
 # 检查是否需要重新加载配置
-NEED_RELOAD="false"
+NEED_RELOAD="true"
 if [[ "${CONFIG_LOADED:-}" != "true" ]]; then
     NEED_RELOAD="true"
 elif [[ "${LAST_CONFIG_CACHE_KEY:-}" != "$CONFIG_CACHE_KEY" ]]; then
@@ -141,7 +141,6 @@ detect_deployment_platform() {
     
     # 标记平台检测已完成并导出到子进程
     DEPLOYMENT_PLATFORM_DETECTED=true
-    export DEPLOYMENT_PLATFORM_DETECTED
 }
 
 # ----- 网络接口检测函数 -----
@@ -195,7 +194,6 @@ detect_deployment_paths() {
     # 设置内存共享目录 (独立于数据目录，保持系统级路径)
     # Linux 生产环境 - 使用系统 tmpfs
     BASE_MEMORY_DIR="/dev/shm/blockchain-node-benchmark"
-    DEPLOYMENT_ENV="production"
     echo "🐧 Linux生产环境" >&2
     
     # 标准化路径配置
@@ -240,19 +238,25 @@ detect_deployment_paths() {
     # 内存共享目录 (独立于数据目录，使用系统级路径)
     MEMORY_SHARE_DIR="${BASE_MEMORY_DIR}"
     
-    # 设置动态路径变量
+    # 生成统一的会话时间戳（确保所有进程使用相同的时间戳）
+    if [[ -z "${SESSION_TIMESTAMP:-}" ]]; then
+        SESSION_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        export SESSION_TIMESTAMP
+    fi
+    
+    # 设置动态路径变量（使用统一的会话时间戳）
     BLOCK_HEIGHT_CACHE_FILE="${MEMORY_SHARE_DIR}/block_height_monitor_cache.json"
-    BLOCK_HEIGHT_DATA_FILE="${LOGS_DIR}/block_height_monitor_$(date +%Y%m%d_%H%M%S).csv"
+    BLOCK_HEIGHT_DATA_FILE="${LOGS_DIR}/block_height_monitor_${SESSION_TIMESTAMP}.csv"
     ACCOUNTS_OUTPUT_FILE="${TMP_DIR}/${ACCOUNT_OUTPUT_FILE}"
     SINGLE_METHOD_TARGETS_FILE="${TMP_DIR}/targets_single.json"
     MIXED_METHOD_TARGETS_FILE="${TMP_DIR}/targets_mixed.json"
     QPS_STATUS_FILE="${MEMORY_SHARE_DIR}/qps_status.json"
-    TEST_SESSION_DIR="${TMP_DIR}/session_$(date +%Y%m%d_%H%M%S)"
+    TEST_SESSION_DIR="${TMP_DIR}/session_${SESSION_TIMESTAMP}"
     
-    # 设置监控开销优化相关的日志文件路径
-    MONITORING_OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_$(date +%Y%m%d_%H%M%S).csv"
-    PERFORMANCE_LOG="${LOGS_DIR}/monitoring_performance_$(date +%Y%m%d_%H%M%S).log"
-    ERROR_LOG="${LOGS_DIR}/monitoring_errors_$(date +%Y%m%d_%H%M%S).log"
+    # 设置监控开销优化相关的日志文件路径（使用统一时间戳）
+    MONITORING_OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_${SESSION_TIMESTAMP}.csv"
+    PERFORMANCE_LOG="${LOGS_DIR}/monitoring_performance_${SESSION_TIMESTAMP}.log"
+    ERROR_LOG="${LOGS_DIR}/monitoring_errors_${SESSION_TIMESTAMP}.log"
     
     # 临时文件模式 (用于清理)
     TEMP_FILE_PATTERN="${TMP_DIR}/${TEMP_FILE_PREFIX}-*"
@@ -637,7 +641,33 @@ validate_blockchain_node() {
     return 1  # 无效
 }
 
+# 配置一致性验证函数
+validate_config_consistency() {
+    local blockchain_node_lower
+    blockchain_node_lower=$(echo "${BLOCKCHAIN_NODE:-solana}" | tr '[:upper:]' '[:lower:]')
+    local rpc_mode_lower
+    rpc_mode_lower=$(echo "${RPC_MODE:-single}" | tr '[:upper:]' '[:lower:]')
 
+    # 验证CHAIN_CONFIG和CURRENT_RPC_METHODS_STRING的一致性
+    if [[ -n "$CHAIN_CONFIG" && "$CHAIN_CONFIG" != "null" ]]; then
+        local expected_method
+        expected_method=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"")
+
+        if [[ -n "$expected_method" && "$expected_method" != "null" ]]; then
+            if [[ "$CURRENT_RPC_METHODS_STRING" != "$expected_method" ]]; then
+                echo "⚠️ 配置不一致检测: 期望 '$expected_method', 实际 '$CURRENT_RPC_METHODS_STRING'" >&2
+                echo "🔧 自动修复配置不一致..." >&2
+                CURRENT_RPC_METHODS_STRING="$expected_method"
+
+                # 更新缓存
+                local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower}_${rpc_mode_lower}"
+                export "$rpc_cache_var_name"="$CURRENT_RPC_METHODS_STRING"
+
+                echo "✅ 配置一致性已修复" >&2
+            fi
+        fi
+    fi
+}
 
 # 基于BLOCKCHAIN_NODE自动生成配置
 generate_auto_config() {
@@ -713,34 +743,6 @@ generate_auto_config() {
     echo "   方法数量: ${#CURRENT_RPC_METHODS_ARRAY[@]}" >&2
 }
 
-# 配置一致性验证函数（混合方案的核心安全机制）
-validate_config_consistency() {
-    local blockchain_node_lower
-    blockchain_node_lower=$(echo "${BLOCKCHAIN_NODE:-solana}" | tr '[:upper:]' '[:lower:]')
-    local rpc_mode_lower
-    rpc_mode_lower=$(echo "${RPC_MODE:-single}" | tr '[:upper:]' '[:lower:]')
-    
-    # 验证CHAIN_CONFIG和CURRENT_RPC_METHODS_STRING的一致性
-    if [[ -n "$CHAIN_CONFIG" && "$CHAIN_CONFIG" != "null" ]]; then
-        local expected_method
-        expected_method=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"")
-        
-        if [[ -n "$expected_method" && "$expected_method" != "null" ]]; then
-            if [[ "$CURRENT_RPC_METHODS_STRING" != "$expected_method" ]]; then
-                echo "⚠️ 配置不一致检测: 期望 '$expected_method', 实际 '$CURRENT_RPC_METHODS_STRING'" >&2
-                echo "🔧 自动修复配置不一致..." >&2
-                CURRENT_RPC_METHODS_STRING="$expected_method"
-                
-                # 更新缓存
-                local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower}_${rpc_mode_lower}"
-                export "$rpc_cache_var_name"="$CURRENT_RPC_METHODS_STRING"
-                
-                echo "✅ 配置一致性已修复" >&2
-            fi
-        fi
-    fi
-}
-
 # 清理过期缓存函数
 clear_stale_cache() {
     local current_blockchain="${BLOCKCHAIN_NODE:-solana}"
@@ -809,17 +811,6 @@ fi
 echo "调用generate_auto_config前: BLOCKCHAIN_NODE=$BLOCKCHAIN_NODE" >&2
 generate_auto_config
 
-clear_config_cache() {
-    local cache_pattern="$1"
-    if [[ -z "$cache_pattern" ]]; then
-        cache_pattern="CACHED_"
-    fi
-    # 清理匹配模式的缓存变量
-    for var in $(compgen -v | grep "^${cache_pattern}"); do
-        unset "$var"
-    done
-}
-
 export -f get_current_rpc_methods get_param_format_from_json clear_config_cache generate_auto_config validate_config_consistency clear_stale_cache
 export CONFIG_LOADED="true"
 export LAST_BLOCKCHAIN_NODE="${BLOCKCHAIN_NODE:-solana}"
@@ -827,16 +818,16 @@ export LAST_CONFIG_CACHE_KEY="$CONFIG_CACHE_KEY"
 export ACCOUNTS_OUTPUT_FILE SINGLE_METHOD_TARGETS_FILE MIXED_METHOD_TARGETS_FILE
 export LOCAL_RPC_URL MAINNET_RPC_URL BLOCKCHAIN_NODE BLOCKCHAIN_PROCESS_NAMES RPC_MODE
 export ACCOUNT_COUNT ACCOUNT_OUTPUT_FILE ACCOUNT_MAX_SIGNATURES ACCOUNT_TX_BATCH_SIZE ACCOUNT_SEMAPHORE_LIMIT
-export CHAIN_CONFIG
+export CHAIN_CONFIG DEPLOYMENT_PLATFORM_DETECTED
 export CURRENT_RPC_METHODS_STRING
 
 export DATA_DIR CURRENT_TEST_DIR LOGS_DIR REPORTS_DIR VEGETA_RESULTS_DIR TMP_DIR ARCHIVES_DIR
 export ERROR_LOG_DIR PYTHON_ERROR_LOG_DIR MEMORY_SHARE_DIR
 export BLOCK_HEIGHT_CACHE_FILE BLOCK_HEIGHT_DATA_FILE QPS_STATUS_FILE TEST_SESSION_DIR
-export MONITORING_OVERHEAD_LOG PERFORMANCE_LOG ERROR_LOG TEMP_FILE_PATTERN
+export MONITORING_OVERHEAD_LOG PERFORMANCE_LOG ERROR_LOG TEMP_FILE_PATTERN SESSION_TIMESTAMP
 
 export NETWORK_MAX_BANDWIDTH_MBPS DEPLOYMENT_PLATFORM ENA_MONITOR_ENABLED
-export NETWORK_INTERFACE BASE_MEMORY_DIR DEPLOYMENT_ENV
+export NETWORK_INTERFACE BASE_MEMORY_DIR
 export BASE_FRAMEWORK_DIR BASE_DATA_DIR DEPLOYMENT_STRUCTURE
 export BLOCKCHAIN_PROCESS_NAMES_STR="${BLOCKCHAIN_PROCESS_NAMES[*]}"
 

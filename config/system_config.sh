@@ -35,13 +35,6 @@ MAX_LOG_FILES=${MAX_LOG_FILES:-5}      # 保留的日志文件数量
 # 日志输出配置
 LOG_JSON=${LOG_JSON:-false}            # JSON格式输出
 
-# Python日志配置
-PYTHON_LOG_LEVEL=${PYTHON_LOG_LEVEL:-"INFO"}
-
-# 导出日志配置环境变量
-export LOG_LEVEL LOG_FORMAT MAX_LOG_SIZE MAX_LOG_FILES
-export LOG_JSON PYTHON_LOG_LEVEL
-
 # ----- 错误处理和恢复配置 -----
 # 错误恢复开关 (true/false) - 基准测试框架中禁用自动恢复以保证测试准确性
 ERROR_RECOVERY_ENABLED=${ERROR_RECOVERY_ENABLED:-false}
@@ -95,14 +88,8 @@ get_unified_epoch() {
 # 静默模式配置
 SILENT_MODE=${SILENT_MODE:-false}
 
-# 监控开销日志存储路径
-MONITORING_OVERHEAD_LOG=""  # 将在路径检测完成后设置
-
 # 监控开销CSV表头定义 - 15个字段 (与unified_monitor.sh实际输出匹配)
 OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage"
-
-# 导出变量
-export OVERHEAD_CSV_HEADER
 
 # 添加配置验证函数
 validate_overhead_csv_header() {
@@ -122,8 +109,8 @@ export -f get_unified_timestamp get_unified_epoch
 export ENA_ALLOWANCE_FIELDS_STR="${ENA_ALLOWANCE_FIELDS[*]}"
 export MONITORING_PROCESS_NAMES_STR="${MONITORING_PROCESS_NAMES[*]}"
 export ENA_ALLOWANCE_FIELDS MONITORING_PROCESS_NAMES DEPLOYMENT_PLATFORM
-export LOG_LEVEL LOG_FORMAT MAX_LOG_SIZE MAX_LOG_FILES LOG_JSON PYTHON_LOG_LEVEL
+export LOG_LEVEL LOG_FORMAT MAX_LOG_SIZE MAX_LOG_FILES LOG_JSON
 export ERROR_RECOVERY_ENABLED ERROR_RECOVERY_DELAY
 export ERROR_LOG_SUBDIR PYTHON_ERROR_LOG_SUBDIR TEMP_FILE_PREFIX
 export AWS_EBS_BASELINE_IO_SIZE_KIB AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB AWS_METADATA_ENDPOINT AWS_METADATA_TOKEN_TTL AWS_METADATA_API_VERSION
-export TIMESTAMP_FORMAT SILENT_MODE MONITORING_OVERHEAD_LOG
+export TIMESTAMP_FORMAT SILENT_MODE OVERHEAD_CSV_HEADER

@@ -1656,12 +1656,6 @@ collect_monitoring_overhead_data() {
 
 # 写入监控开销日志
 write_monitoring_overhead_log() {
-    # 安全检查配置变量
-    if [[ -z "$MONITORING_OVERHEAD_LOG" ]]; then
-        log_warn "MONITORING_OVERHEAD_LOG变量未定义，跳过监控开销日志记录"
-        return 0
-    fi
-    
     # 检查是否需要创建日志文件和写入表头
     if [[ ! -f "$MONITORING_OVERHEAD_LOG" ]] || [[ ! -s "$MONITORING_OVERHEAD_LOG" ]]; then
         echo "$OVERHEAD_CSV_HEADER" > "$MONITORING_OVERHEAD_LOG"
