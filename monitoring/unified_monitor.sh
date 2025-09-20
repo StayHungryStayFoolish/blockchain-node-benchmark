@@ -893,10 +893,16 @@ get_monitoring_overhead_legacy() {
         if [[ -f "/proc/$pid/io" ]]; then
             local io_stats=$(cat "/proc/$pid/io" 2>/dev/null)
             if [[ -n "$io_stats" ]]; then
-                local current_read_bytes=$(echo "$io_stats" | grep "read_bytes" | awk '{print $2}' || echo "0")
-                local current_write_bytes=$(echo "$io_stats" | grep "write_bytes" | awk '{print $2}' || echo "0")
-                local current_syscr=$(echo "$io_stats" | grep "syscr" | awk '{print $2}' || echo "0")
-                local current_syscw=$(echo "$io_stats" | grep "syscw" | awk '{print $2}' || echo "0")
+                local current_read_bytes=$(echo "$io_stats" | grep "^read_bytes:" | awk '{print $2}' | tr -d '\n\r\t ' 2>/dev/null)
+                local current_write_bytes=$(echo "$io_stats" | grep "^write_bytes:" | awk '{print $2}' | tr -d '\n\r\t ' 2>/dev/null)
+                local current_syscr=$(echo "$io_stats" | grep "^syscr:" | awk '{print $2}' | tr -d '\n\r\t ' 2>/dev/null)
+                local current_syscw=$(echo "$io_stats" | grep "^syscw:" | awk '{print $2}' | tr -d '\n\r\t ' 2>/dev/null)
+
+                # 添加数字验证
+                [[ "$current_read_bytes" =~ ^[0-9]+$ ]] || current_read_bytes=0
+                [[ "$current_write_bytes" =~ ^[0-9]+$ ]] || current_write_bytes=0
+                [[ "$current_syscr" =~ ^[0-9]+$ ]] || current_syscr=0
+                [[ "$current_syscw" =~ ^[0-9]+$ ]] || current_syscw=0
 
                 # 获取上次记录的值
                 local last_read_bytes=${LAST_IO_STATS["${pid}_read_bytes"]:-$current_read_bytes}
@@ -1650,6 +1656,12 @@ collect_monitoring_overhead_data() {
 
 # 写入监控开销日志
 write_monitoring_overhead_log() {
+    # 安全检查配置变量
+    if [[ -z "$MONITORING_OVERHEAD_LOG" ]]; then
+        log_warn "MONITORING_OVERHEAD_LOG变量未定义，跳过监控开销日志记录"
+        return 0
+    fi
+    
     # 检查是否需要创建日志文件和写入表头
     if [[ ! -f "$MONITORING_OVERHEAD_LOG" ]] || [[ ! -s "$MONITORING_OVERHEAD_LOG" ]]; then
         echo "$OVERHEAD_CSV_HEADER" > "$MONITORING_OVERHEAD_LOG"

@@ -37,10 +37,9 @@ get_iostat_data() {
     
     # 检查是否已有持续采样进程
     if [[ ! -f "$iostat_pid_file" ]] || ! kill -0 "$(cat "$iostat_pid_file" 2>/dev/null)" 2>/dev/null; then
-        # 启动持续采样进程 - Linux专用实现
+        # 启动持续采样进程
         if [[ "$(uname -s)" == "Linux" ]]; then
-            # Linux: iostat -dx interval 0 (无限次输出)
-            iostat -dx "$monitor_rate" 0 > "$iostat_data_file" &
+            iostat -dx "$monitor_rate" > "$iostat_data_file" &
             local iostat_pid=$!
             echo "$iostat_pid" > "$iostat_pid_file"
             log_debug "启动iostat持续采样: $device, PID: $iostat_pid, 频率: ${monitor_rate}秒, 数据文件: $iostat_data_file"

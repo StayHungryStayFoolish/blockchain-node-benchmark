@@ -116,7 +116,7 @@ start_monitor() {
             if is_monitor_running "unified"; then
                 echo "✅ iostat功能已通过unified_monitor.sh启动"
                 # 验证iostat进程是否真正运行
-                if pgrep -f "iostat.*-dx" >/dev/null 2>&1; then
+                if pgrep -f "iostat -dx [0-9]+" >/dev/null 2>&1; then
                     echo "✅ iostat进程确认运行中"
                 else
                     echo "⚠️  unified_monitor运行中但iostat进程未检测到，可能正在启动"
@@ -232,7 +232,7 @@ stop_all_monitors() {
     # 停止iostat持续采样进程（由unified_monitor.sh启动）
     echo "🧹 清理iostat进程..."
     # 使用更精确的进程匹配模式
-    pkill -f "iostat.*-dx.*[0-9]" 2>/dev/null || true
+    pkill -f "iostat -dx [0-9]+" 2>/dev/null || true
     # 清理iostat相关的临时文件
     rm -f /tmp/iostat_*.pid /tmp/iostat_*.data 2>/dev/null || true
     echo "✅ iostat进程已清理"
@@ -281,8 +281,8 @@ show_iostat_status() {
         echo "  └─ unified_monitor: ✅ 运行中"
         
         # 检查真正的iostat进程（Linux环境）
-        if pgrep -f "iostat.*-dx.*[0-9]" >/dev/null 2>&1; then
-            local iostat_pid=$(pgrep -f "iostat.*-dx.*[0-9]" | head -1)
+        if pgrep -f "iostat -dx [0-9]+" >/dev/null 2>&1; then
+            local iostat_pid=$(pgrep -f "iostat -dx [0-9]+" | head -1)
             echo "  └─ iostat进程: ✅ 运行中 (PID: $iostat_pid)"
         else
             echo "  └─ iostat进程: ⚠️  未检测到 (可能在非Linux环境或未配置EBS设备)"
