@@ -182,7 +182,6 @@ detect_deployment_paths() {
     local framework_dir="$(dirname "$script_dir")"
     local deployment_dir="$(dirname "$framework_dir")"
     
-    echo "🔍 检测部署结构..." >&2
     echo "   框架目录: $framework_dir" >&2
     echo "   部署目录: $deployment_dir" >&2
     
@@ -200,10 +199,7 @@ detect_deployment_paths() {
         echo "⚠️ 数据目录路径异常，使用默认路径" >&2
         BASE_DATA_DIR="${HOME}/blockchain-node-benchmark-result"
     fi
-    
-    DEPLOYMENT_STRUCTURE="standard"
-    
-    echo "🚀 使用标准部署结构" >&2
+
     echo "   数据目录: $BASE_DATA_DIR" >&2
     
     # 支持环境变量覆盖
@@ -258,7 +254,6 @@ detect_deployment_paths() {
     
     # 输出最终配置
     echo "📋 路径配置完成:" >&2
-    echo "   部署结构: $DEPLOYMENT_STRUCTURE" >&2
     echo "   框架目录: $BASE_FRAMEWORK_DIR" >&2
     echo "   数据目录: $BASE_DATA_DIR" >&2
     echo "   内存共享: $MEMORY_SHARE_DIR" >&2
@@ -826,7 +821,7 @@ export MONITORING_OVERHEAD_LOG PERFORMANCE_LOG ERROR_LOG TEMP_FILE_PATTERN SESSI
 
 export NETWORK_MAX_BANDWIDTH_MBPS DEPLOYMENT_PLATFORM ENA_MONITOR_ENABLED
 export NETWORK_INTERFACE BASE_MEMORY_DIR
-export BASE_FRAMEWORK_DIR BASE_DATA_DIR DEPLOYMENT_STRUCTURE
+export BASE_FRAMEWORK_DIR BASE_DATA_DIR
 export BLOCKCHAIN_PROCESS_NAMES_STR="${BLOCKCHAIN_PROCESS_NAMES[*]}"
 
 export CONFIG_ALREADY_LOADED="true"

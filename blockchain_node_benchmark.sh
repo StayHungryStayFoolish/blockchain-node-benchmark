@@ -33,7 +33,7 @@ show_framework_info() {
     echo "   • 极限压力测试 - 智能瓶颈检测"
     echo ""
     echo "🔍 监控能力:"
-    echo "   • 49-67个性能指标实时监控"
+    echo "   • 73 - 79 个性能指标实时监控"
     echo "   • CPU、内存、EBS存储、网络、ENA限制"
     echo "   • 智能瓶颈检测和根因分析"
     echo "   • 瓶颈-日志时间关联分析"
