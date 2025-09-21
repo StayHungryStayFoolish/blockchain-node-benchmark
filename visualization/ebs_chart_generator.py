@@ -101,7 +101,7 @@ class EBSChartGenerator:
             'data_aws_standard_iops', 'data_aws_standard_throughput_mibs',
             'data_util', 'data_aqu_sz'
         ]
-        missing_columns = [col for col in required_columns if col not in self.df.columns]
+        missing_columns = [col for col in required_columns if self.get_mapped_field(col) not in self.df.columns]
         if missing_columns:
             print(f"⚠️ WARNING: 缺失EBS数据列: {missing_columns}")
             return False

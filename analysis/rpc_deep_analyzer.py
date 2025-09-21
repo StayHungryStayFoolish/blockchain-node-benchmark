@@ -134,7 +134,7 @@ class RpcDeepAnalyzer:
         # 处理混合类型的current_qps列
         df_copy = df.copy()
         df_copy['current_qps_str'] = df_copy['current_qps'].astype(str)
-        numeric_mask = df_copy['current_qps_str'].str.isdigit()
+        numeric_mask = pd.to_numeric(df_copy['current_qps_str'], errors='coerce').notna()
         numeric_df = df_copy[numeric_mask].copy()
 
         if len(numeric_df) > 0:

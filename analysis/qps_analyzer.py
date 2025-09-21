@@ -492,7 +492,7 @@ class NodeQPSAnalyzer:
             # 处理current_qps列
             df['current_qps'] = df[qps_column].astype(str)
             df['qps_data_available'] = True
-            numeric_mask = df['current_qps'].str.isdigit()
+            numeric_mask = pd.to_numeric(df['current_qps'], errors='coerce').notna()
             numeric_df = df[numeric_mask].copy()
 
             if len(numeric_df) == 0:
