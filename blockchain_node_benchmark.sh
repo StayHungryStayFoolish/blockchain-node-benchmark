@@ -324,66 +324,6 @@ process_test_results() {
         echo "⚠️ 单位转换脚本不存在，跳过转换"
     fi
     
-    # 归档测试结果
-    echo "📦 归档测试结果..."
-    if [[ -f "${SCRIPT_DIR}/tools/benchmark_archiver.sh" ]]; then
-        # 确定基准测试模式
-        local benchmark_mode="standard"  # 默认值
-        for arg in "$@"; do
-            case $arg in
-                --quick) benchmark_mode="quick" ;;
-                --standard) benchmark_mode="standard" ;;
-                --intensive) benchmark_mode="intensive" ;;
-            esac
-        done
-        
-        # 获取最大QPS (从QPS状态文件或跳过归档)
-        echo "🔍 QPS状态文件调试:"
-        echo "  文件路径: ${QPS_STATUS_FILE}"
-        
-        # 检查并重建共享内存目录
-        if [[ ! -d "$(dirname "${QPS_STATUS_FILE}")" ]]; then
-            echo "  目录不存在，尝试重建..."
-            mkdir -p "$(dirname "${QPS_STATUS_FILE}")" 2>/dev/null || true
-        fi
-        
-        echo "  文件存在: $(test -f "${QPS_STATUS_FILE}" && echo "是" || echo "否")"
-        
-        local max_qps=""
-        if [[ -f "${QPS_STATUS_FILE}" ]]; then
-            echo "  文件大小: $(stat -c%s "${QPS_STATUS_FILE}" 2>/dev/null || stat -f%z "${QPS_STATUS_FILE}" 2>/dev/null || echo "unknown") bytes"
-            echo "  JSON格式: $(jq empty "${QPS_STATUS_FILE}" 2>/dev/null && echo "有效" || echo "无效")"
-            echo "  文件内容:"
-            cat "${QPS_STATUS_FILE}"
-            
-            max_qps=$(jq -r '.max_successful_qps // empty' "${QPS_STATUS_FILE}" 2>/dev/null || echo "")
-            echo "  提取的QPS值: '$max_qps'"
-        else
-            echo "  目录内容:"
-            ls -la "$(dirname "${QPS_STATUS_FILE}")" 2>/dev/null || echo "目录不存在"
-        fi
-        
-        # 如果无法获取有效的QPS值，跳过归档
-        if [[ -z "$max_qps" ]] || [[ "$max_qps" == "0" ]] || [[ "$max_qps" == "null" ]]; then
-            echo "⚠️ 无法获取有效的最大QPS值，跳过测试结果归档"
-            echo "💡 QPS状态文件: ${QPS_STATUS_FILE}"
-            return 0
-        fi
-        
-        # 调用归档工具 (瓶颈信息将自动检测)
-        "${SCRIPT_DIR}/tools/benchmark_archiver.sh" --archive \
-            --benchmark-mode "$benchmark_mode" \
-            --max-qps "$max_qps"
-        
-        if [[ $? -eq 0 ]]; then
-            echo "✅ 测试结果归档完成"
-        else
-            echo "⚠️ 测试结果归档失败"
-        fi
-    else
-        echo "⚠️ 归档脚本不存在，跳过归档"
-    fi
-    
     return 0
 }
 
@@ -613,6 +553,43 @@ execute_performance_cliff_analysis() {
     fi
 }
 
+# 归档测试结果
+archive_test_results() {
+    echo "📦 归档测试结果..."
+    
+    # 确定基准测试模式 - 从传入的参数中解析
+    local benchmark_mode=""
+    for arg in "$@"; do
+        case $arg in
+            --quick) benchmark_mode="quick" ;;
+            --standard) benchmark_mode="standard" ;;
+            --intensive) benchmark_mode="intensive" ;;
+        esac
+    done
+    
+    # 如果没有找到模式参数，使用默认值
+    if [[ -z "$benchmark_mode" ]]; then
+        benchmark_mode="quick"  # 默认模式，与master_qps_executor.sh保持一致
+        echo "⚠️ 未检测到基准测试模式参数，使用默认模式: $benchmark_mode"
+    fi
+    
+    echo "🔍 检测到基准测试模式: $benchmark_mode"
+    
+    # 调用专业的归档工具
+    if [[ -f "${SCRIPT_DIR}/tools/benchmark_archiver.sh" ]]; then
+        "${SCRIPT_DIR}/tools/benchmark_archiver.sh" --archive \
+            --benchmark-mode "$benchmark_mode"
+        
+        if [[ $? -eq 0 ]]; then
+            echo "✅ 测试结果归档完成"
+        else
+            echo "⚠️ 测试结果归档失败"
+        fi
+    else
+        echo "⚠️ 归档脚本不存在，跳过归档"
+    fi
+}
+
 # 生成最终报告
 generate_final_reports() {
     echo "📊 生成最终报告..."
@@ -683,6 +660,9 @@ generate_final_reports() {
     
     # 显示报告位置和摘要
     display_final_report_summary
+    
+    # 归档测试结果 - 在所有分析和报告生成完成后执行
+    archive_test_results "$@"
     
     return 0
 }
@@ -907,7 +887,7 @@ main() {
     
     # 阶段7: 生成最终报告
     echo "📋 阶段7: 生成最终报告"
-    if ! generate_final_reports; then
+    if ! generate_final_reports "${original_args[@]}"; then
         echo "❌ 报告生成失败，测试终止"
         exit 1
     fi

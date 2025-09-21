@@ -1879,7 +1879,7 @@ log_performance_data() {
             qps_data_available=true
             
             # 尝试从最新的vegeta结果文件获取延迟数据
-            local latest_vegeta_file=$(ls -t "${LOGS_DIR}"/vegeta_*qps_*.json 2>/dev/null | head -1)
+            local latest_vegeta_file=$(ls -t "${VEGETA_RESULTS_DIR}"/vegeta_*qps_*.json 2>/dev/null | head -1)
             if [[ -f "$latest_vegeta_file" ]]; then
                 # 检查文件是否完整（避免读取正在写入的文件）
                 if [[ -s "$latest_vegeta_file" ]] && grep -q "}" "$latest_vegeta_file" 2>/dev/null; then
