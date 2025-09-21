@@ -105,12 +105,18 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         Args:
             data_file: Data file path
-            output_dir: Output directory
+            output_dir: Output directory (will be adjusted to use REPORTS_DIR)
         """
         super().__init__()  # Initialize CSV data processor
         
         self.data_file = data_file
-        self.output_dir = output_dir or os.path.dirname(data_file)
+        if output_dir:
+            self.output_dir = os.getenv('REPORTS_DIR', os.path.join(output_dir, 'current', 'reports'))
+        else:
+            self.output_dir = os.getenv('REPORTS_DIR', os.path.join(os.path.dirname(data_file), 'current', 'reports'))
+        
+        # 确保输出目录存在
+        os.makedirs(self.output_dir, exist_ok=True)
         
         try:
             self.unit_converter = UnitConverter()

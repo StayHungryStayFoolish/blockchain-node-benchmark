@@ -226,8 +226,8 @@ class ReportGenerator:
             import glob
             import os
             
-            # 获取logs目录路径 - 与comprehensive_analysis.py保持一致
-            logs_dir = os.path.join(self.output_dir, 'logs')
+            # 获取logs目录路径 - 使用环境变量或current/logs结构
+            logs_dir = os.getenv('LOGS_DIR', os.path.join(self.output_dir, 'current', 'logs'))
             
             # 搜索监控开销文件
             pattern = os.path.join(logs_dir, 'monitoring_overhead_*.csv')
@@ -899,7 +899,8 @@ class ReportGenerator:
             ax2.set_title('内存使用分布')
             
             plt.tight_layout()
-            plt.savefig(os.path.join(self.output_dir, 'resource_distribution_chart.png'), dpi=300, bbox_inches='tight')
+            reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
+            plt.savefig(os.path.join(reports_dir, 'resource_distribution_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()
             
         except Exception as e:
@@ -980,7 +981,8 @@ class ReportGenerator:
                 ax2.annotate(f'相关系数: {corr:.2f}', xy=(0.05, 0.95), xycoords='axes fraction')
             
             plt.tight_layout()
-            plt.savefig(os.path.join(self.output_dir, 'monitoring_impact_chart.png'), dpi=300, bbox_inches='tight')
+            reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
+            plt.savefig(os.path.join(reports_dir, 'monitoring_impact_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()
             
         except Exception as e:
@@ -2336,8 +2338,8 @@ class ReportGenerator:
                 </div>
             """
             
-            # 获取报告输出目录
-            reports_dir = os.path.join(self.output_dir, 'reports')
+            # 获取报告输出目录 - 使用环境变量或current/reports结构
+            reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
             if not os.path.exists(reports_dir):
                 reports_dir = self.output_dir
             
