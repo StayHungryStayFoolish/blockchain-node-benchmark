@@ -581,7 +581,7 @@ class NodeQPSAnalyzer:
         if bottlenecks:
             print("System bottlenecks detected:")
             for bottleneck_type, qps in bottlenecks.items():
-                print(f"  {bottleneck_type}: First occurs at QPS {qps:,}")
+                print(f"  {bottleneck_type}: First occurs at QPS {qps:,}" if not pd.isna(qps) else f"  {bottleneck_type}: First occurs at QPS N/A")
         else:
             print("✅ No critical system bottlenecks detected in tested range")
 
@@ -812,13 +812,13 @@ class NodeQPSAnalyzer:
         bottleneck_score = performance_evaluation.get('bottleneck_score', 0)
         
         if performance_level == "优秀":
-            return f"当前配置可稳定处理高负载 (已测试至 {max_qps:,} QPS，无明显瓶颈)"
+            return f"当前配置可稳定处理高负载 (已测试至 {max_qps:,} QPS，无明显瓶颈)" if not pd.isna(max_qps) else "当前配置可稳定处理高负载 (测试数据不足，无明显瓶颈)"
         elif performance_level == "良好":
-            return f"当前配置可处理中高负载 (已测试至 {max_qps:,} QPS，轻微瓶颈)"
+            return f"当前配置可处理中高负载 (已测试至 {max_qps:,} QPS，轻微瓶颈)" if not pd.isna(max_qps) else "当前配置可处理中高负载 (测试数据不足，轻微瓶颈)"
         elif performance_level == "一般":
-            return f"当前配置适合中等负载 (已测试至 {max_qps:,} QPS，存在瓶颈)"
+            return f"当前配置适合中等负载 (已测试至 {max_qps:,} QPS，存在瓶颈)" if not pd.isna(max_qps) else "当前配置适合中等负载 (测试数据不足，存在瓶颈)"
         elif performance_level == "需要优化":
-            return f"当前配置需要优化以处理高负载 (已测试至 {max_qps:,} QPS，严重瓶颈)"
+            return f"当前配置需要优化以处理高负载 (已测试至 {max_qps:,} QPS，严重瓶颈)" if not pd.isna(max_qps) else "当前配置需要优化以处理高负载 (测试数据不足，严重瓶颈)"
         else:
             return f"需要intensive基准测试模式进行准确的容量评估"
 
@@ -867,7 +867,7 @@ class NodeQPSAnalyzer:
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 ## Executive Summary
-- **Maximum QPS Achieved**: {max_qps:,}
+- **Maximum QPS Achieved**: {max_qps:,} if not pd.isna(max_qps) else "N/A"
 - **Performance Grade**: {performance_evaluation['performance_grade']}
 - **Performance Level**: {performance_evaluation['performance_level']}
 - **Benchmark Mode**: {benchmark_mode}
@@ -909,7 +909,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
         report += f"""
 ### Production Deployment Guidelines
-- **Recommended Production QPS**: {int(max_qps * 0.8):,} (80% of maximum tested)
+- **Recommended Production QPS**: {int(max_qps * 0.8):,} (80% of maximum tested) if not pd.isna(max_qps) else "N/A (insufficient test data)"
 - **Monitoring Thresholds**: 
   - Alert if CPU usage > 85%
   - Alert if Memory usage > 90%

@@ -462,7 +462,7 @@ class RpcDeepAnalyzer:
             latency_by_qps = latency_trend.get('latency_by_qps')
             if latency_by_qps is not None and len(latency_by_qps) > 0:
                 for qps, stats in latency_by_qps.head(10).iterrows():
-                    report += f"- **{qps:,} QPS**: Avg {stats['mean']:.1f}ms, Max {stats['max']:.1f}ms, Samples {stats['count']}\n"
+                    report += f"- **{qps:,} QPS**: Avg {stats['mean']:.1f}ms, Max {stats['max']:.1f}ms, Samples {stats['count']}\n" if not pd.isna(qps) else f"- **N/A QPS**: Avg {stats['mean']:.1f}ms, Max {stats['max']:.1f}ms, Samples {stats['count']}\n"
 
         # 异常检测
         anomaly = analysis_results.get('anomaly_detection', {})
@@ -505,7 +505,7 @@ class RpcDeepAnalyzer:
 #### Critical QPS Thresholds:
 """
             for cliff_point in cliff.get('cliff_details', []):
-                report += f"- **{cliff_point['current_qps']:,} QPS**: Latency spike +{cliff_point['latency_increase']:.1f}ms ({cliff_point.get('latency_increase_percentage', 0):.1f}%)\n"
+                report += f"- **{cliff_point['current_qps']:,} QPS**: Latency spike +{cliff_point['latency_increase']:.1f}ms ({cliff_point.get('latency_increase_percentage', 0):.1f}%)\n" if not pd.isna(cliff_point['current_qps']) else f"- **N/A QPS**: Latency spike +{cliff_point['latency_increase']:.1f}ms ({cliff_point.get('latency_increase_percentage', 0):.1f}%)\n"
 
         # 瓶颈分类
         bottleneck = analysis_results.get('bottleneck_classification', {})

@@ -519,13 +519,13 @@ class ComprehensiveAnalyzer:
         comprehensive_score = performance_evaluation.get('comprehensive_score', 0.0)
         
         if performance_level == "Excellent":
-            return f"Current configuration can stably handle high load (tested up to {max_qps:,} QPS, comprehensive score: {comprehensive_score:.3f})"
+            return f"Current configuration can stably handle high load (tested up to {max_qps:,} QPS, comprehensive score: {comprehensive_score:.3f})" if not pd.isna(max_qps) else f"Current configuration can stably handle high load (insufficient test data, comprehensive score: {comprehensive_score:.3f})"
         elif performance_level == "Good":
-            return f"Current configuration can handle medium-high load (tested up to {max_qps:,} QPS, with minor issues)"
+            return f"Current configuration can handle medium-high load (tested up to {max_qps:,} QPS, with minor issues)" if not pd.isna(max_qps) else "Current configuration can handle medium-high load (insufficient test data, with minor issues)"
         elif performance_level == "Acceptable":
-            return f"Current configuration suitable for medium load (tested up to {max_qps:,} QPS, with noticeable issues)"
+            return f"Current configuration suitable for medium load (tested up to {max_qps:,} QPS, with noticeable issues)" if not pd.isna(max_qps) else "Current configuration suitable for medium load (insufficient test data, with noticeable issues)"
         elif performance_level == "需要优化":
-            return f"当前配置需要优化以处理高负载 (已测试至 {max_qps:,} QPS，存在严重问题)"
+            return f"当前配置需要优化以处理高负载 (已测试至 {max_qps:,} QPS，存在严重问题)" if not pd.isna(max_qps) else "当前配置需要优化以处理高负载 (测试数据不足，存在严重问题)"
         else:
             return f"需要intensive基准测试模式进行准确的容量评估"
 
@@ -595,7 +595,7 @@ class ComprehensiveAnalyzer:
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 ## Executive Summary
-- **Maximum QPS Achieved**: {max_qps:,}
+- **Maximum QPS Achieved**: {max_qps:,} if not pd.isna(max_qps) else "N/A"
 - **Performance Grade**: {performance_evaluation['performance_grade']}
 - **Performance Level**: {performance_evaluation['performance_level']}
 - **Benchmark Mode**: {benchmark_mode}
@@ -679,7 +679,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
         report += f"""
 ### Production Deployment
-- **Recommended Production QPS**: {int(max_qps * 0.8):,} (80% of maximum tested)
+- **Recommended Production QPS**: {int(max_qps * 0.8):,} (80% of maximum tested) if not pd.isna(max_qps) else "N/A (insufficient test data)"
 - **Monitoring Thresholds**: 
   - Alert if RPC latency P99 > 500ms sustained
   - Alert if CPU usage > 85% sustained
@@ -885,7 +885,7 @@ def demo_comprehensive_analysis():
         results = analyzer.run_comprehensive_analysis()
 
         print("\n🎯 Analysis Summary:")
-        print(f"  Maximum QPS: {results['max_qps']:,}")
+        print(f"  Maximum QPS: {results['max_qps']:,}" if not pd.isna(results['max_qps']) else "  Maximum QPS: N/A")
         print(f"  Data Points: {len(results['dataframe'])}")
         print(f"  Bottlenecks: {len(results['bottlenecks'])}")
         
