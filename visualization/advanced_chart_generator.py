@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Advanced Chart Generator - Generate CPU-EBS correlation charts according to documentation requirements
 Implement visualization of statistical analysis methods, including correlation heatmaps
@@ -25,7 +26,7 @@ def setup_font():
     # Use standard fonts that work across all platforms
     plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
     plt.rcParams['axes.unicode_minus'] = False
-    print("SUCCESS: Advanced Charts using font: DejaVu Sans")
+    print("✅ SUCCESS: Advanced Charts using font: DejaVu Sans")
     return True
 
 # Initialize font configuration
@@ -756,7 +757,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 return None
             
             # Chart styling with English labels
-            ax.set_title('🚨 ENA Network Limitation Trend Analysis', fontsize=16, fontweight='bold')
+            ax.set_title('&#128680; ENA Network Limitation Trend Analysis', fontsize=16, fontweight='bold')
             ax.set_xlabel('Time', fontsize=12)
             ax.set_ylabel('Limitation Triggers (Cumulative)', fontsize=12)
             ax.legend(loc='upper left')
@@ -809,7 +810,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                       label=f'Warning Threshold ({warning_threshold:,})')
             
             # Chart styling with English labels
-            ax.set_title('🔗 ENA Connection Capacity Monitoring', fontsize=16, fontweight='bold')
+            ax.set_title('&#128279; ENA Connection Capacity Monitoring', fontsize=16, fontweight='bold')
             ax.set_xlabel('Time', fontsize=12)
             ax.set_ylabel('Available Connections', fontsize=12)
             ax.legend()
@@ -846,7 +847,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 创建2x2子图布局
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
             # Using English title directly
-            fig.suptitle('🌐 ENA Network Comprehensive Analysis', fontsize=16, fontweight='bold')
+            fig.suptitle('&#127760; ENA Network Comprehensive Analysis', fontsize=16, fontweight='bold')
             
             # 1. 限制类型分布 (左上)
             ax1 = axes[0, 0]
@@ -980,7 +981,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         # 3. 负相关分析图表 (2种，根据配置Device动态调整)
         all_charts.extend(self.generate_negative_correlation_charts())
         
-        # 4. ENA网络限制分析图表 (新增)
+        # 4. ENA网络限制分析图表
         all_charts.extend(self.generate_ena_network_analysis_charts())
         
         # 5. 综合相关性矩阵

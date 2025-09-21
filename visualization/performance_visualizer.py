@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Performance Visualizer - Production Version (CSV Field Consistency Fixed)
 Uses unified CSV data processor to ensure field access consistency and reliability
@@ -355,7 +356,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax1.text(0.5, 0.5, f'Missing Fields: {", ".join(missing_fields)}', ha='center', va='center', transform=ax1.transAxes)
             ax1.set_title(f'{LABELS["cpu_usage"]} (Field Missing)')
         
-        # ✅ DATA DeviceIOPS (改进的数据检查)
+        # ✅ DATA DeviceIOPS
         ax2 = axes[0, 1]
         iops_data = self.df[data_iops_col].dropna()
         if len(iops_data) > 0:
@@ -368,7 +369,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax2.text(0.5, 0.5, 'DATA IOPSData Not Available', ha='center', va='center', transform=ax2.transAxes)
             ax2.set_title('DATA DeviceIOPS (Data Not Available)')
         
-        # ✅ Memory Usage (改进的字段处理)
+        # ✅ Memory Usage
         ax3 = axes[1, 0]
         if mem_usage_col:
             mem_data = self.df[mem_usage_col].dropna()
@@ -385,7 +386,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax3.text(0.5, 0.5, 'Memory Usage Field Missing', ha='center', va='center', transform=ax3.transAxes)
             ax3.set_title('Memory Usage (Field Missing)')
         
-        # ✅ Device Utilization (改进的数据检查)
+        # ✅ Device Utilization
         ax4 = axes[1, 1]
         if data_util_col:
             util_data = self.df[data_util_col].dropna()
@@ -522,7 +523,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             'CPU I/O Wait (%)', 'I/O Queue Length', 'CPU I/O Wait vs I/O Queue Length'
         )
         
-        # ✅ Time序列对比 (改进的处理)
+        # ✅ Time序列对比
         ax4 = axes[1, 1]
         try:
             cpu_data = self.df[cpu_iowait_col].dropna()

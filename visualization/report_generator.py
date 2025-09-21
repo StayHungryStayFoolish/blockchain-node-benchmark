@@ -134,11 +134,28 @@ class ReportGenerator:
         return default_data
 
     def _load_overhead_data(self):
-        """加载监控开销数据 - 增强版支持完整资源分析"""
+        """加载监控开销数据 - 支持自动发现"""
         try:
-            if not self.overhead_csv or not os.path.exists(self.overhead_csv):
-                return None
-                
+            # 方案1：自动发现监控开销文件
+            auto_discovered_file = self._find_latest_monitoring_overhead_file()
+            if auto_discovered_file:
+                self.overhead_csv = auto_discovered_file
+                print(f"✅ Auto-discovered monitoring overhead file: {os.path.basename(auto_discovered_file)}")
+                return self._load_from_overhead_csv()
+            
+            # 方案2：备用方案，从performance_csv提取IOPS数据
+            if hasattr(self, 'performance_csv') and os.path.exists(self.performance_csv):
+                return self._extract_iops_from_performance_csv()
+            
+            # 方案3：兜底，返回空数据
+            return None
+        except Exception as e:
+            print(f"Error loading overhead data: {e}")
+            return None
+
+    def _load_from_overhead_csv(self):
+        """从专用的overhead CSV加载数据"""
+        try:
             df = pd.read_csv(self.overhead_csv)
             if df.empty:
                 return None
@@ -146,7 +163,7 @@ class ReportGenerator:
             # 定义需要的字段和它们的可能变体
             field_mappings = {
                 # 监控进程资源
-                'monitoring_cpu_percent': ['monitoring_cpu_percent', 'monitor_cpu', 'overhead_cpu'],
+                'monitoring_cpu_percent': ['monitoring_cpu_percent', 'monitoring_cpu', 'monitor_cpu', 'overhead_cpu'],
                 'monitoring_memory_percent': ['monitoring_memory_percent', 'monitor_memory_percent'],
                 'monitoring_memory_mb': ['monitoring_memory_mb', 'monitor_memory', 'overhead_memory'],
                 'monitoring_process_count': ['monitoring_process_count', 'process_count', 'monitor_processes'],
@@ -167,7 +184,6 @@ class ReportGenerator:
                 'system_memory_usage': ['system_memory_usage', 'memory_usage'],
                 'system_disk_usage': ['system_disk_usage', 'disk_usage'],
                 
-                # 兼容旧版字段
                 'monitoring_iops': ['monitoring_iops', 'monitor_iops', 'overhead_iops'],
                 'monitoring_throughput_mibs': ['monitoring_throughput_mibs', 'monitor_throughput', 'overhead_throughput']
             }
@@ -201,7 +217,58 @@ class ReportGenerator:
                         
             return data
         except Exception as e:
-            print(f"Error loading overhead data: {e}")
+            print(f"Error loading from overhead CSV: {e}")
+            return None
+
+    def _find_latest_monitoring_overhead_file(self):
+        """自动发现最新的监控开销文件"""
+        try:
+            import glob
+            import os
+            
+            # 获取logs目录路径 - 与comprehensive_analysis.py保持一致
+            logs_dir = os.path.join(self.output_dir, 'logs')
+            
+            # 搜索监控开销文件
+            pattern = os.path.join(logs_dir, 'monitoring_overhead_*.csv')
+            files = glob.glob(pattern)
+            
+            if not files:
+                return None
+            
+            # 返回最新的文件（按创建时间排序，与comprehensive_analysis.py保持一致）
+            latest_file = max(files, key=os.path.getctime)
+            return latest_file
+            
+        except Exception as e:
+            print(f"Warning: Failed to find monitoring overhead file: {e}")
+            return None
+
+    def _extract_iops_from_performance_csv(self):
+        """从performance CSV提取IOPS和吞吐量数据"""
+        try:
+            df = pd.read_csv(self.performance_csv)
+            data = {}
+            
+            # 提取IOPS数据
+            if 'monitoring_iops_per_sec' in df.columns:
+                iops_data = pd.to_numeric(df['monitoring_iops_per_sec'], errors='coerce').dropna()
+                if not iops_data.empty:
+                    data['monitoring_iops_avg'] = iops_data.mean()
+                    data['monitoring_iops_max'] = iops_data.max()
+            
+            # 提取吞吐量数据
+            if 'monitoring_throughput_mibs_per_sec' in df.columns:
+                throughput_data = pd.to_numeric(df['monitoring_throughput_mibs_per_sec'], errors='coerce').dropna()
+                if not throughput_data.empty:
+                    data['monitoring_throughput_mibs_avg'] = throughput_data.mean()
+                    data['monitoring_throughput_mibs_max'] = throughput_data.max()
+            
+            return data if data else None
+            
+        except Exception as e:
+            # 记录错误但不影响主要功能
+            print(f"Warning: Failed to extract IOPS data from performance CSV: {e}")
             return None
     
     def _validate_overhead_csv_format(self):
@@ -375,10 +442,10 @@ class ReportGenerator:
         
         html = """
         <div class="section">
-            <h2>📊 EBS性能分析结果</h2>
+            <h2>&#128202; EBS性能分析结果</h2>
             
             <div class="subsection">
-                <h3>⚠️ 性能警告</h3>
+                <h3>&#9888; 性能警告</h3>
         """
         
         if warnings:
@@ -394,13 +461,13 @@ class ReportGenerator:
                 '''
             html += '</div>'
         else:
-            html += '<p style="color: #28a745; font-weight: bold;">✅ 未发现性能异常</p>'
+            html += '<p style="color: #28a745; font-weight: bold;">&#9989; 未发现性能异常</p>'
         
         html += '''
             </div>
             
             <div class="subsection">
-                <h3>📈 性能统计</h3>
+                <h3>&#128200; 性能统计</h3>
         '''
         
         if performance_metrics:
@@ -473,7 +540,7 @@ class ReportGenerator:
         
         return f"""
         <div class="section">
-            <h2>⚙️ 配置状态检查</h2>
+            <h2>&#9881; 配置状态检查</h2>
             <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                 <thead>
                     <tr>
@@ -483,10 +550,10 @@ class ReportGenerator:
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">区块链节点类型</td><td style="padding: 10px; border: 1px solid #ddd;">✅ 已配置</td><td style="padding: 10px; border: 1px solid #ddd;">{blockchain_node}</td></tr>
+                    <tr><td style="padding: 10px; border: 1px solid #ddd;">区块链节点类型</td><td style="padding: 10px; border: 1px solid #ddd;">&#9989; 已配置</td><td style="padding: 10px; border: 1px solid #ddd;">{blockchain_node}</td></tr>
                     <tr><td style="padding: 10px; border: 1px solid #ddd;">DATA Device</td><td style="padding: 10px; border: 1px solid #ddd;">{ledger_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('LEDGER_DEVICE', 'N/A')}</td></tr>
                     <tr><td style="padding: 10px; border: 1px solid #ddd;">ACCOUNTS Device</td><td style="padding: 10px; border: 1px solid #ddd;">{accounts_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('ACCOUNTS_DEVICE', 'N/A')}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">DATA卷类型</td><td style="padding: 10px; border: 1px solid #ddd;">{'✅ 已配置' if self.config.get('DATA_VOL_TYPE') else '⚠️ 未配置'}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('DATA_VOL_TYPE', 'N/A')}</td></tr>
+                    <tr><td style="padding: 10px; border: 1px solid #ddd;">DATA卷类型</td><td style="padding: 10px; border: 1px solid #ddd;">{'&#9989; 已配置' if self.config.get('DATA_VOL_TYPE') else '&#9888; 未配置'}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('DATA_VOL_TYPE', 'N/A')}</td></tr>
                 </tbody>
             </table>
             {accounts_note}
@@ -495,7 +562,7 @@ class ReportGenerator:
     
     def _generate_monitoring_overhead_section(self):
         """生成监控开销部分 - 增强版支持完整资源分析"""
-        overhead_data = self._load_overhead_data()
+        overhead_data = self.overhead_data  # 使用缓存的数据而不是重新加载
         
         if overhead_data:
             # 监控进程资源
@@ -533,7 +600,7 @@ class ReportGenerator:
             
             section_html = f"""
             <div class="section">
-                <h2>📊 监控开销综合分析</h2>
+                <h2>&#128202; 监控开销综合分析</h2>
                 
                 <div class="info-card">
                     <h3>系统资源概览</h3>
@@ -620,7 +687,7 @@ class ReportGenerator:
                 </div>
                 
                 <div class="conclusion">
-                    <h3>📝 监控开销结论</h3>
+                    <h3>&#128221; 监控开销结论</h3>
                     <p>监控系统资源消耗分析:</p>
                     <ul>
                         <li>CPU开销: 系统总CPU的 <strong>{format_num(monitoring_cpu_ratio)}%</strong></li>
@@ -644,14 +711,14 @@ class ReportGenerator:
         else:
             section_html = f"""
             <div class="section">
-                <h2>📊 监控开销分析</h2>
+                <h2>&#128202; 监控开销分析</h2>
                 <div class="warning">
-                    <h4>⚠️  监控开销数据不可用</h4>
+                    <h4>&#9888;  监控开销数据不可用</h4>
                     <p>监控开销数据文件未找到或为空。请确保在性能测试期间启用了监控开销统计。</p>
                     <p><strong>预期文件</strong>: <code>logs/monitoring_overhead_YYYYMMDD_HHMMSS.csv</code></p>
                 </div>
                 <div class="info">
-                    <h4>💡 如何启用监控开销统计</h4>
+                    <h4>&#128161; 如何启用监控开销统计</h4>
                     <p>监控开销统计功能已集成到统一监控系统中，默认启用。</p>
                     <p>如果未生成监控开销数据，请检查以下配置:</p>
                     <ul>
@@ -664,14 +731,10 @@ class ReportGenerator:
             """
             
         return section_html
-    
 
-    
-
-    
     def _generate_monitoring_overhead_detailed_section(self):
         """生成详细的监控开销分析部分"""
-        overhead_data = self._load_overhead_data()
+        overhead_data = self.overhead_data  # 使用缓存的数据而不是重新加载
         
         if overhead_data and os.path.exists(os.path.join(self.output_dir, "monitoring_overhead_analysis.png")):
             # 生成资源使用趋势图表
@@ -679,10 +742,10 @@ class ReportGenerator:
             
             section_html = f"""
             <div class="section">
-                <h2>📈 监控开销详细分析</h2>
+                <h2>&#128200; 监控开销详细分析</h2>
                 
                 <div class="info-card">
-                    <h3>📊 资源使用趋势</h3>
+                    <h3>&#128202; 资源使用趋势</h3>
                     <div class="chart-container">
                         <img src="monitoring_overhead_analysis.png" alt="监控开销分析" class="chart">
                     </div>
@@ -697,7 +760,7 @@ class ReportGenerator:
                 </div>
                 
                 <div class="info-card">
-                    <h3>📊 资源占比分析</h3>
+                    <h3>&#128202; 资源占比分析</h3>
                     <div class="chart-container">
                         <img src="resource_distribution_chart.png" alt="资源分布图" class="chart">
                     </div>
@@ -712,7 +775,7 @@ class ReportGenerator:
                 </div>
                 
                 <div class="info-card">
-                    <h3>📊 监控开销与性能关系</h3>
+                    <h3>&#128202; 监控开销与性能关系</h3>
                     <div class="chart-container">
                         <img src="monitoring_impact_chart.png" alt="监控影响分析" class="chart">
                     </div>
@@ -726,7 +789,7 @@ class ReportGenerator:
                 </div>
                 
                 <div class="info-card">
-                    <h3>📝 生产环境资源规划建议</h3>
+                    <h3>&#128221; 生产环境资源规划建议</h3>
                     <p>基于监控开销分析，对生产环境的资源规划建议:</p>
                     <table class="data-table">
                         <tr>
@@ -760,9 +823,9 @@ class ReportGenerator:
         else:
             section_html = f"""
             <div class="section">
-                <h2>📈 监控开销详细分析</h2>
+                <h2>&#128200; 监控开销详细分析</h2>
                 <div class="warning">
-                    <h4>⚠️  监控开销详细数据不可用</h4>
+                    <h4>&#9888;  监控开销详细数据不可用</h4>
                     <p>监控开销数据文件未找到或图表生成失败。请确保:</p>
                     <ul>
                         <li>监控开销CSV文件已正确生成</li>
@@ -771,7 +834,7 @@ class ReportGenerator:
                     </ul>
                 </div>
                 <div class="info">
-                    <h4>💡 如何生成监控开销图表</h4>
+                    <h4>&#128161; 如何生成监控开销图表</h4>
                     <p>可以使用以下命令生成监控开销分析图表:</p>
                     <pre><code>python3 visualization/performance_visualizer.py --performance-csv logs/performance_data.csv --overhead-csv logs/monitoring_overhead.csv --output-dir reports</code></pre>
                 </div>
@@ -926,7 +989,7 @@ class ReportGenerator:
     def _generate_ebs_bottleneck_section(self):
         """生成EBS瓶颈分析部分 - 增强版支持多设备和根因分析"""
         bottleneck_info = self._load_bottleneck_info()
-        overhead_data = self._load_overhead_data()
+        overhead_data = self.overhead_data  # 使用缓存的数据而不是重新加载
         
         # 设备类型列表
         device_types = ['data', 'accounts']
@@ -976,7 +1039,7 @@ class ReportGenerator:
                     
                     devices_html += f"""
                     <div class="device-bottleneck">
-                        <h3>📀 {device_labels[device_type]}设备瓶颈</h3>
+                        <h3>&#128192; {device_labels[device_type]}设备瓶颈</h3>
                         <div class="bottleneck-container">
                             {bottleneck_html}
                         </div>
@@ -987,9 +1050,9 @@ class ReportGenerator:
                     # DATA设备必须显示，即使没有瓶颈
                     devices_html += f"""
                     <div class="device-bottleneck">
-                        <h3>📀 {device_labels[device_type]}设备</h3>
+                        <h3>&#128192; {device_labels[device_type]}设备</h3>
                         <div class="success">
-                            <h4>✅ 未检测到瓶颈</h4>
+                            <h4>&#9989; 未检测到瓶颈</h4>
                             <p>{device_labels[device_type]}设备性能良好，未发现瓶颈。</p>
                         </div>
                     </div>
@@ -997,7 +1060,7 @@ class ReportGenerator:
             
             section_html = f"""
             <div class="section">
-                <h2>📀 EBS瓶颈分析</h2>
+                <h2>&#128192; EBS瓶颈分析</h2>
                 {devices_html}
                 <div class="note">
                     <p>EBS瓶颈分析基于AWS推荐的性能指标，包括利用率、延迟、AWS标准IOPS和吞吐量。</p>
@@ -1008,9 +1071,9 @@ class ReportGenerator:
         else:
             section_html = f"""
             <div class="section">
-                <h2>📀 EBS瓶颈分析</h2>
+                <h2>&#128192; EBS瓶颈分析</h2>
                 <div class="success">
-                    <h4>✅ 未检测到EBS瓶颈</h4>
+                    <h4>&#9989; 未检测到EBS瓶颈</h4>
                     <p>在测试期间未发现EBS性能瓶颈。存储性能良好，不会限制系统整体性能。</p>
                 </div>
             </div>
@@ -1023,7 +1086,7 @@ class ReportGenerator:
         if not overhead_data:
             return """
             <div class="warning">
-                <h4>⚠️ 无法进行根因分析</h4>
+                <h4>&#9888; 无法进行根因分析</h4>
                 <p>缺少监控开销数据，无法确定瓶颈是否由监控系统引起。</p>
             </div>
             """
@@ -1050,7 +1113,7 @@ class ReportGenerator:
         if impact_level == "高":
             return f"""
             <div class="root-cause-analysis warning">
-                <h4>🔍 根因分析: 监控系统影响显著</h4>
+                <h4>&#128269; 根因分析: 监控系统影响显著</h4>
                 <p>监控系统对EBS性能的影响程度: <strong>{impact_level} (约{impact_percent:.1f}%)</strong></p>
                 <ul>
                     <li>监控系统平均IOPS: <strong>{monitoring_iops_avg:.2f}</strong></li>
@@ -1062,7 +1125,7 @@ class ReportGenerator:
         elif impact_level == "中":
             return f"""
             <div class="root-cause-analysis info">
-                <h4>🔍 根因分析: 监控系统有一定影响</h4>
+                <h4>&#128269; 根因分析: 监控系统有一定影响</h4>
                 <p>监控系统对EBS性能的影响程度: <strong>{impact_level} (约{impact_percent:.1f}%)</strong></p>
                 <ul>
                     <li>监控系统平均IOPS: <strong>{monitoring_iops_avg:.2f}</strong></li>
@@ -1074,7 +1137,7 @@ class ReportGenerator:
         else:
             return f"""
             <div class="root-cause-analysis success">
-                <h4>🔍 根因分析: 监控系统影响较小</h4>
+                <h4>&#128269; 根因分析: 监控系统影响较小</h4>
                 <p>监控系统对EBS性能的影响程度: <strong>{impact_level} (约{impact_percent:.1f}%)</strong></p>
                 <ul>
                     <li>监控系统平均IOPS: <strong>{monitoring_iops_avg:.2f}</strong></li>
@@ -1096,7 +1159,7 @@ class ReportGenerator:
     
     def _generate_production_resource_planning_section(self):
         """生成生产环境资源规划建议部分"""
-        overhead_data = self._load_overhead_data()
+        overhead_data = self.overhead_data  # 使用缓存的数据而不是重新加载
         bottleneck_info = self._load_bottleneck_info()
         
         # 确定主要瓶颈
@@ -1120,10 +1183,10 @@ class ReportGenerator:
         
         section_html = f"""
         <div class="section">
-            <h2>🎯 生产环境资源规划建议</h2>
+            <h2>&#127919; 生产环境资源规划建议</h2>
             
             <div class="conclusion">
-                <h3>📝 测试结论摘要</h3>
+                <h3>&#128221; 测试结论摘要</h3>
                 <p>基于性能测试结果，我们得出以下结论:</p>
                 <ul>
                     <li>主要瓶颈: <strong>{main_bottleneck}</strong></li>
@@ -1134,7 +1197,7 @@ class ReportGenerator:
             
 
             <div class="info-card">
-                <h3>💡 性能优化建议</h3>
+                <h3>&#128161; 性能优化建议</h3>
                 <table class="data-table">
                     <tr>
                         <th>组件</th>
@@ -1190,7 +1253,7 @@ class ReportGenerator:
         if not self.overhead_data:
             return """
             <div class="warning">
-                <h4>⚠️  监控开销Data Not Available</h4>
+                <h4>&#9888;  监控开销Data Not Available</h4>
                 <p>监控开销数据文件未找到或为空。请确保在性能测试期间启用了监控开销统计。</p>
                 <p><strong>预期文件</strong>: <code>logs/monitoring_overhead_YYYYMMDD_HHMMSS.csv</code></p>
                 <p><strong>说明</strong>: 监控开销数据由unified_monitor.sh自动生成，无需手动运行额外工具。</p>
@@ -1198,10 +1261,10 @@ class ReportGenerator:
             """
         
         try:
-            # ✅ 生成详细的监控开销表格
+            # &#9989; 生成详细的监控开销表格
             table_html = """
             <div class="info">
-                <h4>📊 监控开销详细数据</h4>
+                <h4>&#128202; 监控开销详细数据</h4>
                 <p>以下数据显示了测试期间各监控组件的资源消耗情况，帮助评估生产环境的真实资源需求。</p>
             </div>
             
@@ -1310,7 +1373,7 @@ class ReportGenerator:
             </table>
             
             <div class="info" style="margin-top: 15px;">
-                <h4>📊 监控开销分析说明</h4>
+                <h4>&#128202; 监控开销分析说明</h4>
                 <ul>
                     <li><strong>监控组件</strong>: 各个系统监控工具的资源消耗分解</li>
                     <li><strong>CPU Usage</strong>: 监控工具占用的CPU百分比</li>
@@ -1342,22 +1405,22 @@ class ReportGenerator:
         return """
         <div class="info-grid">
             <div class="info-card">
-                <h4>🔍 EBS瓶颈检测结果</h4>
+                <h4>&#128269; EBS瓶颈检测结果</h4>
                 <p><strong>报告文件</strong>: ebs_bottleneck_analysis.txt</p>
                 <p>分析EBS存储在不同QPS负载下的性能瓶颈情况</p>
             </div>
             <div class="info-card">
-                <h4>🔄 EBS IOPS转换分析</h4>
+                <h4>&#128260; EBS IOPS转换分析</h4>
                 <p><strong>报告文件</strong>: ebs_iops_conversion.json</p>
                 <p>将iostat指标转换为AWS EBS标准IOPS和Throughput指标</p>
             </div>
             <div class="info-card">
-                <h4>📊 EBS综合分析</h4>
+                <h4>&#128202; EBS综合分析</h4>
                 <p><strong>报告文件</strong>: ebs_analysis.txt</p>
                 <p>EBS存储性能的综合分析报告</p>
             </div>
             <div class="info-card">
-                <h4>💻 监控开销计算</h4>
+                <h4>&#128187; 监控开销计算</h4>
                 <p><strong>数据文件</strong>: monitoring_overhead_YYYYMMDD_HHMMSS.csv</p>
                 <p>详细的监控系统资源消耗数据</p>
             </div>
@@ -1469,7 +1532,7 @@ class ReportGenerator:
             if warnings:
                 warning_section = f"""
                 <div class="warning">
-                    <h4>⚠️  高利用率警告</h4>
+                    <h4>&#9888;  高利用率警告</h4>
                     <ul>
                         {''.join([f'<li>{warning}</li>' for warning in warnings])}
                     </ul>
@@ -1486,11 +1549,11 @@ class ReportGenerator:
             
             return f"""
             <div class="section">
-                <h2>📊 EBS AWS基准分析</h2>
+                <h2>&#128202; EBS AWS基准分析</h2>
                 
                 {warning_section}
                 
-                <h3>💾 DATA Device (LEDGER存储)</h3>
+                <h3>&#128190; DATA Device (LEDGER存储)</h3>
                 <div class="info-grid">
                     <div class="info-card">
                         <h4>DATA Device基准IOPS</h4>
@@ -1518,7 +1581,7 @@ class ReportGenerator:
                     </div>
                 </div>
                 
-                <h3>🗂️ ACCOUNTS Device (账户存储)</h3>
+                <h3>&#128451; ACCOUNTS Device (账户存储)</h3>
                 <div class="info-grid">
                     <div class="info-card">
                         <h4>ACCOUNTS Device基准IOPS</h4>
@@ -1547,7 +1610,7 @@ class ReportGenerator:
                 </div>
                 
                 <div class="info">
-                    <h4>📊 EBS基准分析说明</h4>
+                    <h4>&#128202; EBS基准分析说明</h4>
                     <ul>
                         <li><strong>基准IOPS/Throughput</strong>: 通过环境变量配置的EBS性能基准</li>
                         <li><strong>实际平均值</strong>: 测试期间的平均性能表现</li>
@@ -1563,9 +1626,9 @@ class ReportGenerator:
             print(f"❌ EBS基准分析生成失败: {e}")
             return f"""
             <div class="section">
-                <h2>📊 EBS AWS基准分析</h2>
+                <h2>&#128202; EBS AWS基准分析</h2>
                 <div class="warning">
-                    <h4>❌ 基准分析失败</h4>
+                    <h4>&#10060; 基准分析失败</h4>
                     <p>错误信息: {str(e)[:100]}</p>
                     <p>请检查：</p>
                     <ul>
@@ -1591,7 +1654,7 @@ class ReportGenerator:
             if not limitations:
                 return """
                 <div class="info" style="background-color: #d4edda; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #28a745;">
-                    <h4>✅ ENA网络状态正常</h4>
+                    <h4>&#9989; ENA网络状态正常</h4>
                     <p>监控期间未检测到任何ENA网络限制。所有网络指标均在正常范围内。</p>
                 </div>
                 """
@@ -1599,7 +1662,7 @@ class ReportGenerator:
             # 生成警告HTML
             html = """
             <div class="warning">
-                <h4>🚨 ENA网络限制检测结果</h4>
+                <h4>&#128680; ENA网络限制检测结果</h4>
                 <p>检测到以下ENA网络限制情况，建议关注网络性能优化：</p>
                 <ul>
             """
@@ -1741,7 +1804,7 @@ class ReportGenerator:
             
             return f"""
             <div class="section">
-                <h3>🌐 ENA网络统计</h3>
+                <h3>&#127760; ENA网络统计</h3>
                 <table class="performance-table">
                     <thead>
                         <tr>
@@ -1892,7 +1955,7 @@ class ReportGenerator:
         if not correlation_data:
             return """
             <div class="warning">
-                <h4>⚠️  相关性分析Data Not Available</h4>
+                <h4>&#9888;  相关性分析Data Not Available</h4>
                 <p>可能的原因：</p>
                 <ul>
                     <li>缺少必要的CPU或EBS性能字段</li>
@@ -1994,7 +2057,13 @@ class ReportGenerator:
                         
                         # 对于health和data_loss字段，显示统计信息
                         if 'health' in field.lower() or 'data_loss' in field.lower():
-                            healthy_count = (numeric_data == 1).sum() if 'health' in field.lower() else (numeric_data == 0).sum()
+                            # 使用pandas Series的显式方法避免IDE类型推断错误
+                            if 'health' in field.lower():
+                                bool_mask = numeric_data.eq(1)  # 使用eq方法替代==
+                                healthy_count = int(bool_mask.sum())
+                            else:
+                                bool_mask = numeric_data.eq(0)  # 使用eq方法替代==
+                                healthy_count = int(bool_mask.sum())
                             total_count = len(numeric_data)
                             percentage = (healthy_count / total_count * 100) if total_count > 0 else 0
                             status_label = 'Healthy' if 'health' in field.lower() else 'No Data Loss'
@@ -2016,7 +2085,7 @@ class ReportGenerator:
                                 <div>Range: {min_val} - {max_val}</div>
                             </div>
                             """
-                        """
+                        
                         analysis_cards.append(card_html)
             
             if analysis_cards:
@@ -2035,14 +2104,13 @@ class ReportGenerator:
             
             # 生成各个部分 - 使用实际存在的方法
             ebs_analysis = self._generate_ebs_baseline_analysis_section(df)
-            ebs_bottleneck_analysis = self._generate_ebs_bottleneck_section()  # 新增EBS瓶颈根因分析
-            monitoring_overhead_analysis = self._generate_monitoring_overhead_section()  # 新增监控开销分析
-            monitoring_overhead_detailed = self._generate_monitoring_overhead_detailed_section()  # 详细监控开销分析
-            production_resource_planning = self._generate_production_resource_planning_section()  # 生产环境资源规划
-            ena_warnings = self._generate_ena_warnings_section(df)  # 新增ENA警告
-            ena_data_table = self._generate_ena_data_table(df)     # 新增ENA数据表
+            ebs_bottleneck_analysis = self._generate_ebs_bottleneck_section()
+            monitoring_overhead_analysis = self._generate_monitoring_overhead_section()
+            monitoring_overhead_detailed = self._generate_monitoring_overhead_detailed_section()
+            production_resource_planning = self._generate_production_resource_planning_section()
+            ena_warnings = self._generate_ena_warnings_section(df)
+            ena_data_table = self._generate_ena_data_table(df)
             
-            # 新增：区块高度性能分析
             block_height_analysis = self._analyze_block_height_performance(df, block_height_fields)
 
             correlation_table = self._generate_cpu_ebs_correlation_table(df)
@@ -2073,10 +2141,10 @@ class ReportGenerator:
             </head>
             <body>
                 <div class="container">
-                    <h1>🚀 Blockchain Node QPS 性能分析报告 - 增强版</h1>
-                    <h1>🚀 Blockchain Node QPS 性能分析报告 - 增强版</h1>
+                    <h1>&#128640; Blockchain Node QPS 性能分析报告 - 增强版</h1>
+                    <h1>&#128640; Blockchain Node QPS 性能分析报告 - 增强版</h1>
                     <p>生成Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    <p>✅ 统一字段命名 | 完整Device支持 | 监控开销分析 | Solana特定分析 | 瓶颈检测分析</p>
+                    <p>&#9989; 统一字段命名 | 完整Device支持 | 监控开销分析 | Solana特定分析 | 瓶颈检测分析</p>
                     
                     {bottleneck_section}
                     {performance_summary}
@@ -2108,153 +2176,153 @@ class ReportGenerator:
                 # performance_visualizer.py 生成的图片
                 {
                     'filename': 'performance_overview.png',
-                    'title': '📈 性能概览图表',
+                    'title': '&#128200; 性能概览图表',
                     'description': '系统整体性能概览，包括CPU、内存、EBS等关键指标的Time序列展示'
                 },
                 {
                     'filename': 'cpu_ebs_correlation_visualization.png',
-                    'title': '🔗 CPU-EBS关联可视化',
+                    'title': '&#128279; CPU-EBS关联可视化',
                     'description': 'CPU Usage与EBS性能指标的关联性分析，帮助识别I/O瓶颈'
                 },
                 {
                     'filename': 'device_performance_comparison.png',
-                    'title': '💾 Device性能对比',
+                    'title': '&#128190; Device性能对比',
                     'description': 'DATA Device和ACCOUNTS Device的性能对比分析'
                 },
                 {
                     'filename': 'await_threshold_analysis.png',
-                    'title': '⏱️ 等待Time阈值分析',
+                    'title': '&#9202; 等待Time阈值分析',
                     'description': 'I/O等待Time的阈值分析，识别存储性能瓶颈'
                 },
                 {
                     'filename': 'util_threshold_analysis.png',
-                    'title': '📊 利用率阈值分析',
+                    'title': '&#128202; 利用率阈值分析',
                     'description': 'Device Utilization的阈值分析，评估资源使用效率'
                 },
                 {
                     'filename': 'monitoring_overhead_analysis.png',
-                    'title': '📋 监控开销分析',
+                    'title': '&#128203; 监控开销分析',
                     'description': '监控系统本身的资源消耗分析，评估监控对系统性能的影响'
                 },
                 {
                     'filename': 'smoothed_trend_analysis.png',
-                    'title': '📈 平滑趋势分析',
+                    'title': '&#128200; 平滑趋势分析',
                     'description': '性能指标的平滑趋势分析，消除噪声后的性能变化趋势'
                 },
                 {
                     'filename': 'qps_trend_analysis.png',
-                    'title': '🚀 QPS趋势分析',
+                    'title': '&#128640; QPS趋势分析',
                     'description': 'QPS性能的详细趋势分析，展示测试过程中的QPS变化'
                 },
                 {
                     'filename': 'resource_efficiency_analysis.png',
-                    'title': '⚡ 资源效率分析',
+                    'title': '&#9889; 资源效率分析',
                     'description': 'QPS与资源消耗的效率分析，评估每QPS的资源成本'
                 },
                 {
                     'filename': 'bottleneck_identification.png',
-                    'title': '🚨 瓶颈识别图',
+                    'title': '&#128680; 瓶颈识别图',
                     'description': '自动瓶颈识别结果，标注性能瓶颈点和影响因素'
                 },
                 
                 # advanced_chart_generator.py 生成的图片
                 {
                     'filename': 'pearson_correlation_analysis.png',
-                    'title': '📊 Pearson相关性分析',
+                    'title': '&#128202; Pearson相关性分析',
                     'description': 'CPU与EBS指标的Pearson相关性分析，量化指标间的线性关系'
                 },
                 {
                     'filename': 'linear_regression_analysis.png',
-                    'title': '📈 线性回归分析',
+                    'title': '&#128200; 线性回归分析',
                     'description': '关键指标的线性回归分析，预测性能趋势和关系'
                 },
                 {
                     'filename': 'negative_correlation_analysis.png',
-                    'title': '📉 负相关分析',
+                    'title': '&#128201; 负相关分析',
                     'description': '负相关指标分析，识别性能权衡关系'
                 },
                 {
                     'filename': 'comprehensive_correlation_matrix.png',
-                    'title': '🔍 综合相关性矩阵',
+                    'title': '&#128269; 综合相关性矩阵',
                     'description': '所有监控指标的综合相关性矩阵热力图'
                 },
                 {
                     'filename': 'performance_trend_analysis.png',
-                    'title': '📊 性能趋势分析',
+                    'title': '&#128202; 性能趋势分析',
                     'description': '长期性能趋势分析，识别性能变化模式'
                 },
                 {
                     'filename': 'ena_limitation_trends.png',
-                    'title': '🚨 ENA网络限制趋势',
+                    'title': '&#128680; ENA网络限制趋势',
                     'description': 'AWS ENA网络限制趋势分析，显示PPS、带宽、连接跟踪等限制的Time变化'
                 },
                 {
                     'filename': 'ena_connection_capacity.png',
-                    'title': '🔗 ENA连接容量监控',
+                    'title': '&#128279; ENA连接容量监控',
                     'description': 'ENA连接容量实时监控，显示可用连接数变化和容量预警'
                 },
                 {
                     'filename': 'ena_comprehensive_status.png',
-                    'title': '🌐 ENA综合状态分析',
+                    'title': '&#127760; ENA综合状态分析',
                     'description': 'ENA网络综合状态分析，包括限制分布、容量状态和严重程度评估'
                 },
                 {
                     'filename': 'performance_correlation_heatmap.png',
-                    'title': '🔥 性能相关性热力图',
+                    'title': '&#128293; 性能相关性热力图',
                     'description': '性能指标相关性的热力图展示，直观显示指标间关系强度'
                 },
                 
                 # analysis/*.py 生成的图片（bottleneck_analysis_chart.png已删除）
                 {
                     'filename': 'reports/performance_cliff_analysis.png',
-                    'title': '📉 性能悬崖分析',
+                    'title': '&#128201; 性能悬崖分析',
                     'description': '性能悬崖检测和分析，识别性能急剧下降的原因'
                 },
                 {
                     'filename': 'reports/comprehensive_analysis_charts.png',
-                    'title': '📊 综合分析图表',
+                    'title': '&#128202; 综合分析图表',
                     'description': '综合性能分析图表集合，全面展示系统性能状况'
                 },
                 {
                     'filename': 'reports/qps_performance_analysis.png',
-                    'title': '🎯 QPS性能分析',
+                    'title': '&#127919; QPS性能分析',
                     'description': 'QPS性能的专项分析图表，深入分析QPS性能特征'
                 },
                 
                 # EBS专业分析图表组
                 {
                     'filename': 'ebs_aws_capacity_planning.png',
-                    'title': '📊 EBS AWS容量规划分析',
+                    'title': '&#128202; EBS AWS容量规划分析',
                     'description': 'AWS EBS容量规划分析，包括IOPS和吞吐量利用率预测，支持容量规划决策'
                 },
                 {
                     'filename': 'ebs_iostat_performance.png',
-                    'title': '💾 EBS iostat性能分析',
+                    'title': '&#128190; EBS iostat性能分析',
                     'description': 'EBS设备的iostat性能分析，包括读写分离、延迟分析和队列深度监控'
                 },
                 {
                     'filename': 'ebs_bottleneck_correlation.png',
-                    'title': '🔗 EBS瓶颈关联分析',
+                    'title': '&#128279; EBS瓶颈关联分析',
                     'description': 'EBS瓶颈关联分析，展示AWS标准视角与iostat视角的关联关系'
                 },
                 {
                     'filename': 'ebs_performance_overview.png',
-                    'title': '📈 EBS性能概览',
+                    'title': '&#128200; EBS性能概览',
                     'description': 'EBS综合性能概览，包括AWS标准IOPS、吞吐量与基准线对比'
                 },
                 {
                     'filename': 'ebs_bottleneck_analysis.png',
-                    'title': '🚨 EBS瓶颈检测分析',
+                    'title': '&#128680; EBS瓶颈检测分析',
                     'description': 'EBS瓶颈检测分析，自动识别IOPS、吞吐量和延迟瓶颈点'
                 },
                 {
                     'filename': 'ebs_aws_standard_comparison.png',
-                    'title': '⚖️ EBS AWS标准对比',
+                    'title': '&#9878;️ EBS AWS标准对比',
                     'description': 'AWS标准值与原始iostat数据对比分析，评估性能标准化程度'
                 },
                 {
                     'filename': 'ebs_time_series_analysis.png',
-                    'title': '📊 EBS时间序列分析',
+                    'title': '&#128202; EBS时间序列分析',
                     'description': 'EBS性能时间序列分析，展示多指标时间维度变化趋势'
                 }
             ]
@@ -2262,7 +2330,7 @@ class ReportGenerator:
             # 检查图片文件存在性并生成HTML
             charts_html = """
             <div class="section">
-                <h2>📊 性能分析图表</h2>
+                <h2>&#128202; 性能分析图表</h2>
                 <div class="info">
                     <p>以下图表提供了系统性能的全方位可视化分析，包括性能趋势、关联性分析、瓶颈识别等。</p>
                 </div>
@@ -2314,18 +2382,18 @@ class ReportGenerator:
                 # 添加图表统计信息
                 charts_html += f"""
                 <div class="charts-summary">
-                    <h3>📈 图表统计</h3>
+                    <h3>&#128200; 图表统计</h3>
                     <ul>
-                        <li>✅ 可用图表: {len(available_charts)} 个</li>
-                        <li>⏳ 待生成图表: {len(missing_charts)} 个</li>
-                        <li>📊 图表覆盖率: {len(available_charts)/(len(available_charts)+len(missing_charts))*100:.1f}%</li>
+                        <li>&#9989; 可用图表: {len(available_charts)} 个</li>
+                        <li>&#8987; 待生成图表: {len(missing_charts)} 个</li>
+                        <li>&#128202; 图表覆盖率: {len(available_charts)/(len(available_charts)+len(missing_charts))*100:.1f}%</li>
                     </ul>
                 </div>
                 """
             else:
                 charts_html += """
                 <div class="warning">
-                    <h3>⚠️ 图表生成提示</h3>
+                    <h3>&#9888; 图表生成提示</h3>
                     <p>当前没有找到生成的图表文件。图表将在以下情况下生成：</p>
                     <ul>
                         <li>运行 performance_visualizer.py 生成性能分析图表</li>
@@ -2340,7 +2408,7 @@ class ReportGenerator:
             if missing_charts:
                 charts_html += """
                 <div class="missing-charts">
-                    <h3>📋 待生成图表</h3>
+                    <h3>&#128203; 待生成图表</h3>
                     <p>以下图表尚未生成，运行相应脚本后将自动显示：</p>
                     <ul>
                 """
@@ -2364,7 +2432,7 @@ class ReportGenerator:
         except Exception as e:
             return f"""
             <div class="section error">
-                <h2>⚠️ 图表展示错误</h2>
+                <h2>&#9888; 图表展示错误</h2>
                 <p>图表部分生成失败: {str(e)}</p>
             </div>
             """
@@ -2406,27 +2474,27 @@ class ReportGenerator:
             
             return f"""
             <div class="section bottleneck-alert" style="border-left: 5px solid {severity_color}; background-color: #fff3cd;">
-                <h2 style="color: {severity_color};">🚨 性能瓶颈检测结果</h2>
+                <h2 style="color: {severity_color};">&#128680; 性能瓶颈检测结果</h2>
                 
                 <div class="bottleneck-summary">
                     <div class="bottleneck-stats">
                         <div class="stat-item">
-                            <h4>🏆 最大成功QPS</h4>
+                            <h4>&#127942; 最大成功QPS</h4>
                             <div class="stat-value" style="color: #28a745; font-size: 2em; font-weight: bold;">{max_qps}</div>
                         </div>
                         <div class="stat-item">
-                            <h4>🚨 瓶颈触发QPS</h4>
+                            <h4>&#128680; 瓶颈触发QPS</h4>
                             <div class="stat-value" style="color: #dc3545; font-size: 2em; font-weight: bold;">{bottleneck_qps}</div>
                         </div>
                         <div class="stat-item">
-                            <h4>📉 性能下降</h4>
+                            <h4>&#128201; 性能下降</h4>
                             <div class="stat-value" style="color: #dc3545; font-size: 1.5em; font-weight: bold;">{performance_drop:.1f}%</div>
                         </div>
                     </div>
                 </div>
                 
                 <div class="bottleneck-details">
-                    <h3>🔍 瓶颈详情</h3>
+                    <h3>&#128269; 瓶颈详情</h3>
                     <div class="info">
                         <p><strong>检测Time:</strong> {detection_time}</p>
                         <p><strong>严重程度:</strong> <span style="color: {severity_color}; font-weight: bold;">{severity.upper()}</span></p>
@@ -2436,7 +2504,7 @@ class ReportGenerator:
                 
                 {f'''
                 <div class="bottleneck-recommendations">
-                    <h3>💡 优化建议</h3>
+                    <h3>&#128161; 优化建议</h3>
                     <div class="info">
                         {recommendations_html}
                     </div>
@@ -2444,7 +2512,7 @@ class ReportGenerator:
                 ''' if recommendations else ''}
                 
                 <div class="bottleneck-actions">
-                    <h3>🎯 建议的下一步行动</h3>
+                    <h3>&#127919; 建议的下一步行动</h3>
                     <div class="info">
                         <ul>
                             <li>查看详细的瓶颈分析图表了解根本原因</li>
@@ -2460,7 +2528,7 @@ class ReportGenerator:
         except Exception as e:
             return f"""
             <div class="section error">
-                <h2>⚠️ 瓶颈信息显示错误</h2>
+                <h2>&#9888; 瓶颈信息显示错误</h2>
                 <p>瓶颈信息处理失败: {str(e)}</p>
             </div>
             """
@@ -2746,7 +2814,7 @@ class ReportGenerator:
             
             return f"""
             <div class="section">
-                <h2>📊 性能摘要</h2>
+                <h2>&#128202; 性能摘要</h2>
                 <div class="info-grid">
                     <div class="info-card">
                         <h4>平均CPU Usage</h4>

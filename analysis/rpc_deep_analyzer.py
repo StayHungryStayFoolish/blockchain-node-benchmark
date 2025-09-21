@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 RPC深度分析器 - 从comprehensive_analysis.py拆分出来的独立模块
 专门负责RPC性能的深度分析，包括延迟趋势、异常检测、性能悬崖检测等
@@ -248,7 +249,7 @@ class RpcDeepAnalyzer:
             block_height_data['block_height_diff_numeric'] = pd.to_numeric(df['block_height_diff'], errors='coerce')
             block_height_data = block_height_data.dropna(subset=['block_height_diff_numeric'])
 
-                if len(block_height_data) > 0:
+            if len(block_height_data) > 0:
                     block_height_analysis['sync_data_available'] = True
                     block_height_analysis['avg_block_height_offset'] = block_height_data['block_height_diff_numeric'].mean()
                     block_height_analysis['max_block_height_offset'] = block_height_data['block_height_diff_numeric'].max()
@@ -378,8 +379,8 @@ class RpcDeepAnalyzer:
                 avg_cpu_special = qps_special['cpu_usage'].mean() if 'cpu_usage' in qps_special.columns else 0.0
                 avg_latency_special = qps_special['rpc_latency_ms'].mean() if 'rpc_latency_ms' in qps_special.columns else 0.0
                 print(f"{self.config.SPECIAL_QPS_ANALYSIS} QPS phase analysis:")
-                print(f"  Average CPU: {avg_cpu_special:.1f}%")
-                print(f"  Average latency: {avg_latency_special:.1f}ms")
+                print(f"  🖥️ Average CPU: {avg_cpu_special:.1f}%")
+                print(f"  ⏱️ Average latency: {avg_latency_special:.1f}ms")
 
                 if avg_latency_special > 20 and avg_cpu_special < self.config.LOW_CPU_THRESHOLD:
                     bottleneck_classification['primary_bottleneck'] = 'rpc_processing'
@@ -388,9 +389,9 @@ class RpcDeepAnalyzer:
                         f"High latency ({avg_latency_special:.1f}ms) at {self.config.SPECIAL_QPS_ANALYSIS} QPS with low CPU ({avg_cpu_special:.1f}%)")
                     print("🔍 Bottleneck type: RPC processing capacity limitation (non-CPU bottleneck)")
                     print("💡 Optimization suggestions:")
-                    print("  - Increase RPC thread count")
-                    print("  - Optimize network configuration")
-                    print("  - Check RPC connection pool settings")
+                    print("  🔧 - Increase RPC thread count")
+                    print("  🌐 - Optimize network configuration")
+                    print("  ⚙️ - Check RPC connection pool settings")
 
             # 通用瓶颈分类逻辑
             if avg_cpu > self.config.HIGH_CPU_THRESHOLD:

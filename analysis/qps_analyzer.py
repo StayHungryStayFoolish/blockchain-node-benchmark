@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 QPS分析器 - 从comprehensive_analysis.py拆分出来的独立模块 + 瓶颈模式支持
 专门负责QPS性能分析，包括性能指标分析、瓶颈识别、图表生成等
@@ -24,7 +25,7 @@ def setup_font():
     # Use standard fonts that work across all platforms
     plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
     plt.rcParams['axes.unicode_minus'] = False
-    print("SUCCESS: QPS Analyzer using font: DejaVu Sans")
+    print("✅ SUCCESS: QPS Analyzer using font: DejaVu Sans")
     return True
 
 # Initialize font configuration
@@ -528,8 +529,8 @@ class NodeQPSAnalyzer:
         max_qps = df['current_qps'].max()
         qps_range = sorted(df['current_qps'].unique())
 
-        print(f"Maximum QPS tested: {max_qps:,}")
-        print(f"QPS range: {min(qps_range):,} - {max_qps:,}")
+        print(f"Maximum QPS tested: {max_qps}")
+        print(f"QPS range: {min(qps_range)} - {max_qps}")
         print(f"Number of QPS levels: {len(qps_range)}")
 
         # 按QPS分组统计
@@ -892,7 +893,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             report += f"- **Detected Bottlenecks**: {', '.join(performance_evaluation['bottleneck_types'])}\n"
             for bottleneck_type in performance_evaluation['bottleneck_types']:
                 qps = bottlenecks.get(bottleneck_type, 'Unknown')
-                report += f"  - **{bottleneck_type}**: First detected at {qps:,} QPS\n" if isinstance(qps, int) else f"  - **{bottleneck_type}**: {qps}\n"
+                report += f"  - **{bottleneck_type}**: First detected at {qps} QPS\n" if isinstance(qps, int) else f"  - **{bottleneck_type}**: {qps}\n"
         else:
             report += "- ✅ No critical bottlenecks detected in tested range\n"
 

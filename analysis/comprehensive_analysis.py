@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Comprehensive Analyzer - Refactored integrated version with bottleneck mode support
 Integrates RPC deep analyzer and QPS analyzer for blockchain node performance testing
@@ -20,7 +21,7 @@ def setup_font():
     # Use standard fonts that work across all platforms
     plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
     plt.rcParams['axes.unicode_minus'] = False
-    print("SUCCESS: Comprehensive Analysis using font: DejaVu Sans")
+    print("✅ SUCCESS: Comprehensive Analysis using font: DejaVu Sans")
     return True
 
 # Initialize font configuration
@@ -312,7 +313,7 @@ class ComprehensiveAnalyzer:
             return None
 
         plt.style.use('default')
-        fig, axes = plt.subplots(4, 2, figsize=(16, 24))
+        fig, axes = plt.subplots(3, 2, figsize=(16, 18))
         # Using English title directly
         fig.suptitle('Blockchain Node QPS Ultimate Performance Analysis Dashboard', fontsize=16, fontweight='bold')
 
@@ -361,69 +362,54 @@ class ComprehensiveAnalyzer:
                            transform=axes[1, 0].transAxes, fontsize=12)
             axes[1, 0].set_title('RPC Latency vs QPS (No Data)')
 
-        # 4. 预留位置（原RPC错误率图表已删除）
-        axes[1, 1].text(0.5, 0.5, 'Chart Removed\n(Invalid Data Source)', ha='center', va='center',
-                        transform=axes[1, 1].transAxes, fontsize=12)
-        axes[1, 1].set_title('RPC Analysis (Removed)')
-
-        # 5. 预留位置（原瓶颈事件分布图表已删除）
-        axes[2, 0].text(0.5, 0.5, 'Chart Removed\n(Invalid Data Source)', ha='center', va='center',
-                        transform=axes[2, 0].transAxes, fontsize=12)
-        axes[2, 0].set_title('Bottleneck Analysis (Removed)')
-
-        # 6. 预留位置（原RPC方法分布图表已删除）
-        axes[2, 1].text(0.5, 0.5, 'Chart Removed\n(Invalid Data Source)', ha='center', va='center',
-                        transform=axes[2, 1].transAxes, fontsize=12)
-        axes[2, 1].set_title('RPC Methods (Removed)')
-
-        # 7. RPC延迟分布
+        # 4. RPC延迟分布（移动到第2行第0列）
         if len(df) > 0 and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
-            axes[3, 0].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
+            axes[2, 0].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
             if 'rpc_latency_ms' in df.columns:
                 mean_latency = df['rpc_latency_ms'].mean()
                 p95_latency = df['rpc_latency_ms'].quantile(0.95)
-                axes[3, 0].axvline(mean_latency, color='red', linestyle='--',
+                axes[2, 0].axvline(mean_latency, color='red', linestyle='--',
                                    label=f'Mean: {mean_latency:.1f}ms')
-                axes[3, 0].axvline(p95_latency, color='orange', linestyle='--',
+                axes[2, 0].axvline(p95_latency, color='orange', linestyle='--',
                                    label=f'P95: {p95_latency:.1f}ms')
-            axes[3, 0].set_title('RPC Latency Distribution')
-            axes[3, 0].set_xlabel('Latency (ms)')
-            axes[3, 0].set_ylabel('Frequency')
-            axes[3, 0].legend()
-            axes[3, 0].grid(True, alpha=0.3)
+            axes[2, 0].set_title('RPC Latency Distribution')
+            axes[2, 0].set_xlabel('Latency (ms)')
+            axes[2, 0].set_ylabel('Frequency')
+            axes[2, 0].legend()
+            axes[2, 0].grid(True, alpha=0.3)
 
-        # 8. 性能悬崖可视化
+        # 5. 性能悬崖可视化
         cliff_analysis = rpc_deep_analysis.get('performance_cliff', {})
         if cliff_analysis and len(df) > 0 and qps_available and 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
             try:
                 qps_latency = df.groupby('current_qps')['rpc_latency_ms'].mean().reset_index()
                 qps_latency = qps_latency.sort_values('current_qps')
 
-                axes[3, 1].plot(qps_latency['current_qps'], qps_latency['rpc_latency_ms'], 'bo-', alpha=0.7)
+                axes[2, 1].plot(qps_latency['current_qps'], qps_latency['rpc_latency_ms'], 'bo-', alpha=0.7)
 
                 # 标记悬崖点
                 cliff_points = cliff_analysis.get('performance_degradation_qps', [])
                 for cliff_qps in cliff_points:
                     cliff_latency = qps_latency[qps_latency['current_qps'] == cliff_qps]['rpc_latency_ms']
                     if len(cliff_latency) > 0:
-                        axes[3, 1].scatter(cliff_qps, cliff_latency.iloc[0], color='red', s=100, marker='x',
+                        axes[2, 1].scatter(cliff_qps, cliff_latency.iloc[0], color='red', s=100, marker='x',
                                            label='Performance Cliff')
 
-                axes[3, 1].set_title('Performance Cliff Detection')
-                axes[3, 1].set_xlabel('QPS')
-                axes[3, 1].set_ylabel('Average Latency (ms)')
-                axes[3, 1].grid(True, alpha=0.3)
+                axes[2, 1].set_title('Performance Cliff Detection')
+                axes[2, 1].set_xlabel('QPS')
+                axes[2, 1].set_ylabel('Average Latency (ms)')
+                axes[2, 1].grid(True, alpha=0.3)
                 if cliff_points:
-                    axes[3, 1].legend()
+                    axes[2, 1].legend()
             except Exception as e:
                 logger.warning(f"⚠️ Performance cliff visualization failed: {e}")
-                axes[3, 1].text(0.5, 0.5, 'Performance Cliff Analysis\nData Processing Error', ha='center', va='center',
-                               transform=axes[3, 1].transAxes, fontsize=12)
-                axes[3, 1].set_title('Performance Cliff Detection (Error)')
+                axes[2, 1].text(0.5, 0.5, 'Performance Cliff Analysis\nData Processing Error', ha='center', va='center',
+                               transform=axes[2, 1].transAxes, fontsize=12)
+                axes[2, 1].set_title('Performance Cliff Detection (Error)')
         else:
-            axes[3, 1].text(0.5, 0.5, 'QPS Data Not Available\nfor Cliff Analysis', ha='center', va='center',
-                           transform=axes[3, 1].transAxes, fontsize=12)
-            axes[3, 1].set_title('Performance Cliff Detection (No Data)')
+            axes[2, 1].text(0.5, 0.5, 'QPS Data Not Available\nfor Cliff Analysis', ha='center', va='center',
+                           transform=axes[2, 1].transAxes, fontsize=12)
+            axes[2, 1].set_title('Performance Cliff Detection (No Data)')
 
         plt.tight_layout()
         

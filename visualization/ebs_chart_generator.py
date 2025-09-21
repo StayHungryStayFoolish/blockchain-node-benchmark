@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 EBS专用图表生成器 - 完全独立的EBS性能分析模块
 基于单一职责原则和模块化设计
@@ -17,7 +18,7 @@ def setup_font():
     # Use standard fonts that work across all platforms
     plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
     plt.rcParams['axes.unicode_minus'] = False
-    print("SUCCESS: EBS Charts using font: DejaVu Sans")
+    print("✅ SUCCESS: EBS Charts using font: DejaVu Sans")
     return True
 
 # Initialize font configuration
@@ -102,7 +103,7 @@ class EBSChartGenerator:
         ]
         missing_columns = [col for col in required_columns if col not in self.df.columns]
         if missing_columns:
-            print(f"WARNING: 缺失EBS数据列: {missing_columns}")
+            print(f"⚠️ WARNING: 缺失EBS数据列: {missing_columns}")
             return False
         return True
     
@@ -818,12 +819,12 @@ class EBSChartGenerator:
                 ax3.axhline(y=mean_val - std_val, color='green', linestyle='--', alpha=0.7,
                            label='Low Threshold')
                 
-                if high_points.any():
+                if high_points.sum() > 0:
                     ax3.scatter(self.df.loc[high_points, 'timestamp'], 
                               self.df.loc[high_points, 'data_aws_standard_iops'],
                               color='red', s=30, alpha=0.7, label='High Points')
                 
-                if low_points.any():
+                if low_points.sum() > 0:
                     ax3.scatter(self.df.loc[low_points, 'timestamp'], 
                               self.df.loc[low_points, 'data_aws_standard_iops'],
                               color='green', s=30, alpha=0.7, label='Low Points')
