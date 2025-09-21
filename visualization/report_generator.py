@@ -2276,17 +2276,17 @@ class ReportGenerator:
                 
                 # analysis/*.py 生成的图片（bottleneck_analysis_chart.png已删除）
                 {
-                    'filename': 'reports/performance_cliff_analysis.png',
+                    'filename': 'performance_cliff_analysis.png',
                     'title': '&#128201; 性能悬崖分析',
                     'description': '性能悬崖检测和分析，识别性能急剧下降的原因'
                 },
                 {
-                    'filename': 'reports/comprehensive_analysis_charts.png',
+                    'filename': 'comprehensive_analysis_charts.png',
                     'title': '&#128202; 综合分析图表',
                     'description': '综合性能分析图表集合，全面展示系统性能状况'
                 },
                 {
-                    'filename': 'reports/qps_performance_analysis.png',
+                    'filename': 'qps_performance_analysis.png',
                     'title': '&#127919; QPS性能分析',
                     'description': 'QPS性能的专项分析图表，深入分析QPS性能特征'
                 },
