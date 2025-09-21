@@ -744,8 +744,14 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             temp_csv_path = os.path.join(self.output_dir, f'temp_performance_data_{process_id}_{random_id}.csv')
             df.to_csv(temp_csv_path, index=False)
             
-            # 查找监控开销文件
+            # 查找监控开销文件 - 增强查找逻辑以处理归档情况
             overhead_files = glob.glob(f"{self.output_dir}/logs/monitoring_overhead_*.csv")
+            if not overhead_files:
+                # 如果current目录没有，检查archives目录
+                overhead_files = glob.glob(f"{self.output_dir}/archives/*/logs/monitoring_overhead_*.csv")
+            if not overhead_files:
+                # 最后检查当前工作目录
+                overhead_files = glob.glob("monitoring_overhead_*.csv")
             overhead_file = max(overhead_files, key=os.path.getctime) if overhead_files else None
             
             # 创建性能可视化器并生成图表

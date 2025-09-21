@@ -628,19 +628,7 @@ generate_final_reports() {
     else
         echo "⚠️ HTML报告生成器不存在"
     fi
-    
-    # 生成性能图表
-    if [[ -f "${SCRIPT_DIR}/visualization/performance_visualizer.py" ]]; then
-        echo "📈 生成性能图表..."
-        if ! python3 "${SCRIPT_DIR}/visualization/performance_visualizer.py" "${report_params[@]}"; then
-            echo "⚠️ 性能图表生成失败"
-        else
-            echo "✅ 性能图表已生成"
-        fi
-    else
-        echo "⚠️ 性能图表生成器不存在"
-    fi
-    
+
     # 生成高级图表
     if [[ -f "${SCRIPT_DIR}/visualization/advanced_chart_generator.py" ]]; then
         echo "📊 生成高级图表..."
