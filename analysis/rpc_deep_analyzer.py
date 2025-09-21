@@ -346,7 +346,8 @@ class RpcDeepAnalyzer:
             print(f"\n📊 Performance cliff detection:")
             print("⚠️  Performance cliff points detected:")
             for _, row in cliff_points.iterrows():
-                print(f"QPS {row['current_qps']:,.0f}: latency spike +{row['latency_increase']:.1f}ms")
+                qps_display = f"{row['current_qps']:,.0f}" if not pd.isna(row['current_qps']) else "N/A"
+                print(f"QPS {qps_display}: latency spike +{row['latency_increase']:.1f}ms")
         else:
             print(f"\n📊 Performance cliff detection:")
             print("✅ No significant performance cliff detected")
@@ -477,11 +478,12 @@ class RpcDeepAnalyzer:
 """
             if anomaly.get('iqr_anomaly_count', 0) > 0:
                 system_state = anomaly.get('system_state_during_anomalies', {})
+                avg_qps_display = f"{system_state.get('avg_qps', 0):,.0f}" if not pd.isna(system_state.get('avg_qps', 0)) else "N/A"
                 report += f"""
 #### System State During Anomalies:
 - **Average CPU**: {system_state.get('avg_cpu', 0):.1f}%
 - **Average Memory**: {system_state.get('avg_memory', 0):.1f}%
-- **Average QPS**: {system_state.get('avg_qps', 0):,.0f}
+- **Average QPS**: {avg_qps_display}
 """
 
         # 相关性分析

@@ -591,11 +591,14 @@ class ComprehensiveAnalyzer:
         
         latency_trend = 'Stable' if max_rpc_latency < avg_rpc * 2 else 'Variable'
 
+        # 处理可能的NaN值
+        max_qps_display = f"{max_qps:,}" if not pd.isna(max_qps) else "N/A"
+        
         report = f"""# Blockchain Node QPS Comprehensive Performance Analysis Report
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 ## Executive Summary
-- **Maximum QPS Achieved**: {max_qps:,} if not pd.isna(max_qps) else "N/A"
+- **Maximum QPS Achieved**: {max_qps_display}
 - **Performance Grade**: {performance_evaluation['performance_grade']}
 - **Performance Level**: {performance_evaluation['performance_level']}
 - **Benchmark Mode**: {benchmark_mode}
@@ -677,9 +680,12 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         capacity_assessment = ComprehensiveAnalyzer._generate_comprehensive_capacity_assessment(performance_evaluation, max_qps)
         csv_file_display = self.csv_file or 'N/A'
         
+        # 计算推荐生产QPS
+        recommended_qps_display = f"{int(max_qps * 0.8):,} (80% of maximum tested)" if not pd.isna(max_qps) else "N/A (insufficient test data)"
+        
         report += f"""
 ### Production Deployment
-- **Recommended Production QPS**: {int(max_qps * 0.8):,} (80% of maximum tested) if not pd.isna(max_qps) else "N/A (insufficient test data)"
+- **Recommended Production QPS**: {recommended_qps_display}
 - **Monitoring Thresholds**: 
   - Alert if RPC latency P99 > 500ms sustained
   - Alert if CPU usage > 85% sustained

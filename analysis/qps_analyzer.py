@@ -863,11 +863,14 @@ class NodeQPSAnalyzer:
             benchmark_mode, max_qps, bottlenecks, avg_cpu, avg_mem, avg_rpc
         )
 
+        # 处理可能的NaN值
+        max_qps_display = f"{max_qps:,}" if not pd.isna(max_qps) else "N/A"
+        
         report = f"""# Solana QPS Performance Analysis Report
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 ## Executive Summary
-- **Maximum QPS Achieved**: {max_qps:,} if not pd.isna(max_qps) else "N/A"
+- **Maximum QPS Achieved**: {max_qps_display}
 - **Performance Grade**: {performance_evaluation['performance_grade']}
 - **Performance Level**: {performance_evaluation['performance_level']}
 - **Benchmark Mode**: {benchmark_mode}
@@ -907,9 +910,12 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         for recommendation in performance_evaluation.get('recommendations', []):
             report += f"- {recommendation}\n"
 
+        # 计算推荐生产QPS
+        recommended_qps_display = f"{int(max_qps * 0.8):,} (80% of maximum tested)" if not pd.isna(max_qps) else "N/A (insufficient test data)"
+        
         report += f"""
 ### Production Deployment Guidelines
-- **Recommended Production QPS**: {int(max_qps * 0.8):,} (80% of maximum tested) if not pd.isna(max_qps) else "N/A (insufficient test data)"
+- **Recommended Production QPS**: {recommended_qps_display}
 - **Monitoring Thresholds**: 
   - Alert if CPU usage > 85%
   - Alert if Memory usage > 90%
