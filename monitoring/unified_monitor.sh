@@ -614,9 +614,6 @@ get_ena_allowance_data() {
     echo "$ena_values"
 }
 
-# 加载ENA网络监控器
-source "$(dirname "${BASH_SOURCE[0]}")/ena_network_monitor.sh"
-
 # 配置化进程发现引擎（带性能监控）
 discover_monitoring_processes() {
     local start_time=$(date +%s%3N 2>/dev/null || date +%s)
@@ -646,7 +643,7 @@ discover_monitoring_processes() {
     echo "$monitoring_pids"
 }
 
-# 系统静态资源收集器 - 性能优化版本
+# 系统静态资源收集器
 get_system_static_resources() {
     # 使用内存缓存替代文件缓存 - 性能优化
     get_cached_system_info
@@ -1042,17 +1039,34 @@ monitor_performance_impact() {
     if [[ ! -f "$PERFORMANCE_LOG" ]]; then
         echo "timestamp,function_name,execution_time_ms,cpu_percent,memory_mb" > "$PERFORMANCE_LOG"
     fi
-    safe_write_csv "$PERFORMANCE_LOG" "$performance_entry"
+    
+    # 直接写入性能日志，避免递归风险
+    local temp_file="${PERFORMANCE_LOG}.tmp.$$"
+    if echo "$performance_entry" >> "$temp_file" && mv "$temp_file" "$PERFORMANCE_LOG"; then
+        : # 成功，无需输出
+    else
+        rm -f "$temp_file"
+        echo "ERROR: 性能日志写入失败: $PERFORMANCE_LOG" >&2
+    fi
 
-    # 如果有警告，记录到主日志
+    # 如果有警告，直接写入unified_monitor日志文件
     if [[ ${#warnings[@]} -gt 0 ]]; then
-        log_warn "监控性能警告 - 函数: $function_name"
-        for warning in "${warnings[@]}"; do
-            log_warn "  - $warning"
-        done
-
-        # 生成优化建议
-        generate_performance_optimization_suggestions "$function_name" "${warnings[@]}"
+        # 硬编码组件名，完全避免环境变量污染
+        local component="unified_monitor"
+        local component_log="${LOGS_DIR}/unified_monitor.log"
+        
+        if [[ -n "$component_log" ]]; then
+            local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+            echo "[$timestamp] [WARN] [$component] 监控性能警告 - 函数: $function_name" >> "$component_log"
+            for warning in "${warnings[@]}"; do
+                echo "[$timestamp] [WARN] [$component]   - $warning" >> "$component_log"
+            done
+            
+            # 生成优化建议
+            echo "[$timestamp] [INFO] [$component] 🔧 性能优化建议 - $function_name:" >> "$component_log"
+            echo "[$timestamp] [INFO] [$component]   💡 建议: 考虑增加MONITOR_INTERVAL间隔或优化数据收集逻辑" >> "$component_log"
+            echo "[$timestamp] [INFO] [$component]   📊 查看详细性能数据: $PERFORMANCE_LOG" >> "$component_log"
+        fi
     fi
 
     log_debug "性能监控: $function_name 执行时间=${execution_time_ms}ms CPU=${cpu_usage}% 内存=${memory_usage}MB"
@@ -1677,10 +1691,17 @@ write_monitoring_overhead_log() {
 
     # 写入数据行
     if [[ -n "$overhead_data_line" ]]; then
-        safe_write_csv "$MONITORING_OVERHEAD_LOG" "$overhead_data_line"
-        log_debug "写入监控开销数据: $(echo "$overhead_data_line" | cut -d',' -f1-5)..."
+        # 直接原子性写入CSV文件，完全绕过safe_write_csv和日志系统
+        local temp_file="${MONITORING_OVERHEAD_LOG}.tmp.$$"
+        if echo "$overhead_data_line" >> "$temp_file" && mv "$temp_file" "$MONITORING_OVERHEAD_LOG"; then
+            log_debug "监控开销数据已写入: $MONITORING_OVERHEAD_LOG"
+        else
+            rm -f "$temp_file"
+            echo "ERROR: Failed to write monitoring overhead data" >&2
+            return 1
+        fi
     else
-        log_debug "监控开销数据收集失败，跳过写入"
+        echo "ERROR: 监控开销数据收集失败" >&2
     fi
 }
 
@@ -1955,7 +1976,7 @@ except:
     if safe_write_csv "$UNIFIED_LOG" "$data_line"; then
         log_debug "CSV数据已安全写入: $UNIFIED_LOG"
     else
-        log_error "CSV数据写入失败: $UNIFIED_LOG"
+        echo "ERROR: CSV数据写入失败: $UNIFIED_LOG" >&2
         return 1
     fi
 
@@ -2406,7 +2427,7 @@ safe_write_csv() {
     
     # 检查参数
     if [[ -z "$csv_file" || -z "$csv_data" ]]; then
-        log_error "safe_write_csv: 缺少必需参数"
+        echo "ERROR: safe_write_csv: 缺少必需参数" >&2
         return 1
     fi
     
@@ -2420,10 +2441,10 @@ safe_write_csv() {
     if [[ $wait_count -ge $max_wait ]]; then
         local lock_pid=$(cat "$lock_file" 2>/dev/null)
         if [[ -n "$lock_pid" ]] && ! kill -0 "$lock_pid" 2>/dev/null; then
-            log_warning "检测到僵尸锁文件，强制删除: $lock_file (PID: $lock_pid)"
+            echo "WARNING: 检测到僵尸锁文件，强制删除: $lock_file (PID: $lock_pid)" >&2
             rm -f "$lock_file"
         else
-            log_warning "CSV写入锁超时，强制删除锁文件: $lock_file"
+            echo "WARNING: CSV写入锁超时，强制删除锁文件: $lock_file" >&2
             rm -f "$lock_file"
         fi
     fi
@@ -2442,10 +2463,9 @@ safe_write_csv() {
     rm -f "$lock_file"
     
     if [[ $write_result -eq 0 ]]; then
-        log_debug "CSV数据安全写入: $csv_file"
         return 0
     else
-        log_error "CSV写入失败: $csv_file"
+        echo "ERROR: CSV写入失败: $csv_file" >&2
         return 1
     fi
 }

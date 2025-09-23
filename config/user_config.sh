@@ -13,6 +13,8 @@ LEDGER_DEVICE="nvme1n1"
 # ACCOUNTS 设备 (可选，用于账户数据存储)
 ACCOUNTS_DEVICE="nvme2n1"
 
+# 使用统一的命名规则 {逻辑名}_{设备名}_{指标}
+# DATA设备使用data前缀，ACCOUNTS设备使用accounts前缀
 # Data volume configuration
 DATA_VOL_TYPE="io2"                    # Options: "gp3" | "io2" | "instance-store"
 DATA_VOL_SIZE="2000"                   # Current required data size to keep both snapshot archive and unarchived version of it

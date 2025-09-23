@@ -102,13 +102,19 @@ start_monitor() {
     case "$monitor_name" in
         "unified")
             # QPS测试模式：不传递duration，无限运行
-            # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
-            (cd "${script_dir}" && ./"${script_name}" -i "$MONITOR_INTERVAL") &
+            # 清理日志相关环境变量，确保进程隔离
+            (
+                unset LOGGER_COMPONENT  # 防止日志组件标识污染
+                cd "${script_dir}" && ./"${script_name}" -i "$MONITOR_INTERVAL"
+            ) &
             ;;
         "block_height")
             # QPS测试模式：不传递duration，无限运行
             # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
-            (cd "${script_dir}" && ./"${script_name}" -b) &
+            (
+                unset LOGGER_COMPONENT
+                cd "${script_dir}" && ./"${script_name}" -b
+            ) &
             ;;
         "iostat")
             # iostat功能由unified_monitor.sh统一管理，避免重复启动
@@ -130,11 +136,14 @@ start_monitor() {
             fi
             ;;
         "ena_network")
-            # ENA网络监控器 - 修复参数传递问题
+            # ENA网络监控器
             if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
                 # 使用正确的参数格式：start [duration] [interval]
-                # duration=0 表示持续运行，interval使用配置值
-                (cd "${script_dir}" && ./"${script_name}" start 0 "$MONITOR_INTERVAL") &
+                # duration=0 表示持续运行
+                (
+                    unset LOGGER_COMPONENT
+                    cd "${script_dir}" && ./"${script_name}" start 0 "$MONITOR_INTERVAL"
+                ) &
             else
                 echo "⚠️  ENA监控已禁用，跳过ena_network任务"
                 return 0
@@ -143,7 +152,10 @@ start_monitor() {
         "ebs_bottleneck")
             # QPS测试模式：不传递duration，无限运行
             # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
-            (cd "${script_dir}/../tools" && ./"${script_name}" -b) &
+            (
+                unset LOGGER_COMPONENT
+                cd "${script_dir}/../tools" && ./"${script_name}" -b
+            ) &
             ;;
         *)
             echo "❌ 不支持的监控任务: $monitor_name"

@@ -59,27 +59,30 @@ DEFAULT_MAX_LOG_FILES="${MAX_LOG_FILES:-5}"
 # 日志管理器类
 # =====================================================================
 
+# 组件日志文件映射表（替代全局LOGGER_FILE）
+declare -A COMPONENT_LOG_FILES
+
 # 初始化日志管理器
 init_logger() {
     local component="$1"
     local log_level="${2:-$DEFAULT_LOG_LEVEL}"
     local log_file="${3:-}"
     
-    # 设置组件特定的环境变量
-    export LOGGER_COMPONENT="$component"
-    export LOGGER_LEVEL="$log_level"
-    export LOGGER_INITIALIZED="true"
-    
-    # 如果指定了日志文件，设置文件路径
+    # 使用组件级映射，完全移除全局变量
     if [[ -n "$log_file" ]]; then
-        export LOGGER_FILE="$log_file"
+        COMPONENT_LOG_FILES["$component"]="$log_file"
         # 确保日志目录存在
         mkdir -p "$(dirname "$log_file")" 2>/dev/null
     fi
     
+    # 设置组件特定的环境变量（仅进程内部）
+    export LOGGER_COMPONENT="$component"
+    export LOGGER_LEVEL="$log_level"
+    export LOGGER_INITIALIZED="true"
+    
     # 输出初始化信息
     local level_name=$(get_log_level_name "$log_level")
-    log_info "Logger initialized for component: $component (level: $level_name)"
+    echo "Logger initialized for component: $component (level: $level_name)"
 }
 
 # 生成标准化日志文件路径
@@ -91,7 +94,7 @@ get_log_file_path() {
     echo "${LOGS_DIR}/${component}_${log_type}_${timestamp}.log"
 }
 
-# 获取日志级别名称 (兼容函数)
+# 获取日志级别名称
 get_log_level_name() {
     local level="$1"
     case "$level" in
@@ -155,11 +158,14 @@ write_log() {
     echo -e "${color}${formatted_message}${COLOR_RESET}"
     
     # 文件输出（无颜色）
-    if [[ -n "${LOGGER_FILE:-}" ]]; then
-        echo "$formatted_message" >> "$LOGGER_FILE"
+    local component="${LOGGER_COMPONENT:-unknown}"
+    local log_file="${COMPONENT_LOG_FILES[$component]}"
+    
+    if [[ -n "$log_file" ]]; then
+        echo "$formatted_message" >> "$log_file"
         
         # 检查日志轮转
-        check_log_rotation "$LOGGER_FILE"
+        check_log_rotation "$log_file"
     fi
 }
 
