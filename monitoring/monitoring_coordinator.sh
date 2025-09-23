@@ -63,7 +63,7 @@ EOF
 # 检查监控任务是否已运行
 is_monitor_running() {
     local monitor_name="$1"
-    local script_name="${MONITOR_TASKS[$monitor_name]}"
+    local script_name="${MONITOR_TASKS[$monitor_name]:-}"
     
     if [[ -z "$script_name" ]]; then
         echo "❌ 未知的监控任务: $monitor_name"
@@ -81,7 +81,7 @@ is_monitor_running() {
 # 启动单个监控任务
 start_monitor() {
     local monitor_name="$1"
-    local script_name="${MONITOR_TASKS[$monitor_name]}"
+    local script_name="${MONITOR_TASKS[$monitor_name]:-}"
     
     if [[ -z "$script_name" ]]; then
         echo "❌ 未知的监控任务: $monitor_name"
@@ -199,7 +199,7 @@ stop_monitor() {
     fi
     
     # 使用脚本名称查找并停止进程
-    local script_name="${MONITOR_TASKS[$monitor_name]}"
+    local script_name="${MONITOR_TASKS[$monitor_name]:-}"
     if [[ -n "$script_name" ]]; then
         pkill -f "$script_name" 2>/dev/null || true
     fi
@@ -281,7 +281,7 @@ show_monitor_status() {
     echo "================================"
     
     for monitor in "${!MONITOR_TASKS[@]}"; do
-        local script_name="${MONITOR_TASKS[$monitor]}"
+        local script_name="${MONITOR_TASKS[$monitor]:-}"
         
         # iostat任务特殊处理：显示其通过unified_monitor.sh的管理状态
         if [[ "$monitor" == "iostat" ]]; then
@@ -437,7 +437,7 @@ show_usage() {
     echo ""
     echo "可用的监控任务:"
     for monitor in "${!MONITOR_TASKS[@]}"; do
-        echo "  $monitor - ${MONITOR_TASKS[$monitor]}"
+        echo "  $monitor - ${MONITOR_TASKS[$monitor]:-}"
     done
     echo ""
     echo "选项:"

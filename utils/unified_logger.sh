@@ -159,7 +159,7 @@ write_log() {
     
     # 文件输出（无颜色）
     local component="${LOGGER_COMPONENT:-unknown}"
-    local log_file="${COMPONENT_LOG_FILES[$component]}"
+    local log_file="${COMPONENT_LOG_FILES[$component]:-}"
     
     if [[ -n "$log_file" ]]; then
         echo "$formatted_message" >> "$log_file"
