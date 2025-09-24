@@ -667,7 +667,7 @@ class NodeQPSAnalyzer:
         print("=" * 50)
 
         reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
-        reports = glob.glob(f"{reports_dir}/*.txt")
+        reports = glob.glob(f"{reports_dir}/vegeta_*.txt")  # Only parse vegeta reports
         if not reports:
             print("No Vegeta reports found")
             return None

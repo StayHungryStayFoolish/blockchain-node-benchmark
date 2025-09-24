@@ -1346,7 +1346,10 @@ Monitoring Efficiency:
             # 2. QPS分布直方图
             ax2 = axes[0, 1]
             for qps_col in qps_cols[:2]:
-                ax2.hist(self.df[qps_col].dropna(), alpha=0.7, label=qps_col, bins=30)
+                qps_data = pd.to_numeric(self.df[qps_col].dropna(), errors='coerce')
+                qps_data = qps_data.dropna()  # Remove any NaN values after conversion
+                if len(qps_data) > 0:
+                    ax2.hist(qps_data, alpha=0.7, label=qps_col, bins=30)
             ax2.set_title('QPS Distribution')
             ax2.set_xlabel('QPS')
             ax2.set_ylabel('Frequency')

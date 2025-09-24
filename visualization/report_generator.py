@@ -348,11 +348,12 @@ class ReportGenerator:
             validation_results['bottleneck_data'] = True  # 默认数据也算通过
         
         # 验证配置
-        if self.config and isinstance(self.config, dict):
+        if self.config and isinstance(self.config, dict) and len(self.config) > 0:
             validation_results['config'] = True
             print("✅ 配置数据验证通过")
         else:
-            print("⚠️ 配置数据验证失败")
+            validation_results['config'] = False
+            print("ℹ️ 配置数据不完整（不影响核心功能）")
         
         # 输出验证摘要
         passed = sum(validation_results.values())
@@ -884,7 +885,7 @@ class ReportGenerator:
             
             # CPU分布饼图
             cpu_sizes = [monitoring_cpu, blockchain_cpu, other_cpu]
-            cpu_labels = ['监控系统', '区块链节点', '其他进程']
+            cpu_labels = ['&#128202; Monitoring', '&#128640; Blockchain', '&#128187; Others']
             cpu_colors = ['#ff9999', '#66b3ff', '#99ff99']
             ax1.pie(cpu_sizes, labels=cpu_labels, colors=cpu_colors, autopct='%1.1f%%', startangle=90)
             ax1.axis('equal')
@@ -892,7 +893,7 @@ class ReportGenerator:
             
             # 内存分布饼图
             mem_sizes = [monitoring_mem, blockchain_mem, other_mem]
-            mem_labels = ['监控系统', '区块链节点', '其他进程']
+            mem_labels = ['&#128202; Monitoring', '&#128640; Blockchain', '&#128187; Others']
             mem_colors = ['#ff9999', '#66b3ff', '#99ff99']
             ax2.pie(mem_sizes, labels=mem_labels, colors=mem_colors, autopct='%1.1f%%', startangle=90)
             ax2.axis('equal')
