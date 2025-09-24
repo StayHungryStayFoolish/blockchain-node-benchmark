@@ -22,6 +22,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 # 初始化统一日志管理器
 init_logger "unified_monitor" $LOG_LEVEL "${LOGS_DIR}/unified_monitor.log"
 
+# 全局数组初始化 - 确保在严格模式下安全访问
+declare -A SYSTEM_INFO_CACHE
+SYSTEM_INFO_CACHE_TIME=0
+
 # 错误处理函数
 handle_monitor_error() {
     local exit_code=$?
@@ -129,9 +133,15 @@ get_cached_system_info() {
     if [[ $((current_time - SYSTEM_INFO_CACHE_TIME)) -gt $cache_ttl ]]; then
         log_debug "🔄 刷新系统信息缓存 (TTL: ${cache_ttl}s)..."
         
-        # 完全重置缓存数组
-        unset SYSTEM_INFO_CACHE
-        declare -A SYSTEM_INFO_CACHE
+        # 安全重置缓存数组 - 避免bash严格模式冲突
+        # 初始化数组（如果不存在）
+        if [[ ! -v SYSTEM_INFO_CACHE ]]; then
+            declare -A SYSTEM_INFO_CACHE
+        fi
+        # 清空现有数据，但保持数组结构
+        for key in "${!SYSTEM_INFO_CACHE[@]}"; do
+            unset SYSTEM_INFO_CACHE["$key"]
+        done
         
         # CPU核数 - 健壮获取
         local cpu_cores
@@ -170,7 +180,7 @@ get_cached_system_info() {
         SYSTEM_INFO_CACHE[disk_gb]="$disk_gb"
         
         SYSTEM_INFO_CACHE_TIME=$current_time
-        log_info "✅ 系统信息缓存已重建: CPU=${SYSTEM_INFO_CACHE[cpu_cores]}核, 内存=${SYSTEM_INFO_CACHE[memory_gb]}GB, 磁盘=${SYSTEM_INFO_CACHE[disk_gb]}GB"
+        log_info "✅ 系统信息缓存已重建: CPU=${SYSTEM_INFO_CACHE[cpu_cores]:-1}核, 内存=${SYSTEM_INFO_CACHE[memory_gb]:-0.00}GB, 磁盘=${SYSTEM_INFO_CACHE[disk_gb]:-0.00}GB"
     else
         local remaining_ttl=$((cache_ttl - (current_time - SYSTEM_INFO_CACHE_TIME)))
         log_debug "使用缓存的系统信息 (剩余TTL: ${remaining_ttl}s)"
@@ -640,6 +650,18 @@ discover_monitoring_processes() {
 get_system_static_resources() {
     # 使用内存缓存替代文件缓存 - 性能优化
     get_cached_system_info
+    
+    # 确保数组已初始化 - 防御性编程
+    if [[ ! -v SYSTEM_INFO_CACHE ]] || [[ -z "${SYSTEM_INFO_CACHE[cpu_cores]:-}" ]]; then
+        log_debug "缓存数组未初始化，强制刷新"
+        # 安全初始化数组
+        if [[ ! -v SYSTEM_INFO_CACHE ]]; then
+            declare -A SYSTEM_INFO_CACHE
+        fi
+        # 强制刷新缓存时间戳，触发重新收集
+        SYSTEM_INFO_CACHE_TIME=0
+        get_cached_system_info
+    fi
     
     # 安全访问缓存数组，提供默认值
     local cpu_cores="${SYSTEM_INFO_CACHE[cpu_cores]:-1}"
