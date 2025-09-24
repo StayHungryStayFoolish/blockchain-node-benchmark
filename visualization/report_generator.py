@@ -1101,7 +1101,7 @@ class ReportGenerator:
         # 这里使用简化的估算，实际应该基于更复杂的相关性分析
         impact_level = "低"
         impact_percent = 0
-        
+
         if monitoring_iops_avg > 100:
             impact_level = "高"
             impact_percent = min(90, monitoring_iops_avg / 200 * 100)
@@ -2146,7 +2146,7 @@ class ReportGenerator:
                     <h1>&#128640; Blockchain Node QPS 性能分析报告 - 增强版</h1>
                     <h1>&#128640; Blockchain Node QPS 性能分析报告 - 增强版</h1>
                     <p>生成Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    <p>&#9989; 统一字段命名 | 完整Device支持 | 监控开销分析 | Solana特定分析 | 瓶颈检测分析</p>
+                    <p>&#9989; 统一字段命名 | 完整Device支持 | 监控开销分析 | Blockchain Node 特定分析 | 瓶颈检测分析</p>
                     
                     {bottleneck_section}
                     {performance_summary}

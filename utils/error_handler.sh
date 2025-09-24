@@ -27,7 +27,7 @@ fi
 mkdir -p "$ERROR_LOG_DIR" 2>/dev/null || {
     # 如果无法创建配置的目录，使用系统临时目录作为后备
     if [[ -z "${FALLBACK_ERROR_LOG_DIR:-}" ]]; then
-        readonly FALLBACK_ERROR_LOG_DIR="/tmp/solana-qps-errors"
+        readonly FALLBACK_ERROR_LOG_DIR="/tmp/blockchain-node-qps-errors"
     fi
     mkdir -p "$FALLBACK_ERROR_LOG_DIR"
     if [[ "$ERROR_LOG_DIR" != "$FALLBACK_ERROR_LOG_DIR" ]]; then
@@ -138,7 +138,7 @@ safe_execute() {
 # 清理临时文件的通用函数
 cleanup_temp_files() {
     # 使用user_config.sh中配置的临时文件模式，如果不可用则使用默认模式
-    local temp_pattern="${1:-${TEMP_FILE_PATTERN:-/tmp/solana-qps-*}}"
+    local temp_pattern="${1:-${TEMP_FILE_PATTERN:-/tmp/blockchain-node-qps-*}}"
     
     echo "🧹 清理临时文件: $temp_pattern" >&2
     find /tmp -name "$(basename "$temp_pattern")" -type f -mtime +1 -delete 2>/dev/null || true

@@ -361,7 +361,7 @@ stop_monitor() {
     fi
     
     # 清理共享内存
-    rm -rf /dev/shm/solana-qps-test/ 2>/dev/null || true
+    rm -rf /dev/shm/blockchain-node-qps-test/ 2>/dev/null || true
     
     echo "Block height monitor cleanup completed"
 }
