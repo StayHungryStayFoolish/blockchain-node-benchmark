@@ -641,9 +641,10 @@ get_system_static_resources() {
     # 使用内存缓存替代文件缓存 - 性能优化
     get_cached_system_info
     
-    local cpu_cores="${SYSTEM_INFO_CACHE["cpu_cores"]}"
-    local memory_gb="${SYSTEM_INFO_CACHE["memory_gb"]}"
-    local disk_gb="${SYSTEM_INFO_CACHE["disk_gb"]}"
+    # 安全访问缓存数组，提供默认值
+    local cpu_cores="${SYSTEM_INFO_CACHE[cpu_cores]:-1}"
+    local memory_gb="${SYSTEM_INFO_CACHE[memory_gb]:-0.00}"
+    local disk_gb="${SYSTEM_INFO_CACHE[disk_gb]:-0.00}"
 
     # 格式化结果 - 使用缓存数据
     local result="${cpu_cores},${memory_gb},${disk_gb}"
