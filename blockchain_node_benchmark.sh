@@ -472,11 +472,11 @@ execute_data_analysis() {
             
             # 如果检测到瓶颈，传递瓶颈模式参数
             if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
-                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --bottleneck-mode; then
+                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --bottleneck-mode --output-dir "$BASE_DATA_DIR"; then
                     echo "⚠️ 分析脚本执行失败: $(basename "$script")"
                 fi
             else
-                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv"; then
+                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --output-dir "$BASE_DATA_DIR"; then
                     echo "⚠️ 分析脚本执行失败: $(basename "$script")"
                 fi
             fi
@@ -514,6 +514,7 @@ execute_bottleneck_window_analysis() {
             python3 "${SCRIPT_DIR}/analysis/comprehensive_analysis.py" \
                 "$csv_file" \
                 --benchmark-mode "$BENCHMARK_MODE" \
+                --output-dir "$BASE_DATA_DIR" \
                 --time-window \
                 --start-time "$window_start" \
                 --end-time "$window_end" \

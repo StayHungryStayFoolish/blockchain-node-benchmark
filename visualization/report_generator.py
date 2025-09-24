@@ -517,7 +517,7 @@ class ReportGenerator:
             
             html_content = self._generate_html_content(df)
             
-            output_file = os.path.join(self.output_dir, f'performance_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.html')
+            output_file = os.path.join(self.output_dir, f'performance_report_{os.environ.get("SESSION_TIMESTAMP")}.html')
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(html_content)
             

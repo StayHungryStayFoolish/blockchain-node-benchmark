@@ -188,35 +188,53 @@ class ComprehensiveAnalyzer:
     """综合分析器 - 整合所有分析功能的主控制器 + 瓶颈模式支持"""
 
     def __init__(self, output_dir: Optional[str] = None, benchmark_mode: str = "standard", bottleneck_mode: Optional[BottleneckAnalysisMode] = None):
-        """
-        初始化综合分析器
+        """重构的初始化方法 - 确保所有属性正确初始化"""
         
-        Args:
-            output_dir: 输出目录路径（如果为None，将从环境变量获取）
-            benchmark_mode: 基准测试模式 (quick/standard/intensive)
-            bottleneck_mode: 瓶颈分析模式配置
-        """
+        # 输出目录处理 - 优先使用框架设置的环境变量
         if output_dir is None:
-            output_dir = os.environ.get('DATA_DIR', os.path.join(os.path.expanduser('~'), 'blockchain-node-benchmark-result'))
+            output_dir = os.environ.get('BASE_DATA_DIR') or os.environ.get('DATA_DIR', os.path.join(os.path.expanduser('~'), 'blockchain-node-benchmark-result'))
         
-        # 创建会话时间戳，用于备份文件命名
-        self.session_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
+        # 核心属性初始化
         self.output_dir = output_dir
         self.benchmark_mode = benchmark_mode
+        # 严格使用框架统一的SESSION_TIMESTAMP环境变量
+        self.session_timestamp = os.environ.get('SESSION_TIMESTAMP')
+        if not self.session_timestamp:
+            raise RuntimeError("SESSION_TIMESTAMP环境变量未设置，请确保通过config_loader.sh正确初始化框架")
+        
+        # 文件管理器初始化
+        self.file_manager = FileManager(self.output_dir, self.session_timestamp)
+        
+        # 关键修复：确保 FileManager 正确初始化
+        if not hasattr(self.file_manager, 'reports_dir'):
+            raise RuntimeError(f"FileManager 初始化失败：缺少 reports_dir 属性。output_dir={self.output_dir}, session_timestamp={self.session_timestamp}")
+        
+        self.reports_dir = self.file_manager.reports_dir
+        
+        # 验证 reports_dir 有效性
+        if not self.reports_dir:
+            raise RuntimeError(f"FileManager.reports_dir 为空。REPORTS_DIR环境变量={os.getenv('REPORTS_DIR')}")
+        
+        # 确保目录存在
+        os.makedirs(self.reports_dir, exist_ok=True)
+        
+        # CSV文件路径
         self.csv_file = self.get_latest_csv()
+        if not self.csv_file:
+            raise FileNotFoundError(f"未找到性能数据CSV文件在目录: {output_dir}")
+        
+        # 瓶颈模式初始化
         self.bottleneck_mode = bottleneck_mode or BottleneckAnalysisMode()
         
-        # 初始化各个分析器
+        # 分析器初始化
         self.qps_analyzer = NodeQPSAnalyzer(output_dir, benchmark_mode, self.bottleneck_mode.enabled)
         self.rpc_deep_analyzer = RpcDeepAnalyzer(self.csv_file)
         
-        # 初始化文件管理器
-        self.file_manager = FileManager(self.output_dir, self.session_timestamp)
+        logger.info(f"🔍 综合分析器初始化完成")
+        logger.info(f"   输出目录: {self.output_dir}")
+        logger.info(f"   报告目录: {self.reports_dir}")
+        logger.info(f"   CSV文件: {self.csv_file}")
         
-        # Using English labels system directly
-        
-        logger.info(f"🔍 初始化综合分析器，输出目录: {output_dir}")
         if self.bottleneck_mode.enabled:
             logger.info(f"🚨 瓶颈分析模式已启用")
     
@@ -570,16 +588,28 @@ class ComprehensiveAnalyzer:
                                     benchmark_mode: str = "standard") -> str:
         """生成基于瓶颈分析的综合报告，整合所有分析结果"""
 
+        # 验证 reports_dir 属性完整性 - 保守的修复方案
+        if not hasattr(self, 'reports_dir') or not self.reports_dir:
+            logger.error("ComprehensiveAnalyzer.reports_dir 属性丢失，尝试恢复")
+            # 尝试从file_manager恢复
+            if hasattr(self, 'file_manager') and hasattr(self.file_manager, 'reports_dir'):
+                self.reports_dir = self.file_manager.reports_dir
+                logger.warning(f"已从file_manager恢复reports_dir: {self.reports_dir}")
+            else:
+                # 最后的备用方案：直接重建
+                self.reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
+                os.makedirs(self.reports_dir, exist_ok=True)
+                logger.warning(f"已重建reports_dir: {self.reports_dir}")
+        
+        if not self.reports_dir:
+            raise RuntimeError(f"ComprehensiveAnalyzer.reports_dir 为空 - output_dir={self.output_dir}")
+
         # 基本性能指标 - 使用工具类避免重复代码
         avg_cpu = DataProcessor.safe_calculate_mean(df, 'cpu_usage')
         avg_mem = DataProcessor.safe_calculate_mean(df, 'mem_usage')
         avg_rpc = DataProcessor.safe_calculate_mean(df, 'rpc_latency_ms') if 'rpc_latency_ms' in df.columns else 0
 
-        # 注意：当前框架只使用实时监控数据，不再依赖区块链节点日志分析
-        # RPC分析基于监控数据中的延迟指标，不是日志解析结果
-        
         # 基于基准测试模式和瓶颈分析的性能评估
-        # 不再使用废弃的日志分析数据，直接基于监控数据进行评估
         performance_evaluation = self._evaluate_comprehensive_performance(
             benchmark_mode, max_qps, bottlenecks, avg_cpu, avg_mem, avg_rpc
         )

@@ -125,59 +125,52 @@ get_cached_system_info() {
     local current_time=$(date +%s)
     local cache_ttl=300  # 5分钟缓存TTL
     
-    # 检查缓存是否过期或未初始化
+    # 强制清理缓存，防止任何污染
     if [[ $((current_time - SYSTEM_INFO_CACHE_TIME)) -gt $cache_ttl ]]; then
         log_debug "🔄 刷新系统信息缓存 (TTL: ${cache_ttl}s)..."
         
-        # 获取并缓存CPU核数
-        local cpu_cores="1"  # 默认值
-        if is_command_available "nproc"; then
-            cpu_cores=$(nproc 2>/dev/null || echo "1")
-            log_debug "CPU核数获取方式: nproc"
-        elif [[ -r "/proc/cpuinfo" ]]; then
-            cpu_cores=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo "1")
-            log_debug "CPU核数获取方式: /proc/cpuinfo"
-        elif is_command_available "sysctl"; then
-            cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
-            log_debug "CPU核数获取方式: sysctl"
-        else
-            log_warn "无法获取CPU核数，使用默认值: 1"
-        fi
-        SYSTEM_INFO_CACHE["cpu_cores"]="$cpu_cores"
+        # 完全重置缓存数组
+        unset SYSTEM_INFO_CACHE
+        declare -A SYSTEM_INFO_CACHE
         
-        # 获取并缓存总内存
-        local memory_gb="0.00"  # 默认值
-        if is_command_available "free"; then
-            local memory_kb=$(free | awk '/^Mem:/{print $2}' 2>/dev/null || echo "0")
-            memory_gb=$(echo "scale=2; $memory_kb / 1024 / 1024" | bc 2>/dev/null || echo "0.00")
-            log_debug "内存大小获取方式: free"
-        elif [[ -r "/proc/meminfo" ]]; then
-            local memory_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
-            memory_gb=$(echo "scale=2; $memory_kb / 1024" | bc 2>/dev/null || echo "0.00")
-            log_debug "内存大小获取方式: /proc/meminfo"
-        elif is_command_available "sysctl"; then
-            local memory_bytes=$(sysctl -n hw.memsize 2>/dev/null || echo "0")
-            memory_gb=$(echo "scale=2; $memory_bytes / 1024 / 1024 / 1024" | bc 2>/dev/null || echo "0.00")
-            log_debug "内存大小获取方式: sysctl"
+        # CPU核数 - 健壮获取
+        local cpu_cores
+        if command -v nproc >/dev/null 2>&1; then
+            cpu_cores=$(nproc 2>/dev/null)
+        elif [[ -r "/proc/cpuinfo" ]]; then
+            cpu_cores=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null)
         else
-            log_warn "无法获取内存大小，使用默认值: 0.00GB"
+            cpu_cores="1"
+        fi
+        
+        # 严格验证和清理
+        cpu_cores=$(echo "$cpu_cores" | grep -o '^[0-9]\+' | head -c 10)
+        SYSTEM_INFO_CACHE["cpu_cores"]="${cpu_cores:-1}"
+        
+        # 内存大小 - 重构计算逻辑
+        local memory_gb="0.00"
+        if command -v free >/dev/null 2>&1; then
+            local memory_kb=$(free | awk '/^Mem:/{print $2}' 2>/dev/null)
+            if [[ "$memory_kb" =~ ^[0-9]+$ ]] && [[ "$memory_kb" -gt 0 ]]; then
+                # 使用awk替代bc，避免管道问题
+                memory_gb=$(awk "BEGIN {printf \"%.2f\", $memory_kb/1024/1024}")
+            fi
         fi
         SYSTEM_INFO_CACHE["memory_gb"]="$memory_gb"
         
-        # 获取并缓存磁盘大小
-        local disk_gb="0.00"  # 默认值
-        if is_command_available "df"; then
-            disk_gb=$(df / 2>/dev/null | awk 'NR==2{printf "%.2f", $2/1024/1024}' || echo "0.00")
-            log_debug "磁盘大小获取方式: df"
-        else
-            log_warn "无法获取磁盘大小，使用默认值: 0.00GB"
+        # 磁盘大小 - 重构计算逻辑
+        local disk_gb="0.00"
+        if command -v df >/dev/null 2>&1; then
+            disk_gb=$(df / 2>/dev/null | awk 'NR==2{printf "%.2f", $2/1024/1024}')
+            # 验证输出格式
+            if [[ ! "$disk_gb" =~ ^[0-9]+\.[0-9]+$ ]]; then
+                disk_gb="0.00"
+            fi
         fi
         SYSTEM_INFO_CACHE["disk_gb"]="$disk_gb"
         
-        # 更新缓存时间戳
         SYSTEM_INFO_CACHE_TIME=$current_time
-        
-        log_info "✅ 系统信息缓存已更新: CPU=${cpu_cores}核, 内存=${memory_gb}GB, 磁盘=${disk_gb}GB"
+        log_info "✅ 系统信息缓存已重建: CPU=${SYSTEM_INFO_CACHE["cpu_cores"]}核, 内存=${SYSTEM_INFO_CACHE["memory_gb"]}GB, 磁盘=${SYSTEM_INFO_CACHE["disk_gb"]}GB"
     else
         local remaining_ttl=$((cache_ttl - (current_time - SYSTEM_INFO_CACHE_TIME)))
         log_debug "使用缓存的系统信息 (剩余TTL: ${remaining_ttl}s)"
@@ -810,18 +803,18 @@ calculate_process_resources() {
         # 跳过空行
         [[ -n "$cpu" ]] || continue
 
-        # 数值验证和累加
+        # 数值验证和累加 - 使用awk替代bc确保跨平台兼容性
         if [[ "$cpu" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-            total_cpu=$(echo "$total_cpu + $cpu" | bc -l 2>/dev/null || echo "$total_cpu")
+            total_cpu=$(awk "BEGIN {printf \"%.2f\", $total_cpu + $cpu}" 2>/dev/null || echo "$total_cpu")
         fi
 
         if [[ "$mem" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-            total_memory=$(echo "$total_memory + $mem" | bc -l 2>/dev/null || echo "$total_memory")
+            total_memory=$(awk "BEGIN {printf \"%.2f\", $total_memory + $mem}" 2>/dev/null || echo "$total_memory")
         fi
 
         if [[ "$rss" =~ ^[0-9]+$ ]]; then
-            local rss_mb=$(echo "scale=2; $rss / 1024" | bc -l 2>/dev/null || echo "0.00")
-            total_memory_mb=$(echo "$total_memory_mb + $rss_mb" | bc -l 2>/dev/null || echo "$total_memory_mb")
+            local rss_mb=$(awk "BEGIN {printf \"%.2f\", $rss / 1024}" 2>/dev/null || echo "0.00")
+            total_memory_mb=$(awk "BEGIN {printf \"%.2f\", $total_memory_mb + $rss_mb}" 2>/dev/null || echo "$total_memory_mb")
         fi
 
         count=$((count + 1))
@@ -1601,9 +1594,72 @@ get_current_process_resources() {
     local cpu_percent=$(echo "$process_info" | awk '{print $1}')
     local memory_percent=$(echo "$process_info" | awk '{print $2}')
     local memory_kb=$(echo "$process_info" | awk '{print $3}')
-    local memory_mb=$(echo "scale=2; $memory_kb / 1024" | bc -l 2>/dev/null || echo "0")
+    local memory_mb=$(awk "BEGIN {printf \"%.2f\", $memory_kb/1024}" 2>/dev/null || echo "0")
 
     echo "$cpu_percent,$memory_mb"
+}
+
+# 数据质量检查函数
+validate_data_quality() {
+    local data_line="$1"
+    local expected_fields=$(echo "$OVERHEAD_CSV_HEADER" | tr ',' '\n' | wc -l)
+    local actual_fields=$(echo "$data_line" | tr ',' '\n' | wc -l)
+    
+    # 字段数量检查
+    if [[ "$actual_fields" -ne "$expected_fields" ]]; then
+        log_error "数据质量检查失败: 字段数量不匹配"
+        return 1
+    fi
+    
+    # 异常格式检查
+    if echo "$data_line" | grep -q "0\.000\.00\|00,"; then
+        log_error "数据质量检查失败: 检测到异常格式"
+        return 1
+    fi
+    
+    return 0
+}
+
+# 数据清理和格式化函数
+clean_and_format_number() {
+    local value="$1"
+    local format="$2"  # "int" 或 "float"
+    
+    # 移除所有非数字和小数点字符
+    value=$(echo "$value" | tr -cd '0-9.')
+    
+    # 处理多个小数点：只保留第一个小数点及其前面的内容
+    if [[ "$value" == *.*.* ]]; then
+        # 找到第一个小数点的位置，只保留到第一个小数点后的数字
+        value=$(echo "$value" | sed 's/\([0-9]*\.[0-9]*\)\..*/\1/')
+    fi
+    
+    # 处理边界情况
+    if [[ -z "$value" ]] || [[ "$value" == "." ]] || [[ "$value" == ".." ]]; then
+        value="0"
+    fi
+    
+    # 移除前导小数点
+    if [[ "$value" == .* ]]; then
+        value="0$value"
+    fi
+    
+    # 移除尾随小数点
+    if [[ "$value" == *. ]]; then
+        value="${value%.*}"
+    fi
+    
+    # 最终验证
+    if ! [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        value="0"
+    fi
+    
+    # 格式化输出
+    if [[ "$format" == "int" ]]; then
+        printf "%.0f" "$value" 2>/dev/null || echo "0"
+    else
+        printf "%.2f" "$value" 2>/dev/null || echo "0.00"
+    fi
 }
 
 # 监控开销数据收集主函数（增强版 - 带性能监控）
@@ -1640,23 +1696,32 @@ collect_monitoring_overhead_data() {
     local system_memory_usage=$(echo "$system_dynamic" | cut -d',' -f2)
     local system_disk_usage=$(echo "$system_dynamic" | cut -d',' -f3)
 
-    # 数据验证和格式化
-    monitoring_cpu=$(printf "%.2f" "$monitoring_cpu" 2>/dev/null || echo "0.00")
-    monitoring_memory_percent=$(printf "%.2f" "$monitoring_memory_percent" 2>/dev/null || echo "0.00")
-    monitoring_memory_mb=$(printf "%.2f" "$monitoring_memory_mb" 2>/dev/null || echo "0.00")
-    monitoring_process_count=$(printf "%.0f" "$monitoring_process_count" 2>/dev/null || echo "0")
+    # 重构所有格式化调用 - 增强数据源头验证
+    monitoring_cpu=$(clean_and_format_number "$monitoring_cpu" "float")
+    monitoring_memory_percent=$(clean_and_format_number "$monitoring_memory_percent" "float")
+    monitoring_memory_mb=$(clean_and_format_number "$monitoring_memory_mb" "float")
+    monitoring_process_count=$(clean_and_format_number "$monitoring_process_count" "int")
 
-    blockchain_cpu=$(printf "%.2f" "$blockchain_cpu" 2>/dev/null || echo "0.00")
-    blockchain_memory_percent=$(printf "%.2f" "$blockchain_memory_percent" 2>/dev/null || echo "0.00")
-    blockchain_memory_mb=$(printf "%.2f" "$blockchain_memory_mb" 2>/dev/null || echo "0.00")
-    blockchain_process_count=$(printf "%.0f" "$blockchain_process_count" 2>/dev/null || echo "0")
+    blockchain_cpu=$(clean_and_format_number "$blockchain_cpu" "float")
+    blockchain_memory_percent=$(clean_and_format_number "$blockchain_memory_percent" "float")
+    blockchain_memory_mb=$(clean_and_format_number "$blockchain_memory_mb" "float")
+    blockchain_process_count=$(clean_and_format_number "$blockchain_process_count" "int")
 
-    system_cpu_cores=$(printf "%.0f" "$system_cpu_cores" 2>/dev/null || echo "0")
-    system_memory_gb=$(printf "%.2f" "$system_memory_gb" 2>/dev/null || echo "0.00")
-    system_disk_gb=$(printf "%.2f" "$system_disk_gb" 2>/dev/null || echo "0.00")
-    system_cpu_usage=$(printf "%.2f" "$system_cpu_usage" 2>/dev/null || echo "0.00")
-    system_memory_usage=$(printf "%.2f" "$system_memory_usage" 2>/dev/null || echo "0.00")
-    system_disk_usage=$(printf "%.0f" "$system_disk_usage" 2>/dev/null || echo "0")
+    system_cpu_cores=$(clean_and_format_number "$system_cpu_cores" "int")
+    system_memory_gb=$(clean_and_format_number "$system_memory_gb" "float")
+    system_disk_gb=$(clean_and_format_number "$system_disk_gb" "float")
+    system_cpu_usage=$(clean_and_format_number "$system_cpu_usage" "float")
+    system_memory_usage=$(clean_and_format_number "$system_memory_usage" "float")
+    system_disk_usage=$(clean_and_format_number "$system_disk_usage" "int")
+
+    # 生成完整的数据行 - 确保所有变量都有有效值
+    local overhead_data_line="${timestamp},${monitoring_cpu},${monitoring_memory_percent},${monitoring_memory_mb},${monitoring_process_count},${blockchain_cpu},${blockchain_memory_percent},${blockchain_memory_mb},${blockchain_process_count},${system_cpu_cores},${system_memory_gb},${system_disk_gb},${system_cpu_usage},${system_memory_usage},${system_disk_usage}"
+    
+    # 最终数据完整性验证
+    if [[ "$overhead_data_line" == *",,"* ]] || [[ "$overhead_data_line" == *"0.000.00"* ]]; then
+        log_error "检测到监控开销数据格式异常: $overhead_data_line"
+        return 1
+    fi
 
     log_debug "监控开销数据收集完成: 监控进程=${monitoring_process_count}, 区块链进程=${blockchain_process_count}, 系统CPU=${system_cpu_cores}核"
 
@@ -1669,40 +1734,93 @@ collect_monitoring_overhead_data() {
     # 调用性能监控
     monitor_performance_impact "collect_monitoring_overhead_data" "$start_time" "$end_time" "$current_cpu" "$current_memory"
 
-    # 生成完整的数据行
-    echo "$timestamp,$monitoring_cpu,$monitoring_memory_percent,$monitoring_memory_mb,$monitoring_process_count,$blockchain_cpu,$blockchain_memory_percent,$blockchain_memory_mb,$blockchain_process_count,$system_cpu_cores,$system_memory_gb,$system_disk_gb,$system_cpu_usage,$system_memory_usage,$system_disk_usage"
+    # 生成完整的数据行 - 确保所有变量都有有效值
+    local safe_timestamp="${timestamp:-$(date '+%Y-%m-%d %H:%M:%S')}"
+    local safe_monitoring_cpu="${monitoring_cpu:-0.00}"
+    local safe_monitoring_memory_percent="${monitoring_memory_percent:-0.00}"
+    local safe_monitoring_memory_mb="${monitoring_memory_mb:-0.00}"
+    local safe_monitoring_process_count="${monitoring_process_count:-0}"
+    local safe_blockchain_cpu="${blockchain_cpu:-0.00}"
+    local safe_blockchain_memory_percent="${blockchain_memory_percent:-0.00}"
+    local safe_blockchain_memory_mb="${blockchain_memory_mb:-0.00}"
+    local safe_blockchain_process_count="${blockchain_process_count:-0}"
+    local safe_system_cpu_cores="${system_cpu_cores:-0}"
+    local safe_system_memory_gb="${system_memory_gb:-0.00}"
+    local safe_system_disk_gb="${system_disk_gb:-0.00}"
+    local safe_system_cpu_usage="${system_cpu_usage:-0.00}"
+    local safe_system_memory_usage="${system_memory_usage:-0.00}"
+    local safe_system_disk_usage="${system_disk_usage:-0.00}"
+    
+    echo "$safe_timestamp,$safe_monitoring_cpu,$safe_monitoring_memory_percent,$safe_monitoring_memory_mb,$safe_monitoring_process_count,$safe_blockchain_cpu,$safe_blockchain_memory_percent,$safe_blockchain_memory_mb,$safe_blockchain_process_count,$safe_system_cpu_cores,$safe_system_memory_gb,$safe_system_disk_gb,$safe_system_cpu_usage,$safe_system_memory_usage,$safe_system_disk_usage"
 }
 
 # 写入监控开销日志
 write_monitoring_overhead_log() {
-    # 检查是否需要创建日志文件和写入表头
-    if [[ ! -f "$MONITORING_OVERHEAD_LOG" ]] || [[ ! -s "$MONITORING_OVERHEAD_LOG" ]]; then
-        echo "$OVERHEAD_CSV_HEADER" > "$MONITORING_OVERHEAD_LOG"
-        log_debug "创建监控开销日志文件: $MONITORING_OVERHEAD_LOG"
+    # 确保目录存在
+    local log_dir=$(dirname "$MONITORING_OVERHEAD_LOG")
+    mkdir -p "$log_dir"
+    
+    # 原子性文件操作
+    local temp_file="${MONITORING_OVERHEAD_LOG}.tmp.$$"
+    local lock_file="${MONITORING_OVERHEAD_LOG}.lock"
+    
+    # 获取文件锁
+    if ! (set -C; echo $$ > "$lock_file") 2>/dev/null; then
+        log_warn "监控开销日志文件被锁定，跳过本次写入"
+        return 1
     fi
-
-    # 收集监控开销数据（使用增强的错误处理）
+    
+    # 检查并写入表头
+    if [[ ! -f "$MONITORING_OVERHEAD_LOG" ]] || [[ ! -s "$MONITORING_OVERHEAD_LOG" ]]; then
+        if [[ -n "$OVERHEAD_CSV_HEADER" ]]; then
+            echo "$OVERHEAD_CSV_HEADER" > "$temp_file"
+            log_debug "创建监控开销日志表头: $OVERHEAD_CSV_HEADER"
+        else
+            log_error "OVERHEAD_CSV_HEADER变量未定义，无法创建表头"
+            return 1
+        fi
+    else
+        # 复制现有内容
+        cp "$MONITORING_OVERHEAD_LOG" "$temp_file"
+    fi
+    
+    # 收集并验证数据
     local overhead_data_line
     if [[ "$ERROR_RECOVERY_ENABLED" == "true" ]]; then
         overhead_data_line=$(enhanced_collect_monitoring_overhead_data)
     else
         overhead_data_line=$(collect_monitoring_overhead_data)
     fi
-
-    # 写入数据行
+    
     if [[ -n "$overhead_data_line" ]]; then
-        # 直接原子性写入CSV文件，完全绕过safe_write_csv和日志系统
-        local temp_file="${MONITORING_OVERHEAD_LOG}.tmp.$$"
-        if echo "$overhead_data_line" >> "$temp_file" && mv "$temp_file" "$MONITORING_OVERHEAD_LOG"; then
-            log_debug "监控开销数据已写入: $MONITORING_OVERHEAD_LOG"
-        else
+        # 数据质量检查
+        if ! validate_data_quality "$overhead_data_line"; then
+            log_error "数据质量检查失败，跳过本次写入"
             rm -f "$temp_file"
-            echo "ERROR: Failed to write monitoring overhead data" >&2
+            rm -f "$lock_file"
             return 1
         fi
+        
+        # 验证数据格式（字段数量）
+        local expected_fields=$(echo "$OVERHEAD_CSV_HEADER" | tr ',' '\n' | wc -l)
+        local actual_fields=$(echo "$overhead_data_line" | tr ',' '\n' | wc -l)
+        
+        if [[ "$actual_fields" -eq "$expected_fields" ]]; then
+            echo "$overhead_data_line" >> "$temp_file"
+            # 原子性替换
+            mv "$temp_file" "$MONITORING_OVERHEAD_LOG"
+            log_debug "监控开销数据已写入: $MONITORING_OVERHEAD_LOG"
+        else
+            log_error "数据格式错误: 期望${expected_fields}字段，实际${actual_fields}字段"
+            rm -f "$temp_file"
+        fi
     else
-        echo "ERROR: 监控开销数据收集失败" >&2
+        log_error "监控开销数据收集失败"
+        rm -f "$temp_file"
     fi
+    
+    # 释放文件锁
+    rm -f "$lock_file"
 }
 
 # 配置验证和健康检查
