@@ -129,9 +129,8 @@ get_cached_system_info() {
     if [[ $((current_time - SYSTEM_INFO_CACHE_TIME)) -gt $cache_ttl ]]; then
         log_debug "🔄 刷新系统信息缓存 (TTL: ${cache_ttl}s)..."
         
-        # 完全重置缓存数组
-        unset SYSTEM_INFO_CACHE
-        declare -A SYSTEM_INFO_CACHE
+        # 重置缓存数组 - 保持全局作用域
+        SYSTEM_INFO_CACHE=()
         
         # CPU核数 - 健壮获取
         local cpu_cores
@@ -145,7 +144,7 @@ get_cached_system_info() {
         
         # 严格验证和清理
         cpu_cores=$(echo "$cpu_cores" | grep -o '^[0-9]\+' | head -c 10)
-        SYSTEM_INFO_CACHE["cpu_cores"]="${cpu_cores:-1}"
+        SYSTEM_INFO_CACHE[cpu_cores]="${cpu_cores:-1}"
         
         # 内存大小 - 重构计算逻辑
         local memory_gb="0.00"
@@ -156,7 +155,7 @@ get_cached_system_info() {
                 memory_gb=$(awk "BEGIN {printf \"%.2f\", $memory_kb/1024/1024}")
             fi
         fi
-        SYSTEM_INFO_CACHE["memory_gb"]="$memory_gb"
+        SYSTEM_INFO_CACHE[memory_gb]="$memory_gb"
         
         # 磁盘大小 - 重构计算逻辑
         local disk_gb="0.00"
@@ -167,10 +166,10 @@ get_cached_system_info() {
                 disk_gb="0.00"
             fi
         fi
-        SYSTEM_INFO_CACHE["disk_gb"]="$disk_gb"
+        SYSTEM_INFO_CACHE[disk_gb]="$disk_gb"
         
         SYSTEM_INFO_CACHE_TIME=$current_time
-        log_info "✅ 系统信息缓存已重建: CPU=${SYSTEM_INFO_CACHE["cpu_cores"]}核, 内存=${SYSTEM_INFO_CACHE["memory_gb"]}GB, 磁盘=${SYSTEM_INFO_CACHE["disk_gb"]}GB"
+        log_info "✅ 系统信息缓存已重建: CPU=${SYSTEM_INFO_CACHE[cpu_cores]}核, 内存=${SYSTEM_INFO_CACHE[memory_gb]}GB, 磁盘=${SYSTEM_INFO_CACHE[disk_gb]}GB"
     else
         local remaining_ttl=$((cache_ttl - (current_time - SYSTEM_INFO_CACHE_TIME)))
         log_debug "使用缓存的系统信息 (剩余TTL: ${remaining_ttl}s)"
