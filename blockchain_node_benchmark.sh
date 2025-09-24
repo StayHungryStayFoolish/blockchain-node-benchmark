@@ -585,10 +585,17 @@ archive_test_results() {
     
     echo "🔍 检测到基准测试模式: $benchmark_mode"
     
+    # 从QPS状态文件读取最大QPS
+    local max_qps=0
+    if [[ -f "$QPS_STATUS_FILE" ]]; then
+        max_qps=$(jq -r '.max_successful_qps // 0' "$QPS_STATUS_FILE" 2>/dev/null)
+    fi
+    
     # 调用专业的归档工具
     if [[ -f "${SCRIPT_DIR}/tools/benchmark_archiver.sh" ]]; then
         "${SCRIPT_DIR}/tools/benchmark_archiver.sh" --archive \
-            --benchmark-mode "$benchmark_mode"
+            --benchmark-mode "$benchmark_mode" \
+            --max-qps "$max_qps"
         
         if [[ $? -eq 0 ]]; then
             echo "✅ 测试结果归档完成"

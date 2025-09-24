@@ -74,14 +74,16 @@ class ReportGenerator:
         
     def _load_config(self):
         config = {}
-        try:
-            with open(self.config_file, 'r') as f:
-                for line in f:
-                    if '=' in line and not line.strip().startswith('#'):
-                        key, value = line.split('=', 1)
-                        config[key.strip()] = value.strip().strip('"')
-        except:
-            pass
+        # 从环境变量读取配置
+        config_keys = [
+            'BLOCKCHAIN_NODE', 'DATA_VOL_TYPE', 'ACCOUNTS_VOL_TYPE',
+            'NETWORK_MAX_BANDWIDTH_GBPS', 'ENA_MONITOR_ENABLED',
+            'LEDGER_DEVICE', 'ACCOUNTS_DEVICE'  # 补充缺失的关键配置
+        ]
+        for key in config_keys:
+            value = os.getenv(key)
+            if value:
+                config[key] = value
         return config
     
     def _load_bottleneck_data(self):
@@ -2014,7 +2016,7 @@ class ReportGenerator:
             </tbody>
         </table>
         <div class="info" style="margin-top: 15px;">
-            <h4>📊 相关性分析说明</h4>
+            <h4>&#128202; 相关性分析说明</h4>
             <ul>
                 <li><strong>相关系数范围</strong>: -1.0 到 1.0，绝对值越大相关性越强</li>
                 <li><strong>统计显著性</strong>: *** p&lt;0.001, ** p&lt;0.01, * p&lt;0.05</li>
@@ -2114,6 +2116,7 @@ class ReportGenerator:
             ena_warnings = self._generate_ena_warnings_section(df)
             ena_data_table = self._generate_ena_data_table(df)
             
+            config_status_section = self._generate_config_status_section()
             block_height_analysis = self._analyze_block_height_performance(df, block_height_fields)
 
             correlation_table = self._generate_cpu_ebs_correlation_table(df)
@@ -2151,6 +2154,7 @@ class ReportGenerator:
                     
                     {bottleneck_section}
                     {performance_summary}
+                    {config_status_section}
                     {block_height_analysis}
                     {ebs_analysis_section}
                     {charts_section}
@@ -2275,7 +2279,6 @@ class ReportGenerator:
                     'description': '性能指标相关性的热力图展示，直观显示指标间关系强度'
                 },
                 
-                # analysis/*.py 生成的图片（bottleneck_analysis_chart.png已删除）
                 {
                     'filename': 'performance_cliff_analysis.png',
                     'title': '&#128201; 性能悬崖分析',
