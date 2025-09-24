@@ -1654,11 +1654,12 @@ clean_and_format_number() {
         value="0"
     fi
     
-    # 格式化输出
+    # 安全的格式化输出 - 避免异常大数字
     if [[ "$format" == "int" ]]; then
-        printf "%.0f" "$value" 2>/dev/null || echo "0"
+        # 使用awk替代printf避免异常输出
+        awk "BEGIN {printf \"%.0f\", $value}" 2>/dev/null || echo "0"
     else
-        printf "%.2f" "$value" 2>/dev/null || echo "0.00"
+        awk "BEGIN {printf \"%.2f\", $value}" 2>/dev/null || echo "0.00"
     fi
 }
 
