@@ -22,10 +22,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 # 初始化统一日志管理器
 init_logger "unified_monitor" $LOG_LEVEL "${LOGS_DIR}/unified_monitor.log"
 
-# 全局数组初始化 - 确保在严格模式下安全访问
-declare -A SYSTEM_INFO_CACHE
-SYSTEM_INFO_CACHE_TIME=0
-
 # 错误处理函数
 handle_monitor_error() {
     local exit_code=$?
@@ -191,6 +187,13 @@ get_cached_system_info() {
         log_debug "磁盘处理: 原始='${raw_disk_output:-未获取}' -> GB='$disk_gb' -> 缓存='${SYSTEM_INFO_CACHE[disk_gb]}'"
         
         SYSTEM_INFO_CACHE_TIME=$current_time
+        
+        # 导出为环境变量，解决子进程访问问题
+        export CACHED_CPU_CORES="${SYSTEM_INFO_CACHE[cpu_cores]}"
+        export CACHED_MEMORY_GB="${SYSTEM_INFO_CACHE[memory_gb]}"
+        export CACHED_DISK_GB="${SYSTEM_INFO_CACHE[disk_gb]}"
+        export SYSTEM_INFO_CACHE_TIME
+        
         log_info "✅ 系统信息缓存已重建: CPU=${SYSTEM_INFO_CACHE[cpu_cores]:-1}核, 内存=${SYSTEM_INFO_CACHE[memory_gb]:-0.00}GB, 磁盘=${SYSTEM_INFO_CACHE[disk_gb]:-0.00}GB"
     else
         local remaining_ttl=$((cache_ttl - (current_time - SYSTEM_INFO_CACHE_TIME)))
@@ -657,33 +660,40 @@ discover_monitoring_processes() {
     echo "$monitoring_pids"
 }
 
-# 系统静态资源收集器
+# 系统静态资源收集器 - 直接获取，避免缓存复杂性
 get_system_static_resources() {
-    # 使用内存缓存替代文件缓存 - 性能优化
-    get_cached_system_info
+    # 直接获取CPU核数
+    local cpu_cores
+    if command -v nproc >/dev/null 2>&1; then
+        cpu_cores=$(nproc 2>/dev/null)
+    elif [[ -r "/proc/cpuinfo" ]]; then
+        cpu_cores=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null)
+    else
+        cpu_cores="1"
+    fi
+    cpu_cores=$(echo "$cpu_cores" | grep -o '^[0-9]\+' | head -c 10)
+    cpu_cores="${cpu_cores:-1}"
     
-    # 确保数组已初始化 - 防御性编程
-    if [[ ! -v SYSTEM_INFO_CACHE ]] || [[ -z "${SYSTEM_INFO_CACHE[cpu_cores]:-}" ]]; then
-        log_debug "缓存数组未初始化，强制刷新"
-        # 安全初始化数组
-        if [[ ! -v SYSTEM_INFO_CACHE ]]; then
-            declare -A SYSTEM_INFO_CACHE
+    # 直接获取内存大小
+    local memory_gb="0.00"
+    if command -v free >/dev/null 2>&1; then
+        local memory_kb=$(free | awk '/^Mem:/{print $2}' 2>/dev/null)
+        if [[ "$memory_kb" =~ ^[0-9]+$ ]] && [[ "$memory_kb" -gt 0 ]]; then
+            memory_gb=$(awk "BEGIN {printf \"%.2f\", $memory_kb/1024/1024}")
         fi
-        # 强制刷新缓存时间戳，触发重新收集
-        SYSTEM_INFO_CACHE_TIME=0
-        get_cached_system_info
     fi
     
-    # 安全访问缓存数组，提供默认值
-    local cpu_cores="${SYSTEM_INFO_CACHE[cpu_cores]:-1}"
-    local memory_gb="${SYSTEM_INFO_CACHE[memory_gb]:-0.00}"
-    local disk_gb="${SYSTEM_INFO_CACHE[disk_gb]:-0.00}"
-
-    # 格式化结果 - 使用缓存数据
-    local result="${cpu_cores},${memory_gb},${disk_gb}"
+    # 直接获取磁盘大小
+    local disk_gb="0.00"
+    if command -v df >/dev/null 2>&1; then
+        disk_gb=$(df / 2>/dev/null | awk 'NR==2{printf "%.2f", $2/1024/1024}')
+        if [[ ! "$disk_gb" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            disk_gb="0.00"
+        fi
+    fi
     
-    log_debug "系统静态资源: CPU=${cpu_cores}核, 内存=${memory_gb}GB, 磁盘=${disk_gb}GB (缓存)"
-    echo "$result"
+    log_debug "系统静态资源: CPU=${cpu_cores}核, 内存=${memory_gb}GB, 磁盘=${disk_gb}GB (直接获取)"
+    echo "${cpu_cores},${memory_gb},${disk_gb}"
 }
 
 # 系统动态资源收集器

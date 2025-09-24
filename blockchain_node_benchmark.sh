@@ -66,6 +66,16 @@ source "${SCRIPT_DIR}/config/config_loader.sh"
 source "${SCRIPT_DIR}/utils/error_handler.sh"
 source "${SCRIPT_DIR}/core/common_functions.sh"
 
+# 清理内存共享目录中的旧缓存数据
+if [[ -d "$MEMORY_SHARE_DIR" ]]; then
+    echo "🧹 清理内存共享目录中的旧缓存数据..." >&2
+    # 清理可能导致问题的缓存文件
+    rm -f "$MEMORY_SHARE_DIR"/*.json 2>/dev/null || true
+    rm -f "$MEMORY_SHARE_DIR"/sample_count 2>/dev/null || true
+    rm -f "$MEMORY_SHARE_DIR"/*cache* 2>/dev/null || true
+    echo "✅ 内存共享目录清理完成" >&2
+fi
+
 # 设置错误处理
 setup_error_handling "$(basename "$0")" "区块链节点基准测试框架"
 log_script_start "$(basename "$0")"
