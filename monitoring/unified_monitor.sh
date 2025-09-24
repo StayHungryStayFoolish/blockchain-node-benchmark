@@ -1780,13 +1780,6 @@ collect_monitoring_overhead_data() {
     # 调试：记录最终数据行格式
     log_debug "最终数据行: $(echo "$overhead_data_line" | cut -c1-150)..."
     
-    # 专门检测异常格式
-    if echo "$overhead_data_line" | grep -q "0\.000\.00\|00,.*00,"; then
-        log_error "🚨 检测到异常数据格式！"
-        log_error "完整数据行: $overhead_data_line"
-        log_error "系统信息详情: CPU=$system_cpu_cores, 内存=$system_memory_gb, 磁盘=$system_disk_gb"
-    fi
-    
     # 最终数据完整性验证 - 只检查空字段
     if [[ "$overhead_data_line" == *",,"* ]]; then
         log_error "检测到监控开销数据格式异常 (空字段): $overhead_data_line"
