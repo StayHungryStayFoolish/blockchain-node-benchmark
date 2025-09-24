@@ -110,98 +110,6 @@ init_command_cache() {
 }
 
 # =====================================================================
-# 系统信息缓存模块
-# =====================================================================
-# 缓存静态系统信息，避免重复获取CPU核数、内存大小等不变信息
-
-# 系统信息缓存存储
-declare -A SYSTEM_INFO_CACHE
-declare SYSTEM_INFO_CACHE_TIME=0
-
-# 获取缓存的系统信息
-# 说明: 静态系统信息(CPU核数、总内存、磁盘大小)变化频率极低，使用5分钟缓存
-# 性能影响: 减少90%以上的系统信息获取调用
-get_cached_system_info() {
-    local current_time=$(date +%s)
-    local cache_ttl=300  # 5分钟缓存TTL
-    
-    # 强制清理缓存，防止任何污染
-    if [[ $((current_time - SYSTEM_INFO_CACHE_TIME)) -gt $cache_ttl ]]; then
-        log_debug "🔄 刷新系统信息缓存 (TTL: ${cache_ttl}s)..."
-        
-        # 安全重置缓存数组 - 避免bash严格模式冲突
-        # 初始化数组（如果不存在）
-        if [[ ! -v SYSTEM_INFO_CACHE ]]; then
-            declare -A SYSTEM_INFO_CACHE
-        fi
-        # 清空现有数据，但保持数组结构
-        for key in "${!SYSTEM_INFO_CACHE[@]}"; do
-            unset SYSTEM_INFO_CACHE["$key"]
-        done
-        
-        # CPU核数 - 健壮获取
-        local cpu_cores
-        if command -v nproc >/dev/null 2>&1; then
-            cpu_cores=$(nproc 2>/dev/null)
-        elif [[ -r "/proc/cpuinfo" ]]; then
-            cpu_cores=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null)
-        else
-            cpu_cores="1"
-        fi
-        
-        # 严格验证和清理
-        local raw_cpu_cores="$cpu_cores"
-        cpu_cores=$(echo "$cpu_cores" | grep -o '^[0-9]\+' | head -c 10)
-        SYSTEM_INFO_CACHE[cpu_cores]="${cpu_cores:-1}"
-        
-        # 调试：记录CPU核数处理过程
-        log_debug "CPU核数处理: 原始='$raw_cpu_cores' -> 清理后='$cpu_cores' -> 缓存='${SYSTEM_INFO_CACHE[cpu_cores]}'"
-        
-        # 内存大小 - 重构计算逻辑
-        local memory_gb="0.00"
-        if command -v free >/dev/null 2>&1; then
-            local memory_kb=$(free | awk '/^Mem:/{print $2}' 2>/dev/null)
-            if [[ "$memory_kb" =~ ^[0-9]+$ ]] && [[ "$memory_kb" -gt 0 ]]; then
-                # 使用awk替代bc，避免管道问题
-                memory_gb=$(awk "BEGIN {printf \"%.2f\", $memory_kb/1024/1024}")
-            fi
-        fi
-        SYSTEM_INFO_CACHE[memory_gb]="$memory_gb"
-        
-        # 调试：记录内存处理过程
-        log_debug "内存处理: KB='${memory_kb:-未获取}' -> GB='$memory_gb' -> 缓存='${SYSTEM_INFO_CACHE[memory_gb]}'"
-        
-        # 磁盘大小 - 重构计算逻辑
-        local disk_gb="0.00"
-        if command -v df >/dev/null 2>&1; then
-            local raw_disk_output=$(df / 2>/dev/null | awk 'NR==2{print $2}')
-            disk_gb=$(df / 2>/dev/null | awk 'NR==2{printf "%.2f", $2/1024/1024}')
-            # 验证输出格式
-            if [[ ! "$disk_gb" =~ ^[0-9]+\.[0-9]+$ ]]; then
-                disk_gb="0.00"
-            fi
-        fi
-        SYSTEM_INFO_CACHE[disk_gb]="$disk_gb"
-        
-        # 调试：记录磁盘处理过程
-        log_debug "磁盘处理: 原始='${raw_disk_output:-未获取}' -> GB='$disk_gb' -> 缓存='${SYSTEM_INFO_CACHE[disk_gb]}'"
-        
-        SYSTEM_INFO_CACHE_TIME=$current_time
-        
-        # 导出为环境变量，解决子进程访问问题
-        export CACHED_CPU_CORES="${SYSTEM_INFO_CACHE[cpu_cores]}"
-        export CACHED_MEMORY_GB="${SYSTEM_INFO_CACHE[memory_gb]}"
-        export CACHED_DISK_GB="${SYSTEM_INFO_CACHE[disk_gb]}"
-        export SYSTEM_INFO_CACHE_TIME
-        
-        log_info "✅ 系统信息缓存已重建: CPU=${SYSTEM_INFO_CACHE[cpu_cores]:-1}核, 内存=${SYSTEM_INFO_CACHE[memory_gb]:-0.00}GB, 磁盘=${SYSTEM_INFO_CACHE[disk_gb]:-0.00}GB"
-    else
-        local remaining_ttl=$((cache_ttl - (current_time - SYSTEM_INFO_CACHE_TIME)))
-        log_debug "使用缓存的系统信息 (剩余TTL: ${remaining_ttl}s)"
-    fi
-}
-
-# =====================================================================
 # 数据验证和工具函数模块
 # =====================================================================
 
@@ -660,7 +568,7 @@ discover_monitoring_processes() {
     echo "$monitoring_pids"
 }
 
-# 系统静态资源收集器 - 直接获取，避免缓存复杂性
+# 系统静态资源收集器 - 直接获取
 get_system_static_resources() {
     # 直接获取CPU核数
     local cpu_cores

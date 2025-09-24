@@ -888,7 +888,7 @@ class ReportGenerator:
             cpu_colors = ['#ff9999', '#66b3ff', '#99ff99']
             ax1.pie(cpu_sizes, labels=cpu_labels, colors=cpu_colors, autopct='%1.1f%%', startangle=90)
             ax1.axis('equal')
-            ax1.set_title('CPU使用分布')
+            ax1.set_title('&#128200; CPU Usage Distribution')
             
             # 内存分布饼图
             mem_sizes = [monitoring_mem, blockchain_mem, other_mem]
@@ -896,7 +896,7 @@ class ReportGenerator:
             mem_colors = ['#ff9999', '#66b3ff', '#99ff99']
             ax2.pie(mem_sizes, labels=mem_labels, colors=mem_colors, autopct='%1.1f%%', startangle=90)
             ax2.axis('equal')
-            ax2.set_title('内存使用分布')
+            ax2.set_title('&#128200; Memory Usage Distribution')
             
             plt.tight_layout()
             reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
@@ -943,9 +943,9 @@ class ReportGenerator:
             # 监控CPU vs QPS
             if qps_col and 'monitoring_cpu_percent' in merged_df.columns:
                 ax1.scatter(merged_df['monitoring_cpu_percent'], merged_df[qps_col], alpha=0.5)
-                ax1.set_xlabel('监控CPU使用率 (%)')
-                ax1.set_ylabel('系统吞吐量 (QPS)')
-                ax1.set_title('监控CPU开销与系统吞吐量关系')
+                ax1.set_xlabel('Monitoring CPU Usage (%)')
+                ax1.set_ylabel('System Throughput (QPS)')
+                ax1.set_title('&#128202; Monitoring CPU Overhead vs System Throughput')
                 ax1.grid(True, linestyle='--', alpha=0.7)
                 
                 # 添加趋势线
@@ -966,9 +966,9 @@ class ReportGenerator:
                     
             if ebs_col and 'monitoring_iops' in merged_df.columns:
                 ax2.scatter(merged_df['monitoring_iops'], merged_df[ebs_col], alpha=0.5)
-                ax2.set_xlabel('监控IOPS')
-                ax2.set_ylabel('EBS性能指标')
-                ax2.set_title('监控I/O开销与EBS性能关系')
+                ax2.set_xlabel('Monitoring IOPS')
+                ax2.set_ylabel('EBS Performance Metrics')
+                ax2.set_title('&#128202; Monitoring I/O Overhead vs EBS Performance')
                 ax2.grid(True, linestyle='--', alpha=0.7)
                 
                 # 添加趋势线
