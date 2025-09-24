@@ -153,9 +153,9 @@ write_log() {
     # 格式化消息
     local formatted_message=$(format_log_message "$level" "$component" "$message")
     
-    # 控制台输出（带颜色）
+    # 控制台输出（带颜色）- 重定向到stderr避免污染stdout
     local color=$(get_log_level_color "$level")
-    echo -e "${color}${formatted_message}${COLOR_RESET}"
+    echo -e "${color}${formatted_message}${COLOR_RESET}" >&2
     
     # 文件输出（无颜色）
     local component="${LOGGER_COMPONENT:-unknown}"

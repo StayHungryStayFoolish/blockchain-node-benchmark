@@ -85,13 +85,40 @@ try:
     ADVANCED_TOOLS_AVAILABLE = True
     print("✅ Advanced analysis tools loaded")
 except ImportError as e:
-    print(f"❌ Critical import error: {e}")
-    print("📋 Required modules missing. Please check:")
-    print("  - utils/csv_data_processor.py")
-    print("  - analysis/cpu_ebs_correlation_analyzer.py") 
-    print("  - utils/unit_converter.py")
-    print("  - visualization/advanced_chart_generator.py")
-    sys.exit(1)
+    print(f"⚠️  Advanced analysis tools unavailable: {e}")
+    print("📝 Using basic functionality mode, some advanced features may be unavailable")
+    ADVANCED_TOOLS_AVAILABLE = False
+    # Set placeholder classes to avoid runtime errors
+    class CSVDataProcessor:
+        def __init__(self):
+            self.df = None
+        def load_csv_data(self, file): 
+            self.df = pd.read_csv(file)
+            return True
+        def clean_data(self):
+            return True
+        def has_field(self, name):
+            return name in self.df.columns if self.df is not None else False
+        def get_device_columns_safe(self, device_prefix: str, metric_suffix: str) -> list:
+            if self.df is None:
+                return []
+            matching_cols = []
+            for col in self.df.columns:
+                if col.startswith(f'{device_prefix}_') and metric_suffix in col:
+                    matching_cols.append(col)
+            return matching_cols
+
+    # Define placeholder classes to avoid IDE warnings and runtime errors
+    class DummyTool:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __call__(self, *args, **kwargs):
+            return self
+    
+    # 使用可调用的占位符类
+    CPUEBSCorrelationAnalyzer = DummyTool
+    UnitConverter = DummyTool
+    AdvancedChartGenerator = DummyTool
 
 class PerformanceVisualizer(CSVDataProcessor):
     """Performance Visualizer - Based on unified CSV data processor"""
@@ -130,15 +157,22 @@ class PerformanceVisualizer(CSVDataProcessor):
             'critical': thresholds['critical']    # Critical Threshold (%)
         }
         
-        # 初始化分析工具
-        try:
-            self.unit_converter = UnitConverter()
-            self.correlation_analyzer = CPUEBSCorrelationAnalyzer(data_file)
-            self.chart_generator = AdvancedChartGenerator(data_file, self.output_dir)
-            print("✅ Analysis tools initialized successfully")
-        except Exception as e:
-            print(f"❌ Analysis tools initialization failed: {e}")
-            raise
+        # 初始化新工具
+        if ADVANCED_TOOLS_AVAILABLE:
+            try:
+                self.unit_converter = UnitConverter()
+                self.correlation_analyzer = CPUEBSCorrelationAnalyzer(data_file)
+                self.chart_generator = AdvancedChartGenerator(data_file, self.output_dir)
+            except Exception as e:
+                print(f"⚠️ Advanced tools initialization failed: {e}")
+                self.unit_converter = None
+                self.correlation_analyzer = None
+                self.chart_generator = None
+        else:
+            # 当高级工具不可用时，设置为 None
+            self.unit_converter = None
+            self.correlation_analyzer = None
+            self.chart_generator = None
         
     def load_data(self):
         """加载数据"""
@@ -1041,10 +1075,11 @@ Monitoring Efficiency:
         
         try:
             # Use advanced chart generator
-            print("🎨 Using advanced chart generator...")
-            advanced_charts = self.chart_generator.generate_all_charts()
-            if advanced_charts:
-                chart_files.extend(advanced_charts)
+            if ADVANCED_TOOLS_AVAILABLE and self.chart_generator is not None:
+                print("🎨 Using advanced chart generator...")
+                advanced_charts = self.chart_generator.generate_all_charts()
+                if advanced_charts:
+                    chart_files.extend(advanced_charts)
             
             # Generate EBS professional analysis charts (high priority)
             print("📊 Generating EBS professional analysis charts...")

@@ -129,8 +129,9 @@ get_cached_system_info() {
     if [[ $((current_time - SYSTEM_INFO_CACHE_TIME)) -gt $cache_ttl ]]; then
         log_debug "🔄 刷新系统信息缓存 (TTL: ${cache_ttl}s)..."
         
-        # 重置缓存数组 - 保持全局作用域
-        SYSTEM_INFO_CACHE=()
+        # 完全重置缓存数组
+        unset SYSTEM_INFO_CACHE
+        declare -A SYSTEM_INFO_CACHE
         
         # CPU核数 - 健壮获取
         local cpu_cores
@@ -1654,12 +1655,11 @@ clean_and_format_number() {
         value="0"
     fi
     
-    # 安全的格式化输出 - 避免异常大数字
+    # 格式化输出
     if [[ "$format" == "int" ]]; then
-        # 使用awk替代printf避免异常输出
-        awk "BEGIN {printf \"%.0f\", $value}" 2>/dev/null || echo "0"
+        printf "%.0f" "$value" 2>/dev/null || echo "0"
     else
-        awk "BEGIN {printf \"%.2f\", $value}" 2>/dev/null || echo "0.00"
+        printf "%.2f" "$value" 2>/dev/null || echo "0.00"
     fi
 }
 
