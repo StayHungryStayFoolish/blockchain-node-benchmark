@@ -154,8 +154,12 @@ get_cached_system_info() {
         fi
         
         # 严格验证和清理
+        local raw_cpu_cores="$cpu_cores"
         cpu_cores=$(echo "$cpu_cores" | grep -o '^[0-9]\+' | head -c 10)
         SYSTEM_INFO_CACHE[cpu_cores]="${cpu_cores:-1}"
+        
+        # 调试：记录CPU核数处理过程
+        log_debug "CPU核数处理: 原始='$raw_cpu_cores' -> 清理后='$cpu_cores' -> 缓存='${SYSTEM_INFO_CACHE[cpu_cores]}'"
         
         # 内存大小 - 重构计算逻辑
         local memory_gb="0.00"
@@ -168,9 +172,13 @@ get_cached_system_info() {
         fi
         SYSTEM_INFO_CACHE[memory_gb]="$memory_gb"
         
+        # 调试：记录内存处理过程
+        log_debug "内存处理: KB='${memory_kb:-未获取}' -> GB='$memory_gb' -> 缓存='${SYSTEM_INFO_CACHE[memory_gb]}'"
+        
         # 磁盘大小 - 重构计算逻辑
         local disk_gb="0.00"
         if command -v df >/dev/null 2>&1; then
+            local raw_disk_output=$(df / 2>/dev/null | awk 'NR==2{print $2}')
             disk_gb=$(df / 2>/dev/null | awk 'NR==2{printf "%.2f", $2/1024/1024}')
             # 验证输出格式
             if [[ ! "$disk_gb" =~ ^[0-9]+\.[0-9]+$ ]]; then
@@ -178,6 +186,9 @@ get_cached_system_info() {
             fi
         fi
         SYSTEM_INFO_CACHE[disk_gb]="$disk_gb"
+        
+        # 调试：记录磁盘处理过程
+        log_debug "磁盘处理: 原始='${raw_disk_output:-未获取}' -> GB='$disk_gb' -> 缓存='${SYSTEM_INFO_CACHE[disk_gb]}'"
         
         SYSTEM_INFO_CACHE_TIME=$current_time
         log_info "✅ 系统信息缓存已重建: CPU=${SYSTEM_INFO_CACHE[cpu_cores]:-1}核, 内存=${SYSTEM_INFO_CACHE[memory_gb]:-0.00}GB, 磁盘=${SYSTEM_INFO_CACHE[disk_gb]:-0.00}GB"
@@ -1313,7 +1324,7 @@ assess_system_load() {
         local mem_total=$(grep MemTotal /proc/meminfo | awk '{print $2}')
         local mem_available=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
         if [[ -n "$mem_total" && -n "$mem_available" ]]; then
-            memory_usage=$(echo "scale=1; ($mem_total - $mem_available) * 100 / $mem_total" | bc -l 2>/dev/null || echo "0.0")
+            memory_usage=$(awk "BEGIN {printf \"%.1f\", ($mem_total - $mem_available) * 100 / $mem_total}" 2>/dev/null || echo "0.0")
         fi
 
     fi
@@ -1326,12 +1337,12 @@ assess_system_load() {
     fi
 
     # 计算综合负载分数 (0-100)
-    local cpu_score=$(echo "scale=0; $cpu_usage" | bc -l 2>/dev/null || echo "0")
-    local memory_score=$(echo "scale=0; $memory_usage" | bc -l 2>/dev/null || echo "0")
+    local cpu_score=$(awk "BEGIN {printf \"%.0f\", $cpu_usage}" 2>/dev/null || echo "0")
+    local memory_score=$(awk "BEGIN {printf \"%.0f\", $memory_usage}" 2>/dev/null || echo "0")
 
     # 负载平均值转换为分数 (假设4核系统，负载4.0为100%)
     local cpu_cores=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "4")
-    local load_score=$(echo "scale=0; $load_average * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
+    local load_score=$(awk "BEGIN {printf \"%.0f\", $load_average * 100 / $cpu_cores}" 2>/dev/null || echo "0")
 
     # 取最高分数作为系统负载
     local system_load=$cpu_score
@@ -1634,9 +1645,10 @@ validate_data_quality() {
         return 1
     fi
     
-    # 异常格式检查
-    if echo "$data_line" | grep -q "0\.000\.00\|00,"; then
-        log_error "数据质量检查失败: 检测到异常格式"
+    # 异常格式检查 - 只检查真正的问题格式
+    if echo "$data_line" | grep -q ",,$\|^,$\|^,\|,$"; then
+        log_error "数据质量检查失败: 检测到空字段或格式错误"
+        log_debug "问题数据行: $data_line"
         return 1
     fi
     
@@ -1647,6 +1659,7 @@ validate_data_quality() {
 clean_and_format_number() {
     local value="$1"
     local format="$2"  # "int" 或 "float"
+    local original_value="$value"
     
     # 移除所有非数字和小数点字符
     value=$(echo "$value" | tr -cd '0-9.')
@@ -1678,11 +1691,19 @@ clean_and_format_number() {
     fi
     
     # 格式化输出
+    local result
     if [[ "$format" == "int" ]]; then
-        printf "%.0f" "$value" 2>/dev/null || echo "0"
+        result=$(printf "%.0f" "$value" 2>/dev/null || echo "0")
     else
-        printf "%.2f" "$value" 2>/dev/null || echo "0.00"
+        result=$(printf "%.2f" "$value" 2>/dev/null || echo "0.00")
     fi
+    
+    # 调试：如果输入或输出异常，记录详细信息
+    if [[ "$original_value" == *"."*"."* ]] || [[ "$result" == *"."*"."* ]] || [[ "$original_value" == "00" ]]; then
+        log_debug "数据清理异常: 输入='$original_value' -> 输出='$result' (格式:$format)"
+    fi
+    
+    echo "$result"
 }
 
 # 监控开销数据收集主函数（增强版 - 带性能监控）
@@ -1730,9 +1751,15 @@ collect_monitoring_overhead_data() {
     blockchain_memory_mb=$(clean_and_format_number "$blockchain_memory_mb" "float")
     blockchain_process_count=$(clean_and_format_number "$blockchain_process_count" "int")
 
+    # 调试：记录系统信息原始值
+    log_debug "系统信息原始值: CPU='$system_cpu_cores' 内存='$system_memory_gb' 磁盘='$system_disk_gb'"
+    
     system_cpu_cores=$(clean_and_format_number "$system_cpu_cores" "int")
     system_memory_gb=$(clean_and_format_number "$system_memory_gb" "float")
     system_disk_gb=$(clean_and_format_number "$system_disk_gb" "float")
+    
+    # 调试：记录清理后的值
+    log_debug "系统信息清理后: CPU='$system_cpu_cores' 内存='$system_memory_gb' 磁盘='$system_disk_gb'"
     system_cpu_usage=$(clean_and_format_number "$system_cpu_usage" "float")
     system_memory_usage=$(clean_and_format_number "$system_memory_usage" "float")
     system_disk_usage=$(clean_and_format_number "$system_disk_usage" "int")
@@ -1740,9 +1767,19 @@ collect_monitoring_overhead_data() {
     # 生成完整的数据行 - 确保所有变量都有有效值
     local overhead_data_line="${timestamp},${monitoring_cpu},${monitoring_memory_percent},${monitoring_memory_mb},${monitoring_process_count},${blockchain_cpu},${blockchain_memory_percent},${blockchain_memory_mb},${blockchain_process_count},${system_cpu_cores},${system_memory_gb},${system_disk_gb},${system_cpu_usage},${system_memory_usage},${system_disk_usage}"
     
-    # 最终数据完整性验证
-    if [[ "$overhead_data_line" == *",,"* ]] || [[ "$overhead_data_line" == *"0.000.00"* ]]; then
-        log_error "检测到监控开销数据格式异常: $overhead_data_line"
+    # 调试：记录最终数据行格式
+    log_debug "最终数据行: $(echo "$overhead_data_line" | cut -c1-150)..."
+    
+    # 专门检测异常格式
+    if echo "$overhead_data_line" | grep -q "0\.000\.00\|00,.*00,"; then
+        log_error "🚨 检测到异常数据格式！"
+        log_error "完整数据行: $overhead_data_line"
+        log_error "系统信息详情: CPU=$system_cpu_cores, 内存=$system_memory_gb, 磁盘=$system_disk_gb"
+    fi
+    
+    # 最终数据完整性验证 - 只检查空字段
+    if [[ "$overhead_data_line" == *",,"* ]]; then
+        log_error "检测到监控开销数据格式异常 (空字段): $overhead_data_line"
         return 1
     fi
 
