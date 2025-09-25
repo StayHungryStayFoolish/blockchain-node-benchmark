@@ -887,7 +887,7 @@ class ReportGenerator:
             
             # CPU分布饼图
             cpu_sizes = [monitoring_cpu, blockchain_cpu, other_cpu]
-            cpu_labels = ['&#128202; Monitoring', '&#128640; Blockchain', '&#128187; Others']
+            cpu_labels = ['&#128202; Monitoring', '&#128640; Blockchain Node', '&#128187; Others']
             cpu_colors = ['#ff9999', '#66b3ff', '#99ff99']
             ax1.pie(cpu_sizes, labels=cpu_labels, colors=cpu_colors, autopct='%1.1f%%', startangle=90)
             ax1.axis('equal')
@@ -895,7 +895,7 @@ class ReportGenerator:
             
             # 内存分布饼图
             mem_sizes = [monitoring_mem, blockchain_mem, other_mem]
-            mem_labels = ['&#128202; Monitoring', '&#128640; Blockchain', '&#128187; Others']
+            mem_labels = ['&#128202; Monitoring', '&#128640; Blockchain Node', '&#128187; Others']
             mem_colors = ['#ff9999', '#66b3ff', '#99ff99']
             ax2.pie(mem_sizes, labels=mem_labels, colors=mem_colors, autopct='%1.1f%%', startangle=90)
             ax2.axis('equal')
