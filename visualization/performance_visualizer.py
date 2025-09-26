@@ -1088,6 +1088,13 @@ Monitoring Efficiency:
                 chart_files.extend(ebs_charts)
                 print(f"✅ Generated {len(ebs_charts)} EBS professional charts")
             
+            # Generate blockchain node analysis charts
+            print("🔗 Generating blockchain node analysis charts...")
+            block_sync_chart = self.create_block_height_sync_chart()
+            if block_sync_chart:
+                chart_files.append(block_sync_chart)
+                print("✅ Block height sync chart generated")
+            
             # Generate traditional charts as supplement
             overview_chart = self.create_performance_overview_chart()
             if overview_chart:
@@ -1599,6 +1606,118 @@ Monitoring Efficiency:
             print(f"⚠️ EBS时间序列分析失败: {e}")
             return None
     
+    def create_block_height_sync_chart(self):
+        """生成区块高度同步状态时序图表"""
+        print("📊 Generating block height synchronization chart...")
+        
+        if not self.load_data():
+            return None
+        
+        try:
+            # 检查必需字段
+            required_fields = ['timestamp', 'block_height_diff', 'data_loss']
+            if not all(field in self.df.columns for field in required_fields):
+                print("⚠️ Block height fields not found, skipping chart generation")
+                return None
+            
+            # 数据预处理
+            df_clean = self.df.dropna(subset=required_fields)
+            if df_clean.empty:
+                print("⚠️ No valid block height data found")
+                return None
+                
+            timestamps = pd.to_datetime(df_clean['timestamp'])
+            height_diff = pd.to_numeric(df_clean['block_height_diff'], errors='coerce')
+            data_loss = pd.to_numeric(df_clean['data_loss'], errors='coerce')
+            
+            # 创建图表
+            fig, ax = plt.subplots(figsize=(14, 8))
+            
+            # 主曲线：区块高度差值
+            ax.plot(timestamps, height_diff, 
+                    color='#2E86AB', linewidth=2, 
+                    label='Block Height Difference (Mainnet - Local)', alpha=0.8)
+            
+            # 阈值线
+            threshold = 50  # BLOCK_HEIGHT_DIFF_THRESHOLD
+            ax.axhline(y=threshold, color='#E74C3C', linestyle='--', 
+                      linewidth=2, alpha=0.7, label=f'Threshold (+{threshold})')
+            ax.axhline(y=-threshold, color='#E74C3C', linestyle='--', 
+                      linewidth=2, alpha=0.7, label=f'Threshold (-{threshold})')
+            
+            # 异常区域标注
+            anomaly_periods = self._identify_anomaly_periods(timestamps, data_loss)
+            for i, (start_time, end_time) in enumerate(anomaly_periods):
+                ax.axvspan(start_time, end_time, alpha=0.25, color='#E74C3C', 
+                          label='Data Loss Period' if i == 0 else "")
+            
+            # 图表美化
+            ax.set_title('🔗 Blockchain Node Synchronization Status', 
+                        fontsize=16, fontweight='bold', pad=20)
+            ax.set_xlabel('Time', fontsize=12)
+            ax.set_ylabel('Block Height Difference', fontsize=12)
+            ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+            ax.legend(loc='upper right', framealpha=0.9)
+            
+            # 时间轴格式化
+            if len(timestamps) > 0:
+                ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M:%S'))
+                plt.xticks(rotation=45)
+            
+            # 添加统计信息文本框
+            stats_text = self._generate_sync_stats_text(height_diff, data_loss)
+            ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
+                   verticalalignment='top', bbox=dict(boxstyle='round', 
+                   facecolor='wheat', alpha=0.8), fontsize=10)
+            
+            plt.tight_layout()
+            
+            # 保存文件
+            output_file = os.path.join(self.output_dir, 'block_height_sync_chart.png')
+            plt.savefig(output_file, dpi=300, bbox_inches='tight', 
+                       facecolor='white', edgecolor='none')
+            plt.close()
+            
+            print(f"✅ Block height sync chart saved: {output_file}")
+            return output_file
+            
+        except Exception as e:
+            print(f"❌ Error generating block height sync chart: {e}")
+            return None
+
+    def _identify_anomaly_periods(self, timestamps, data_loss):
+        """识别数据丢失时间段"""
+        periods = []
+        start_time = None
+        
+        for i, (ts, loss) in enumerate(zip(timestamps, data_loss)):
+            if loss == 1 and start_time is None:
+                start_time = ts
+            elif loss == 0 and start_time is not None:
+                periods.append((start_time, ts))
+                start_time = None
+        
+        # 处理结尾的异常
+        if start_time is not None and len(timestamps) > 0:
+            periods.append((start_time, timestamps.iloc[-1]))
+        
+        return periods
+
+    def _generate_sync_stats_text(self, height_diff, data_loss):
+        """生成同步统计文本"""
+        total_samples = len(height_diff)
+        anomaly_samples = int(data_loss.sum())
+        avg_diff = height_diff.mean()
+        max_diff = height_diff.max()
+        min_diff = height_diff.min()
+        
+        return f"""Sync Statistics:
+• Total Samples: {total_samples}
+• Anomaly Samples: {anomaly_samples} ({anomaly_samples/total_samples*100:.1f}%)
+• Avg Difference: {avg_diff:.1f} blocks
+• Max Difference: {max_diff:.0f} blocks
+• Min Difference: {min_diff:.0f} blocks"""
+
     def generate_all_ebs_charts(self):
         """生成所有EBS图表"""
         try:

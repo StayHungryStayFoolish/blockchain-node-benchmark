@@ -223,7 +223,7 @@ monitor_block_height_diff() {
     fi
     
     # 检查数据丢失
-    if [[ "$data_loss" == "true" ]]; then
+    if [[ "$data_loss" == "1" ]]; then
         DATA_LOSS_COUNT=$((DATA_LOSS_COUNT + 1))
         
         if [[ "$DATA_LOSS_ALERT" == "false" ]]; then

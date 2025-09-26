@@ -25,6 +25,27 @@ get_next_run_number() {
     fi
 }
 
+# 复制共享内存统计文件到归档
+copy_shared_memory_stats() {
+    local archive_path="$1"
+    local stats_dir="$archive_path/stats"
+    mkdir -p "$stats_dir"
+    
+    # 复制data_loss_stats.json到归档
+    if [[ -f "$MEMORY_SHARE_DIR/data_loss_stats.json" ]]; then
+        cp "$MEMORY_SHARE_DIR/data_loss_stats.json" "$stats_dir/"
+        echo "✅ data_loss_stats.json已归档到: $stats_dir/"
+    else
+        echo "⚠️ data_loss_stats.json文件不存在，跳过归档"
+    fi
+    
+    # 复制其他重要统计文件
+    if [[ -f "$MEMORY_SHARE_DIR/bottleneck_status.json" ]]; then
+        cp "$MEMORY_SHARE_DIR/bottleneck_status.json" "$stats_dir/"
+        echo "✅ bottleneck_status.json已归档到: $stats_dir/"
+    fi
+}
+
 # 自动检测瓶颈信息 (开发环境优化版)
 auto_detect_bottlenecks() {
     local bottleneck_file="${MEMORY_SHARE_DIR}/bottleneck_status.json"
@@ -208,6 +229,9 @@ archive_current_test() {
     # 创建归档目录
     local archive_path="${ARCHIVES_DIR}/${run_id}"
     mkdir -p "$archive_path"
+    
+    # 复制共享内存中的重要统计文件
+    copy_shared_memory_stats "$archive_path"
     
     # 移动当前测试数据到归档
     if mv "$CURRENT_TEST_DIR"/* "$archive_path/" 2>/dev/null; then

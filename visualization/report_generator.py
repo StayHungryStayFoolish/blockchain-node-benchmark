@@ -2039,11 +2039,18 @@ class ReportGenerator:
             return f"{value:.0f}" if isinstance(value, (int, float)) else str(value)
 
     def _analyze_block_height_performance(self, df, block_height_fields):
-        """分析区块高度性能数据"""
+        """增强的区块高度性能分析 - 包含图表和统计文件展示"""
         if not block_height_fields or df.empty:
             return "<div class='info-card'><h4>区块高度监控</h4><p>暂无区块高度数据</p></div>"
         
         try:
+            # 添加时序图表展示
+            sync_chart_html = self._generate_block_height_chart_section()
+            
+            # 添加data_loss_stats.json文件展示
+            stats_file_html = self._generate_data_loss_stats_section()
+            
+            # 原有字段分析逻辑
             analysis_cards = []
             
             for field in block_height_fields:
@@ -2093,13 +2100,123 @@ class ReportGenerator:
                         
                         analysis_cards.append(card_html)
             
-            if analysis_cards:
-                return f'<div class="info-grid">{"".join(analysis_cards)}</div>'
-            else:
-                return "<div class='info-card'><h4>区块高度监控</h4><p>无有效的数值数据</p></div>"
+            # 组合所有部分
+            complete_html = f"""
+            <div class="section">
+                <h2>🔗 区块链节点同步分析</h2>
+                {sync_chart_html}
+                {stats_file_html}
+                <div class="info-grid">{"".join(analysis_cards)}</div>
+            </div>
+            """
+            
+            return complete_html
                 
         except Exception as e:
             return f"<div class='error'>区块高度分析失败: {str(e)}</div>"
+
+    def _generate_block_height_chart_section(self):
+        """生成区块高度图表展示部分"""
+        chart_path = os.path.join(self.output_dir, 'block_height_sync_chart.png')
+        
+        if os.path.exists(chart_path):
+            return f"""
+            <div class="info-card">
+                <h3>📊 区块高度同步时序图</h3>
+                <div class="chart-container">
+                    <img src="block_height_sync_chart.png" alt="区块高度同步状态" class="chart-image">
+                </div>
+                <div class="chart-info">
+                    <p>此图表展示了测试期间本地节点与主网的区块高度差值变化：</p>
+                    <ul>
+                        <li><strong>蓝色曲线</strong>: 区块高度差值 (主网 - 本地)</li>
+                        <li><strong>红色虚线</strong>: 异常阈值 (±50个区块)</li>
+                        <li><strong>红色区域</strong>: 检测到数据丢失的时间段</li>
+                        <li><strong>统计信息</strong>: 左上角显示同步质量统计</li>
+                    </ul>
+                </div>
+            </div>
+            """
+        else:
+            return """
+            <div class="warning">
+                <h3>⚠️ 区块高度同步图表</h3>
+                <p>区块高度同步时序图尚未生成。请确保运行了performance_visualizer.py。</p>
+            </div>
+            """
+
+    def _generate_data_loss_stats_section(self):
+        """生成data_loss_stats.json文件展示部分"""
+        import json
+        
+        # 检查归档中的stats文件
+        stats_file = None
+        possible_paths = [
+            os.path.join(self.output_dir, 'stats', 'data_loss_stats.json'),
+            os.path.join(self.output_dir, 'data_loss_stats.json'),
+            os.path.join(os.path.dirname(self.output_dir), 'stats', 'data_loss_stats.json')
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                stats_file = path
+                break
+        
+        if stats_file:
+            try:
+                with open(stats_file, 'r') as f:
+                    stats_data = json.load(f)
+                
+                # 计算衍生指标
+                avg_duration = (stats_data['total_duration'] / stats_data['data_loss_periods']) if stats_data['data_loss_periods'] > 0 else 0
+                
+                return f"""
+                <div class="info-card">
+                    <h3>📋 数据丢失统计摘要</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value">{stats_data['data_loss_count']}</div>
+                            <div class="stat-label">异常采样数</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">{stats_data['data_loss_periods']}</div>
+                            <div class="stat-label">异常事件数</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">{stats_data['total_duration']}s</div>
+                            <div class="stat-label">总异常时长</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">{avg_duration:.1f}s</div>
+                            <div class="stat-label">平均事件时长</div>
+                        </div>
+                    </div>
+                    <div class="file-info">
+                        <p><strong>📁 统计文件位置:</strong> <code>{os.path.relpath(stats_file, self.output_dir)}</code></p>
+                        <p><strong>🕐 最后更新:</strong> {stats_data.get('last_updated', 'Unknown')}</p>
+                    </div>
+                </div>
+                """
+            except Exception as e:
+                return f"""
+                <div class="warning">
+                    <h3>⚠️ 数据丢失统计</h3>
+                    <p>统计文件读取失败: {str(e)}</p>
+                    <p><strong>文件位置:</strong> <code>{os.path.relpath(stats_file, self.output_dir)}</code></p>
+                </div>
+                """
+        else:
+            return """
+            <div class="warning">
+                <h3>⚠️ 数据丢失统计</h3>
+                <p>未找到data_loss_stats.json文件。可能的原因：</p>
+                <ul>
+                    <li>测试期间未检测到数据丢失事件</li>
+                    <li>统计文件未正确归档</li>
+                    <li>block_height_monitor.sh未正常运行</li>
+                </ul>
+            </div>
+            """
 
     def _generate_html_content(self, df):
         """生成HTML内容 + 瓶颈信息展示 + 图片引用"""
@@ -2330,6 +2447,11 @@ class ReportGenerator:
                     'filename': 'ebs_time_series_analysis.png',
                     'title': '&#128202; EBS时间序列分析',
                     'description': 'EBS性能时间序列分析，展示多指标时间维度变化趋势'
+                },
+                {
+                    'filename': 'block_height_sync_chart.png',
+                    'title': '🔗 区块链节点同步状态',
+                    'description': '本地节点与主网区块高度同步状态时序图，展示同步差值变化和异常时间段标注'
                 }
             ]
             
@@ -2721,6 +2843,46 @@ class ReportGenerator:
         .missing-charts li {
             margin: 8px 0;
             color: #856404;
+        }
+        
+        /* 区块高度统计样式 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        .stat-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .file-info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f4fd;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+        }
+        .file-info code {
+            background-color: #f1f3f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
         }
         
         /* 表格样式 */
