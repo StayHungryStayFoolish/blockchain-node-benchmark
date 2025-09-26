@@ -41,7 +41,7 @@ cleanup_and_exit() {
     # 清理共享内存缓存 - 只清理block_height相关文件，保留QPS状态文件
     if [[ -n "$BASE_MEMORY_DIR" ]]; then
         # 只清理block_height相关的缓存文件，保留其他进程的状态文件
-        rm -f "$BASE_MEMORY_DIR"/block_height_*.cache 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/block_height_monitor_cache.json 2>/dev/null || true
         rm -f "$BASE_MEMORY_DIR"/node_health_*.cache 2>/dev/null || true
     fi
     

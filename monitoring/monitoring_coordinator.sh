@@ -185,7 +185,7 @@ stop_monitor() {
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
         echo "正在停止进程 $pid..."
         kill "$pid" 2>/dev/null
-        sleep 2
+        sleep 3
         
         # 如果还在运行，强制终止
         if kill -0 "$pid" 2>/dev/null; then
@@ -408,6 +408,25 @@ cleanup_coordinator() {
     pkill -f "block_height_monitor" 2>/dev/null || true
     pkill -f "tail.*performance_latest.csv" 2>/dev/null || true
 
+    # 清理共享内存文件
+    if [[ -n "${MEMORY_SHARE_DIR:-}" ]] && [[ -d "$MEMORY_SHARE_DIR" ]]; then
+        echo "🧹 清理共享内存文件..."
+        
+        # 清理所有监控相关文件
+        rm -f "$MEMORY_SHARE_DIR"/*.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/sample_count 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/*cache* 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/*.lock 2>/dev/null || true
+        
+        # 统一的清理结果反馈
+        if [[ -z "$(ls -A "$MEMORY_SHARE_DIR" 2>/dev/null)" ]]; then
+            rmdir "$MEMORY_SHARE_DIR" 2>/dev/null || true
+            echo "✅ 共享内存目录已完全清理"
+        else
+            echo "✅ 共享内存监控文件已清理"
+        fi
+    fi
+
     # 保留状态文件用于调试
     if [[ -f "$MONITOR_STATUS_FILE" ]]; then
         echo "📊 监控状态文件保留: $MONITOR_STATUS_FILE"
@@ -522,6 +541,8 @@ main() {
                 echo "  [STAT] Active task count: $active_count"
                 
                 if [[ $active_count -eq 0 ]]; then
+                    echo "[INFO] All monitoring tasks stopped, waiting for graceful cleanup..."
+                    sleep 3
                     echo "[INFO] QPS test completed and all monitoring tasks finished, monitoring coordinator exiting"
                     break
                 fi

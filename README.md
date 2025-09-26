@@ -13,7 +13,7 @@ A professional multi blockchain node performance benchmarking framework with com
 - **Intelligent Bottleneck Detection**: 6-dimensional bottleneck detection with scientific evaluation algorithms
 - **Professional Visualization**: 18 types of professional charts and comprehensive HTML reports
 - **AWS Deep Integration**: EBS performance baselines, ENA network monitoring, EC2 instance optimization
-- **Solana Specialization**: Block height monitoring, validator log analysis, RPC performance analysis
+- **Blockchain Node Specialization**: Block height monitoring, validator log analysis, RPC performance analysis
 
 ## 🚀 Quick Start
 
@@ -115,7 +115,7 @@ which sar       # Network monitoring tool
 - **Chart Gallery**: All 18 professional visualization charts
 - **EBS Analysis**: Storage performance deep dive
 - **ENA Analysis**: Network performance analysis (AWS environments)
-- **Solana Analysis**: Blockchain-specific metrics analysis
+- **Blockchain Node Analysis**: Blockchain-specific metrics analysis
 
 ## ⚙️ Configuration
 
@@ -335,7 +335,3 @@ If you encounter issues or need help:
 4. Submit an issue to the project repository
 
 ---
-
-**Last Updated**: 2025-01-22  
-**Version**: v2.0  
-**Compatible with**: Solana QPS Testing Framework v2.0+

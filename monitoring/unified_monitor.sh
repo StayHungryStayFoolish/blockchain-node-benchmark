@@ -184,6 +184,14 @@ cleanup_monitor_processes() {
         log_info "📊 监控数据已保存: $UNIFIED_LOG (大小: $file_size)"
     fi
     
+    # 清理共享内存中的监控文件
+    if [[ -n "${MEMORY_SHARE_DIR:-}" ]] && [[ -d "$MEMORY_SHARE_DIR" ]]; then
+        log_debug "清理共享内存监控文件"
+        rm -f "$MEMORY_SHARE_DIR"/latest_metrics.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/unified_metrics.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/sample_count 2>/dev/null || true
+    fi
+    
     # 显示缓存统计
     local cache_hits=0
     for cmd in "${!COMMAND_CACHE[@]}"; do
