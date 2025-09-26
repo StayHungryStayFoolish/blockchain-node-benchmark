@@ -392,7 +392,7 @@ start_monitoring() {
             trap 'cleanup_and_exit' SIGTERM SIGINT SIGQUIT EXIT
             
             # 频率转换：计算sleep间隔
-            local sleep_interval=$(echo "scale=3; 1/$BLOCK_HEIGHT_MONITOR_RATE" | bc 2>/dev/null || echo "1")
+            local sleep_interval=$(awk "BEGIN {printf \"%.3f\", 1/$BLOCK_HEIGHT_MONITOR_RATE}" 2>/dev/null || echo "1")
             
             # 跟随框架生命周期
             while [[ -f "$TMP_DIR/qps_test_status" ]]; do
@@ -408,7 +408,7 @@ start_monitoring() {
         trap 'cleanup_and_exit' SIGTERM SIGINT SIGQUIT
         
         # 频率转换：计算sleep间隔
-        local sleep_interval=$(echo "scale=3; 1/$BLOCK_HEIGHT_MONITOR_RATE" | bc 2>/dev/null || echo "1")
+        local sleep_interval=$(awk "BEGIN {printf \"%.3f\", 1/$BLOCK_HEIGHT_MONITOR_RATE}" 2>/dev/null || echo "1")
         
         # 跟随框架生命周期
         while [[ -f "$TMP_DIR/qps_test_status" ]]; do

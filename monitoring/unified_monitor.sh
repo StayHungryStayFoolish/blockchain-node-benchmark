@@ -140,9 +140,9 @@ format_percentage() {
     value=$(validate_numeric_value "$value" "0")
     
     # 确保百分比在0-100范围内
-    if (( $(echo "$value > 100" | bc -l 2>/dev/null || echo "0") )); then
+    if (( $(awk "BEGIN {print ($value > 100) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         value="100"
-    elif (( $(echo "$value < 0" | bc -l 2>/dev/null || echo "0") )); then
+    elif (( $(awk "BEGIN {print ($value < 0) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         value="0"
     fi
     
@@ -322,7 +322,7 @@ get_cpu_data() {
                 local cpu_idle=$(validate_numeric_value "${fields[$((start_idx + 9))]:-0}")
                 
                 # 计算总CPU使用率并验证
-                local cpu_usage=$(echo "scale=2; 100 - $cpu_idle" | bc 2>/dev/null || echo "0")
+                local cpu_usage=$(awk "BEGIN {printf \"%.2f\", 100 - $cpu_idle}" 2>/dev/null || echo "0")
                 cpu_usage=$(validate_numeric_value "$cpu_usage")
 
                 log_debug "📊 CPU指标解析成功: 使用率=${cpu_usage}%, 用户=${cpu_usr}%, 系统=${cpu_sys}%, IO等待=${cpu_iowait}%, 软中断=${cpu_soft}%, 空闲=${cpu_idle}%"
@@ -365,7 +365,7 @@ get_memory_data() {
                 # 计算内存使用率
                 local mem_usage="0"
                 if [[ "$mem_total" != "0" ]]; then
-                    mem_usage=$(echo "scale=2; $mem_used * 100 / $mem_total" | bc 2>/dev/null || echo "0")
+                    mem_usage=$(awk "BEGIN {printf \"%.2f\", $mem_used * 100 / $mem_total}" 2>/dev/null || echo "0")
                     mem_usage=$(format_percentage "$mem_usage" 2)
                 fi
                 
@@ -390,7 +390,7 @@ get_memory_data() {
             # 转换为MB
             local mem_total_mb=$((mem_total_kb / 1024))
             local mem_used_mb=$(((mem_total_kb - mem_available_kb) / 1024))
-            local mem_usage=$(echo "scale=2; $mem_used_mb * 100 / $mem_total_mb" | bc 2>/dev/null || echo "0")
+            local mem_usage=$(awk "BEGIN {printf \"%.2f\", $mem_used_mb * 100 / $mem_total_mb}" 2>/dev/null || echo "0")
             echo "$mem_used_mb,$mem_total_mb,$mem_usage"
             return
         fi
@@ -446,17 +446,17 @@ get_network_data() {
             # 正确转换为AWS标准的网络带宽单位
             # sar输出的是kB/s (实际是KB/s，十进制)
             # 转换步骤: kB/s -> bytes/s -> bits/s -> Mbps -> Gbps
-            local rx_mbps=$(echo "scale=3; $rx_kbs * 8 / 1000" | bc 2>/dev/null || echo "0")
-            local tx_mbps=$(echo "scale=3; $tx_kbs * 8 / 1000" | bc 2>/dev/null || echo "0")
-            local total_mbps=$(echo "scale=3; $rx_mbps + $tx_mbps" | bc 2>/dev/null || echo "0")
+            local rx_mbps=$(awk "BEGIN {printf \"%.3f\", $rx_kbs * 8 / 1000}" 2>/dev/null || echo "0")
+            local tx_mbps=$(awk "BEGIN {printf \"%.3f\", $tx_kbs * 8 / 1000}" 2>/dev/null || echo "0")
+            local total_mbps=$(awk "BEGIN {printf \"%.3f\", $rx_mbps + $tx_mbps}" 2>/dev/null || echo "0")
 
             # 转换为Gbps (AWS EC2网络带宽通常以Gbps计量)
-            local rx_gbps=$(echo "scale=6; $rx_mbps / 1000" | bc 2>/dev/null || echo "0")
-            local tx_gbps=$(echo "scale=6; $tx_mbps / 1000" | bc 2>/dev/null || echo "0")
-            local total_gbps=$(echo "scale=6; $total_mbps / 1000" | bc 2>/dev/null || echo "0")
+            local rx_gbps=$(awk "BEGIN {printf \"%.6f\", $rx_mbps / 1000}" 2>/dev/null || echo "0")
+            local tx_gbps=$(awk "BEGIN {printf \"%.6f\", $tx_mbps / 1000}" 2>/dev/null || echo "0")
+            local total_gbps=$(awk "BEGIN {printf \"%.6f\", $total_mbps / 1000}" 2>/dev/null || echo "0")
 
             # 计算总PPS
-            local total_pps=$(echo "scale=0; $rx_pps + $tx_pps" | bc 2>/dev/null || echo "0")
+            local total_pps=$(awk "BEGIN {printf \"%.0f\", $rx_pps + $tx_pps}" 2>/dev/null || echo "0")
 
             echo "$NETWORK_INTERFACE,$rx_mbps,$tx_mbps,$total_mbps,$rx_gbps,$tx_gbps,$total_gbps,$rx_pps,$tx_pps,$total_pps"
             return
@@ -641,7 +641,7 @@ get_system_dynamic_resources() {
             local total_diff=$((total2 - total1))
 
             if [[ $total_diff -gt 0 ]]; then
-                cpu_usage=$(echo "scale=1; 100 - ($idle_diff * 100 / $total_diff)" | bc 2>/dev/null || echo "0.0")
+                cpu_usage=$(awk "BEGIN {printf \"%.1f\", 100 - ($idle_diff * 100 / $total_diff)}" 2>/dev/null || echo "0.0")
             fi
         fi
     elif is_command_available "top"; then
@@ -665,7 +665,7 @@ get_system_dynamic_resources() {
             mem_available_kb=$((mem_free_kb + mem_buffers_kb + mem_cached_kb))
         fi
         local mem_used_kb=$((mem_total_kb - mem_available_kb))
-        memory_usage=$(echo "scale=1; $mem_used_kb * 100 / $mem_total_kb" | bc 2>/dev/null || echo "0.0")
+        memory_usage=$(awk "BEGIN {printf \"%.1f\", $mem_used_kb * 100 / $mem_total_kb}" 2>/dev/null || echo "0.0")
 
     fi
 
@@ -755,7 +755,7 @@ calculate_process_resources() {
         # 跳过空行
         [[ -n "$cpu" ]] || continue
 
-        # 数值验证和累加 - 使用awk替代bc确保跨平台兼容性
+        # 数值验证和累加 - 使用awk确保跨平台兼容性
         if [[ "$cpu" =~ ^[0-9]+\.?[0-9]*$ ]]; then
             total_cpu=$(awk "BEGIN {printf \"%.2f\", $total_cpu + $cpu}" 2>/dev/null || echo "$total_cpu")
         fi
@@ -897,8 +897,8 @@ get_monitoring_overhead_legacy() {
     done
 
     # 计算每秒真实速率
-    local real_iops=$(echo "scale=2; ($total_read_ops_diff + $total_write_ops_diff) / $MONITOR_INTERVAL" | bc 2>/dev/null || echo "0.00")
-    local real_throughput=$(echo "scale=6; ($total_read_bytes_diff + $total_write_bytes_diff) / $MONITOR_INTERVAL / 1024 / 1024" | bc 2>/dev/null || echo "0.000000")
+    local real_iops=$(awk "BEGIN {printf \"%.2f\", ($total_read_ops_diff + $total_write_ops_diff) / $MONITOR_INTERVAL}" 2>/dev/null || echo "0.00")
+    local real_throughput=$(awk "BEGIN {printf \"%.6f\", ($total_read_bytes_diff + $total_write_bytes_diff) / $MONITOR_INTERVAL / 1024 / 1024}" 2>/dev/null || echo "0.000000")
 
     # 确保数值格式正确
     real_iops=$(printf "%.2f" "$real_iops" 2>/dev/null || echo "0.00")
@@ -964,7 +964,7 @@ monitor_performance_impact() {
     fi
 
     # 检查CPU使用率
-    if (( $(echo "$cpu_usage > $BOTTLENECK_CPU_THRESHOLD" | bc -l 2>/dev/null || echo "0") )); then
+    if (( $(awk "BEGIN {print ($cpu_usage > $BOTTLENECK_CPU_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         warnings+=("CPU使用率超标: ${cpu_usage}% > ${BOTTLENECK_CPU_THRESHOLD}%")
     fi
 
@@ -972,7 +972,7 @@ monitor_performance_impact() {
     local total_memory_mb=$(get_cached_total_memory)
     local memory_usage_percent=$(calculate_memory_percentage "$memory_usage" "$total_memory_mb")
     
-    if (( $(echo "$memory_usage_percent > $BOTTLENECK_MEMORY_THRESHOLD" | bc -l 2>/dev/null || echo "0") )); then
+    if (( $(awk "BEGIN {print ($memory_usage_percent > $BOTTLENECK_MEMORY_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         warnings+=("内存使用超标: ${memory_usage}MB (${memory_usage_percent}%) > ${BOTTLENECK_MEMORY_THRESHOLD}%")
     fi
 
@@ -1102,7 +1102,7 @@ generate_performance_impact_report() {
         # 性能警告统计
         echo "## 性能警告分析"
         local total_memory_mb=$(get_cached_total_memory)
-        local memory_threshold_mb=$(echo "scale=0; $total_memory_mb * $BOTTLENECK_MEMORY_THRESHOLD / 100" | bc)
+        local memory_threshold_mb=$(awk "BEGIN {printf \"%.0f\", $total_memory_mb * $BOTTLENECK_MEMORY_THRESHOLD / 100}")
         
         local warning_count=$(tail -n +2 "$PERFORMANCE_LOG" | awk -F',' -v max_time="$MAX_COLLECTION_TIME_MS" -v max_cpu="$BOTTLENECK_CPU_THRESHOLD" -v max_mem="$memory_threshold_mb" '
             $3 > max_time || $4 > max_cpu || $5 > max_mem {count++}
@@ -1125,13 +1125,13 @@ generate_performance_impact_report() {
         echo "## 优化建议"
 
         if [[ $warning_count -gt 0 ]]; then
-            local warning_ratio=$(echo "scale=2; $warning_count * 100 / $total_records" | bc -l)
+            local warning_ratio=$(awk "BEGIN {printf \"%.2f\", $warning_count * 100 / $total_records}")
             echo "- 警告比例: ${warning_ratio}%"
 
-            if (( $(echo "$warning_ratio > 10" | bc -l) )); then
+            if (( $(awk "BEGIN {print ($warning_ratio > 10) ? 1 : 0}") )); then
                 echo "- 🔴 高风险: 超过10%的监控操作存在性能问题"
                 echo "  建议: 立即优化监控频率或算法"
-            elif (( $(echo "$warning_ratio > 5" | bc -l) )); then
+            elif (( $(awk "BEGIN {print ($warning_ratio > 5) ? 1 : 0}") )); then
                 echo "- 🟡 中风险: 5-10%的监控操作存在性能问题"
                 echo "  建议: 考虑优化监控配置"
             else
@@ -1168,7 +1168,7 @@ auto_performance_optimization_advisor() {
     local avg_time=$(tail -n +2 "$PERFORMANCE_LOG" | cut -d',' -f3 | awk '{sum+=$1} END {print sum/NR}')
     local max_time=$(tail -n +2 "$PERFORMANCE_LOG" | cut -d',' -f3 | sort -n | tail -1)
 
-    if (( $(echo "$avg_time > $MAX_COLLECTION_TIME_MS * 0.8" | bc -l 2>/dev/null || echo "0") )); then
+    if (( $(awk "BEGIN {print ($avg_time > $MAX_COLLECTION_TIME_MS * 0.8) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         log_warn "⚠️  平均执行时间接近阈值 (${avg_time}ms vs ${MAX_COLLECTION_TIME_MS}ms)"
         log_info "💡 建议: 考虑将MONITOR_INTERVAL从${MONITOR_INTERVAL}s增加到$((MONITOR_INTERVAL * 2))s"
     fi
@@ -1176,7 +1176,7 @@ auto_performance_optimization_advisor() {
     # 分析CPU使用趋势
     local avg_cpu=$(tail -n +2 "$PERFORMANCE_LOG" | cut -d',' -f4 | awk '{sum+=$1} END {print sum/NR}')
 
-    if (( $(echo "$avg_cpu > $BOTTLENECK_CPU_THRESHOLD * 0.8" | bc -l 2>/dev/null || echo "0") )); then
+    if (( $(awk "BEGIN {print ($avg_cpu > $BOTTLENECK_CPU_THRESHOLD * 0.8) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         log_warn "⚠️  平均CPU使用率接近阈值 (${avg_cpu}% vs ${BOTTLENECK_CPU_THRESHOLD}%)"
         log_info "💡 建议: 减少监控进程数量或优化进程发现算法"
     fi
@@ -1188,7 +1188,7 @@ auto_performance_optimization_advisor() {
     local total_memory_mb=$(get_cached_total_memory)
     local avg_memory_percent=$(calculate_memory_percentage "$avg_memory" "$total_memory_mb")
     
-    if (( $(echo "$avg_memory_percent > $BOTTLENECK_MEMORY_THRESHOLD * 0.8" | bc -l 2>/dev/null || echo "0") )); then
+    if (( $(awk "BEGIN {print ($avg_memory_percent > $BOTTLENECK_MEMORY_THRESHOLD * 0.8) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         log_warn "⚠️  平均内存使用接近阈值 (${avg_memory}MB, ${avg_memory_percent}% vs ${BOTTLENECK_MEMORY_THRESHOLD}%)"
         log_info "💡 建议: 优化数据结构或增加内存清理逻辑"
     fi
@@ -1197,7 +1197,7 @@ auto_performance_optimization_advisor() {
     local slowest_func=$(tail -n +2 "$PERFORMANCE_LOG" | sort -t',' -k3 -n | tail -1 | cut -d',' -f2)
     local slowest_time=$(tail -n +2 "$PERFORMANCE_LOG" | sort -t',' -k3 -n | tail -1 | cut -d',' -f3)
 
-    if [[ -n "$slowest_func" ]] && (( $(echo "$slowest_time > $MAX_COLLECTION_TIME_MS" | bc -l 2>/dev/null || echo "0") )); then
+    if [[ -n "$slowest_func" ]] && (( $(awk "BEGIN {print ($slowest_time > $MAX_COLLECTION_TIME_MS) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         log_warn "🐌 最慢函数: $slowest_func (${slowest_time}ms)"
 
         case "$slowest_func" in
@@ -1264,17 +1264,17 @@ assess_system_load() {
 
     # 取最高分数作为系统负载
     local system_load=$cpu_score
-    if (( $(echo "$memory_score > $system_load" | bc -l 2>/dev/null || echo "0") )); then
+    if (( $(awk "BEGIN {print ($memory_score > $system_load) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         system_load=$memory_score
     fi
-    if (( $(echo "$load_score > $system_load" | bc -l 2>/dev/null || echo "0") )); then
+    if (( $(awk "BEGIN {print ($load_score > $system_load) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         system_load=$load_score
     fi
 
     # 确保负载值在合理范围内
-    if (( $(echo "$system_load < 0" | bc -l 2>/dev/null || echo "0") )); then
+    if (( $(awk "BEGIN {print ($system_load < 0) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         system_load=0
-    elif (( $(echo "$system_load > 100" | bc -l 2>/dev/null || echo "0") )); then
+    elif (( $(awk "BEGIN {print ($system_load > 100) ? 1 : 0}" 2>/dev/null || echo "0") )); then
         system_load=100
     fi
 
@@ -1393,11 +1393,6 @@ recover_resource_calculation() {
     if ! is_command_available "ps"; then
         log_error "ps命令不可用，这是严重问题"
         return 1
-    fi
-
-    # 检查bc命令是否可用
-    if ! is_command_available "bc"; then
-        log_warn "bc命令不可用，将使用简化的数学计算"
     fi
 
     # 清理可能的临时文件
@@ -1914,9 +1909,9 @@ generate_json_metrics() {
     local net_total_mbps=$(echo "$network_data" | cut -d',' -f4)
 
     # 计算网络利用率
-    local network_util=$(echo "scale=2; ($net_total_mbps / $NETWORK_MAX_BANDWIDTH_MBPS) * 100" | bc 2>/dev/null || echo "0")
+    local network_util=$(awk "BEGIN {printf \"%.2f\", ($net_total_mbps / $NETWORK_MAX_BANDWIDTH_MBPS) * 100}" 2>/dev/null || echo "0")
     # 限制在100%以内
-    network_util=$(echo "if ($network_util > 100) 100 else $network_util" | bc 2>/dev/null || echo "0")
+    network_util=$(awk "BEGIN {printf \"%.2f\", ($network_util > 100) ? 100 : $network_util}" 2>/dev/null || echo "0")
 
     # 从设备数据中提取EBS信息 (简化处理，取第一个设备的数据)
     local ebs_util=0
@@ -2214,7 +2209,7 @@ start_unified_monitoring() {
             if (( sample_count % 12 == 0 )); then
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))
-                local avg_interval=$(echo "scale=2; $elapsed / $sample_count" | bc 2>/dev/null || echo "N/A")
+                local avg_interval=$(awk "BEGIN {printf "%.2f", $elapsed / $sample_count}" 2>/dev/null || echo "N/A")
                 echo "📈 监控状态: 已收集 $sample_count 个样本，运行时间 ${elapsed}s，平均间隔 ${avg_interval}s (跟随框架生命周期)"
             fi
 
@@ -2242,7 +2237,7 @@ start_unified_monitoring() {
             if [[ $((current_time - last_status_time)) -ge $status_interval ]]; then
                 local elapsed=$((current_time - start_time))
                 local remaining=$((end_time - current_time))
-                local progress_percent=$(echo "scale=1; $elapsed * 100 / $duration" | bc 2>/dev/null || echo "N/A")
+                local progress_percent=$(awk "BEGIN {printf "%.1f", $elapsed * 100 / $duration}" 2>/dev/null || echo "N/A")
                 echo "📈 监控状态: 已收集 $sample_count 次数据, 进度 ${progress_percent}%, 运行时间 ${elapsed}s, 剩余 ${remaining}s"
                 last_status_time=$current_time
             fi
@@ -2252,8 +2247,8 @@ start_unified_monitoring() {
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))
                 local remaining=$((end_time - current_time))
-                local avg_interval=$(echo "scale=2; $elapsed / $sample_count" | bc 2>/dev/null || echo "N/A")
-                local progress_percent=$(echo "scale=1; $elapsed * 100 / $duration" | bc 2>/dev/null || echo "N/A")
+                local avg_interval=$(awk "BEGIN {printf "%.2f", $elapsed / $sample_count}" 2>/dev/null || echo "N/A")
+                local progress_percent=$(awk "BEGIN {printf "%.1f", $elapsed * 100 / $duration}" 2>/dev/null || echo "N/A")
                 echo "📈 监控状态: 已收集 $sample_count 个样本，进度 ${progress_percent}%，运行 ${elapsed}s，剩余 ${remaining}s，平均间隔 ${avg_interval}s"
             fi
 
@@ -2274,7 +2269,7 @@ start_unified_monitoring() {
     
     local final_time=$(date +%s)
     local total_elapsed=$((final_time - start_time))
-    local avg_sample_interval=$(echo "scale=2; $total_elapsed / $sample_count" | bc 2>/dev/null || echo "N/A")
+    local avg_sample_interval=$(awk "BEGIN {printf "%.2f", $total_elapsed / $sample_count}" 2>/dev/null || echo "N/A")
     local file_size=$(du -h "$UNIFIED_LOG" 2>/dev/null | cut -f1 || echo "未知")
     local line_count=$(wc -l < "$UNIFIED_LOG" 2>/dev/null || echo "未知")
     
@@ -2290,13 +2285,13 @@ start_unified_monitoring() {
     
     # 性能效率评估
     if [[ "$sample_count" -gt 0 ]] && [[ "$total_elapsed" -gt 0 ]]; then
-        local efficiency=$(echo "scale=1; $sample_count * 100 / $total_elapsed" | bc 2>/dev/null || echo "N/A")
+        local efficiency=$(awk "BEGIN {printf "%.1f", $sample_count * 100 / $total_elapsed}" 2>/dev/null || echo "N/A")
         echo "⚡ 监控效率: ${efficiency} 样本/秒"
     fi
     
     # 数据质量评估
     if [[ "$line_count" != "未知" ]] && [[ "$sample_count" -gt 0 ]]; then
-        local data_integrity=$(echo "scale=1; ($line_count - 1) * 100 / $sample_count" | bc 2>/dev/null || echo "N/A")
+        local data_integrity=$(awk "BEGIN {printf "%.1f", ($line_count - 1) * 100 / $sample_count}" 2>/dev/null || echo "N/A")
         echo "📊 数据完整性: ${data_integrity}% (${line_count}行数据/${sample_count}次采样)"
     fi
     
@@ -2443,7 +2438,7 @@ calculate_memory_percentage() {
         return
     fi
     
-    local memory_percent=$(echo "scale=2; $memory_usage_mb * 100 / $total_memory_mb" | bc 2>/dev/null || echo "0")
+    local memory_percent=$(awk "BEGIN {printf \"%.2f\", $memory_usage_mb * 100 / $total_memory_mb}" 2>/dev/null || echo "0")
     echo "$memory_percent"
 }
 

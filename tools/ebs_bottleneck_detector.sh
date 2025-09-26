@@ -22,8 +22,8 @@ BOTTLENECK_EBS_IOPS_THRESHOLD=${BOTTLENECK_EBS_IOPS_THRESHOLD:-90}      # IOPS�
 BOTTLENECK_EBS_THROUGHPUT_THRESHOLD=${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90}  # 吞吐量利用率阈值 (%)
 
 # 阈值配置
-readonly BOTTLENECK_IOPS_THRESHOLD=$(echo "scale=4; ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} / 100" | bc)
-readonly BOTTLENECK_THROUGHPUT_THRESHOLD=$(echo "scale=4; ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} / 100" | bc)
+readonly BOTTLENECK_IOPS_THRESHOLD=$(awk "BEGIN {printf \"%.4f\", ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} / 100}")
+readonly BOTTLENECK_THROUGHPUT_THRESHOLD=$(awk "BEGIN {printf \"%.4f\", ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} / 100}")
 
 # 全局变量
 declare -A DEVICE_LIMITS
@@ -264,7 +264,7 @@ start_csv_monitoring() {
                     IFS=',' read -r util total_iops aws_standard_iops aws_standard_throughput r_await w_await _ <<< "$metrics"
                     
                     # 计算平均延迟
-                    local avg_latency=$(echo "scale=2; ($r_await + $w_await) / 2" | bc 2>/dev/null || echo "0")
+                    local avg_latency=$(awk "BEGIN {printf "%.2f", ($r_await + $w_await) / 2}" 2>/dev/null || echo "0")
                     
                     # 执行瓶颈检测 (使用正确的AWS标准化参数)
                     detect_ebs_bottleneck "$device" "$total_iops" "$aws_standard_iops" "$aws_standard_throughput" "$avg_latency" "$timestamp"
@@ -301,7 +301,7 @@ start_csv_monitoring() {
                     IFS=',' read -r util total_iops aws_standard_iops aws_standard_throughput r_await w_await _ <<< "$metrics"
                     
                     # 计算平均延迟
-                    local avg_latency=$(echo "scale=2; ($r_await + $w_await) / 2" | bc 2>/dev/null || echo "0")
+                    local avg_latency=$(awk "BEGIN {printf "%.2f", ($r_await + $w_await) / 2}" 2>/dev/null || echo "0")
                     
                     # 执行瓶颈检测 (使用正确的AWS标准化参数)
                     detect_ebs_bottleneck "$device" "$total_iops" "$aws_standard_iops" "$aws_standard_throughput" "$avg_latency" "$timestamp"
@@ -388,18 +388,18 @@ detect_ebs_bottleneck() {
     fi
     
     # IOPS瓶颈检测
-    local iops_utilization=$(echo "scale=4; $current_aws_iops / $max_iops" | bc)
-    if (( $(echo "$iops_utilization > $BOTTLENECK_IOPS_THRESHOLD" | bc -l) )); then
+    local iops_utilization=$(awk "BEGIN {printf \"%.4f\", $current_aws_iops / $max_iops}")
+    if (( $(awk "BEGIN {print ($iops_utilization > $BOTTLENECK_IOPS_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_detected=true
         bottleneck_type="${bottleneck_type}IOPS,"
         
         # 使用可配置的阈值而不是硬编码值
-        local critical_threshold=$(echo "scale=2; (${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} + 5) / 100" | bc)
-        local high_threshold=$(echo "scale=2; ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} / 100" | bc)
+        local critical_threshold=$(awk "BEGIN {printf \"%.2f\", (${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} + 5) / 100}")
+        local high_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} / 100}")
         
-        if (( $(echo "$iops_utilization > $critical_threshold" | bc -l) )); then
+        if (( $(awk "BEGIN {print ($iops_utilization > $critical_threshold) ? 1 : 0}") )); then
             severity="CRITICAL"
-        elif (( $(echo "$iops_utilization > $high_threshold" | bc -l) )); then
+        elif (( $(awk "BEGIN {print ($iops_utilization > $high_threshold) ? 1 : 0}") )); then
             severity="HIGH"
         else
             severity="MEDIUM"
@@ -407,18 +407,18 @@ detect_ebs_bottleneck() {
     fi
     
     # Throughput瓶颈检测
-    local throughput_utilization=$(echo "scale=4; $current_throughput / $max_throughput" | bc)
-    if (( $(echo "$throughput_utilization > $BOTTLENECK_THROUGHPUT_THRESHOLD" | bc -l) )); then
+    local throughput_utilization=$(awk "BEGIN {printf \"%.4f\", $current_throughput / $max_throughput}")
+    if (( $(awk "BEGIN {print ($throughput_utilization > $BOTTLENECK_THROUGHPUT_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_detected=true
         bottleneck_type="${bottleneck_type}THROUGHPUT,"
         
         # 使用可配置的阈值而不是硬编码值
-        local critical_threshold=$(echo "scale=2; (${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} + 5) / 100" | bc)
-        local high_threshold=$(echo "scale=2; ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} / 100" | bc)
+        local critical_threshold=$(awk "BEGIN {printf \"%.2f\", (${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} + 5) / 100}")
+        local high_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} / 100}")
         
-        if (( $(echo "$throughput_utilization > $critical_threshold" | bc -l) )); then
+        if (( $(awk "BEGIN {print ($throughput_utilization > $critical_threshold) ? 1 : 0}") )); then
             severity="CRITICAL"
-        elif (( $(echo "$throughput_utilization > $high_threshold" | bc -l) )); then
+        elif (( $(awk "BEGIN {print ($throughput_utilization > $high_threshold) ? 1 : 0}") )); then
             severity="HIGH"
         else
             severity="MEDIUM"
@@ -427,13 +427,13 @@ detect_ebs_bottleneck() {
     
     # 延迟瓶颈检测
     local latency_threshold=${BOTTLENECK_EBS_LATENCY_THRESHOLD:-50}
-    if (( $(echo "$current_latency > $latency_threshold" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($current_latency > $latency_threshold) ? 1 : 0}") )); then
         bottleneck_detected=true
         bottleneck_type="${bottleneck_type}LATENCY,"
         
         # 延迟严重程度分级
-        local critical_latency_threshold=$(echo "scale=2; $latency_threshold * 2" | bc)
-        if (( $(echo "$current_latency > $critical_latency_threshold" | bc -l) )); then
+        local critical_latency_threshold=$(awk "BEGIN {printf \"%.2f\", $latency_threshold * 2}")
+        if (( $(awk "BEGIN {print ($current_latency > $critical_latency_threshold) ? 1 : 0}") )); then
             severity="CRITICAL"
         else
             severity="HIGH"
@@ -536,8 +536,8 @@ generate_monitoring_summary() {
                 echo "------------------------"
                 tail -n +2 "$BOTTLENECK_LOG_FILE" | while IFS=',' read -r timestamp device bottleneck_type severity current_aws_iops max_iops iops_util current_throughput max_throughput throughput_util latency; do
                     echo "[$timestamp] $device: $bottleneck_type (Severity: $severity)"
-                    echo "  IOPS: $current_aws_iops/$max_iops ($(echo "$iops_util * 100" | bc | cut -d'.' -f1)%)"
-                    echo "  Throughput: $current_throughput/$max_throughput MiB/s ($(echo "$throughput_util * 100" | bc | cut -d'.' -f1)%)"
+                    echo "  IOPS: $current_aws_iops/$max_iops ($(awk "BEGIN {printf \"%.0f\", $iops_util * 100}")%)"
+                    echo "  Throughput: $current_throughput/$max_throughput MiB/s ($(awk "BEGIN {printf \"%.0f\", $throughput_util * 100}")%)"
                     echo ""
                 done
             fi
@@ -558,13 +558,13 @@ generate_monitoring_summary() {
         if [[ -n "$device" && -n "${DEVICE_LIMITS["${device}_max_iops"]}" ]]; then
             local peak_iops=${PEAK_VALUES["${device}_max_iops"]}
             local max_iops=${DEVICE_LIMITS["${device}_max_iops"]}
-            local peak_utilization=$(echo "scale=1; $peak_iops / $max_iops * 100" | bc)
+            local peak_utilization=$(awk "BEGIN {printf \"%.1f\", $peak_iops / $max_iops * 100}")
             
             echo "  $device: Peak utilization ${peak_utilization}% (${peak_iops}/${max_iops} IOPS)"
             
-            if (( $(echo "$peak_utilization > 85" | bc -l) )); then
+            if (( $(awk "BEGIN {print ($peak_utilization > 85) ? 1 : 0}") )); then
                 echo "    ⚠️  HIGH UTILIZATION - Consider upgrading EBS configuration"
-            elif (( $(echo "$peak_utilization > 70" | bc -l) )); then
+            elif (( $(awk "BEGIN {print ($peak_utilization > 70) ? 1 : 0}") )); then
                 echo "    ⚠️  MODERATE UTILIZATION - Monitor closely"
             else
                 echo "    ✅ NORMAL UTILIZATION"

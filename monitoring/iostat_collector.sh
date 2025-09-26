@@ -76,21 +76,21 @@ get_iostat_data() {
     local util=${fields[22]:-0}
     
     # 计算衍生指标 (基于实时数据，无经验值)
-    local total_iops=$(echo "scale=2; $r_s + $w_s" | bc 2>/dev/null || echo "0")
-    local total_throughput_kbs=$(echo "scale=2; $rkb_s + $wkb_s" | bc 2>/dev/null || echo "0")
-    local total_throughput_mibs=$(echo "scale=2; $total_throughput_kbs / 1024" | bc 2>/dev/null || echo "0")
+    local total_iops=$(awk "BEGIN {printf \"%.2f\", $r_s + $w_s}" 2>/dev/null || echo "0")
+    local total_throughput_kbs=$(awk "BEGIN {printf \"%.2f\", $rkb_s + $wkb_s}" 2>/dev/null || echo "0")
+    local total_throughput_mibs=$(awk "BEGIN {printf \"%.2f\", $total_throughput_kbs / 1024}" 2>/dev/null || echo "0")
     
     # 计算读写吞吐量分离 (KB/s → MiB/s)
-    local read_throughput_mibs=$(echo "scale=2; $rkb_s / 1024" | bc 2>/dev/null || echo "0")
-    local write_throughput_mibs=$(echo "scale=2; $wkb_s / 1024" | bc 2>/dev/null || echo "0")
+    local read_throughput_mibs=$(awk "BEGIN {printf \"%.2f\", $rkb_s / 1024}" 2>/dev/null || echo "0")
+    local write_throughput_mibs=$(awk "BEGIN {printf \"%.2f\", $wkb_s / 1024}" 2>/dev/null || echo "0")
     
     # 计算AWS标准throughput
     local aws_standard_throughput_mibs="0"
     if command -v convert_to_aws_standard_throughput >/dev/null 2>&1; then
         # 计算加权平均IO大小
         local weighted_avg_io_kib
-        if [[ $(echo "$total_iops > 0" | bc 2>/dev/null) -eq 1 ]]; then
-            weighted_avg_io_kib=$(echo "scale=2; $total_throughput_kbs / $total_iops" | bc 2>/dev/null || echo "0")
+        if [[ $(awk "BEGIN {print ($total_iops > 0) ? 1 : 0}") -eq 1 ]]; then
+            weighted_avg_io_kib=$(awk "BEGIN {printf \"%.2f\", $total_throughput_kbs / $total_iops}" 2>/dev/null || echo "0")
         else
             weighted_avg_io_kib="0"
         fi
@@ -105,19 +105,19 @@ get_iostat_data() {
         aws_standard_throughput_mibs="$total_throughput_mibs"
     fi
     
-    local avg_await=$(echo "scale=2; ($r_await + $w_await) / 2" | bc 2>/dev/null || echo "0")
+    local avg_await=$(awk "BEGIN {printf \"%.2f\", ($r_await + $w_await) / 2}" 2>/dev/null || echo "0")
     
     # 计算平均 I/O 大小 (基于实时数据)
     local avg_io_kib
-    if [[ $(echo "$total_iops > 0" | bc 2>/dev/null) -eq 1 ]]; then
-        avg_io_kib=$(echo "scale=2; $total_throughput_kbs / $total_iops" | bc 2>/dev/null || echo "0")
+    if [[ $(awk "BEGIN {print ($total_iops > 0) ? 1 : 0}") -eq 1 ]]; then
+        avg_io_kib=$(awk "BEGIN {printf \"%.2f\", $total_throughput_kbs / $total_iops}" 2>/dev/null || echo "0")
     else
         avg_io_kib="0"
     fi
     
     # 计算 AWS 标准 IOPS (基于实时数据)
     local aws_standard_iops
-    if [[ $(echo "$avg_io_kib > 0" | bc 2>/dev/null) -eq 1 ]]; then
+    if [[ $(awk "BEGIN {print ($avg_io_kib > 0) ? 1 : 0}") -eq 1 ]]; then
         aws_standard_iops=$(convert_to_aws_standard_iops "$total_iops" "$avg_io_kib")
     else
         aws_standard_iops="$total_iops"

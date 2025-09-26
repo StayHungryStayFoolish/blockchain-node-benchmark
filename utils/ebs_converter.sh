@@ -28,17 +28,17 @@ convert_to_aws_standard_iops() {
     local actual_iops=$1
     local actual_avg_io_size_kib=$2
     
-    if (( $(echo "$actual_iops <= 0" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($actual_iops <= 0) ? 1 : 0}") )); then
         echo "0"
         return
     fi
     
-    if (( $(echo "$actual_avg_io_size_kib <= 0" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($actual_avg_io_size_kib <= 0) ? 1 : 0}") )); then
         echo "0"
         return
     fi
     
-    local aws_standard_iops=$(echo "scale=2; $actual_iops * ($actual_avg_io_size_kib / $AWS_EBS_BASELINE_IO_SIZE_KIB)" | bc)
+    local aws_standard_iops=$(awk "BEGIN {printf \"%.2f\", $actual_iops * ($actual_avg_io_size_kib / $AWS_EBS_BASELINE_IO_SIZE_KIB)}")
     echo "$aws_standard_iops"
 }
 
@@ -56,13 +56,13 @@ convert_to_aws_standard_throughput() {
     fi
     
     # 避免除零错误
-    if [[ $(echo "$actual_avg_io_size_kib == 0" | bc 2>/dev/null) -eq 1 ]]; then
+    if [[ $(awk "BEGIN {print ($actual_avg_io_size_kib == 0) ? 1 : 0}") -eq 1 ]]; then
         echo "$actual_throughput_mibs"  # IO大小为0时，返回原始值
         return 0
     fi
     
     # 使用system_config.sh中定义的AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB变量
-    local aws_standard_throughput=$(echo "scale=2; $actual_throughput_mibs * ($actual_avg_io_size_kib / $AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB)" | bc)
+    local aws_standard_throughput=$(awk "BEGIN {printf \"%.2f\", $actual_throughput_mibs * ($actual_avg_io_size_kib / $AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB)}")
     
     echo "$aws_standard_throughput"
 }
@@ -72,8 +72,8 @@ convert_to_aws_standard_throughput() {
 # 返回: 自动计算的吞吐量 (MiB/s)
 calculate_io2_throughput() {
     local iops=$1
-    local calculated_throughput=$(echo "scale=2; $iops * $IO2_THROUGHPUT_RATIO" | bc)
-    local actual_throughput=$(echo "if ($calculated_throughput > $IO2_MAX_THROUGHPUT) $IO2_MAX_THROUGHPUT else $calculated_throughput" | bc)
+    local calculated_throughput=$(awk "BEGIN {printf \"%.2f\", $iops * $IO2_THROUGHPUT_RATIO}")
+    local actual_throughput=$(awk "BEGIN {printf \"%.2f\", ($calculated_throughput > $IO2_MAX_THROUGHPUT) ? $IO2_MAX_THROUGHPUT : $calculated_throughput}")
     echo "$actual_throughput"
 }
 
@@ -102,14 +102,14 @@ recommend_ebs_type() {
     local actual_throughput_mibs=$2
     
     # 检查gp3是否可满足
-    if (( $(echo "$aws_standard_iops <= 16000 && $actual_throughput_mibs <= 1000" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($aws_standard_iops <= 16000 && $actual_throughput_mibs <= 1000) ? 1 : 0}") )); then
         echo "gp3"
         return
     fi
     
     # 检查io2是否可满足
     local io2_throughput=$(calculate_io2_throughput "$aws_standard_iops")
-    if (( $(echo "$aws_standard_iops <= 256000 && $io2_throughput >= $actual_throughput_mibs" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($aws_standard_iops <= 256000 && $io2_throughput >= $actual_throughput_mibs) ? 1 : 0}") )); then
         echo "io2"
         return
     fi
@@ -127,15 +127,15 @@ calculate_weighted_avg_io_size() {
     local rkb_s=$3
     local wkb_s=$4
     
-    local total_iops=$(echo "scale=2; $r_s + $w_s" | bc)
-    local total_throughput_kbs=$(echo "scale=2; $rkb_s + $wkb_s" | bc)
+    local total_iops=$(awk "BEGIN {printf \"%.2f\", $r_s + $w_s}")
+    local total_throughput_kbs=$(awk "BEGIN {printf \"%.2f\", $rkb_s + $wkb_s}")
     
-    if (( $(echo "$total_iops <= 0" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($total_iops <= 0) ? 1 : 0}") )); then
         echo "0"
         return
     fi
     
-    local avg_io_kib=$(echo "scale=2; $total_throughput_kbs / $total_iops" | bc)
+    local avg_io_kib=$(awk "BEGIN {printf \"%.2f\", $total_throughput_kbs / $total_iops}")
     echo "$avg_io_kib"
 }
 
@@ -144,7 +144,7 @@ calculate_weighted_avg_io_size() {
 # 返回: KiB
 sectors_to_kib() {
     local sectors=$1
-    echo "scale=2; $sectors * 0.5" | bc
+    awk "BEGIN {printf \"%.2f\", $sectors * 0.5}"
 }
 
 # 主函数：完整的EBS性能转换
@@ -160,9 +160,9 @@ convert_ebs_performance() {
     local wareq_sz=$7
     
     # 计算基础指标
-    local total_iops=$(echo "scale=2; $r_s + $w_s" | bc)
-    local total_throughput_kbs=$(echo "scale=2; $rkb_s + $wkb_s" | bc)
-    local total_throughput_mibs=$(echo "scale=2; $total_throughput_kbs / 1024" | bc)
+    local total_iops=$(awk "BEGIN {printf \"%.2f\", $r_s + $w_s}")
+    local total_throughput_kbs=$(awk "BEGIN {printf \"%.2f\", $rkb_s + $wkb_s}")
+    local total_throughput_mibs=$(awk "BEGIN {printf \"%.2f\", $total_throughput_kbs / 1024}")
     
     # 计算平均I/O大小
     local avg_read_io_kib=$(sectors_to_kib "$rareq_sz")

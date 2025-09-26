@@ -207,9 +207,9 @@ analyze_ena_limits() {
     
     echo "ENA网络限制分析结果:"
     echo "  总样本数: $total_samples"
-    echo "  网络受限样本: $network_limited_count ($(echo "scale=2; $network_limited_count * 100 / $total_samples" | bc 2>/dev/null || echo "0")%)"
-    echo "  PPS受限样本: $pps_limited_count ($(echo "scale=2; $pps_limited_count * 100 / $total_samples" | bc 2>/dev/null || echo "0")%)"
-    echo "  带宽受限样本: $bandwidth_limited_count ($(echo "scale=2; $bandwidth_limited_count * 100 / $total_samples" | bc 2>/dev/null || echo "0")%)"
+    echo "  网络受限样本: $network_limited_count ($(awk "BEGIN {printf \"%.2f\", $network_limited_count * 100 / $total_samples}" 2>/dev/null || echo "0")%)"
+    echo "  PPS受限样本: $pps_limited_count ($(awk "BEGIN {printf \"%.2f\", $pps_limited_count * 100 / $total_samples}" 2>/dev/null || echo "0")%)"
+    echo "  带宽受限样本: $bandwidth_limited_count ($(awk "BEGIN {printf \"%.2f\", $bandwidth_limited_count * 100 / $total_samples}" 2>/dev/null || echo "0")%)"
     
     # 检查最大allowance exceeded值
     echo ""

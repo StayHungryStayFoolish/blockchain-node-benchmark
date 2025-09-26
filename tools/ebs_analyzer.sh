@@ -113,14 +113,14 @@ analyze_device_performance() {
         log_debug "处理数据行: util=$util, await_time=$await_time, util_field=$util_field, await_field=$await_field"
         
         # 检查高利用率 (使用瓶颈阈值的80%作为警告级别)
-        local warning_util_threshold=$(echo "scale=2; ${BOTTLENECK_EBS_UTIL_THRESHOLD:-90} * 0.8" | bc)
-        if (( $(echo "$util > $warning_util_threshold" | bc -l 2>/dev/null || echo 0) )); then
+        local warning_util_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_UTIL_THRESHOLD:-90} * 0.8}")
+        if (( $(awk "BEGIN {print ($util > $warning_util_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
             log_warn "$device_name 高iostat利用率警告: ${util}% (iostat %util, 警告阈值: ${warning_util_threshold}%, 数据时间: $timestamp)"
         fi
         
         # 检查高延迟 (使用瓶颈阈值的40%作为警告级别，保持合理的预警距离)
-        local warning_latency_threshold=$(echo "scale=2; ${BOTTLENECK_EBS_LATENCY_THRESHOLD:-50} * 0.4" | bc)
-        if (( $(echo "$await_time > $warning_latency_threshold" | bc -l 2>/dev/null || echo 0) )); then
+        local warning_latency_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_LATENCY_THRESHOLD:-50} * 0.4}")
+        if (( $(awk "BEGIN {print ($await_time > $warning_latency_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
             log_warn "$device_name 高延迟警告: ${await_time}ms (警告阈值: ${warning_latency_threshold}ms, 数据时间: $timestamp)"
         fi
     done

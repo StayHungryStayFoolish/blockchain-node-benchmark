@@ -548,7 +548,7 @@ execute_performance_cliff_analysis() {
     local bottleneck_qps=$(echo "$bottleneck_info" | jq -r '.bottleneck_qps // 0')
     
     if [[ $max_qps -gt 0 && $bottleneck_qps -gt 0 ]]; then
-        local performance_drop=$(echo "scale=2; ($bottleneck_qps - $max_qps) * 100 / $max_qps" | bc)
+        local performance_drop=$(awk "BEGIN {printf \"%.2f\", ($bottleneck_qps - $max_qps) * 100 / $max_qps}")
         echo "📊 性能悬崖: 从 ${max_qps} QPS 到 ${bottleneck_qps} QPS (${performance_drop}%)"
         
         # 调用性能悬崖分析工具

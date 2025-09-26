@@ -89,9 +89,9 @@ get_cached_block_height_data() {
         
         # 检查缓存是否过期
         local current_time=$(date +%s.%N)
-        local age=$(echo "$current_time - $timestamp" | bc)
+        local age=$(awk "BEGIN {printf \"%.6f\", $current_time - $timestamp}")
         
-        if (( $(echo "$age < $max_age_seconds" | bc -l) )); then
+        if (( $(awk "BEGIN {print ($age < $max_age_seconds) ? 1 : 0}") )); then
             # 缓存未过期，返回缓存数据
             echo "$cache_data"
             return 0

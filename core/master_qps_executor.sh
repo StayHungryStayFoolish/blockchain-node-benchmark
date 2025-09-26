@@ -283,10 +283,10 @@ check_bottleneck_during_test() {
     
     # 检查CPU瓶颈
     local cpu_usage=$(echo "$latest_data" | jq -r '.cpu_usage // 0' 2>/dev/null || echo "0")
-    if (( $(echo "$cpu_usage > $BOTTLENECK_CPU_THRESHOLD" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($cpu_usage > $BOTTLENECK_CPU_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
         local severity="中等"
-        if (( $(echo "$cpu_usage > 95" | bc -l) )); then
+        if (( $(awk "BEGIN {print ($cpu_usage > 95) ? 1 : 0}") )); then
             severity="严重"
             bottleneck_severity="high"
         fi
@@ -295,10 +295,10 @@ check_bottleneck_during_test() {
     
     # 检查内存瓶颈
     local mem_usage=$(echo "$latest_data" | jq -r '.memory_usage // 0' 2>/dev/null || echo "0")
-    if (( $(echo "$mem_usage > $BOTTLENECK_MEMORY_THRESHOLD" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($mem_usage > $BOTTLENECK_MEMORY_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
         local severity="中等"
-        if (( $(echo "$mem_usage > 95" | bc -l) )); then
+        if (( $(awk "BEGIN {print ($mem_usage > 95) ? 1 : 0}") )); then
             severity="严重"
             bottleneck_severity="high"
         fi
@@ -307,14 +307,14 @@ check_bottleneck_during_test() {
     
     # 检查EBS利用率瓶颈
     local ebs_util=$(echo "$latest_data" | jq -r '.ebs_util // 0' 2>/dev/null || echo "0")
-    if (( $(echo "$ebs_util > $BOTTLENECK_EBS_UTIL_THRESHOLD" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($ebs_util > $BOTTLENECK_EBS_UTIL_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
         bottleneck_reasons+=("EBS利用率: ${ebs_util}% > ${BOTTLENECK_EBS_UTIL_THRESHOLD}%")
     fi
     
     # 检查EBS延迟瓶颈
     local ebs_latency=$(echo "$latest_data" | jq -r '.ebs_latency // 0' 2>/dev/null || echo "0")
-    if (( $(echo "$ebs_latency > $BOTTLENECK_EBS_LATENCY_THRESHOLD" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($ebs_latency > $BOTTLENECK_EBS_LATENCY_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
         bottleneck_severity="high"
         bottleneck_reasons+=("EBS延迟: ${ebs_latency}ms > ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms (严重)")
@@ -322,14 +322,14 @@ check_bottleneck_during_test() {
     
     # 检查网络瓶颈
     local network_util=$(echo "$latest_data" | jq -r '.network_util // 0' 2>/dev/null || echo "0")
-    if (( $(echo "$network_util > $BOTTLENECK_NETWORK_THRESHOLD" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($network_util > $BOTTLENECK_NETWORK_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
         bottleneck_reasons+=("网络利用率: ${network_util}% > ${BOTTLENECK_NETWORK_THRESHOLD}%")
     fi
     
     # 检查错误率瓶颈
     local error_rate=$(echo "$latest_data" | jq -r '.error_rate // 0' 2>/dev/null || echo "0")
-    if (( $(echo "$error_rate > $BOTTLENECK_ERROR_RATE_THRESHOLD" | bc -l) )); then
+    if (( $(awk "BEGIN {print ($error_rate > $BOTTLENECK_ERROR_RATE_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
         bottleneck_severity="high"
         bottleneck_reasons+=("错误率: ${error_rate}% > ${BOTTLENECK_ERROR_RATE_THRESHOLD}% (严重)")
@@ -669,20 +669,20 @@ execute_single_qps_test() {
         # 解析测试结果
         local total_requests=$(jq -r '.requests' "$result_file" 2>/dev/null || echo "1")
         local success_requests=$(jq -r '.status_codes."200" // 0' "$result_file" 2>/dev/null || echo "0")
-        local success_rate=$(echo "scale=0; $success_requests * 100 / $total_requests" | bc 2>/dev/null || echo "0")
+        local success_rate=$(awk "BEGIN {printf \"%.0f\", $success_requests * 100 / $total_requests}" 2>/dev/null || echo "0")
         local avg_latency=$(jq -r '.latencies.mean' "$result_file" 2>/dev/null || echo "0")
         
         # 转换延迟单位 (纳秒转毫秒)
-        local avg_latency_ms=$(echo "scale=2; $avg_latency / 1000000" | bc 2>/dev/null || echo "0")
+        local avg_latency_ms=$(awk "BEGIN {printf \"%.2f\", $avg_latency / 1000000}" 2>/dev/null || echo "0")
         
         echo "📈 测试结果: 成功率 ${success_rate}%, 平均延迟 ${avg_latency_ms}ms"
         
         # 检查测试是否成功
-        local success_rate_num=$(echo "$success_rate * 100" | bc 2>/dev/null || echo "0")
-        local avg_latency_num=$(echo "$avg_latency_ms" | bc 2>/dev/null || echo "0")
+        local success_rate_num=$(awk "BEGIN {printf \"%.0f\", $success_rate * 100}" 2>/dev/null || echo "0")
+        local avg_latency_num=$(awk "BEGIN {printf \"%.2f\", $avg_latency_ms}" 2>/dev/null || echo "0")
         
-        if (( $(echo "$success_rate_num >= $SUCCESS_RATE_THRESHOLD" | bc -l) )) && \
-           (( $(echo "$avg_latency_num <= $MAX_LATENCY_THRESHOLD" | bc -l) )); then
+        if (( $(awk "BEGIN {print ($success_rate_num >= $SUCCESS_RATE_THRESHOLD) ? 1 : 0}") )) && \
+           (( $(awk "BEGIN {print ($avg_latency_num <= $MAX_LATENCY_THRESHOLD) ? 1 : 0}") )); then
             LAST_SUCCESSFUL_QPS=$qps
             return 0
         else
