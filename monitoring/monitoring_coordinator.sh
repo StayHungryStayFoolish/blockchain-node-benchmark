@@ -412,11 +412,14 @@ cleanup_coordinator() {
     if [[ -n "${MEMORY_SHARE_DIR:-}" ]] && [[ -d "$MEMORY_SHARE_DIR" ]]; then
         echo "🧹 清理共享内存文件..."
         
-        # 清理所有监控相关文件
-        rm -f "$MEMORY_SHARE_DIR"/*.json 2>/dev/null || true
+        # 清理监控相关文件
+        rm -f "$MEMORY_SHARE_DIR"/latest_metrics.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/unified_metrics.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/block_height_monitor_cache.json 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/sample_count 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/*cache* 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/*.lock 2>/dev/null || true
+        # 保留qps_status.json直到框架最终清理
         
         # 统一的清理结果反馈
         if [[ -z "$(ls -A "$MEMORY_SHARE_DIR" 2>/dev/null)" ]]; then

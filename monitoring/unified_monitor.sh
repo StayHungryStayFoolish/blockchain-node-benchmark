@@ -90,7 +90,6 @@ init_command_cache() {
         "sysctl"    # 系统参数
         "df"        # 磁盘使用
         "top"       # 进程统计
-        "vm_stat"   # 内存统计
         "ps"        # 进程信息
         "pgrep"     # 进程查找
         "bc"        # 数学计算
@@ -1447,10 +1446,6 @@ recover_system_load_assessment() {
         available_commands+=("free")
     fi
 
-    if is_command_available "vm_stat"; then
-        available_commands+=("vm_stat")
-    fi
-
     if [[ ${#available_commands[@]} -eq 0 ]]; then
         log_error "没有可用的系统监控命令，系统负载评估将使用默认值"
         return 1
@@ -2217,7 +2212,7 @@ start_unified_monitoring() {
             if (( sample_count % 12 == 0 )); then
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))
-                local avg_interval=$(awk "BEGIN {printf "%.2f", $elapsed / $sample_count}" 2>/dev/null || echo "N/A")
+                local avg_interval=$(awk -v e="$elapsed" -v s="$sample_count" 'BEGIN {printf "%.2f", (s > 0) ? e / s : 0}' 2>/dev/null || echo "N/A")
                 echo "📈 监控状态: 已收集 $sample_count 个样本，运行时间 ${elapsed}s，平均间隔 ${avg_interval}s (跟随框架生命周期)"
             fi
 
@@ -2255,8 +2250,8 @@ start_unified_monitoring() {
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))
                 local remaining=$((end_time - current_time))
-                local avg_interval=$(awk "BEGIN {printf "%.2f", $elapsed / $sample_count}" 2>/dev/null || echo "N/A")
-                local progress_percent=$(awk "BEGIN {printf "%.1f", $elapsed * 100 / $duration}" 2>/dev/null || echo "N/A")
+                local avg_interval=$(awk -v e="$elapsed" -v s="$sample_count" 'BEGIN {printf "%.2f", (s > 0) ? e / s : 0}' 2>/dev/null || echo "N/A")
+                local progress_percent=$(awk -v e="$elapsed" -v d="$duration" 'BEGIN {printf "%.1f", (d > 0) ? e * 100 / d : 0}' 2>/dev/null || echo "N/A")
                 echo "📈 监控状态: 已收集 $sample_count 个样本，进度 ${progress_percent}%，运行 ${elapsed}s，剩余 ${remaining}s，平均间隔 ${avg_interval}s"
             fi
 
@@ -2277,7 +2272,7 @@ start_unified_monitoring() {
     
     local final_time=$(date +%s)
     local total_elapsed=$((final_time - start_time))
-    local avg_sample_interval=$(awk "BEGIN {printf "%.2f", $total_elapsed / $sample_count}" 2>/dev/null || echo "N/A")
+    local avg_sample_interval=$(awk -v t="$total_elapsed" -v s="$sample_count" 'BEGIN {printf "%.2f", (s > 0) ? t / s : 0}' 2>/dev/null || echo "N/A")
     local file_size=$(du -h "$UNIFIED_LOG" 2>/dev/null | cut -f1 || echo "未知")
     local line_count=$(wc -l < "$UNIFIED_LOG" 2>/dev/null || echo "未知")
     
@@ -2293,13 +2288,13 @@ start_unified_monitoring() {
     
     # 性能效率评估
     if [[ "$sample_count" -gt 0 ]] && [[ "$total_elapsed" -gt 0 ]]; then
-        local efficiency=$(awk "BEGIN {printf "%.1f", $sample_count * 100 / $total_elapsed}" 2>/dev/null || echo "N/A")
+        local efficiency=$(awk -v s="$sample_count" -v t="$total_elapsed" 'BEGIN {printf "%.1f", (t > 0) ? s * 100 / t : 0}' 2>/dev/null || echo "N/A")
         echo "⚡ 监控效率: ${efficiency} 样本/秒"
     fi
     
     # 数据质量评估
     if [[ "$line_count" != "未知" ]] && [[ "$sample_count" -gt 0 ]]; then
-        local data_integrity=$(awk "BEGIN {printf "%.1f", ($line_count - 1) * 100 / $sample_count}" 2>/dev/null || echo "N/A")
+        local data_integrity=$(awk -v l="$line_count" -v s="$sample_count" 'BEGIN {printf "%.1f", (s > 0) ? (l - 1) * 100 / s : 0}' 2>/dev/null || echo "N/A")
         echo "📊 数据完整性: ${data_integrity}% (${line_count}行数据/${sample_count}次采样)"
     fi
     
