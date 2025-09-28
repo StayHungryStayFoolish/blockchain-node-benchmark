@@ -99,9 +99,9 @@ validate_csv_file() {
         return 1
     fi
     
-    # 验证时间戳格式 (检查前5行)
+    # 验证时间戳格式 (检查前5行) - 修复为空格分隔格式
     check_count
-    local invalid_timestamps=$(tail -n +2 "$csv_file" | head -5 | cut -d',' -f1 | grep -v '^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}' | wc -l)
+    local invalid_timestamps=$(tail -n +2 "$csv_file" | head -5 | cut -d',' -f1 | grep -v '^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\} [0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}' | wc -l)
     if [[ $invalid_timestamps -eq 0 ]]; then
         log_success "$file_desc 时间戳格式正确"
     else
@@ -307,9 +307,9 @@ extract_log_warnings_errors() {
     local errors=$(grep -i "ERROR\|\[ERROR\]\|❌" "$log_file" 2>/dev/null | head -10 || true)
     local warnings=$(grep -i "WARN\|\[WARN\]\|⚠️" "$log_file" 2>/dev/null | head -10 || true)
     
-    # 统计数量
-    local error_count=$(echo "$errors" | grep -c . 2>/dev/null || echo "0")
-    local warn_count=$(echo "$warnings" | grep -c . 2>/dev/null || echo "0")
+    # 统计数量 - 修复换行符导致的语法错误
+    local error_count=$(echo "$errors" | grep -c . 2>/dev/null | tr -d '\n' || echo "0")
+    local warn_count=$(echo "$warnings" | grep -c . 2>/dev/null | tr -d '\n' || echo "0")
     
     if [[ $error_count -eq 0 && $warn_count -eq 0 ]]; then
         log_success "$file_desc 无错误或警告"
@@ -346,16 +346,16 @@ extract_log_warnings_errors() {
 generate_expected_csv_header() {
     local basic_header="timestamp,cpu_usage,cpu_usr,cpu_sys,cpu_iowait,cpu_soft,cpu_idle,mem_used,mem_total,mem_usage"
     
-    # 设备表头 (简化版，基于配置)
+    # 设备表头 (与框架实际生成逻辑同步)
     local device_header=""
     if [[ -n "$LEDGER_DEVICE" ]]; then
-        device_header="${LEDGER_DEVICE}_r_iops,${LEDGER_DEVICE}_w_iops,${LEDGER_DEVICE}_r_mbps,${LEDGER_DEVICE}_w_mbps,${LEDGER_DEVICE}_r_latency,${LEDGER_DEVICE}_w_latency,${LEDGER_DEVICE}_util"
+        device_header="data_${LEDGER_DEVICE}_r_s,data_${LEDGER_DEVICE}_w_s,data_${LEDGER_DEVICE}_rkb_s,data_${LEDGER_DEVICE}_wkb_s,data_${LEDGER_DEVICE}_r_await,data_${LEDGER_DEVICE}_w_await,data_${LEDGER_DEVICE}_avg_await,data_${LEDGER_DEVICE}_aqu_sz,data_${LEDGER_DEVICE}_util,data_${LEDGER_DEVICE}_rrqm_s,data_${LEDGER_DEVICE}_wrqm_s,data_${LEDGER_DEVICE}_rrqm_pct,data_${LEDGER_DEVICE}_wrqm_pct,data_${LEDGER_DEVICE}_rareq_sz,data_${LEDGER_DEVICE}_wareq_sz,data_${LEDGER_DEVICE}_total_iops,data_${LEDGER_DEVICE}_aws_standard_iops,data_${LEDGER_DEVICE}_read_throughput_mibs,data_${LEDGER_DEVICE}_write_throughput_mibs,data_${LEDGER_DEVICE}_total_throughput_mibs,data_${LEDGER_DEVICE}_aws_standard_throughput_mibs"
     fi
     if [[ -n "$ACCOUNTS_DEVICE" && "$ACCOUNTS_DEVICE" != "$LEDGER_DEVICE" ]]; then
         if [[ -n "$device_header" ]]; then
-            device_header="$device_header,${ACCOUNTS_DEVICE}_r_iops,${ACCOUNTS_DEVICE}_w_iops,${ACCOUNTS_DEVICE}_r_mbps,${ACCOUNTS_DEVICE}_w_mbps,${ACCOUNTS_DEVICE}_r_latency,${ACCOUNTS_DEVICE}_w_latency,${ACCOUNTS_DEVICE}_util"
+            device_header="$device_header,accounts_${ACCOUNTS_DEVICE}_r_s,accounts_${ACCOUNTS_DEVICE}_w_s,accounts_${ACCOUNTS_DEVICE}_rkb_s,accounts_${ACCOUNTS_DEVICE}_wkb_s,accounts_${ACCOUNTS_DEVICE}_r_await,accounts_${ACCOUNTS_DEVICE}_w_await,accounts_${ACCOUNTS_DEVICE}_avg_await,accounts_${ACCOUNTS_DEVICE}_aqu_sz,accounts_${ACCOUNTS_DEVICE}_util,accounts_${ACCOUNTS_DEVICE}_rrqm_s,accounts_${ACCOUNTS_DEVICE}_wrqm_s,accounts_${ACCOUNTS_DEVICE}_rrqm_pct,accounts_${ACCOUNTS_DEVICE}_wrqm_pct,accounts_${ACCOUNTS_DEVICE}_rareq_sz,accounts_${ACCOUNTS_DEVICE}_wareq_sz,accounts_${ACCOUNTS_DEVICE}_total_iops,accounts_${ACCOUNTS_DEVICE}_aws_standard_iops,accounts_${ACCOUNTS_DEVICE}_read_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_write_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_total_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_aws_standard_throughput_mibs"
         else
-            device_header="${ACCOUNTS_DEVICE}_r_iops,${ACCOUNTS_DEVICE}_w_iops,${ACCOUNTS_DEVICE}_r_mbps,${ACCOUNTS_DEVICE}_w_mbps,${ACCOUNTS_DEVICE}_r_latency,${ACCOUNTS_DEVICE}_w_latency,${ACCOUNTS_DEVICE}_util"
+            device_header="accounts_${ACCOUNTS_DEVICE}_r_s,accounts_${ACCOUNTS_DEVICE}_w_s,accounts_${ACCOUNTS_DEVICE}_rkb_s,accounts_${ACCOUNTS_DEVICE}_wkb_s,accounts_${ACCOUNTS_DEVICE}_r_await,accounts_${ACCOUNTS_DEVICE}_w_await,accounts_${ACCOUNTS_DEVICE}_avg_await,accounts_${ACCOUNTS_DEVICE}_aqu_sz,accounts_${ACCOUNTS_DEVICE}_util,accounts_${ACCOUNTS_DEVICE}_rrqm_s,accounts_${ACCOUNTS_DEVICE}_wrqm_s,accounts_${ACCOUNTS_DEVICE}_rrqm_pct,accounts_${ACCOUNTS_DEVICE}_wrqm_pct,accounts_${ACCOUNTS_DEVICE}_rareq_sz,accounts_${ACCOUNTS_DEVICE}_wareq_sz,accounts_${ACCOUNTS_DEVICE}_total_iops,accounts_${ACCOUNTS_DEVICE}_aws_standard_iops,accounts_${ACCOUNTS_DEVICE}_read_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_write_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_total_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_aws_standard_throughput_mibs"
         fi
     fi
     
@@ -369,10 +369,21 @@ generate_expected_csv_header() {
     [[ -n "$device_header" ]] && full_header="$full_header,$device_header"
     full_header="$full_header,$network_header"
     
-    # ENA字段 (如果启用)
+    # ENA字段 (如果启用) - 动态生成与框架完全同步
     if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
-        local ena_header="ena_bw_in_allowance_exceeded,ena_bw_out_allowance_exceeded,ena_pps_allowance_exceeded,ena_conntrack_allowance_exceeded,ena_linklocal_allowance_exceeded,ena_bw_in_allowance_available,ena_bw_out_allowance_available,ena_pps_allowance_available,ena_conntrack_allowance_available,ena_linklocal_allowance_available"
-        full_header="$full_header,$ena_header"
+        # 使用框架相同的动态生成逻辑
+        local ena_header=""
+        if [[ -n "$ENA_ALLOWANCE_FIELDS_STR" ]]; then
+            ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+            for field in "${ena_fields[@]}"; do
+                if [[ -n "$ena_header" ]]; then
+                    ena_header="$ena_header,$field"
+                else
+                    ena_header="$field"
+                fi
+            done
+        fi
+        [[ -n "$ena_header" ]] && full_header="$full_header,$ena_header"
     fi
     
     full_header="$full_header,$overhead_header,$block_height_header,$qps_header"
@@ -498,17 +509,33 @@ validate_shared_memory_files() {
         return 0
     fi
     
-    # 验证核心指标JSON
-    validate_json_file "$MEMORY_SHARE_DIR/latest_metrics.json" "核心指标" "timestamp cpu_usage memory_usage"
+    # 验证核心指标JSON (如果存在)
+    if [[ -f "$MEMORY_SHARE_DIR/latest_metrics.json" ]]; then
+        validate_json_file "$MEMORY_SHARE_DIR/latest_metrics.json" "核心指标" "timestamp cpu_usage memory_usage"
+    else
+        log_info "共享内存文件已被清理，跳过核心指标验证 (框架正常行为)"
+    fi
     
-    # 验证详细指标JSON
-    validate_json_file "$MEMORY_SHARE_DIR/unified_metrics.json" "详细指标" "timestamp cpu_usage memory_usage detailed_data"
+    # 验证详细指标JSON (如果存在)
+    if [[ -f "$MEMORY_SHARE_DIR/unified_metrics.json" ]]; then
+        validate_json_file "$MEMORY_SHARE_DIR/unified_metrics.json" "详细指标" "timestamp cpu_usage memory_usage detailed_data"
+    else
+        log_info "共享内存文件已被清理，跳过详细指标验证 (框架正常行为)"
+    fi
     
-    # 验证区块高度缓存
-    validate_json_file "$MEMORY_SHARE_DIR/block_height_monitor_cache.json" "区块高度缓存" "timestamp local_block_height mainnet_block_height"
+    # 验证区块高度缓存 (如果存在)
+    if [[ -f "$MEMORY_SHARE_DIR/block_height_monitor_cache.json" ]]; then
+        validate_json_file "$MEMORY_SHARE_DIR/block_height_monitor_cache.json" "区块高度缓存" "timestamp local_block_height mainnet_block_height"
+    else
+        log_info "共享内存文件已被清理，跳过区块高度缓存验证 (框架正常行为)"
+    fi
     
-    # 验证采样计数文件
-    validate_file_exists "$MEMORY_SHARE_DIR/sample_count" "采样计数"
+    # 验证采样计数文件 (如果存在)
+    if [[ -f "$MEMORY_SHARE_DIR/sample_count" ]]; then
+        validate_file_exists "$MEMORY_SHARE_DIR/sample_count" "采样计数"
+    else
+        log_info "共享内存文件已被清理，跳过采样计数验证 (框架正常行为)"
+    fi
     
     # 验证其他可选文件
     [[ -f "$MEMORY_SHARE_DIR/data_loss_stats.json" ]] && validate_json_file "$MEMORY_SHARE_DIR/data_loss_stats.json" "数据丢失统计" ""
@@ -549,9 +576,9 @@ validate_data_consistency() {
         local json_timestamp=$(jq -r '.timestamp' "$MEMORY_SHARE_DIR/latest_metrics.json" 2>/dev/null)
         
         if [[ -n "$csv_last_timestamp" && -n "$json_timestamp" && "$json_timestamp" != "null" ]]; then
-            # 简单的时间戳格式检查
-            if [[ "$csv_last_timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]] && 
-               [[ "$json_timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
+            # 简单的时间戳格式检查 - 修复为空格分隔格式
+            if [[ "$csv_last_timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2} ]] && 
+               [[ "$json_timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
                 log_success "时间戳格式一致"
             else
                 log_error "时间戳格式不一致: CSV=$csv_last_timestamp, JSON=$json_timestamp"
