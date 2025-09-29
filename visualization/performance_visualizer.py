@@ -940,6 +940,25 @@ class PerformanceVisualizer(CSVDataProcessor):
             print("⚠️ Monitoring overhead data file does not exist, skipping overhead analysis chart")
             return None, {}
         
+        # 智能字段映射配置
+        def get_monitoring_field_mapping():
+            """监控开销字段映射配置"""
+            return {
+                'monitoring_cpu': ['monitoring_cpu_percent', 'monitoring_cpu', 'monitor_cpu'],
+                'monitoring_memory': ['monitoring_mem_percent', 'monitoring_memory_percent', 'monitor_memory'],
+                'blockchain_cpu': ['blockchain_cpu_percent', 'blockchain_cpu'],
+                'blockchain_memory': ['blockchain_memory_percent', 'blockchain_mem_percent'],
+                'system_cpu': ['system_cpu_usage', 'cpu_usage'],
+                'system_memory': ['system_memory_usage', 'memory_usage']
+            }
+
+        def find_field_in_df(df, field_variants):
+            """智能字段查找函数"""
+            for field in field_variants:
+                if field in df.columns:
+                    return field
+            return None
+        
         try:
             overhead_df = pd.read_csv(self.overhead_file)
             if 'timestamp' in overhead_df.columns:
@@ -960,9 +979,14 @@ class PerformanceVisualizer(CSVDataProcessor):
             total_cpu = self.df['cpu_usage'].mean()
             total_mem = self.df['mem_usage'].mean()
             
-            if all(col in overhead_df.columns for col in ['monitoring_cpu_percent', 'monitoring_mem_percent']):
-                monitor_cpu = overhead_df['monitoring_cpu_percent'].mean()
-                monitor_mem = overhead_df['monitoring_mem_percent'].mean()
+            # 使用智能字段映射
+            field_mapping = get_monitoring_field_mapping()
+            monitoring_cpu_field = find_field_in_df(overhead_df, field_mapping['monitoring_cpu'])
+            monitoring_mem_field = find_field_in_df(overhead_df, field_mapping['monitoring_memory'])
+            
+            if monitoring_cpu_field and monitoring_mem_field:
+                monitor_cpu = overhead_df[monitoring_cpu_field].mean()
+                monitor_mem = overhead_df[monitoring_mem_field].mean()
                 
                 node_cpu = max(0, total_cpu - monitor_cpu)
                 node_mem = max(0, total_mem - monitor_mem)
@@ -1067,6 +1091,18 @@ Monitoring Efficiency:
     def generate_all_charts(self):
         print("🎨 Generating performance visualization charts...")
         
+        # 设置全局图表样式
+        plt.rcParams.update({
+            'font.size': 10,
+            'axes.titlesize': 12,
+            'axes.labelsize': 10,
+            'xtick.labelsize': 9,
+            'ytick.labelsize': 9,
+            'legend.fontsize': 9,
+            'figure.titlesize': 14,
+            'font.family': 'DejaVu Sans'  # 确保跨平台字体兼容性
+        })
+        
         if not self.load_data():
             return []
         
@@ -1089,7 +1125,7 @@ Monitoring Efficiency:
                 print(f"✅ Generated {len(ebs_charts)} EBS professional charts")
             
             # Generate blockchain node analysis charts
-            print("🔗 Generating blockchain node analysis charts...")
+            print("Generating blockchain node analysis charts...")
             block_sync_chart = self.create_block_height_sync_chart()
             if block_sync_chart:
                 chart_files.append(block_sync_chart)
@@ -1418,8 +1454,11 @@ Monitoring Efficiency:
                     len(cpu_data[(cpu_data >= 60) & (cpu_data < thresholds["warning"])]),
                     len(cpu_data[cpu_data >= thresholds["warning"]])
                 ]
-                ax1.pie(efficiency_counts, labels=efficiency_ranges, autopct='%1.1f%%')
-                ax1.set_title('CPU Efficiency Distribution')
+                wedges, texts, autotexts = ax1.pie(efficiency_counts, labels=efficiency_ranges,
+                                                  autopct='%1.1f%%', startangle=90,
+                                                  explode=(0.05, 0.05, 0.05, 0.05),
+                                                  textprops={'fontsize': 9})
+                ax1.set_title('CPU Efficiency Distribution', fontsize=11, pad=20)
             
             # 2. Memory efficiency analysis
             ax2 = axes[0, 1]
@@ -1433,8 +1472,11 @@ Monitoring Efficiency:
                     len(mem_data[(mem_data >= 70) & (mem_data < thresholds["memory"])]),
                     len(mem_data[mem_data >= thresholds["memory"]])
                 ]
-                ax2.pie(mem_counts, labels=mem_ranges, autopct='%1.1f%%')
-                ax2.set_title('Memory Efficiency Distribution')
+                wedges, texts, autotexts = ax2.pie(mem_counts, labels=mem_ranges,
+                                                  autopct='%1.1f%%', startangle=90,
+                                                  explode=(0.05, 0.05, 0.05, 0.05),
+                                                  textprops={'fontsize': 9})
+                ax2.set_title('Memory Efficiency Distribution', fontsize=11, pad=20)
             
             # 3. I/O efficiency analysis
             ax3 = axes[1, 0]
@@ -1464,7 +1506,8 @@ Monitoring Efficiency:
                 stats_text += f"I/O Average Utilization: {io_avg:.1f}%\n"
             ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=12, verticalalignment='top')
             
-            plt.tight_layout()
+            # 调整整体布局，解决饼图重叠问题
+            plt.subplots_adjust(hspace=0.35, wspace=0.25)
             
             # 保存图表
             output_file = os.path.join(self.output_dir, 'resource_efficiency_analysis.png')
@@ -1652,7 +1695,7 @@ Monitoring Efficiency:
                           label='Data Loss Period' if i == 0 else "")
             
             # 图表美化
-            ax.set_title('🔗 Blockchain Node Synchronization Status', 
+            ax.set_title('Blockchain Node Synchronization Status', 
                         fontsize=16, fontweight='bold', pad=20)
             ax.set_xlabel('Time', fontsize=12)
             ax.set_ylabel('Block Height Difference', fontsize=12)

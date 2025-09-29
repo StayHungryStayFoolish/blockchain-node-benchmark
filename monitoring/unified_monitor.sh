@@ -2208,7 +2208,7 @@ start_unified_monitoring() {
                 last_status_time=$current_time
             fi
 
-            # 进度报告 - 增强版统计信息
+            # 进度报告
             if (( sample_count % 12 == 0 )); then
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))
@@ -2245,7 +2245,7 @@ start_unified_monitoring() {
                 last_status_time=$current_time
             fi
 
-            # 进度报告 - 增强版统计信息
+            # 进度报告
             if (( sample_count % 12 == 0 )); then
                 local current_time=$(date +%s)
                 local elapsed=$((current_time - start_time))

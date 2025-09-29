@@ -763,7 +763,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 return None
             
             # Chart styling with English labels
-            ax.set_title('&#128680; ENA Network Limitation Trend Analysis', fontsize=16, fontweight='bold')
+            ax.set_title('ENA Network Limitation Trend Analysis', fontsize=16, fontweight='bold')
             ax.set_xlabel('Time', fontsize=12)
             ax.set_ylabel('Limitation Triggers (Cumulative)', fontsize=12)
             ax.legend(loc='upper left')
@@ -816,7 +816,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                       label=f'Warning Threshold ({warning_threshold:,})')
             
             # Chart styling with English labels
-            ax.set_title('&#128279; ENA Connection Capacity Monitoring', fontsize=16, fontweight='bold')
+            ax.set_title('ENA Connection Capacity Monitoring', fontsize=16, fontweight='bold')
             ax.set_xlabel('Time', fontsize=12)
             ax.set_ylabel('Available Connections', fontsize=12)
             ax.legend()
@@ -853,7 +853,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 创建2x2子图布局
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
             # Using English title directly
-            fig.suptitle('&#127760; ENA Network Comprehensive Analysis', fontsize=16, fontweight='bold')
+            fig.suptitle('ENA Network Comprehensive Analysis', fontsize=16, fontweight='bold')
             
             # 1. 限制类型分布 (左上)
             ax1 = axes[0, 0]

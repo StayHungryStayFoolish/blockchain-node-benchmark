@@ -887,19 +887,19 @@ class ReportGenerator:
             
             # CPU分布饼图
             cpu_sizes = [monitoring_cpu, blockchain_cpu, other_cpu]
-            cpu_labels = ['&#128202; Monitoring', '&#128640; Blockchain Node', '&#128187; Others']
+            cpu_labels = ['Monitoring', 'Blockchain Node', 'Others']
             cpu_colors = ['#ff9999', '#66b3ff', '#99ff99']
             ax1.pie(cpu_sizes, labels=cpu_labels, colors=cpu_colors, autopct='%1.1f%%', startangle=90)
             ax1.axis('equal')
-            ax1.set_title('&#128200; CPU Usage Distribution')
+            ax1.set_title('CPU Usage Distribution')
             
             # 内存分布饼图
             mem_sizes = [monitoring_mem, blockchain_mem, other_mem]
-            mem_labels = ['&#128202; Monitoring', '&#128640; Blockchain Node', '&#128187; Others']
+            mem_labels = ['Monitoring', 'Blockchain Node', 'Others']
             mem_colors = ['#ff9999', '#66b3ff', '#99ff99']
             ax2.pie(mem_sizes, labels=mem_labels, colors=mem_colors, autopct='%1.1f%%', startangle=90)
             ax2.axis('equal')
-            ax2.set_title('&#128200; Memory Usage Distribution')
+            ax2.set_title('Memory Usage Distribution')
             
             plt.tight_layout()
             reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
@@ -948,7 +948,7 @@ class ReportGenerator:
                 ax1.scatter(merged_df['monitoring_cpu_percent'], merged_df[qps_col], alpha=0.5)
                 ax1.set_xlabel('Monitoring CPU Usage (%)')
                 ax1.set_ylabel('System Throughput (QPS)')
-                ax1.set_title('&#128202; Monitoring CPU Overhead vs System Throughput')
+                ax1.set_title('Monitoring CPU Overhead vs System Throughput')
                 ax1.grid(True, linestyle='--', alpha=0.7)
                 
                 # 添加趋势线
@@ -971,7 +971,7 @@ class ReportGenerator:
                 ax2.scatter(merged_df['monitoring_iops'], merged_df[ebs_col], alpha=0.5)
                 ax2.set_xlabel('Monitoring IOPS')
                 ax2.set_ylabel('EBS Performance Metrics')
-                ax2.set_title('&#128202; Monitoring I/O Overhead vs EBS Performance')
+                ax2.set_title('Monitoring I/O Overhead vs EBS Performance')
                 ax2.grid(True, linestyle='--', alpha=0.7)
                 
                 # 添加趋势线
@@ -2256,7 +2256,7 @@ class ReportGenerator:
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Blockchain Node QPS 性能分析报告</title>
+                <title>&#128640; Blockchain Node QPS 性能分析报告</title>
                 <meta charset="utf-8">
                 <style>
                     {self._get_css_styles()}
@@ -2264,8 +2264,6 @@ class ReportGenerator:
             </head>
             <body>
                 <div class="container">
-                    <h1>&#128640; Blockchain Node QPS 性能分析报告 - 增强版</h1>
-                    <h1>&#128640; Blockchain Node QPS 性能分析报告 - 增强版</h1>
                     <p>生成Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                     <p>&#9989; 统一字段命名 | 完整Device支持 | 监控开销分析 | Blockchain Node 特定分析 | 瓶颈检测分析</p>
                     

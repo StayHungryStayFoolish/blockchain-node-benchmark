@@ -336,6 +336,19 @@ class ComprehensiveAnalyzer:
             return None
 
         plt.style.use('default')
+        
+        # 设置全局图表样式
+        plt.rcParams.update({
+            'font.size': 10,
+            'axes.titlesize': 12,
+            'axes.labelsize': 10,
+            'xtick.labelsize': 9,
+            'ytick.labelsize': 9,
+            'legend.fontsize': 9,
+            'figure.titlesize': 14,
+            'font.family': 'DejaVu Sans'  # 确保跨平台字体兼容性
+        })
+        
         fig, axes = plt.subplots(3, 2, figsize=(16, 18))
         # Using English title directly
         fig.suptitle('Blockchain Node QPS Ultimate Performance Analysis Dashboard', fontsize=16, fontweight='bold')
@@ -401,40 +414,69 @@ class ComprehensiveAnalyzer:
             axes[2, 0].legend()
             axes[2, 0].grid(True, alpha=0.3)
 
-        # 5. 性能悬崖可视化
-        cliff_analysis = rpc_deep_analysis.get('performance_cliff', {})
-        if cliff_analysis and len(df) > 0 and qps_available and 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
-            try:
-                qps_latency = df.groupby('current_qps')['rpc_latency_ms'].mean().reset_index()
-                qps_latency = qps_latency.sort_values('current_qps')
-
-                axes[2, 1].plot(qps_latency['current_qps'], qps_latency['rpc_latency_ms'], 'bo-', alpha=0.7)
-
-                # 标记悬崖点
-                cliff_points = cliff_analysis.get('performance_degradation_qps', [])
-                for cliff_qps in cliff_points:
-                    cliff_latency = qps_latency[qps_latency['current_qps'] == cliff_qps]['rpc_latency_ms']
-                    if len(cliff_latency) > 0:
-                        axes[2, 1].scatter(cliff_qps, cliff_latency.iloc[0], color='red', s=100, marker='x',
-                                           label='Performance Cliff')
-
-                axes[2, 1].set_title('Performance Cliff Detection')
-                axes[2, 1].set_xlabel('QPS')
-                axes[2, 1].set_ylabel('Average Latency (ms)')
+        # 5. QPS Performance Analysis (替换Performance Cliff Detection)
+        if len(df) > 0 and qps_available and 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns:
+            # 过滤有效QPS数据 (基于验证的40个有效数据点)
+            valid_qps_data = df[(df['current_qps'] > 0) & (df['rpc_latency_ms'].notna())].copy()
+            
+            if len(valid_qps_data) >= 5:  # 确保有足够数据点
+                # 按QPS分组计算平均延迟
+                qps_groups = valid_qps_data.groupby('current_qps').agg({
+                    'rpc_latency_ms': ['mean', 'std', 'count']
+                }).round(3)
+                
+                qps_values = qps_groups.index.tolist()
+                latency_means = qps_groups[('rpc_latency_ms', 'mean')].tolist()
+                latency_stds = qps_groups[('rpc_latency_ms', 'std')].tolist()
+                
+                # 绘制QPS vs 延迟关系
+                axes[2, 1].errorbar(qps_values, latency_means, yerr=latency_stds,
+                                   fmt='bo-', capsize=5, capthick=2, alpha=0.8, markersize=8)
+                
+                # 添加数据标注
+                for qps, latency in zip(qps_values, latency_means):
+                    axes[2, 1].annotate(f'{latency:.3f}ms',
+                                       (qps, latency), textcoords="offset points",
+                                       xytext=(0,15), ha='center', fontsize=10, fontweight='bold')
+                
+                axes[2, 1].set_title('QPS vs Latency Performance Analysis')
+                axes[2, 1].set_xlabel('QPS (Queries Per Second)')
+                axes[2, 1].set_ylabel('Average RPC Latency (ms)')
                 axes[2, 1].grid(True, alpha=0.3)
-                if cliff_points:
-                    axes[2, 1].legend()
-            except Exception as e:
-                logger.warning(f"⚠️ Performance cliff visualization failed: {e}")
-                axes[2, 1].text(0.5, 0.5, 'Performance Cliff Analysis\nData Processing Error', ha='center', va='center',
-                               transform=axes[2, 1].transAxes, fontsize=12)
-                axes[2, 1].set_title('Performance Cliff Detection (Error)')
+                axes[2, 1].set_ylim(bottom=0)
+                
+                # 添加性能评估文本
+                performance_text = f"Test Results:\n"
+                performance_text += f"QPS Levels: {len(qps_values)}\n"
+                performance_text += f"Max QPS: {max(qps_values)}\n"
+                performance_text += f"Min Latency: {min(latency_means):.3f}ms\n"
+                performance_text += f"Max Latency: {max(latency_means):.3f}ms"
+                
+                axes[2, 1].text(0.02, 0.98, performance_text, transform=axes[2, 1].transAxes,
+                                fontsize=9, verticalalignment='top',
+                                bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
+            else:
+                axes[2, 1].text(0.5, 0.5, f'Insufficient QPS Data\n({len(valid_qps_data)} valid points)',
+                               ha='center', va='center', transform=axes[2, 1].transAxes, fontsize=12)
+                axes[2, 1].set_title('QPS Performance Analysis (Insufficient Data)')
         else:
-            axes[2, 1].text(0.5, 0.5, 'QPS Data Not Available\nfor Cliff Analysis', ha='center', va='center',
-                           transform=axes[2, 1].transAxes, fontsize=12)
-            axes[2, 1].set_title('Performance Cliff Detection (No Data)')
+            axes[2, 1].text(0.5, 0.5, 'QPS Data Not Available\nfor Performance Analysis',
+                           ha='center', va='center', transform=axes[2, 1].transAxes, fontsize=12)
+            axes[2, 1].set_title('QPS Performance Analysis (No Data)')
 
-        plt.tight_layout()
+        # 精确控制间距，解决标题重叠问题
+        plt.subplots_adjust(
+            top=0.90,      # 为主标题留出空间
+            bottom=0.08,   # 底部边距
+            left=0.08,     # 左边距
+            right=0.95,    # 右边距
+            hspace=0.40,   # 子图垂直间距 (解决标题重叠)
+            wspace=0.25    # 子图水平间距
+        )
+        
+        # 调整主标题位置
+        fig.suptitle('Comprehensive Performance Analysis', 
+                     fontsize=16, fontweight='bold', y=0.95)
         
         # 保存图表 - 使用文件管理器，同时创建当前版本和备份
         chart_file = self.file_manager.save_chart_with_backup('comprehensive_analysis_charts', plt)
