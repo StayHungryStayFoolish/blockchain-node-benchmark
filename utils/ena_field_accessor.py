@@ -70,22 +70,16 @@ class ENAFieldAccessor:
             if fields and fields[0]:  # 确保不是空列表
                 return fields
         
-        # 如果环境变量不可用，提供详细的诊断信息
+        # 如果环境变量不可用，使用标准ENA字段列表作为fallback
         print("⚠️ 无法从环境变量获取ENA字段配置")
         print("   诊断信息:")
         print(f"   - ENA_ALLOWANCE_FIELDS_STR: '{os.getenv('ENA_ALLOWANCE_FIELDS_STR', '')}'")
         print(f"   - ENA_ALLOWANCE_FIELDS: '{os.getenv('ENA_ALLOWANCE_FIELDS', '')}'")
         print(f"   - ENA_MONITOR_ENABLED: {os.getenv('ENA_MONITOR_ENABLED', 'undefined')}")
-        print("   - 可能原因:")
-        print("     1. config_loader.sh未正确加载")
-        print("     2. system_config.sh中的export语句未执行")
-        print("     3. 环境变量传递到Python进程失败")
-        print("   - 解决方案:")
-        print("     1. 确保脚本通过source config/config_loader.sh启动")
-        print("     2. 检查system_config.sh的export语句")
-        print("     3. 使用ENA_ALLOWANCE_FIELDS_STR环境变量")
+        print("   - 使用标准ENA字段列表作为fallback")
         
-        return []
+        # 返回标准ENA字段列表
+        return list(cls.FIELD_CONFIG.keys())
     
     @classmethod
     def get_available_ena_fields(cls, df: pd.DataFrame) -> List[str]:

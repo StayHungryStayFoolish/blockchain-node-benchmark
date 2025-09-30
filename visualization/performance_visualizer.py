@@ -127,7 +127,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         super().__init__()  # 初始化CSV数据处理器
         
         self.data_file = data_file
-        self.overhead_file = overhead_file
+        self.overhead_file = overhead_file or os.getenv('MONITORING_OVERHEAD_LOG')
         self.output_dir = os.getenv('REPORTS_DIR', os.path.dirname(data_file))
         
         plt.style.use('seaborn-v0_8')
@@ -935,158 +935,130 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file, threshold_violations
 
     def create_monitoring_overhead_analysis_chart(self):
-        """Create monitoring overhead analysis chart"""
+        """Create monitoring overhead analysis chart - 增强稳定性"""
         if not self.overhead_file or not os.path.exists(self.overhead_file):
             print("⚠️ Monitoring overhead data file does not exist, skipping overhead analysis chart")
             return None, {}
         
-        # 智能字段映射配置
-        def get_monitoring_field_mapping():
-            """监控开销字段映射配置"""
-            return {
-                'monitoring_cpu': ['monitoring_cpu_percent', 'monitoring_cpu', 'monitor_cpu'],
-                'monitoring_memory': ['monitoring_mem_percent', 'monitoring_memory_percent', 'monitor_memory'],
-                'blockchain_cpu': ['blockchain_cpu_percent', 'blockchain_cpu'],
-                'blockchain_memory': ['blockchain_memory_percent', 'blockchain_mem_percent'],
-                'system_cpu': ['system_cpu_usage', 'cpu_usage'],
-                'system_memory': ['system_memory_usage', 'memory_usage']
-            }
-
-        def find_field_in_df(df, field_variants):
-            """智能字段查找函数"""
-            for field in field_variants:
-                if field in df.columns:
-                    return field
-            return None
-        
         try:
+            # Load overhead data
             overhead_df = pd.read_csv(self.overhead_file)
             if 'timestamp' in overhead_df.columns:
                 overhead_df['timestamp'] = pd.to_datetime(overhead_df['timestamp'])
-        except Exception as e:
-            print(f"❌ Monitoring overhead data loading failed: {e}")
-            return None, {}
-        
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('Monitoring Overhead Analysis', fontsize=16, fontweight='bold')
-        
-        # 1. Resource consumption comparison (total resources vs node resources vs monitoring overhead)
-        ax1 = axes[0, 0]
-        ax1.set_title('System Resource Consumption Comparison')
-        
-        if all(col in self.df.columns for col in ['cpu_usage', 'mem_usage']):
-            # Calculate average resource usage
-            total_cpu = self.df['cpu_usage'].mean()
-            total_mem = self.df['mem_usage'].mean()
             
-            # 使用智能字段映射
-            field_mapping = get_monitoring_field_mapping()
-            monitoring_cpu_field = find_field_in_df(overhead_df, field_mapping['monitoring_cpu'])
-            monitoring_mem_field = find_field_in_df(overhead_df, field_mapping['monitoring_memory'])
+            # 智能字段映射配置
+            field_mapping = {
+                'monitoring_cpu': ['monitoring_cpu_percent', 'monitoring_cpu', 'monitor_cpu'],
+                'monitoring_memory': ['monitoring_mem_percent', 'monitoring_memory_percent', 'monitor_memory']
+            }
+            
+            # 查找实际字段
+            monitoring_cpu_field = None
+            monitoring_mem_field = None
+            
+            for field in field_mapping['monitoring_cpu']:
+                if field in overhead_df.columns:
+                    monitoring_cpu_field = field
+                    break
+                    
+            for field in field_mapping['monitoring_memory']:
+                if field in overhead_df.columns:
+                    monitoring_mem_field = field
+                    break
+            
+            # 创建图表
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle('Monitoring Overhead Analysis', fontsize=16, fontweight='bold')
+            
+            # 1. Resource consumption comparison
+            ax1 = axes[0, 0]
+            ax1.set_title('System Resource Consumption Comparison')
             
             if monitoring_cpu_field and monitoring_mem_field:
                 monitor_cpu = overhead_df[monitoring_cpu_field].mean()
                 monitor_mem = overhead_df[monitoring_mem_field].mean()
                 
-                node_cpu = max(0, total_cpu - monitor_cpu)
-                node_mem = max(0, total_mem - monitor_mem)
-                
                 categories = ['CPU Usage (%)', 'Memory Usage (%)']
-                total_values = [total_cpu, total_mem]
-                node_values = [node_cpu, node_mem]
                 monitor_values = [monitor_cpu, monitor_mem]
                 
-                x = np.arange(len(categories))
-                width = 0.25
-                
-                ax1.bar(x - width, total_values, width, label='Total System Resources', alpha=0.8)
-                ax1.bar(x, node_values, width, label='Blockchain Node', alpha=0.8)
-                ax1.bar(x + width, monitor_values, width, label='Monitoring Overhead', alpha=0.8)
-                
-                ax1.set_xticks(x)
-                ax1.set_xticklabels(categories)
-                ax1.legend()
+                ax1.bar(categories, monitor_values, alpha=0.8)
+                ax1.set_ylabel('Usage Percentage (%)')
                 ax1.grid(True, alpha=0.3)
-        
-        # 2. Monitoring overhead trends
-        ax2 = axes[0, 1]
-        ax2.set_title('Monitoring Overhead Time Trends')
-        
-        if 'timestamp' in overhead_df.columns and 'monitoring_cpu_percent' in overhead_df.columns:
-            ax2.plot(overhead_df['timestamp'], overhead_df['monitoring_cpu_percent'], 
-                    label='CPU Overhead', linewidth=2)
-            if 'monitoring_mem_percent' in overhead_df.columns:
-                ax2_mem = ax2.twinx()
-                ax2_mem.plot(overhead_df['timestamp'], overhead_df['monitoring_mem_percent'], 
-                           'r-', label='Memory Overhead', linewidth=2)
-                ax2_mem.set_ylabel('Memory Overhead (%)', color='r')
-                ax2_mem.tick_params(axis='y', labelcolor='r')
             
-            ax2.set_ylabel('CPU Overhead (%)')
-            ax2.legend(loc='upper left')
-            ax2.grid(True, alpha=0.3)
-        
-        # 3. Monitoring process resource distribution
-        ax3 = axes[1, 0]
-        ax3.set_title('Monitoring Process Resource Distribution')
-        
-        # 如果有进程级别的数据
-        process_cols = [col for col in overhead_df.columns if col.startswith('process_')]
-        if process_cols:
-            process_data = []
-            process_names = []
-            for col in process_cols[:5]:  # 显示前5个进程
-                if overhead_df[col].sum() > 0:
-                    process_data.append(overhead_df[col].mean())
-                    process_names.append(col.replace('process_', '').replace('_cpu', ''))
+            # 2. Monitoring overhead trends
+            ax2 = axes[0, 1]
+            ax2.set_title('Monitoring Overhead Trends')
             
-            if process_data:
-                ax3.pie(process_data, labels=process_names, autopct='%1.1f%%')
-        
-        # 4. 监控开销统计摘要
-        ax4 = axes[1, 1]
-        ax4.set_title('Monitoring Overhead Statistics Summary')
-        ax4.axis('off')
-        
-        if all(col in overhead_df.columns for col in ['monitoring_cpu_percent', 'monitoring_mem_percent']):
-            stats_text = f"""
-Monitoring Overhead Statistics:
+            if 'timestamp' in overhead_df.columns and monitoring_cpu_field:
+                ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_cpu_field], 
+                        label='CPU Overhead', linewidth=2)
+                if monitoring_mem_field:
+                    ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_mem_field], 
+                            label='Memory Overhead', linewidth=2)
+                ax2.set_ylabel('Overhead (%)')
+                ax2.legend()
+                ax2.grid(True, alpha=0.3)
+            
+            # 3. Statistics summary
+            ax3 = axes[1, 0]
+            ax3.set_title('Overhead Statistics')
+            ax3.axis('off')
+            
+            if monitoring_cpu_field and monitoring_mem_field:
+                stats_text = f"""Monitoring Overhead Summary:
 
 CPU Overhead:
-  Average: {overhead_df['monitoring_cpu_percent'].mean():.2f}%
-  Maximum: {overhead_df['monitoring_cpu_percent'].max():.2f}%
-  Minimum: {overhead_df['monitoring_cpu_percent'].min():.2f}%
+  Average: {overhead_df[monitoring_cpu_field].mean():.2f}%
+  Maximum: {overhead_df[monitoring_cpu_field].max():.2f}%
 
 Memory Overhead:
-  Average: {overhead_df['monitoring_mem_percent'].mean():.2f}%
-  Maximum: {overhead_df['monitoring_mem_percent'].max():.2f}%
-  Minimum: {overhead_df['monitoring_mem_percent'].min():.2f}%
+  Average: {overhead_df[monitoring_mem_field].mean():.2f}%
+  Maximum: {overhead_df[monitoring_mem_field].max():.2f}%
 
-Monitoring Efficiency:
-  Data points: {len(overhead_df)}
-  Monitoring duration: {(overhead_df['timestamp'].max() - overhead_df['timestamp'].min()).total_seconds():.0f}s
-            """
-            ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=10,
-                    verticalalignment='top', fontfamily='monospace')
-        
-        plt.tight_layout()
-        
-        output_file = os.path.join(self.output_dir, 'monitoring_overhead_analysis.png')
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 Monitoring overhead analysis chart saved: {output_file}")
-        
-        # Return overhead analysis results
-        overhead_analysis = {}
-        if all(col in overhead_df.columns for col in ['monitoring_cpu_percent', 'monitoring_mem_percent']):
-            overhead_analysis = {
-                'avg_cpu_overhead': overhead_df['monitoring_cpu_percent'].mean(),
-                'max_cpu_overhead': overhead_df['monitoring_cpu_percent'].max(),
-                'avg_mem_overhead': overhead_df['monitoring_mem_percent'].mean(),
-                'max_mem_overhead': overhead_df['monitoring_mem_percent'].max(),
-                'total_data_points': len(overhead_df)
-            }
-        
-        return output_file, overhead_analysis
+Data Points: {len(overhead_df)}"""
+                
+                ax3.text(0.1, 0.9, stats_text, transform=ax3.transAxes, fontsize=10,
+                        verticalalignment='top', fontfamily='monospace')
+            
+            # 4. Impact analysis
+            ax4 = axes[1, 1]
+            ax4.set_title('Impact Analysis')
+            
+            if monitoring_cpu_field and monitoring_mem_field:
+                impact_categories = ['CPU Impact', 'Memory Impact']
+                impact_values = [
+                    overhead_df[monitoring_cpu_field].mean(),
+                    overhead_df[monitoring_mem_field].mean()
+                ]
+                
+                colors = ['red' if x > 10 else 'orange' if x > 5 else 'green' for x in impact_values]
+                ax4.bar(impact_categories, impact_values, color=colors, alpha=0.7)
+                ax4.set_ylabel('Impact Percentage (%)')
+                ax4.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            output_file = os.path.join(self.output_dir, 'monitoring_overhead_analysis.png')
+            plt.savefig(output_file, dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            print(f"📊 Monitoring overhead analysis chart saved: {output_file}")
+            
+            # Return analysis results
+            overhead_analysis = {}
+            if monitoring_cpu_field and monitoring_mem_field:
+                overhead_analysis = {
+                    'avg_cpu_overhead': overhead_df[monitoring_cpu_field].mean(),
+                    'max_cpu_overhead': overhead_df[monitoring_cpu_field].max(),
+                    'avg_mem_overhead': overhead_df[monitoring_mem_field].mean(),
+                    'max_mem_overhead': overhead_df[monitoring_mem_field].max(),
+                    'total_data_points': len(overhead_df)
+                }
+            
+            return output_file, overhead_analysis
+            
+        except Exception as e:
+            print(f"❌ Monitoring overhead chart generation failed: {e}")
+            return None, {}
 
     def generate_all_charts(self):
         print("🎨 Generating performance visualization charts...")
@@ -1366,33 +1338,56 @@ Monitoring Efficiency:
         """QPS trend analysis chart"""
         print("📊 Generating QPS trend analysis charts...")
         
+        # 检查数据是否已加载
+        if not hasattr(self, 'df') or self.df is None:
+            if not self.load_data():
+                print("❌ Failed to load data for QPS analysis")
+                return None
+        
         try:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
             fig.suptitle('QPS Performance Trend Analysis', fontsize=16, fontweight='bold')
             
-            # 查找QPS相关字段
-            qps_cols = [col for col in self.df.columns if 'qps' in col.lower()]
+            # 查找数值型QPS字段 (排除布尔型字段)
+            qps_cols = []
+            for col in self.df.columns:
+                if 'qps' in col.lower():
+                    # 检查是否为数值型字段
+                    try:
+                        numeric_data = pd.to_numeric(self.df[col], errors='coerce')
+                        if not numeric_data.isna().all():  # 如果有有效数值
+                            qps_cols.append(col)
+                    except:
+                        continue
+            
             if not qps_cols:
-                print("⚠️  QPS related fields not found")
+                print("⚠️  No numeric QPS fields found")
                 plt.close()
                 return None
             
-            # 1. QPSTime序列
+            # 1. QPS时间序列
             ax1 = axes[0, 0]
             for qps_col in qps_cols[:3]:  # 最多显示3个QPS指标
-                ax1.plot(self.df['timestamp'], self.df[qps_col], label=qps_col, linewidth=2)
+                qps_data = pd.to_numeric(self.df[qps_col], errors='coerce')
+                valid_mask = ~qps_data.isna()
+                if valid_mask.any():
+                    ax1.plot(self.df.loc[valid_mask, 'timestamp'], 
+                            qps_data[valid_mask], 
+                            label=qps_col, linewidth=2)
             ax1.set_title('QPS Time Series')
             ax1.set_ylabel('QPS')
             ax1.legend()
             ax1.grid(True, alpha=0.3)
             
-            # 2. QPS分布直方图
+            # 2. QPS分布直方图 (只处理数值数据)
             ax2 = axes[0, 1]
             for qps_col in qps_cols[:2]:
-                qps_data = pd.to_numeric(self.df[qps_col].dropna(), errors='coerce')
-                qps_data = qps_data.dropna()  # Remove any NaN values after conversion
+                qps_data = pd.to_numeric(self.df[qps_col], errors='coerce')
+                qps_data = qps_data.dropna()  # 移除NaN值
                 if len(qps_data) > 0:
-                    ax2.hist(qps_data, alpha=0.7, label=qps_col, bins=30)
+                    # 确保数据是数值型
+                    qps_data = qps_data.astype(float)
+                    ax2.hist(qps_data, alpha=0.7, label=qps_col, bins=20)
             ax2.set_title('QPS Distribution')
             ax2.set_xlabel('QPS')
             ax2.set_ylabel('Frequency')
@@ -1401,23 +1396,45 @@ Monitoring Efficiency:
             # 3. QPS与CPU相关性
             ax3 = axes[1, 0]
             if 'cpu_usage' in self.df.columns and qps_cols:
-                ax3.scatter(self.df['cpu_usage'], self.df[qps_cols[0]], alpha=0.6)
-                ax3.set_title('QPS vs CPU Usage')
-                ax3.set_xlabel('CPU Usage (%)')
-                ax3.set_ylabel('QPS')
-                ax3.grid(True, alpha=0.3)
+                qps_data = pd.to_numeric(self.df[qps_cols[0]], errors='coerce')
+                cpu_data = pd.to_numeric(self.df['cpu_usage'], errors='coerce')
+                
+                # 只使用有效数据点
+                valid_mask = ~(qps_data.isna() | cpu_data.isna())
+                if valid_mask.any():
+                    ax3.scatter(cpu_data[valid_mask], qps_data[valid_mask], alpha=0.6)
+                    ax3.set_title('QPS vs CPU Usage')
+                    ax3.set_xlabel('CPU Usage (%)')
+                    ax3.set_ylabel('QPS')
+                    ax3.grid(True, alpha=0.3)
             
             # 4. QPS统计摘要
             ax4 = axes[1, 1]
             ax4.axis('off')
             stats_text = "QPS Statistics Summary:\n\n"
             for qps_col in qps_cols[:3]:
-                qps_data = self.df[qps_col].dropna()
+                qps_data = pd.to_numeric(self.df[qps_col], errors='coerce').dropna()
                 if len(qps_data) > 0:
                     stats_text += f"{qps_col}:\n"
                     stats_text += f"  Average: {qps_data.mean():.2f}\n"
                     stats_text += f"  Maximum: {qps_data.max():.2f}\n"
-                    stats_text += f"  Minimum: {qps_data.min():.2f}\n\n"
+                    stats_text += f"  Minimum: {qps_data.min():.2f}\n"
+                    stats_text += f"  Valid samples: {len(qps_data)}\n\n"
+            
+            # 添加QPS可用性信息
+            if 'qps_data_available' in self.df.columns:
+                qps_available = self.df['qps_data_available']
+                # 正确处理布尔类型数据
+                if qps_available.notna().any():
+                    # 将数据转换为布尔类型并计算True的数量
+                    bool_series = pd.to_numeric(qps_available, errors='coerce').fillna(0).astype(bool)
+                    true_count = bool_series.sum()
+                else:
+                    true_count = 0
+                total_count = len(qps_available)
+                stats_text += f"QPS Data Availability:\n"
+                stats_text += f"  Available: {true_count}/{total_count} ({true_count/total_count*100:.1f}%)\n"
+            
             ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=10, verticalalignment='top')
             
             plt.tight_layout()
@@ -1437,6 +1454,12 @@ Monitoring Efficiency:
     def create_resource_efficiency_analysis_chart(self):
         """Resource efficiency analysis chart"""
         print("📊 Generating resource efficiency analysis charts...")
+        
+        # 检查数据是否已加载
+        if not hasattr(self, 'df') or self.df is None:
+            if not self.load_data():
+                print("❌ Failed to load data for resource efficiency analysis")
+                return None
         
         try:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -1458,6 +1481,10 @@ Monitoring Efficiency:
                                                   autopct='%1.1f%%', startangle=90,
                                                   explode=(0.05, 0.05, 0.05, 0.05),
                                                   textprops={'fontsize': 9})
+                # 使用返回值来设置文本属性
+                for autotext in autotexts:
+                    autotext.set_color('white')
+                    autotext.set_fontweight('bold')
                 ax1.set_title('CPU Efficiency Distribution', fontsize=11, pad=20)
             
             # 2. Memory efficiency analysis
@@ -1476,6 +1503,10 @@ Monitoring Efficiency:
                                                   autopct='%1.1f%%', startangle=90,
                                                   explode=(0.05, 0.05, 0.05, 0.05),
                                                   textprops={'fontsize': 9})
+                # 使用返回值来设置文本属性
+                for autotext in autotexts:
+                    autotext.set_color('white')
+                    autotext.set_fontweight('bold')
                 ax2.set_title('Memory Efficiency Distribution', fontsize=11, pad=20)
             
             # 3. I/O efficiency analysis
@@ -1524,6 +1555,12 @@ Monitoring Efficiency:
     def create_bottleneck_identification_chart(self):
         """Bottleneck identification analysis chart"""
         print("📊 Generating bottleneck identification analysis charts...")
+        
+        # 检查数据是否已加载
+        if not hasattr(self, 'df') or self.df is None:
+            if not self.load_data():
+                print("❌ Failed to load data for bottleneck identification analysis")
+                return None
         
         try:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
