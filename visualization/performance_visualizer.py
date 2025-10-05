@@ -18,12 +18,106 @@ from pathlib import Path
 
 def get_visualization_thresholds():
     """获取可视化阈值配置"""
+    # 获取EBS延迟阈值 (正确的I/O延迟基准)
+    ebs_latency_threshold = int(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', 50))
+    ebs_util_threshold = int(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', 90))
+    
     return {
-        'warning': int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85)),
-        'critical': int(os.getenv('SUCCESS_RATE_THRESHOLD', 95)),
-        'io_warning': int(os.getenv('BOTTLENECK_NETWORK_THRESHOLD', 80)),
-        'memory': int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))
+        'warning': int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85)),           # CPU阈值 (%)
+        'critical': ebs_util_threshold,                                      # EBS利用率阈值 (%)
+        'io_warning': int(ebs_latency_threshold * 0.4),                     # I/O延迟警告: 50ms * 0.4 = 20ms
+        'io_critical': ebs_latency_threshold,                               # I/O延迟临界: 50ms
+        'memory': int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90)),        # 内存阈值 (%)
+        'network': int(os.getenv('BOTTLENECK_NETWORK_THRESHOLD', 80))       # 网络阈值 (%)
     }
+
+def read_config_file(config_path):
+    """读取配置文件并返回环境变量字典"""
+    config_vars = {}
+    try:
+        with open(config_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    # 移除行内注释和引号，处理变量替换
+                    value = value.split('#')[0].strip().strip('"\'')
+                    
+                    # 跳过包含变量替换的行（如$auto_throughput）
+                    if '$' in value:
+                        continue
+                        
+                    config_vars[key] = value
+    except FileNotFoundError:
+        pass
+    return config_vars
+
+def load_framework_config():
+    """加载框架配置 - 使用动态路径检测"""
+    import os
+    
+    # 动态检测配置路径
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    config_dir = os.path.join(current_dir, '..', 'config')
+    
+    # 配置文件列表 - 加载所有4个配置文件
+    config_files = [
+        'user_config.sh',
+        'internal_config.sh', 
+        'system_config.sh',
+        'config_loader.sh'
+    ]
+    
+    config = {}
+    for config_file in config_files:
+        config_path = os.path.join(config_dir, config_file)
+        if os.path.exists(config_path):
+            config.update(read_config_file(config_path))
+    
+    # 更新环境变量
+    os.environ.update(config)
+    return config
+
+def format_summary_text(device_info, data_stats, accounts_stats=None):
+    """统一的文本格式化函数"""
+    lines = [f"Analysis Summary ({device_info}):", ""]
+    
+    # DATA设备统计
+    lines.extend([
+        "DATA Device:",
+        f"  Mean: {data_stats['mean']:.2f}{data_stats['unit']}",
+        f"  Max: {data_stats['max']:.2f}{data_stats['unit']}",
+        f"  Violations: {data_stats['violations']}",
+        ""
+    ])
+    
+    # ACCOUNTS设备统计
+    if accounts_stats:
+        lines.extend([
+            "ACCOUNTS Device:",
+            f"  Mean: {accounts_stats['mean']:.2f}{accounts_stats['unit']}",
+            f"  Max: {accounts_stats['max']:.2f}{accounts_stats['unit']}",
+            f"  Violations: {accounts_stats['violations']}"
+        ])
+    else:
+        lines.append("ACCOUNTS Device: Not Configured")
+    
+    return "\n".join(lines)
+
+def add_text_summary(ax, summary_text, title):
+    """统一的文本摘要添加函数"""
+    ax.axis('off')
+    ax.text(0.05, 0.95, summary_text, transform=ax.transAxes, 
+           fontsize=11, verticalalignment='top', fontfamily='monospace',
+           bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+    ax.set_title(title)
+
+def create_chart_title(base_title, accounts_configured):
+    """统一的图表标题创建函数"""
+    if accounts_configured:
+        return f"{base_title} - DATA & ACCOUNTS Devices"
+    else:
+        return f"{base_title} - DATA Device Only"
 
 # Configure font support for cross-platform compatibility
 def setup_font():
@@ -127,7 +221,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         super().__init__()  # 初始化CSV数据处理器
         
         self.data_file = data_file
-        self.overhead_file = overhead_file or os.getenv('MONITORING_OVERHEAD_LOG')
+        self.overhead_file = overhead_file or self._find_monitoring_overhead_file() or os.getenv('MONITORING_OVERHEAD_LOG')
         self.output_dir = os.getenv('REPORTS_DIR', os.path.dirname(data_file))
         
         plt.style.use('seaborn-v0_8')
@@ -135,6 +229,33 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # Using English labels system directly
         self.font_manager = None
+    
+    def _find_monitoring_overhead_file(self):
+        """智能查找监控开销文件 - 与report_generator.py保持一致"""
+        try:
+            import glob
+            
+            # 多路径搜索策略
+            search_dirs = [
+                os.path.dirname(self.data_file),  # 与performance CSV同目录
+                os.path.join(os.path.dirname(self.data_file), 'logs'),  # logs子目录
+                os.getenv('LOGS_DIR', os.path.join(os.path.dirname(self.data_file), 'current', 'logs')),  # 环境变量指定
+            ]
+            
+            for logs_dir in search_dirs:
+                if os.path.exists(logs_dir):
+                    pattern = os.path.join(logs_dir, 'monitoring_overhead_*.csv')
+                    files = glob.glob(pattern)
+                    if files:
+                        # 返回最新的文件
+                        latest_file = max(files, key=os.path.getctime)
+                        print(f"✅ Found monitoring overhead file: {os.path.basename(latest_file)}")
+                        return latest_file
+            
+            return None
+        except Exception as e:
+            print(f"Warning: Failed to find monitoring overhead file: {e}")
+            return None
             
         # 阈值配置 - 集成自await_util_analyzer
         self.await_thresholds = {
@@ -299,156 +420,293 @@ class PerformanceVisualizer(CSVDataProcessor):
         }
     
     def create_performance_overview_chart(self):
-        """✅ Improved performance overview chart generation"""
+        """✅ System Performance Overview Chart - Systematic Refactor"""
+        
+        # 加载配置
+        load_framework_config()
+        
+        accounts_configured = self._is_accounts_configured()
+        
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
         fig.suptitle('System Performance Overview', fontsize=16, fontweight='bold')
         
-        # ✅ 安全获取字段名 - 直接访问
+        # ✅ 修复字段名映射
         cpu_usage_col = 'cpu_usage' if 'cpu_usage' in self.df.columns else None
         cpu_iowait_col = 'cpu_iowait' if 'cpu_iowait' in self.df.columns else None
-        mem_usage_col = 'memory_usage' if 'memory_usage' in self.df.columns else None
+        mem_usage_col = 'mem_usage' if 'mem_usage' in self.df.columns else None  # 修复字段名
         
-        # 查找DATA Device列
+        # 查找设备列
         data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_total_iops')]
+        data_throughput_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_total_throughput_mibs')]
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         
-        if not data_iops_cols:
-            print("❌ DATA Device data not found")
-            return None
+        accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_total_iops')] if accounts_configured else []
+        accounts_throughput_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_total_throughput_mibs')] if accounts_configured else []
+        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
         
-        data_iops_col = data_iops_cols[0]
-        data_util_col = data_util_cols[0] if data_util_cols else None
-        
-        # ✅ CPU performance metrics (improved field handling)
+        # 1. CPU Performance (Top Left)
         ax1 = axes[0, 0]
         if cpu_usage_col and cpu_iowait_col:
-            # 检查数据有效性
             cpu_usage_data = self.df[cpu_usage_col].dropna()
             cpu_iowait_data = self.df[cpu_iowait_col].dropna()
             
             if len(cpu_usage_data) > 0 and len(cpu_iowait_data) > 0:
-                # 原始数据
-                ax1.plot(self.df['timestamp'], self.df[cpu_usage_col], color='blue', linewidth=1, alpha=0.6, label='CPU Usage (Raw)')
-                ax1.plot(self.df['timestamp'], self.df[cpu_iowait_col], color='red', linewidth=1, alpha=0.6, label='CPU I/O Wait (Raw)')
-                
-                # ✅ 安全的移动平均计算
-                if len(cpu_usage_data) >= 10:
-                    cpu_smooth = self.df[cpu_usage_col].rolling(window=10, center=True, min_periods=1).mean()
-                    ax1.plot(self.df['timestamp'], cpu_smooth, color='blue', linewidth=2, label='CPU Usage (Smoothed)')
-                
-                if len(cpu_iowait_data) >= 10:
-                    iowait_smooth = self.df[cpu_iowait_col].rolling(window=10, center=True, min_periods=1).mean()
-                    ax1.plot(self.df['timestamp'], iowait_smooth, color='red', linewidth=2, label='CPU I/O Wait (Smoothed)')
-                
-                ax1.set_title(f'{LABELS["cpu_usage"]} (with Moving Average)')
+                # 先绘制网格线（底层）
+                ax1.grid(True, alpha=0.3, zorder=0)
+                # 再绘制数据线（上层）
+                ax1.plot(self.df['timestamp'], cpu_usage_data, label='CPU Usage', linewidth=2, color='blue', zorder=2)
+                ax1.plot(self.df['timestamp'], cpu_iowait_data, label='CPU I/O Wait', linewidth=2, color='red', zorder=2)
+                ax1.set_title('CPU Performance')
                 ax1.set_ylabel('Usage (%)')
                 ax1.legend()
-                ax1.grid(True, alpha=0.3)
             else:
-                ax1.text(0.5, 0.5, 'CPUData Not Available', ha='center', va='center', transform=ax1.transAxes)
-                ax1.set_title(f'{LABELS["cpu_usage"]} (Data Not Available)')
+                ax1.text(0.5, 0.5, 'CPU data not available', ha='center', va='center', transform=ax1.transAxes)
+                ax1.set_title('CPU Performance (No Data)')
         else:
-            missing_fields = []
-            if not cpu_usage_col:
-                missing_fields.append('cpu_usage')
-            if not cpu_iowait_col:
-                missing_fields.append('cpu_iowait')
-            ax1.text(0.5, 0.5, f'Missing Fields: {", ".join(missing_fields)}', ha='center', va='center', transform=ax1.transAxes)
-            ax1.set_title(f'{LABELS["cpu_usage"]} (Field Missing)')
+            ax1.text(0.5, 0.5, 'CPU data not found', ha='center', va='center', transform=ax1.transAxes)
+            ax1.set_title('CPU Performance (No Data)')
         
-        # ✅ DATA DeviceIOPS
+        # 2. Memory Usage (Top Right)
         ax2 = axes[0, 1]
-        iops_data = self.df[data_iops_col].dropna()
-        if len(iops_data) > 0:
-            ax2.plot(self.df['timestamp'], self.df[data_iops_col], color='green', linewidth=2, label='DATA IOPS')
-            ax2.set_title('DATA DeviceIOPS')
-            ax2.set_ylabel('IOPS')
-            ax2.legend()
-            ax2.grid(True, alpha=0.3)
-        else:
-            ax2.text(0.5, 0.5, 'DATA IOPSData Not Available', ha='center', va='center', transform=ax2.transAxes)
-            ax2.set_title('DATA DeviceIOPS (Data Not Available)')
-        
-        # ✅ Memory Usage
-        ax3 = axes[1, 0]
         if mem_usage_col:
             mem_data = self.df[mem_usage_col].dropna()
             if len(mem_data) > 0:
-                ax3.plot(self.df['timestamp'], self.df[mem_usage_col], color='purple', linewidth=2, label='Memory Usage')
-                ax3.set_title('Memory Usage')
-                ax3.set_ylabel('Usage (%)')
-                ax3.legend()
-                ax3.grid(True, alpha=0.3)
+                ax2.plot(self.df['timestamp'], mem_data, label='Memory Usage', linewidth=2, color='green')
+                ax2.set_title('Memory Usage')
+                ax2.set_ylabel('Usage (%)')
+                ax2.legend()
+                ax2.grid(True, alpha=0.3)
             else:
-                ax3.text(0.5, 0.5, 'Memory Data Not Available', ha='center', va='center', transform=ax3.transAxes)
-                ax3.set_title('Memory Usage (Data Not Available)')
+                ax2.text(0.5, 0.5, 'Memory data not available', ha='center', va='center', transform=ax2.transAxes)
+                ax2.set_title('Memory Usage (No Data)')
         else:
-            ax3.text(0.5, 0.5, 'Memory Usage Field Missing', ha='center', va='center', transform=ax3.transAxes)
-            ax3.set_title('Memory Usage (Field Missing)')
+            ax2.text(0.5, 0.5, 'Memory data not found', ha='center', va='center', transform=ax2.transAxes)
+            ax2.set_title('Memory Usage (No Data)')
         
-        # ✅ Device Utilization
-        ax4 = axes[1, 1]
-        if data_util_col:
-            util_data = self.df[data_util_col].dropna()
-            if len(util_data) > 0:
-                ax4.plot(self.df['timestamp'], self.df[data_util_col], color='orange', linewidth=2, label='DATA Device iostat %util')
-                thresholds = get_visualization_thresholds()
-                ax4.axhline(y=thresholds['io_warning'], color='red', linestyle='--', alpha=0.7, label=f'{thresholds["io_warning"]}% Warning Line')
-                ax4.set_title('Device iostat %util')
-                ax4.set_ylabel('iostat %util (%)')
-                ax4.legend()
-                ax4.grid(True, alpha=0.3)
-            else:
-                ax4.text(0.5, 0.5, 'Device iostat %util Data Not Available', ha='center', va='center', transform=ax4.transAxes)
-                ax4.set_title('Device iostat %util (Data Not Available)')
+        # 3. EBS IOPS + Throughput (Bottom Left) - iostat原始数据
+        ax3 = axes[1, 0]
+        if data_iops_cols and data_throughput_cols:
+            # 双Y轴显示IOPS和throughput
+            ax3_twin = ax3.twinx()
+            
+            # DATA设备
+            ax3.plot(self.df['timestamp'], self.df[data_iops_cols[0]], 
+                    label='DATA IOPS (iostat)', linewidth=2, color='blue')
+            ax3_twin.plot(self.df['timestamp'], self.df[data_throughput_cols[0]], 
+                         label='DATA Throughput (iostat)', linewidth=2, color='lightblue', linestyle='--')
+            
+            # ACCOUNTS设备
+            if accounts_configured and accounts_iops_cols and accounts_throughput_cols:
+                ax3.plot(self.df['timestamp'], self.df[accounts_iops_cols[0]], 
+                        label='ACCOUNTS IOPS (iostat)', linewidth=2, color='orange')
+                ax3_twin.plot(self.df['timestamp'], self.df[accounts_throughput_cols[0]], 
+                             label='ACCOUNTS Throughput (iostat)', linewidth=2, color='lightsalmon', linestyle='--')
+            
+            ax3.set_title('EBS IOPS & Throughput (iostat data)')
+            ax3.set_ylabel('IOPS')
+            ax3_twin.set_ylabel('Throughput (MiB/s)')
+            ax3.legend(loc='upper left')
+            ax3_twin.legend(loc='upper right')
+            ax3.grid(True, alpha=0.3)
         else:
-            ax4.text(0.5, 0.5, 'Device Utilization Field Missing', ha='center', va='center', transform=ax4.transAxes)
-            ax4.set_title('Device Utilization (Field Missing)')
+            ax3.text(0.5, 0.5, 'EBS IOPS/Throughput data not found', ha='center', va='center', transform=ax3.transAxes)
+            ax3.set_title('EBS IOPS & Throughput (No Data)')
+        
+        # 4. EBS Utilization (Bottom Right) - iostat原始数据
+        ax4 = axes[1, 1]
+        if data_util_cols:
+            ax4.plot(self.df['timestamp'], self.df[data_util_cols[0]], 
+                    label='DATA Utilization (iostat)', linewidth=2, color='blue')
+            
+            if accounts_configured and accounts_util_cols:
+                ax4.plot(self.df['timestamp'], self.df[accounts_util_cols[0]], 
+                        label='ACCOUNTS Utilization (iostat)', linewidth=2, color='orange')
+            
+            ax4.set_title('EBS Utilization (iostat data)')
+            ax4.set_ylabel('Utilization (%)')
+            ax4.legend()
+            ax4.grid(True, alpha=0.3)
+        else:
+            ax4.text(0.5, 0.5, 'EBS Utilization data not found', ha='center', va='center', transform=ax4.transAxes)
+            ax4.set_title('EBS Utilization (No Data)')
+        
+        # Format time axis
+        for ax in axes.flat:
+            ax.tick_params(axis='x', rotation=45)
         
         plt.tight_layout()
         
         output_file = os.path.join(self.output_dir, 'performance_overview.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 {LABELS['performance_analysis']} overview saved: {output_file}")
+        plt.close()
         
+        print(f"📊 Performance Analysis overview saved: {output_file}")
         return output_file
-    
+
     def create_correlation_visualization_chart(self):
-        """✅ 改进的CPU-EBS Performance Correlation Analysis"""
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('CPU-EBS Performance Correlation Analysis', fontsize=16, fontweight='bold')
+        """CPU-EBS Performance Correlation Analysis - Dual Device Support"""
         
-        # ✅ 安全获取相关字段
+        # Device configuration detection
+        data_configured = len([col for col in self.df.columns if col.startswith('data_')]) > 0
+        accounts_configured = len([col for col in self.df.columns if col.startswith('accounts_')]) > 0
+        
+        if not data_configured:
+            print("❌ DATA device data not found")
+            return None
+        
+        # Dynamic title
+        title = 'CPU-EBS Performance Correlation Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'CPU-EBS Performance Correlation Analysis - DATA Device Only'
+        
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle(title, fontsize=16, fontweight='bold')
+        
+        # Get CPU and device fields
         cpu_iowait_col = 'cpu_iowait' if 'cpu_iowait' in self.df.columns else None
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
         data_aqu_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_aqu_sz')]
         
-        # ✅ 改进的字段存在性检查
+        # ACCOUNTS device fields
+        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
+        accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
+        accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_aqu_sz')] if accounts_configured else []
+        
+        # Check field availability
         missing_fields = []
         if not cpu_iowait_col:
             missing_fields.append('cpu_iowait')
         if not data_util_cols:
             missing_fields.append('data_util')
-        if not data_await_cols:
-            missing_fields.append('data_avg_await')
-        if not data_aqu_cols:
-            missing_fields.append('data_aqu_sz')
         
         if missing_fields:
             print(f"⚠️  Missing fields for correlation analysis: {', '.join(missing_fields)}")
             # Display error information in chart
             for i, ax in enumerate(axes.flat):
-                ax.text(0.5, 0.5, f'Missing Fields:\n{chr(10).join(missing_fields)}', 
+                ax.text(0.5, 0.5, f'Missing required fields:\n{chr(10).join(missing_fields)}', 
                        ha='center', va='center', transform=ax.transAxes, fontsize=12)
-                ax.set_title(f'{LABELS["correlation_analysis"]} {i+1} (Field Missing)')
-            plt.tight_layout()
+                ax.set_title(f'Correlation Analysis {i+1} - Data Unavailable')
+            
             output_file = os.path.join(self.output_dir, 'cpu_ebs_correlation_visualization.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
+            plt.close()
             return output_file
         
-        data_util_col = data_util_cols[0]
-        data_await_col = data_await_cols[0]
+        # 1. CPU I/O Wait vs DATA Device Utilization
+        if cpu_iowait_col and data_util_cols:
+            data_util_col = data_util_cols[0]
+            axes[0, 0].scatter(self.df[cpu_iowait_col], self.df[data_util_col], 
+                             alpha=0.6, s=20, color='blue', label='DATA Device')
+            
+            # Add ACCOUNTS device if configured
+            if accounts_configured and accounts_util_cols:
+                accounts_util_col = accounts_util_cols[0]
+                axes[0, 0].scatter(self.df[cpu_iowait_col], self.df[accounts_util_col], 
+                                 alpha=0.6, s=20, color='orange', label='ACCOUNTS Device')
+            
+            # Calculate and display correlation
+            data_corr = self.df[cpu_iowait_col].corr(self.df[data_util_col])
+            corr_text = f'DATA Correlation: {data_corr:.3f}'
+            
+            if accounts_configured and accounts_util_cols:
+                accounts_corr = self.df[cpu_iowait_col].corr(self.df[accounts_util_col])
+                corr_text += f'\nACCOUNTS Correlation: {accounts_corr:.3f}'
+            
+            axes[0, 0].text(0.05, 0.95, corr_text, transform=axes[0, 0].transAxes, 
+                           bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            axes[0, 0].set_xlabel('CPU I/O Wait (%)')
+            axes[0, 0].set_ylabel('Device Utilization (%)')
+            axes[0, 0].set_title('CPU I/O Wait vs Device Utilization')
+            axes[0, 0].legend()
+            axes[0, 0].grid(True, alpha=0.3)
+        
+        # 2. CPU I/O Wait vs Device Latency
+        if cpu_iowait_col and data_await_cols:
+            data_await_col = data_await_cols[0]
+            axes[0, 1].scatter(self.df[cpu_iowait_col], self.df[data_await_col], 
+                             alpha=0.6, s=20, color='green', label='DATA Device')
+            
+            # Add ACCOUNTS device if configured
+            if accounts_configured and accounts_await_cols:
+                accounts_await_col = accounts_await_cols[0]
+                axes[0, 1].scatter(self.df[cpu_iowait_col], self.df[accounts_await_col], 
+                                 alpha=0.6, s=20, color='purple', label='ACCOUNTS Device')
+            
+            # Calculate correlation
+            data_corr = self.df[cpu_iowait_col].corr(self.df[data_await_col])
+            corr_text = f'DATA Correlation: {data_corr:.3f}'
+            
+            if accounts_configured and accounts_await_cols:
+                accounts_corr = self.df[cpu_iowait_col].corr(self.df[accounts_await_col])
+                corr_text += f'\nACCOUNTS Correlation: {accounts_corr:.3f}'
+            
+            axes[0, 1].text(0.05, 0.95, corr_text, transform=axes[0, 1].transAxes,
+                           bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            axes[0, 1].set_xlabel('CPU I/O Wait (%)')
+            axes[0, 1].set_ylabel('Average Latency (ms)')
+            axes[0, 1].set_title('CPU I/O Wait vs Device Latency')
+            axes[0, 1].legend()
+            axes[0, 1].grid(True, alpha=0.3)
+        
+        # 3. Device Utilization vs Queue Depth
+        if data_util_cols and data_aqu_cols:
+            data_util_col = data_util_cols[0]
+            data_aqu_col = data_aqu_cols[0]
+            axes[1, 0].scatter(self.df[data_util_col], self.df[data_aqu_col], 
+                             alpha=0.6, s=20, color='blue', label='DATA Device')
+            
+            # Add ACCOUNTS device if configured
+            if accounts_configured and accounts_util_cols and accounts_aqu_cols:
+                accounts_util_col = accounts_util_cols[0]
+                accounts_aqu_col = accounts_aqu_cols[0]
+                axes[1, 0].scatter(self.df[accounts_util_col], self.df[accounts_aqu_col], 
+                                 alpha=0.6, s=20, color='orange', label='ACCOUNTS Device')
+            
+            axes[1, 0].set_xlabel('Device Utilization (%)')
+            axes[1, 0].set_ylabel('Queue Depth')
+            axes[1, 0].set_title('Device Utilization vs Queue Depth')
+            axes[1, 0].legend()
+            axes[1, 0].grid(True, alpha=0.3)
+        
+        # 4. Correlation Summary
+        axes[1, 1].axis('off')
+        summary_text = "CPU-EBS Correlation Summary:\n\n"
+        
+        if cpu_iowait_col and data_util_cols:
+            data_corr = self.df[cpu_iowait_col].corr(self.df[data_util_cols[0]])
+            summary_text += f"DATA Device:\n"
+            summary_text += f"  CPU I/O Wait vs Utilization: {data_corr:.3f}\n"
+            
+            if data_await_cols:
+                data_await_corr = self.df[cpu_iowait_col].corr(self.df[data_await_cols[0]])
+                summary_text += f"  CPU I/O Wait vs Latency: {data_await_corr:.3f}\n\n"
+        
+        if accounts_configured and cpu_iowait_col and accounts_util_cols:
+            accounts_corr = self.df[cpu_iowait_col].corr(self.df[accounts_util_cols[0]])
+            summary_text += f"ACCOUNTS Device:\n"
+            summary_text += f"  CPU I/O Wait vs Utilization: {accounts_corr:.3f}\n"
+            
+            if accounts_await_cols:
+                accounts_await_corr = self.df[cpu_iowait_col].corr(self.df[accounts_await_cols[0]])
+                summary_text += f"  CPU I/O Wait vs Latency: {accounts_await_corr:.3f}"
+        elif not accounts_configured:
+            summary_text += "ACCOUNTS Device: Not Configured\n"
+            summary_text += "Configure ACCOUNTS_DEVICE for dual-device analysis"
+        
+        axes[1, 1].text(0.05, 0.95, summary_text, transform=axes[1, 1].transAxes, 
+                       fontsize=11, verticalalignment='top', fontfamily='monospace',
+                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        axes[1, 1].set_title('Correlation Summary')
+        
+        plt.tight_layout()
+        
+        output_file = os.path.join(self.output_dir, 'cpu_ebs_correlation_visualization.png')
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        print(f"✅ CPU-EBS correlation visualization saved: {output_file} ({device_info} devices)")
+        
+        return output_file
         data_aqu_col = data_aqu_cols[0]
         
         from scipy.stats import pearsonr
@@ -556,91 +814,215 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file
     
     def create_device_comparison_chart(self):
-        """Create Device comparison chart (DATA vs ACCOUNTS) - optimized version
+        """Device Performance Comparison Chart - Enhanced Dual Device Support"""
         
-        Dynamically adjust chart content based on ACCOUNTS Device configuration status:
-        - If ACCOUNTS not configured: only show DATA Device analysis
-        - If ACCOUNTS configured: show DATA vs ACCOUNTS comparison
-        """
-        # 检查 ACCOUNTS Device配置状态
+        # Device configuration detection
         accounts_configured = self._is_accounts_configured()
         
         fig, axes = plt.subplots(2, 1, figsize=(15, 10))
         
-        # 根据配置状态设置标题
+        # Enhanced dynamic title
         if accounts_configured:
             fig.suptitle('Device Performance Comparison Analysis (DATA vs ACCOUNTS)', fontsize=16, fontweight='bold')
         else:
-            fig.suptitle('Device Performance Analysis (DATA)', fontsize=16, fontweight='bold')
+            fig.suptitle('Device Performance Analysis (DATA Device Only)', fontsize=16, fontweight='bold')
         
-        # 查找Device列
-        data_cols = [col for col in self.df.columns if col.startswith('data_')]
-        accounts_cols = [col for col in self.df.columns if col.startswith('accounts_')] if accounts_configured else []
+        # Find device columns with correct field names
+        data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_total_iops')]
+        data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         
-        if not data_cols:
+        accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_total_iops')] if accounts_configured else []
+        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
+        
+        if not data_iops_cols and not data_util_cols:
             print("❌ DATA Device data not found")
             return None
         
-        # 上图：IOPS对比
+        # Upper chart: IOPS comparison with enhanced font labels
         ax1 = axes[0]
-        data_iops_col = [col for col in data_cols if col.endswith('_total_iops')]
-        if data_iops_col:
-            ax1.plot(self.df['timestamp'], self.df[data_iops_col[0]], 
-                    label='DATA IOPS', linewidth=2, color='blue')
+        if data_iops_cols:
+            ax1.plot(self.df['timestamp'], self.df[data_iops_cols[0]], 
+                    label='DATA Device Total IOPS', linewidth=2, color='blue')
         
-        # 只有在 ACCOUNTS 配置时才处理 ACCOUNTS 数据
-        if accounts_configured and accounts_cols:
-            accounts_iops_col = [col for col in accounts_cols if col.endswith('_total_iops')]
-            if accounts_iops_col:
-                ax1.plot(self.df['timestamp'], self.df[accounts_iops_col[0]], 
-                        label='ACCOUNTS IOPS', linewidth=2, color='green')
+        if accounts_configured and accounts_iops_cols:
+            ax1.plot(self.df['timestamp'], self.df[accounts_iops_cols[0]], 
+                    label='ACCOUNTS Device Total IOPS', linewidth=2, color='orange')
         
-        ax1.set_title('Device IOPS Comparison' if accounts_configured else 'DATA Device IOPS')
-        ax1.set_ylabel('IOPS')
+        ax1.set_title('Device IOPS Performance Comparison' if accounts_configured else 'DATA Device IOPS Performance')
+        ax1.set_ylabel('Total IOPS')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
-        # 下图：利用率对比
+        # Lower chart: Utilization comparison with enhanced font labels
         ax2 = axes[1]
-        data_util_col = [col for col in data_cols if col.endswith('_util')]
-        if data_util_col:
-            ax2.plot(self.df['timestamp'], self.df[data_util_col[0]], 
-                    label='DATA Utilization', linewidth=2, color='blue')
+        if data_util_cols:
+            ax2.plot(self.df['timestamp'], self.df[data_util_cols[0]], 
+                    label='DATA Device Utilization', linewidth=2, color='blue')
         
-        # 只有在 ACCOUNTS 配置时才处理 ACCOUNTS 数据
-        if accounts_configured and accounts_cols:
-            accounts_util_col = [col for col in accounts_cols if col.endswith('_util')]
-            if accounts_util_col:
-                ax2.plot(self.df['timestamp'], self.df[accounts_util_col[0]], 
-                        label='ACCOUNTS Utilization', linewidth=2, color='green')
+        if accounts_configured and accounts_util_cols:
+            ax2.plot(self.df['timestamp'], self.df[accounts_util_cols[0]], 
+                    label='ACCOUNTS Device Utilization', linewidth=2, color='orange')
         
+        # Enhanced threshold lines with clear labels
         thresholds = get_visualization_thresholds()
-        ax2.axhline(y=thresholds['io_warning'], color='orange', linestyle='--', alpha=0.7, label=f'{thresholds["io_warning"]}% Warning Line')
-        ax2.axhline(y=thresholds['critical'], color='red', linestyle='--', alpha=0.7, label=f'{thresholds["critical"]}% Critical Line')
+        ax2.axhline(y=thresholds['warning'], color='orange', linestyle='--', alpha=0.7, 
+                   label=f'Warning Threshold: {thresholds["warning"]}%')
+        ax2.axhline(y=thresholds['critical'], color='red', linestyle='--', alpha=0.7, 
+                   label=f'Critical Threshold: {thresholds["critical"]}%')
         
-        ax2.set_title('Device Utilization Comparison' if accounts_configured else 'DATA Device Utilization')
+        ax2.set_title('Device Utilization Performance Comparison' if accounts_configured else 'DATA Device Utilization Performance')
         ax2.set_xlabel('Time')
         ax2.set_ylabel('Utilization (%)')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
-        plt.tight_layout()
+        # Adjust layout with proper spacing
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         
         output_file = os.path.join(self.output_dir, 'device_performance_comparison.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"📊 Device performance comparison chart saved: {output_file}")
+        plt.close()
+        
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        print(f"✅ Device performance comparison chart saved: {output_file} ({device_info} devices)")
         
         return output_file
 
     def create_await_threshold_analysis_chart(self):
-        """Create await latency threshold analysis chart - optimized version
+        """I/O Latency Threshold Analysis Chart - Dual Device Support"""
         
-        Dynamically adjust analysis content based on ACCOUNTS Device configuration status:
-        - If ACCOUNTS not configured: only analyze DATA Device
-        - If ACCOUNTS configured: analyze DATA and ACCOUNTS Device
-        """
-        # 检查 ACCOUNTS Device配置状态
+        # Device configuration detection
         accounts_configured = self._is_accounts_configured()
+        
+        # Dynamic title
+        title = 'I/O Latency Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'I/O Latency Threshold Analysis - DATA Device Only'
+        
+        fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+        fig.suptitle(title, fontsize=16, fontweight='bold')
+        
+        # Get threshold values
+        thresholds = get_visualization_thresholds()
+        
+        # Find DATA device await columns
+        data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
+        
+        if not data_await_cols:
+            print("❌ DATA device latency data not found")
+            return None
+        
+        data_await_col = data_await_cols[0]
+        
+        # Find ACCOUNTS device await columns
+        accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
+        
+        # 1. Latency Time Series with Thresholds
+        axes[0, 0].plot(self.df['timestamp'], self.df[data_await_col], 
+                       label='DATA Device Average Latency', linewidth=2, color='blue')
+        
+        # ACCOUNTS device overlay
+        if accounts_configured and accounts_await_cols:
+            accounts_await_col = accounts_await_cols[0]
+            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_await_col], 
+                           label='ACCOUNTS Device Average Latency', linewidth=2, color='orange')
+        
+        # Threshold lines
+        axes[0, 0].axhline(y=thresholds['io_warning'], color='orange', linestyle='--', alpha=0.7, 
+                          label=f'Warning: {thresholds["io_warning"]}ms')
+        axes[0, 0].axhline(y=thresholds['io_critical'], color='red', linestyle='--', alpha=0.7, 
+                          label=f'Critical: {thresholds["io_critical"]}ms')
+        
+        axes[0, 0].set_title('I/O Latency vs Thresholds')
+        axes[0, 0].set_ylabel('Average Latency (ms)')
+        axes[0, 0].legend()
+        axes[0, 0].grid(True, alpha=0.3)
+        
+        # 1.5. Latency Distribution Chart (Left Bottom - axes[1,0])
+        axes[1, 0].hist(self.df[data_await_col], bins=10, alpha=0.8, color='blue', 
+                       label='DATA Device Latency Distribution')
+        
+        if accounts_configured and accounts_await_cols:
+            accounts_await_col = accounts_await_cols[0]
+            axes[1, 0].hist(self.df[accounts_await_col], bins=10, alpha=0.6, color='orange', 
+                           label='ACCOUNTS Device Latency Distribution')
+        
+        axes[1, 0].axvline(x=thresholds['io_warning'], color='orange', linestyle='--', alpha=0.8, linewidth=3,
+                          label=f'Warning: {thresholds["io_warning"]}ms')
+        axes[1, 0].axvline(x=thresholds['io_critical'], color='red', linestyle='--', alpha=0.8, linewidth=3,
+                          label=f'Critical: {thresholds["io_critical"]}ms')
+        
+        axes[1, 0].set_title('Latency Distribution Analysis')
+        axes[1, 0].set_xlabel('Average Latency (ms)')
+        axes[1, 0].set_ylabel('Frequency')
+        axes[1, 0].legend()
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        # 2. Latency Violation Timeline (Right Top - axes[0,1]) - Optimized Colors
+        violation_data = self.df[data_await_col] > thresholds['io_critical']
+        warning_data = (self.df[data_await_col] > thresholds['io_warning']) & (self.df[data_await_col] <= thresholds['io_critical'])
+        
+        axes[0, 1].plot(self.df['timestamp'], violation_data.astype(int), 
+                       label='DATA Critical Violations', linewidth=2, color='crimson', marker='o', markersize=3)
+        axes[0, 1].plot(self.df['timestamp'], warning_data.astype(int) * 0.5, 
+                       label='DATA Warning Violations', linewidth=2, color='gold', marker='s', markersize=3)
+        
+        if accounts_configured and accounts_await_cols:
+            accounts_violation = self.df[accounts_await_col] > thresholds['io_critical']
+            accounts_warning = (self.df[accounts_await_col] > thresholds['io_warning']) & (self.df[accounts_await_col] <= thresholds['io_critical'])
+            
+            axes[0, 1].plot(self.df['timestamp'], accounts_violation.astype(int) + 0.1, 
+                           label='ACCOUNTS Critical Violations', linewidth=2, color='darkblue', marker='o', markersize=3)
+            axes[0, 1].plot(self.df['timestamp'], accounts_warning.astype(int) * 0.5 + 0.05, 
+                           label='ACCOUNTS Warning Violations', linewidth=2, color='forestgreen', marker='s', markersize=3)
+        
+        axes[0, 1].set_title('Latency Threshold Violations Timeline')
+        axes[0, 1].set_ylabel('Violation Status (0=Normal, 1=Violation)')
+        axes[0, 1].legend()
+        axes[0, 1].grid(True, alpha=0.3)
+        axes[0, 1].set_ylim(-0.1, 1.3)
+        
+        
+        # 4. Summary Statistics (Right Bottom - axes[1,1])
+        axes[1, 1].axis('off')
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        summary_text = f"I/O Latency Analysis Summary ({device_info}):\n\n"
+        
+        # DATA device statistics
+        if data_await_cols:
+            data_mean = self.df[data_await_col].mean()
+            data_max = self.df[data_await_col].max()
+            data_violations = (self.df[data_await_col] > thresholds['io_critical']).sum()
+            
+            summary_text += f"DATA Device:\n"
+            summary_text += f"  Mean Latency: {data_mean:.2f}ms\n"
+            summary_text += f"  Max Latency: {data_max:.2f}ms\n"
+            summary_text += f"  Critical Violations: {data_violations}\n\n"
+        
+        # ACCOUNTS device statistics
+        if accounts_configured and accounts_await_cols:
+            accounts_mean = self.df[accounts_await_col].mean()
+            accounts_max = self.df[accounts_await_col].max()
+            accounts_violations = (self.df[accounts_await_col] > thresholds['io_critical']).sum()
+            
+            summary_text += f"ACCOUNTS Device:\n"
+            summary_text += f"  Mean Latency: {accounts_mean:.2f}ms\n"
+            summary_text += f"  Max Latency: {accounts_max:.2f}ms\n"
+            summary_text += f"  Critical Violations: {accounts_violations}"
+        else:
+            summary_text += "ACCOUNTS Device: Not Configured"
+        
+        axes[1, 1].text(0.05, 0.95, summary_text, transform=axes[1, 1].transAxes, 
+                       fontsize=11, verticalalignment='top', fontfamily='monospace',
+                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        axes[1, 1].set_title('Latency Statistics Summary')
+        
+        plt.tight_layout()
+        
+        output_file = os.path.join(self.output_dir, 'await_threshold_analysis.png')
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"✅ I/O latency threshold analysis chart saved: {output_file} ({device_info} devices)")
+        return output_file, {}
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         
@@ -787,13 +1169,260 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file, threshold_violations
 
     def create_util_threshold_analysis_chart(self):
-        """Create utilization threshold analysis chart - optimized version
+        """Device Utilization Threshold Analysis Chart - Systematic Refactor"""
         
-        Dynamically adjust analysis content based on ACCOUNTS Device configuration status:
-        - If ACCOUNTS not configured: only analyze DATA Device
-        - If ACCOUNTS configured: analyze DATA and ACCOUNTS Device
-        """
-        # 检查 ACCOUNTS Device配置状态
+        accounts_configured = self._is_accounts_configured()
+        title = 'Device Utilization Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Device Utilization Threshold Analysis - DATA Device Only'
+        
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle(title, fontsize=16)
+        
+        thresholds = get_visualization_thresholds()
+        data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
+        
+        if not data_util_cols:
+            print("❌ DATA device utilization data not found")
+            return None
+        
+        data_util_col = data_util_cols[0]
+        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
+        
+        # 1. Utilization Time Series (Top Left)
+        axes[0, 0].plot(self.df['timestamp'], self.df[data_util_col], 
+                       label='DATA Device Utilization', linewidth=2, color='blue')
+        
+        if accounts_configured and accounts_util_cols:
+            accounts_util_col = accounts_util_cols[0]
+            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_util_col], 
+                           label='ACCOUNTS Device Utilization', linewidth=2, color='orange')
+        
+        axes[0, 0].axhline(y=thresholds['warning'], color='orange', linestyle='--', alpha=0.7, 
+                          label=f'Warning: {thresholds["warning"]}%')
+        axes[0, 0].axhline(y=thresholds['critical'], color='red', linestyle='--', alpha=0.7, 
+                          label=f'Critical: {thresholds["critical"]}%')
+        
+        axes[0, 0].set_title('Device Utilization vs Thresholds')
+        axes[0, 0].set_ylabel('Utilization (%)')
+        axes[0, 0].legend()
+        axes[0, 0].grid(True, alpha=0.3)
+        
+        # 2. Utilization Distribution (Top Right)
+        axes[0, 1].hist(self.df[data_util_col], bins=15, alpha=0.8, color='blue', 
+                       label='DATA Device Distribution')
+        
+        if accounts_configured and accounts_util_cols:
+            axes[0, 1].hist(self.df[accounts_util_col], bins=15, alpha=0.6, color='orange', 
+                           label='ACCOUNTS Device Distribution')
+        
+        axes[0, 1].axvline(x=thresholds['warning'], color='orange', linestyle='--', alpha=0.8, linewidth=2,
+                          label=f'Warning: {thresholds["warning"]}%')
+        axes[0, 1].axvline(x=thresholds['critical'], color='red', linestyle='--', alpha=0.8, linewidth=2,
+                          label=f'Critical: {thresholds["critical"]}%')
+        
+        axes[0, 1].set_title('Utilization Distribution')
+        axes[0, 1].set_xlabel('Utilization (%)')
+        axes[0, 1].set_ylabel('Frequency')
+        axes[0, 1].legend()
+        axes[0, 1].grid(True, alpha=0.3)
+        
+        # 3. Violation Timeline (Bottom Left)
+        violation_data = self.df[data_util_col] > thresholds['critical']
+        warning_data = (self.df[data_util_col] > thresholds['warning']) & (self.df[data_util_col] <= thresholds['critical'])
+        
+        axes[1, 0].plot(self.df['timestamp'], violation_data.astype(int), 
+                       label='DATA Critical', linewidth=2, color='crimson', marker='o', markersize=2)
+        axes[1, 0].plot(self.df['timestamp'], warning_data.astype(int) * 0.5, 
+                       label='DATA Warning', linewidth=2, color='gold', marker='s', markersize=2)
+        
+        if accounts_configured and accounts_util_cols:
+            accounts_violation = self.df[accounts_util_col] > thresholds['critical']
+            accounts_warning = (self.df[accounts_util_col] > thresholds['warning']) & (self.df[accounts_util_col] <= thresholds['critical'])
+            
+            axes[1, 0].plot(self.df['timestamp'], accounts_violation.astype(int) + 0.1, 
+                           label='ACCOUNTS Critical', linewidth=2, color='darkblue', marker='o', markersize=2)
+            axes[1, 0].plot(self.df['timestamp'], accounts_warning.astype(int) * 0.5 + 0.05, 
+                           label='ACCOUNTS Warning', linewidth=2, color='forestgreen', marker='s', markersize=2)
+        
+        axes[1, 0].set_title('Violation Timeline')
+        axes[1, 0].set_ylabel('Violation Status')
+        axes[1, 0].legend()
+        axes[1, 0].grid(True, alpha=0.3)
+        axes[1, 0].set_ylim(-0.1, 1.3)
+        
+        # 4. Statistics Summary (Bottom Right)
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        data_stats = {
+            'mean': self.df[data_util_col].mean(),
+            'max': self.df[data_util_col].max(),
+            'violations': (self.df[data_util_col] > thresholds['critical']).sum(),
+            'unit': '%'
+        }
+        
+        accounts_stats = None
+        if accounts_configured and accounts_util_cols:
+            accounts_stats = {
+                'mean': self.df[accounts_util_col].mean(),
+                'max': self.df[accounts_util_col].max(),
+                'violations': (self.df[accounts_util_col] > thresholds['critical']).sum(),
+                'unit': '%'
+            }
+        
+        summary_text = format_summary_text(device_info, data_stats, accounts_stats)
+        add_text_summary(axes[1, 1], summary_text, 'Utilization Statistics')
+        
+        plt.tight_layout()
+        
+        output_file = os.path.join(self.output_dir, 'util_threshold_analysis.png')
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        print(f"✅ Utilization threshold analysis chart saved: {output_file} ({device_info} devices)")
+        
+        return output_file, {}
+        """Utilization Threshold Analysis Chart - Dual Device Support"""
+        
+        # Device configuration detection
+        accounts_configured = self._is_accounts_configured()
+        
+        # Dynamic title
+        title = 'Utilization Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Utilization Threshold Analysis - DATA Device Only'
+        
+        fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+        fig.suptitle(title, fontsize=16, fontweight='bold')
+        
+        # Get threshold values
+        thresholds = get_visualization_thresholds()
+        
+        # Find DATA device util columns
+        data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
+        
+        if not data_util_cols:
+            print("❌ DATA device utilization data not found")
+            return None
+        
+        data_util_col = data_util_cols[0]
+        
+        # Find ACCOUNTS device util columns
+        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
+        
+        # 1. Utilization Time Series with Thresholds
+        axes[0, 0].plot(self.df['timestamp'], self.df[data_util_col], 
+                       label='DATA Device Utilization', linewidth=2, color='blue')
+        
+        # ACCOUNTS device overlay
+        if accounts_configured and accounts_util_cols:
+            accounts_util_col = accounts_util_cols[0]
+            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_util_col], 
+                           label='ACCOUNTS Device Utilization', linewidth=2, color='orange')
+        
+        # Threshold lines
+        axes[0, 0].axhline(y=thresholds['io_warning'], color='orange', linestyle='--', alpha=0.7, 
+                          label=f'Warning: {thresholds["io_warning"]}%')
+        axes[0, 0].axhline(y=thresholds['critical'], color='red', linestyle='--', alpha=0.7, 
+                          label=f'Critical: {thresholds["critical"]}%')
+        
+        axes[0, 0].set_title('Device Utilization vs Thresholds')
+        axes[0, 0].set_ylabel('Utilization (%)')
+        axes[0, 0].legend()
+        axes[0, 0].grid(True, alpha=0.3)
+        
+        # 2. Utilization Distribution Chart (Left Bottom - axes[1,0])
+        axes[1, 0].hist(self.df[data_util_col], bins=20, alpha=0.7, color='blue', 
+                       label='DATA Device Utilization Distribution', edgecolor='black')
+        
+        if accounts_configured and accounts_util_cols:
+            accounts_util_col = accounts_util_cols[0]
+            axes[1, 0].hist(self.df[accounts_util_col], bins=20, alpha=0.7, color='orange', 
+                           label='ACCOUNTS Device Utilization Distribution', edgecolor='black')
+        
+        axes[1, 0].axvline(x=thresholds['io_warning'], color='orange', linestyle='--', alpha=0.8, linewidth=2,
+                          label=f'Warning: {thresholds["io_warning"]}%')
+        axes[1, 0].axvline(x=thresholds['critical'], color='red', linestyle='--', alpha=0.8, linewidth=2,
+                          label=f'Critical: {thresholds["critical"]}%')
+        
+        axes[1, 0].set_title('Utilization Distribution Analysis')
+        axes[1, 0].set_xlabel('Utilization (%)')
+        axes[1, 0].set_ylabel('Frequency')
+        axes[1, 0].legend()
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        # 2. Summary Statistics
+        axes[0, 1].axis('off')
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        summary_text = f"Utilization Analysis Summary ({device_info}):\n\n"
+        
+        # DATA device statistics
+        data_mean = self.df[data_util_col].mean()
+        data_max = self.df[data_util_col].max()
+        data_violations = (self.df[data_util_col] > thresholds['critical']).sum()
+        
+        summary_text += f"DATA Device:\n"
+        summary_text += f"  Mean Utilization: {data_mean:.1f}%\n"
+        summary_text += f"  Max Utilization: {data_max:.1f}%\n"
+        summary_text += f"  Critical Violations: {data_violations}\n\n"
+        
+        # ACCOUNTS device statistics
+        if accounts_configured and accounts_util_cols:
+            accounts_mean = self.df[accounts_util_col].mean()
+            accounts_max = self.df[accounts_util_col].max()
+            accounts_violations = (self.df[accounts_util_col] > thresholds['critical']).sum()
+            
+            summary_text += f"ACCOUNTS Device:\n"
+            summary_text += f"  Mean Utilization: {accounts_mean:.1f}%\n"
+            summary_text += f"  Max Utilization: {accounts_max:.1f}%\n"
+            summary_text += f"  Critical Violations: {accounts_violations}"
+        else:
+            summary_text += "ACCOUNTS Device: Not Configured"
+        
+        axes[0, 1].text(0.05, 0.95, summary_text, transform=axes[0, 1].transAxes, 
+                       fontsize=11, verticalalignment='top', fontfamily='monospace',
+                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        
+        # 4. Summary Statistics (Right Bottom - axes[1,1])
+        axes[1, 1].axis('off')
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        summary_text = f"Utilization Analysis Summary ({device_info}):\\n\\n"
+        
+        # DATA device statistics
+        if data_util_cols:
+            data_mean = self.df[data_util_col].mean()
+            data_max = self.df[data_util_col].max()
+            data_violations = (self.df[data_util_col] > thresholds['critical']).sum()
+            
+            summary_text += f"DATA Device:\\n"
+            summary_text += f"  Mean Utilization: {data_mean:.1f}%\\n"
+            summary_text += f"  Max Utilization: {data_max:.1f}%\\n"
+            summary_text += f"  Critical Violations: {data_violations}\\n\\n"
+        
+        # ACCOUNTS device statistics
+        if accounts_configured and accounts_util_cols:
+            accounts_util_col = accounts_util_cols[0]
+            accounts_mean = self.df[accounts_util_col].mean()
+            accounts_max = self.df[accounts_util_col].max()
+            accounts_violations = (self.df[accounts_util_col] > thresholds['critical']).sum()
+            
+            summary_text += f"ACCOUNTS Device:\\n"
+            summary_text += f"  Mean Utilization: {accounts_mean:.1f}%\\n"
+            summary_text += f"  Max Utilization: {accounts_max:.1f}%\\n"
+            summary_text += f"  Critical Violations: {accounts_violations}"
+        else:
+            summary_text += "ACCOUNTS Device: Not Configured"
+        
+        axes[1, 1].text(0.05, 0.95, summary_text, transform=axes[1, 1].transAxes, 
+                       fontsize=11, verticalalignment='top', fontfamily='monospace',
+                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        axes[1, 1].set_title('Utilization Statistics Summary')
+        
+        plt.tight_layout()
+        plt.tight_layout()
+        
+        output_file = os.path.join(self.output_dir, 'util_threshold_analysis.png')
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"✅ Utilization threshold analysis chart saved: {output_file} ({device_info} devices)")
+        return output_file, {}
         accounts_configured = self._is_accounts_configured()
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -1147,13 +1776,6 @@ Data Points: {len(overhead_df)}"""
             if bottleneck_chart:
                 chart_files.append(bottleneck_chart)
             
-            # Generate EBS professional analysis charts
-            print("📊 Generating EBS professional analysis charts...")
-            ebs_charts = self.generate_all_ebs_charts()
-            if ebs_charts:
-                chart_files.extend(ebs_charts)
-                print(f"✅ Generated {len(ebs_charts)} EBS professional charts")
-            
             util_chart, util_violations = self.create_util_threshold_analysis_chart()
             if util_chart:
                 chart_files.append(util_chart)
@@ -1282,17 +1904,31 @@ Data Points: {len(overhead_df)}"""
             if data_await_cols:
                 ax3 = axes[1, 0]
                 await_col = data_await_cols[0]
-                
-                ax3.plot(self.df['timestamp'], self.df[await_col], 
-                        color='lightgreen', linewidth=1, alpha=0.5, label='EBS Latency (Raw)')
-                
-                await_smooth = self.df[await_col].rolling(window=window_size, center=True).mean()
+            # 3. EBS Latency trends - 支持双设备，移除Raw数据显示
+            ax3 = axes[1, 0]
+            
+            # 查找DATA和ACCOUNTS设备的延迟字段
+            data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
+            accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')]
+            
+            if data_await_cols:
+                data_await_col = data_await_cols[0]
+                # 只显示平滑后的数据，颜色区分度更高
+                await_smooth = self.df[data_await_col].rolling(window=window_size, center=True).mean()
                 ax3.plot(self.df['timestamp'], await_smooth, 
-                        color='green', linewidth=2, label=f'EBS Latency({window_size}-point smoothed)')
+                        color='blue', linewidth=2, label=f'DATA EBS Latency ({window_size}-point avg)')
                 
-                ax3.set_title('EBS Latency Trends')
+                # ACCOUNTS设备延迟
+                accounts_configured = self._is_accounts_configured()
+                if accounts_configured and accounts_await_cols:
+                    accounts_await_col = accounts_await_cols[0]
+                    accounts_await_smooth = self.df[accounts_await_col].rolling(window=window_size, center=True).mean()
+                    ax3.plot(self.df['timestamp'], accounts_await_smooth, 
+                            color='orange', linewidth=2, label=f'ACCOUNTS EBS Latency ({window_size}-point avg)')
+                
+                ax3.set_title('EBS Latency Trends (Smoothed - DATA & ACCOUNTS)')
                 ax3.set_ylabel('Latency (ms)')
-                ax3.legend()
+                ax3.legend(fontsize=9)
                 ax3.grid(True, alpha=0.3)
             else:
                 axes[1, 0].text(0.5, 0.5, 'EBS Latency data not found', ha='center', va='center', transform=axes[1, 0].transAxes)
@@ -1435,7 +2071,8 @@ Data Points: {len(overhead_df)}"""
                 stats_text += f"QPS Data Availability:\n"
                 stats_text += f"  Available: {true_count}/{total_count} ({true_count/total_count*100:.1f}%)\n"
             
-            ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=10, verticalalignment='top')
+            ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=10, 
+                     verticalalignment='top', bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', alpha=0.8))
             
             plt.tight_layout()
             
@@ -1445,7 +2082,7 @@ Data Points: {len(overhead_df)}"""
             plt.close()
             
             print(f"  ✅ QPS trend analysis chart: {os.path.basename(output_file)}")
-            return output_file
+            return output_file, {}
             
         except Exception as e:
             print(f"❌ QPS trend analysis chart generation failed: {e}")
@@ -1480,11 +2117,14 @@ Data Points: {len(overhead_df)}"""
                 wedges, texts, autotexts = ax1.pie(efficiency_counts, labels=efficiency_ranges,
                                                   autopct='%1.1f%%', startangle=90,
                                                   explode=(0.05, 0.05, 0.05, 0.05),
-                                                  textprops={'fontsize': 9})
-                # 使用返回值来设置文本属性
+                                                  textprops={'fontsize': 8})
+                # 修复字体重叠问题
+                for text in texts:
+                    text.set_fontsize(8)
                 for autotext in autotexts:
                     autotext.set_color('white')
                     autotext.set_fontweight('bold')
+                    autotext.set_fontsize(8)
                 ax1.set_title('CPU Efficiency Distribution', fontsize=11, pad=20)
             
             # 2. Memory efficiency analysis
@@ -1502,25 +2142,41 @@ Data Points: {len(overhead_df)}"""
                 wedges, texts, autotexts = ax2.pie(mem_counts, labels=mem_ranges,
                                                   autopct='%1.1f%%', startangle=90,
                                                   explode=(0.05, 0.05, 0.05, 0.05),
-                                                  textprops={'fontsize': 9})
-                # 使用返回值来设置文本属性
+                                                  textprops={'fontsize': 8})
+                # 修复字体重叠问题
+                for text in texts:
+                    text.set_fontsize(8)
                 for autotext in autotexts:
                     autotext.set_color('white')
                     autotext.set_fontweight('bold')
+                    autotext.set_fontsize(8)
                 ax2.set_title('Memory Efficiency Distribution', fontsize=11, pad=20)
             
-            # 3. I/O efficiency analysis
+            # 3. I/O efficiency analysis - 支持双设备
             ax3 = axes[1, 0]
             data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
+            accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
+            
             if data_util_cols:
                 util_col = data_util_cols[0]
                 util_data = self.df[util_col].dropna()
-                ax3.hist(util_data, bins=20, alpha=0.7, color='green')
-                ax3.axvline(util_data.mean(), color='red', linestyle='--', label=f'Average: {util_data.mean():.1f}%')
-                ax3.set_title('I/O Utilization Distribution')
+                ax3.hist(util_data, bins=20, alpha=0.7, color='blue', label='DATA Device')
+                ax3.axvline(util_data.mean(), color='blue', linestyle='--', 
+                           label=f'DATA Avg: {util_data.mean():.1f}%')
+                
+                # ACCOUNTS设备利用率分布
+                if accounts_util_cols:
+                    accounts_util_col = accounts_util_cols[0]
+                    accounts_util_data = self.df[accounts_util_col].dropna()
+                    ax3.hist(accounts_util_data, bins=20, alpha=0.7, color='orange', label='ACCOUNTS Device')
+                    ax3.axvline(accounts_util_data.mean(), color='orange', linestyle='--', 
+                               label=f'ACCOUNTS Avg: {accounts_util_data.mean():.1f}%')
+                
+                ax3.set_title('I/O Utilization Distribution (DATA + ACCOUNTS)')
                 ax3.set_xlabel('Utilization (%)')
                 ax3.set_ylabel('Frequency')
-                ax3.legend()
+                ax3.legend(fontsize=9)
+                ax3.grid(True, alpha=0.3)
             
             # 4. Efficiency statistics summary
             ax4 = axes[1, 1]
@@ -1535,7 +2191,8 @@ Data Points: {len(overhead_df)}"""
             if data_util_cols:
                 io_avg = self.df[data_util_cols[0]].mean()
                 stats_text += f"I/O Average Utilization: {io_avg:.1f}%\n"
-            ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=12, verticalalignment='top')
+            ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=12, 
+                     verticalalignment='top', bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', alpha=0.8))
             
             # 调整整体布局，解决饼图重叠问题
             plt.subplots_adjust(hspace=0.35, wspace=0.25)
@@ -1546,21 +2203,292 @@ Data Points: {len(overhead_df)}"""
             plt.close()
             
             print(f"  ✅ Resource efficiency analysis chart: {os.path.basename(output_file)}")
-            return output_file
+            return output_file, {}
             
         except Exception as e:
             print(f"❌ Resource efficiency analysis chart generation failed: {e}")
             return None
 
     def create_bottleneck_identification_chart(self):
-        """Bottleneck identification analysis chart"""
-        print("📊 Generating bottleneck identification analysis charts...")
+        """Bottleneck Identification Chart - Systematic Refactor"""
         
-        # 检查数据是否已加载
+        accounts_configured = self._is_accounts_configured()
+        title = 'Bottleneck Identification Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Bottleneck Identification Analysis - DATA Device Only'
+        
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for bottleneck identification analysis")
                 return None
+        
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle(title, fontsize=16)
+        
+        thresholds = get_visualization_thresholds()
+        data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
+        
+        if not data_util_cols:
+            print("❌ DATA device data not found")
+            return None
+        
+        data_util_col = data_util_cols[0]
+        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
+        
+        # 1. Utilization Time Series (Top Left)
+        axes[0, 0].plot(self.df['timestamp'], self.df[data_util_col], 
+                       label='DATA Device Utilization', linewidth=2, color='blue')
+        
+        if accounts_configured and accounts_util_cols:
+            accounts_util_col = accounts_util_cols[0]
+            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_util_col], 
+                           label='ACCOUNTS Device Utilization', linewidth=2, color='orange')
+        
+        axes[0, 0].axhline(y=thresholds['critical'], color='red', linestyle='--', alpha=0.7, 
+                          label=f'Bottleneck Threshold: {thresholds["critical"]}%')
+        
+        axes[0, 0].set_title('Device Utilization vs Bottleneck Threshold')
+        axes[0, 0].set_ylabel('Utilization (%)')
+        axes[0, 0].legend()
+        axes[0, 0].grid(True, alpha=0.3)
+        
+        # 2. Bottleneck Timeline (Top Right)
+        bottleneck_timeline = self.df[data_util_col] > thresholds['critical']
+        
+        axes[0, 1].plot(self.df['timestamp'], bottleneck_timeline.astype(int), 
+                       label='DATA Bottleneck Events', linewidth=2, color='red', marker='o', markersize=2)
+        
+        if accounts_configured and accounts_util_cols:
+            accounts_bottleneck_timeline = self.df[accounts_util_col] > thresholds['critical']
+            axes[0, 1].plot(self.df['timestamp'], accounts_bottleneck_timeline.astype(int) + 0.1, 
+                           label='ACCOUNTS Bottleneck Events', linewidth=2, color='darkred', marker='s', markersize=2)
+        
+        axes[0, 1].set_title('Bottleneck Event Timeline')
+        axes[0, 1].set_ylabel('Bottleneck Status')
+        axes[0, 1].legend()
+        axes[0, 1].grid(True, alpha=0.3)
+        axes[0, 1].set_ylim(-0.1, 1.3)
+        
+        # 3. Bottleneck Distribution (Bottom Left)
+        normal_data = self.df[data_util_col][self.df[data_util_col] <= thresholds['critical']]
+        bottleneck_data = self.df[data_util_col][self.df[data_util_col] > thresholds['critical']]
+        
+        if len(normal_data) > 0:
+            axes[1, 0].hist(normal_data, bins=15, alpha=0.7, color='green', label='Normal Operation')
+        if len(bottleneck_data) > 0:
+            axes[1, 0].hist(bottleneck_data, bins=15, alpha=0.7, color='red', label='Bottleneck Events')
+        
+        axes[1, 0].axvline(x=thresholds['critical'], color='red', linestyle='--', alpha=0.8, linewidth=2,
+                          label=f'Threshold: {thresholds["critical"]}%')
+        
+        axes[1, 0].set_title('Utilization Distribution')
+        axes[1, 0].set_xlabel('Utilization (%)')
+        axes[1, 0].set_ylabel('Frequency')
+        axes[1, 0].legend()
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        # 4. Statistics Summary (Bottom Right)
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        data_normal = (self.df[data_util_col] <= thresholds['critical']).sum()
+        data_bottleneck = (self.df[data_util_col] > thresholds['critical']).sum()
+        data_percentage = (data_bottleneck / len(self.df) * 100) if len(self.df) > 0 else 0
+        
+        data_stats = {
+            'mean': self.df[data_util_col].mean(),
+            'max': self.df[data_util_col].max(),
+            'violations': data_bottleneck,
+            'unit': '%'
+        }
+        
+        accounts_stats = None
+        if accounts_configured and accounts_util_cols:
+            accounts_normal = (self.df[accounts_util_col] <= thresholds['critical']).sum()
+            accounts_bottleneck = (self.df[accounts_util_col] > thresholds['critical']).sum()
+            
+            accounts_stats = {
+                'mean': self.df[accounts_util_col].mean(),
+                'max': self.df[accounts_util_col].max(),
+                'violations': accounts_bottleneck,
+                'unit': '%'
+            }
+        
+        summary_text = format_summary_text(device_info, data_stats, accounts_stats)
+        add_text_summary(axes[1, 1], summary_text, 'Bottleneck Statistics')
+        
+        plt.tight_layout()
+        
+        output_file = os.path.join(self.output_dir, 'bottleneck_identification.png')
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        print(f"✅ Bottleneck identification chart saved: {output_file} ({device_info} devices)")
+        
+        return output_file
+        """Bottleneck Identification Chart - Dual Device Support"""
+        
+        # Device configuration detection
+        accounts_configured = self._is_accounts_configured()
+        
+        # Dynamic title
+        title = 'Bottleneck Identification Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Bottleneck Identification Analysis - DATA Device Only'
+        
+        # Check data availability
+        if not hasattr(self, 'df') or self.df is None:
+            if not self.load_data():
+                print("❌ Failed to load data for bottleneck identification analysis")
+                return None
+        
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle(title, fontsize=16, fontweight='bold')
+        
+        # Get threshold values
+        thresholds = get_visualization_thresholds()
+        
+        # Find device columns
+        data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
+        
+        if not data_util_cols:
+            print("❌ DATA device data not found")
+            return None
+        
+        data_util_col = data_util_cols[0]
+        
+        # ACCOUNTS device columns
+        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
+        
+        # 1. Device Utilization Bottleneck Detection
+        axes[0, 0].plot(self.df['timestamp'], self.df[data_util_col], 
+                       label='DATA Device Utilization', linewidth=2, color='blue')
+        
+        # ACCOUNTS device overlay
+        if accounts_configured and accounts_util_cols:
+            accounts_util_col = accounts_util_cols[0]
+            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_util_col], 
+                           label='ACCOUNTS Device Utilization', linewidth=2, color='orange')
+        
+        # Bottleneck threshold lines
+        axes[0, 0].axhline(y=thresholds['critical'], color='red', linestyle='--', alpha=0.7, 
+                          label=f'Bottleneck Threshold: {thresholds["critical"]}%')
+        
+        axes[0, 0].set_title('Utilization Bottleneck Detection')
+        axes[0, 0].set_ylabel('Utilization (%)')
+        axes[0, 0].legend()
+        axes[0, 0].grid(True, alpha=0.3)
+        
+        # 2. Bottleneck Timeline Chart (Right Top - axes[0,1])
+        bottleneck_timeline = self.df[data_util_col] > thresholds['critical']
+        axes[0, 1].plot(self.df['timestamp'], bottleneck_timeline.astype(int), 
+                       label='DATA Device Bottleneck Events', linewidth=2, color='red', marker='o', markersize=4)
+        
+        if accounts_configured and accounts_util_cols:
+            accounts_util_col = accounts_util_cols[0]
+            accounts_bottleneck_timeline = self.df[accounts_util_col] > thresholds['critical']
+            axes[0, 1].plot(self.df['timestamp'], accounts_bottleneck_timeline.astype(int) + 0.1, 
+                           label='ACCOUNTS Device Bottleneck Events', linewidth=2, color='orange', marker='s', markersize=4)
+        
+        axes[0, 1].set_title('Bottleneck Timeline Analysis')
+        axes[0, 1].set_ylabel('Bottleneck Status (0=Normal, 1=Bottleneck)')
+        axes[0, 1].legend()
+        axes[0, 1].grid(True, alpha=0.3)
+        axes[0, 1].set_ylim(-0.1, 1.3)
+        
+        # 3. Bottleneck Statistics Chart (Left Bottom - axes[1,0])
+        bottleneck_counts = ['Normal', 'Bottleneck']
+        data_normal = (self.df[data_util_col] <= thresholds['critical']).sum()
+        data_bottleneck = (self.df[data_util_col] > thresholds['critical']).sum()
+        data_counts = [data_normal, data_bottleneck]
+        
+        if accounts_configured and accounts_util_cols:
+            accounts_util_col = accounts_util_cols[0]
+            accounts_normal = (self.df[accounts_util_col] <= thresholds['critical']).sum()
+            accounts_bottleneck = (self.df[accounts_util_col] > thresholds['critical']).sum()
+            accounts_counts = [accounts_normal, accounts_bottleneck]
+            
+            x_pos = range(len(bottleneck_counts))
+            width = 0.35
+            axes[1, 0].bar([x - width/2 for x in x_pos], data_counts, width, 
+                          label='DATA Device', color=['green', 'red'], alpha=0.7)
+            axes[1, 0].bar([x + width/2 for x in x_pos], accounts_counts, width, 
+                          label='ACCOUNTS Device', color=['lightgreen', 'lightcoral'], alpha=0.7)
+            axes[1, 0].set_xticks(x_pos)
+            axes[1, 0].set_xticklabels(bottleneck_counts)
+            axes[1, 0].legend()
+        else:
+            axes[1, 0].bar(bottleneck_counts, data_counts, color=['green', 'red'], alpha=0.7)
+        
+        axes[1, 0].set_title('Bottleneck Statistics')
+        axes[1, 0].set_ylabel('Number of Samples')
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        # 4. Enhanced Summary Statistics (Right Bottom - axes[1,1])
+        axes[1, 1].axis('off')
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        summary_text = f"Bottleneck Analysis Summary ({device_info}):\\n\\n"
+        
+        # DATA device statistics
+        data_normal = (self.df[data_util_col] <= thresholds['critical']).sum()
+        data_bottleneck = (self.df[data_util_col] > thresholds['critical']).sum()
+        data_percentage = (data_bottleneck / len(self.df) * 100) if len(self.df) > 0 else 0
+        
+        summary_text += f"DATA Device:\\n"
+        summary_text += f"  Normal Samples: {data_normal}\\n"
+        summary_text += f"  Bottleneck Samples: {data_bottleneck}\\n"
+        summary_text += f"  Bottleneck Rate: {data_percentage:.1f}%\\n\\n"
+        
+        # ACCOUNTS device statistics
+        if accounts_configured and accounts_util_cols:
+            accounts_util_col = accounts_util_cols[0]
+            accounts_normal = (self.df[accounts_util_col] <= thresholds['critical']).sum()
+            accounts_bottleneck = (self.df[accounts_util_col] > thresholds['critical']).sum()
+            accounts_percentage = (accounts_bottleneck / len(self.df) * 100) if len(self.df) > 0 else 0
+            
+            summary_text += f"ACCOUNTS Device:\\n"
+            summary_text += f"  Normal Samples: {accounts_normal}\\n"
+            summary_text += f"  Bottleneck Samples: {accounts_bottleneck}\\n"
+            summary_text += f"  Bottleneck Rate: {accounts_percentage:.1f}%"
+        else:
+            summary_text += "ACCOUNTS Device: Not Configured"
+        
+        axes[1, 1].text(0.05, 0.95, summary_text, transform=axes[1, 1].transAxes, 
+                       fontsize=10, verticalalignment='top', fontfamily='monospace',
+                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        axes[1, 1].set_title('Bottleneck Statistics Summary')
+        axes[0, 1].axis('off')
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        summary_text = f"Bottleneck Analysis Summary ({device_info}):\n\n"
+        
+        # DATA device bottleneck analysis
+        data_bottlenecks = self.df[data_util_col] > thresholds['critical']
+        data_bottleneck_count = data_bottlenecks.sum()
+        data_bottleneck_pct = (data_bottleneck_count / len(self.df) * 100)
+        
+        summary_text += f"DATA Device:\n"
+        summary_text += f"  Bottlenecks: {data_bottleneck_count} ({data_bottleneck_pct:.1f}%)\n"
+        summary_text += f"  Max Utilization: {self.df[data_util_col].max():.1f}%\n\n"
+        
+        # ACCOUNTS device bottleneck analysis
+        if accounts_configured and accounts_util_cols:
+            accounts_bottlenecks = self.df[accounts_util_col] > thresholds['critical']
+            accounts_bottleneck_count = accounts_bottlenecks.sum()
+            accounts_bottleneck_pct = (accounts_bottleneck_count / len(self.df) * 100)
+            
+            summary_text += f"ACCOUNTS Device:\n"
+            summary_text += f"  Bottlenecks: {accounts_bottleneck_count} ({accounts_bottleneck_pct:.1f}%)\n"
+            summary_text += f"  Max Utilization: {self.df[accounts_util_col].max():.1f}%"
+        else:
+            summary_text += "ACCOUNTS Device: Not Configured"
+        
+        axes[0, 1].text(0.05, 0.95, summary_text, transform=axes[0, 1].transAxes, 
+                       fontsize=11, verticalalignment='top', fontfamily='monospace',
+                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        
+        plt.tight_layout()
+        
+        output_file = os.path.join(self.output_dir, 'bottleneck_identification.png')
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"✅ Bottleneck identification chart saved: {output_file} ({device_info} devices)")
+        return output_file
         
         try:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -1633,7 +2561,8 @@ Data Points: {len(overhead_df)}"""
                 summary_text += f"  Occurrences: {count}\n"
                 summary_text += f"  Percentage: {percentage:.1f}%\n\n"
             
-            ax4.text(0.1, 0.9, summary_text, transform=ax4.transAxes, fontsize=10, verticalalignment='top')
+            ax4.text(0.1, 0.9, summary_text, transform=ax4.transAxes, fontsize=10, 
+                     verticalalignment='top', bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', alpha=0.8))
             
             plt.tight_layout()
             
@@ -1643,7 +2572,7 @@ Data Points: {len(overhead_df)}"""
             plt.close()
             
             print(f"  ✅ Bottleneck identification analysis chart: {os.path.basename(output_file)}")
-            return output_file
+            return output_file, {}
             
         except Exception as e:
             print(f"❌ Bottleneck identification analysis chart generation failed: {e}")
@@ -1718,8 +2647,8 @@ Data Points: {len(overhead_df)}"""
                     color='#2E86AB', linewidth=2, 
                     label='Block Height Difference (Mainnet - Local)', alpha=0.8)
             
-            # 阈值线
-            threshold = 50  # BLOCK_HEIGHT_DIFF_THRESHOLD
+            # 阈值线 - 使用配置变量
+            threshold = int(os.getenv('BLOCK_HEIGHT_DIFF_THRESHOLD', 50))
             ax.axhline(y=threshold, color='#E74C3C', linestyle='--', 
                       linewidth=2, alpha=0.7, label=f'Threshold (+{threshold})')
             ax.axhline(y=-threshold, color='#E74C3C', linestyle='--', 

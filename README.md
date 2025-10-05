@@ -88,25 +88,46 @@ which sar       # Network monitoring tool
 
 ## 📈 Generated Reports
 
-### 18 Professional Charts
-1. Performance Overview Chart
-2. CPU-EBS Correlation Analysis
-3. Device Performance Comparison
-4. I/O Latency Threshold Analysis
-5. Utilization Analysis
-6. Monitoring Overhead Analysis
-7. QPS Trend Analysis
-8. Resource Efficiency Analysis
-9. Bottleneck Identification Chart
-10. Pearson Correlation Analysis
-11. Linear Regression Analysis
-12. Negative Correlation Analysis
-13. ENA Limitation Trends
-14. ENA Connection Capacity
-15. ENA Comprehensive Status
-16. Comprehensive Correlation Matrix
-17. Performance Trend Analysis
-18. Correlation Heatmap
+### 32 Professional Charts (Complete Framework Coverage)
+**Advanced Analysis Charts (9 charts)**:
+1. `pearson_correlation_analysis.png` - Pearson相关性分析
+2. `linear_regression_analysis.png` - 线性回归分析
+3. `negative_correlation_analysis.png` - 负相关分析
+4. `ena_limitation_trends.png` - ENA限制趋势
+5. `ena_connection_capacity.png` - ENA连接容量
+6. `ena_comprehensive_status.png` - ENA综合状态
+7. `comprehensive_correlation_matrix.png` - 综合相关性矩阵
+8. `performance_trend_analysis.png` - 性能趋势分析
+9. `performance_correlation_heatmap.png` - 相关性热力图
+
+**EBS Professional Charts (7 charts)**:
+10. `ebs_aws_capacity_planning.png` - AWS容量规划分析
+11. `ebs_iostat_performance.png` - Iostat性能分析
+12. `ebs_bottleneck_correlation.png` - 瓶颈相关性分析
+13. `ebs_performance_overview.png` - EBS性能概览
+14. `ebs_bottleneck_analysis.png` - EBS瓶颈分析
+15. `ebs_aws_standard_comparison.png` - EBS AWS标准对比
+16. `ebs_time_series_analysis.png` - EBS时间序列
+
+**Core Performance Charts (11 charts)**:
+17. `performance_overview.png` - 性能概览图表
+18. `cpu_ebs_correlation_visualization.png` - CPU-EBS相关性分析
+19. `device_performance_comparison.png` - 设备性能对比
+20. `await_threshold_analysis.png` - I/O延迟阈值分析
+21. `monitoring_overhead_analysis.png` - 监控开销分析
+22. `qps_trend_analysis.png` - QPS趋势分析
+23. `resource_efficiency_analysis.png` - 资源效率分析
+24. `bottleneck_identification.png` - 瓶颈识别图表
+25. `block_height_sync_chart.png` - 区块高度同步图表
+26. `smoothed_trend_analysis.png` - 平滑趋势分析
+27. `util_threshold_analysis.png` - 利用率阈值分析
+
+**Additional Analysis Charts (5 charts)**:
+28. `resource_distribution_chart.png` - 资源分布图表
+29. `monitoring_impact_chart.png` - 监控影响分析
+30. `comprehensive_analysis_charts.png` - 综合分析图表
+31. `performance_cliff_analysis.png` - 性能悬崖分析
+32. `qps_performance_analysis.png` - QPS性能分析
 
 ### HTML Report Sections
 - **Executive Summary**: Test overview and key findings

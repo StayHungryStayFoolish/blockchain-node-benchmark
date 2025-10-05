@@ -909,6 +909,62 @@ class ReportGenerator:
         except Exception as e:
             print(f"Error generating resource distribution chart: {e}")
             
+    def _generate_ebs_baseline_chart(self, data_baseline_iops, data_actual_iops, data_baseline_throughput, data_actual_throughput,
+                                   accounts_baseline_iops, accounts_actual_iops, accounts_baseline_throughput, accounts_actual_throughput):
+        """生成EBS基准对比图表"""
+        try:
+            import matplotlib.pyplot as plt
+            import numpy as np
+            
+            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
+            
+            # DATA IOPS对比
+            categories = ['Baseline', 'Actual']
+            data_iops_values = [data_baseline_iops or 0, data_actual_iops or 0]
+            ax1.bar(categories, data_iops_values, color=['#3498db', '#27ae60'])
+            ax1.set_title('DATA Device IOPS Comparison', fontsize=12, fontweight='bold')
+            ax1.set_ylabel('IOPS')
+            for i, v in enumerate(data_iops_values):
+                ax1.text(i, v + max(data_iops_values) * 0.01, f'{v:.0f}', ha='center', va='bottom')
+            
+            # DATA Throughput对比
+            data_throughput_values = [data_baseline_throughput or 0, data_actual_throughput or 0]
+            ax2.bar(categories, data_throughput_values, color=['#3498db', '#27ae60'])
+            ax2.set_title('DATA Device Throughput Comparison', fontsize=12, fontweight='bold')
+            ax2.set_ylabel('MiB/s')
+            for i, v in enumerate(data_throughput_values):
+                ax2.text(i, v + max(data_throughput_values) * 0.01, f'{v:.1f}', ha='center', va='bottom')
+            
+            # ACCOUNTS IOPS对比
+            accounts_iops_values = [accounts_baseline_iops or 0, accounts_actual_iops or 0]
+            ax3.bar(categories, accounts_iops_values, color=['#e74c3c', '#f39c12'])
+            ax3.set_title('ACCOUNTS Device IOPS Comparison', fontsize=12, fontweight='bold')
+            ax3.set_ylabel('IOPS')
+            for i, v in enumerate(accounts_iops_values):
+                ax3.text(i, v + max(accounts_iops_values) * 0.01, f'{v:.0f}', ha='center', va='bottom')
+            
+            # ACCOUNTS Throughput对比
+            accounts_throughput_values = [accounts_baseline_throughput or 0, accounts_actual_throughput or 0]
+            ax4.bar(categories, accounts_throughput_values, color=['#e74c3c', '#f39c12'])
+            ax4.set_title('ACCOUNTS Device Throughput Comparison', fontsize=12, fontweight='bold')
+            ax4.set_ylabel('MiB/s')
+            for i, v in enumerate(accounts_throughput_values):
+                ax4.text(i, v + max(accounts_throughput_values) * 0.01, f'{v:.1f}', ha='center', va='bottom')
+            
+            plt.tight_layout()
+            
+            # 保存图表
+            reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
+            chart_path = os.path.join(reports_dir, 'ebs_baseline_comparison.png')
+            plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            return os.path.relpath(chart_path, self.output_dir)
+            
+        except Exception as e:
+            print(f"Error generating EBS baseline chart: {e}")
+            return None
+            
     def _generate_monitoring_impact_chart(self, overhead_df):
         """生成监控影响分析图"""
         try:
@@ -1558,69 +1614,60 @@ class ReportGenerator:
                 
                 {warning_section}
                 
-                <h3>&#128190; DATA Device (LEDGER存储)</h3>
-                <div class="info-grid">
-                    <div class="info-card">
-                        <h4>DATA Device基准IOPS</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{data_baseline_iops or '未配置'}</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>DATA Device基准Throughput</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{data_baseline_throughput or '未配置'} MiB/s</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>DATA实际平均IOPS</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{data_actual_iops_display}</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>DATA AWS基准IOPS利用率</h4>
-                        <div style="font-size: 1.5em; font-weight: bold; color: {'red' if check_utilization_warning(data_iops_utilization) else 'green'};">{data_iops_utilization}</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>DATA实际平均Throughput</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{data_actual_throughput_display} MiB/s</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>DATA AWS基准Throughput利用率</h4>
-                        <div style="font-size: 1.5em; font-weight: bold; color: {'red' if check_utilization_warning(data_throughput_utilization) else 'green'};">{data_throughput_utilization}</div>
-                    </div>
-                </div>
-                
-                <h3>&#128451; ACCOUNTS Device (账户存储)</h3>
-                <div class="info-grid">
-                    <div class="info-card">
-                        <h4>ACCOUNTS Device基准IOPS</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{accounts_baseline_iops or '未配置'}</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>ACCOUNTS Device基准Throughput</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{accounts_baseline_throughput or '未配置'} MiB/s</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>ACCOUNTS实际平均IOPS</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{accounts_actual_iops_display}</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>ACCOUNTS AWS基准IOPS利用率</h4>
-                        <div style="font-size: 1.5em; font-weight: bold; color: {'red' if check_utilization_warning(accounts_iops_utilization) else 'green'};">{accounts_iops_utilization}</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>ACCOUNTS实际平均Throughput</h4>
-                        <div style="font-size: 1.5em; font-weight: bold;">{accounts_actual_throughput_display} MiB/s</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>ACCOUNTS AWS基准Throughput利用率</h4>
-                        <div style="font-size: 1.5em; font-weight: bold; color: {'red' if check_utilization_warning(accounts_throughput_utilization) else 'green'};">{accounts_throughput_utilization}</div>
-                    </div>
+                <div class="table-container">
+                    <table class="performance-table">
+                        <thead>
+                            <tr>
+                                <th>设备</th>
+                                <th>指标类型</th>
+                                <th>基准值</th>
+                                <th>实际值</th>
+                                <th>利用率</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td rowspan="2"><strong>DATA Device</strong><br><small>(LEDGER存储)</small></td>
+                                <td>IOPS</td>
+                                <td>{data_baseline_iops or '未配置'}</td>
+                                <td>{data_actual_iops_display}</td>
+                                <td style="color: {'red' if check_utilization_warning(data_iops_utilization) else 'green'}; font-weight: bold;">{data_iops_utilization}</td>
+                                <td>{'⚠️ 警告' if check_utilization_warning(data_iops_utilization) else '✅ 正常'}</td>
+                            </tr>
+                            <tr>
+                                <td>Throughput (MiB/s)</td>
+                                <td>{data_baseline_throughput or '未配置'}</td>
+                                <td>{data_actual_throughput_display}</td>
+                                <td style="color: {'red' if check_utilization_warning(data_throughput_utilization) else 'green'}; font-weight: bold;">{data_throughput_utilization}</td>
+                                <td>{'⚠️ 警告' if check_utilization_warning(data_throughput_utilization) else '✅ 正常'}</td>
+                            </tr>
+                            <tr>
+                                <td rowspan="2"><strong>ACCOUNTS Device</strong><br><small>(账户存储)</small></td>
+                                <td>IOPS</td>
+                                <td>{accounts_baseline_iops or '未配置'}</td>
+                                <td>{accounts_actual_iops_display}</td>
+                                <td style="color: {'red' if check_utilization_warning(accounts_iops_utilization) else 'green'}; font-weight: bold;">{accounts_iops_utilization}</td>
+                                <td>{'⚠️ 警告' if check_utilization_warning(accounts_iops_utilization) else '✅ 正常'}</td>
+                            </tr>
+                            <tr>
+                                <td>Throughput (MiB/s)</td>
+                                <td>{accounts_baseline_throughput or '未配置'}</td>
+                                <td>{accounts_actual_throughput_display}</td>
+                                <td style="color: {'red' if check_utilization_warning(accounts_throughput_utilization) else 'green'}; font-weight: bold;">{accounts_throughput_utilization}</td>
+                                <td>{'⚠️ 警告' if check_utilization_warning(accounts_throughput_utilization) else '✅ 正常'}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
                 
                 <div class="info">
                     <h4>&#128202; EBS基准分析说明</h4>
                     <ul>
-                        <li><strong>基准IOPS/Throughput</strong>: 通过环境变量配置的EBS性能基准</li>
-                        <li><strong>实际平均值</strong>: 测试期间的平均性能表现</li>
+                        <li><strong>基准值</strong>: 通过环境变量配置的EBS性能基准</li>
+                        <li><strong>实际值</strong>: 测试期间的平均性能表现</li>
                         <li><strong>利用率</strong>: 实际性能占基准性能的百分比</li>
-                        <li><strong>Warning Threshold</strong>: 利用率超过{get_visualization_thresholds()['warning']}%时显示警告</li>
+                        <li><strong>警告阈值</strong>: 利用率超过{get_visualization_thresholds()['warning']}%时显示警告</li>
                     </ul>
                     <p><strong>配置方法</strong>: 设置环境变量 DATA_VOL_MAX_IOPS, DATA_VOL_MAX_THROUGHPUT, ACCOUNTS_VOL_MAX_IOPS, ACCOUNTS_VOL_MAX_THROUGHPUT</p>
                 </div>
@@ -2117,14 +2164,26 @@ class ReportGenerator:
 
     def _generate_block_height_chart_section(self):
         """生成区块高度图表展示部分"""
-        chart_path = os.path.join(self.output_dir, 'block_height_sync_chart.png')
+        # 检查多个可能的图表位置
+        possible_paths = [
+            os.path.join(self.output_dir, 'block_height_sync_chart.png'),
+            os.path.join(os.path.dirname(self.output_dir), 'reports', 'block_height_sync_chart.png'),
+            os.path.join(self.output_dir, 'current', 'reports', 'block_height_sync_chart.png')
+        ]
         
-        if os.path.exists(chart_path):
+        chart_src = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                # 计算相对路径
+                chart_src = os.path.relpath(path, self.output_dir)
+                break
+        
+        if chart_src:
             return f"""
             <div class="info-card">
                 <h3>📊 区块高度同步时序图</h3>
                 <div class="chart-container">
-                    <img src="block_height_sync_chart.png" alt="区块高度同步状态" class="chart-image">
+                    <img src="{chart_src}" alt="区块高度同步状态" class="chart-image">
                 </div>
                 <div class="chart-info">
                     <p>此图表展示了测试期间本地节点与主网的区块高度差值变化：</p>
@@ -2139,9 +2198,12 @@ class ReportGenerator:
             """
         else:
             return """
-            <div class="warning">
-                <h3>⚠️ 区块高度同步图表</h3>
-                <p>区块高度同步时序图尚未生成。请确保运行了performance_visualizer.py。</p>
+            <div class="info-card">
+                <h3>📊 区块高度同步时序图</h3>
+                <div class="warning">
+                    <p>⚠️ 区块高度同步图表未生成</p>
+                    <p>可能原因：区块链节点数据不可用或监控未启用</p>
+                </div>
             </div>
             """
 
@@ -2218,6 +2280,137 @@ class ReportGenerator:
             </div>
             """
 
+    def _discover_chart_files(self):
+        """动态发现所有生成的图表文件 - 扫描多个目录，支持归档路径"""
+        import glob
+        chart_patterns = ["*.png", "*.jpg", "*.svg"]
+        chart_files = []
+        
+        # 扫描目录列表 - 支持归档后的路径结构
+        scan_dirs = [
+            self.output_dir,  # 主输出目录 (可能是归档目录)
+            os.path.join(self.output_dir, 'current', 'reports'),  # Advanced charts目录
+            os.path.join(self.output_dir, 'reports'),  # 备用reports目录
+            os.path.join(self.output_dir, 'logs'),  # 归档后的logs目录
+        ]
+        
+        # 如果output_dir看起来像归档目录，添加特殊扫描路径
+        if 'archives' in self.output_dir or 'run_' in os.path.basename(self.output_dir):
+            # 这是归档目录，直接扫描其子目录
+            scan_dirs.extend([
+                os.path.join(self.output_dir, 'logs'),
+                os.path.join(self.output_dir, 'reports'),
+                os.path.join(self.output_dir, 'current', 'reports'),
+            ])
+        
+        # 添加同级reports目录扫描 (关键修复)
+        parent_dir = os.path.dirname(self.output_dir)
+        sibling_reports = os.path.join(parent_dir, 'reports')
+        if os.path.exists(sibling_reports):
+            scan_dirs.append(sibling_reports)
+        
+        for scan_dir in scan_dirs:
+            if os.path.exists(scan_dir):
+                for pattern in chart_patterns:
+                    chart_files.extend(glob.glob(os.path.join(scan_dir, pattern)))
+        
+        # 去重并排序
+        unique_charts = list(set(chart_files))
+        return sorted([f for f in unique_charts if os.path.exists(f)])
+
+    def _categorize_charts(self, chart_files):
+        """按类别组织图表 - 基于文件名模式，排除重复显示的图表"""
+        # 排除已在固定section显示的图表
+        excluded_charts = {
+            'block_height_sync_chart.png',  # 已在区块高度分析section显示
+            'monitoring_overhead_analysis.png'  # 已在监控开销详细分析section显示
+        }
+        
+        categories = {
+            'advanced': {'title': 'Advanced Analysis Charts', 'charts': []},
+            'ebs': {'title': 'EBS Professional Charts', 'charts': []},
+            'performance': {'title': 'Core Performance Charts', 'charts': []},
+            'monitoring': {'title': 'Monitoring & Overhead Charts', 'charts': []},
+            'network': {'title': 'Network & ENA Charts', 'charts': []},
+            'other': {'title': 'Additional Charts', 'charts': []}
+        }
+        
+        for chart_file in chart_files:
+            filename = os.path.basename(chart_file)
+            filename_lower = filename.lower()
+            
+            # 跳过排除的图表
+            if filename in excluded_charts:
+                continue
+            
+            # Advanced analysis charts
+            if any(keyword in filename_lower for keyword in ['pearson', 'correlation', 'regression', 'heatmap', 'matrix']):
+                categories['advanced']['charts'].append(chart_file)
+            # EBS charts
+            elif any(keyword in filename_lower for keyword in ['ebs', 'aws', 'iostat', 'bottleneck']):
+                categories['ebs']['charts'].append(chart_file)
+            # Network/ENA charts
+            elif any(keyword in filename_lower for keyword in ['ena', 'network', 'allowance']):
+                categories['network']['charts'].append(chart_file)
+            # Monitoring charts (排除已显示的)
+            elif any(keyword in filename_lower for keyword in ['monitoring', 'overhead']) and filename not in excluded_charts:
+                categories['monitoring']['charts'].append(chart_file)
+            # Performance charts
+            elif any(keyword in filename_lower for keyword in ['performance', 'qps', 'trend', 'efficiency', 'threshold', 'util', 'await']):
+                categories['performance']['charts'].append(chart_file)
+            else:
+                categories['other']['charts'].append(chart_file)
+        
+        return categories
+
+    def _generate_chart_gallery_section(self):
+        """生成动态图表展示区域"""
+        chart_files = self._discover_chart_files()
+        if not chart_files:
+            return '<div class="section"><h2>📊 Performance Charts</h2><p>No charts found.</p></div>'
+        
+        categories = self._categorize_charts(chart_files)
+        
+        html = '''
+        <div class="section">
+            <h2>📊 Performance Chart Gallery</h2>
+            <div class="chart-summary">
+                <p><strong>Total Charts Generated:</strong> {total_charts}</p>
+            </div>
+        '''.format(total_charts=len(chart_files))
+        
+        for category_key, category_data in categories.items():
+            if category_data['charts']:
+                html += f'''
+                <div class="chart-category">
+                    <h3>📈 {category_data['title']} ({len(category_data['charts'])} charts)</h3>
+                    <div class="chart-grid">
+                '''
+                
+                for chart_file in category_data['charts']:
+                    chart_name = os.path.basename(chart_file)
+                    chart_title = chart_name.replace('_', ' ').replace('.png', '').title()
+                    
+                    # 计算相对路径
+                    rel_path = os.path.relpath(chart_file, self.output_dir)
+                    
+                    html += f'''
+                    <div class="chart-item">
+                        <h4>{chart_title}</h4>
+                        <div class="chart-container">
+                            <img src="{rel_path}" alt="{chart_title}" class="chart">
+                        </div>
+                    </div>
+                    '''
+                
+                html += '''
+                    </div>
+                </div>
+                '''
+        
+        html += '</div>'
+        return html
+
     def _generate_html_content(self, df):
         """生成HTML内容 + 瓶颈信息展示 + 图片引用"""
         try:
@@ -2245,8 +2438,8 @@ class ReportGenerator:
             # 生成瓶颈信息展示（如果有）
             bottleneck_section = self._generate_bottleneck_section()
             
-            # 生成图片展示部分
-            charts_section = self._generate_charts_section()
+            # 生成动态图表展示部分
+            charts_section = self._generate_chart_gallery_section()
             
             # 生成EBS分析结果
             ebs_warnings, ebs_metrics = self.parse_ebs_analyzer_log()
@@ -2264,6 +2457,7 @@ class ReportGenerator:
             </head>
             <body>
                 <div class="container">
+                    <h1>🚀 Blockchain Node QPS 性能分析报告</h1>
                     <p>生成Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                     <p>&#9989; 统一字段命名 | 完整Device支持 | 监控开销分析 | Blockchain Node 特定分析 | 瓶颈检测分析</p>
                     
@@ -2959,6 +3153,66 @@ class ReportGenerator:
             .chart-image:hover {
                 transform: none;
             }
+        }
+        
+        /* Chart Gallery Styles */
+        .chart-summary {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+        .chart-category {
+            margin-bottom: 30px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+        .chart-category h3 {
+            color: #1976d2;
+            border-bottom: 2px solid #e3f2fd;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        }
+        .chart-item {
+            background-color: #fafafa;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .chart-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+        }
+        .chart-item h4 {
+            color: #424242;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .chart-container {
+            text-align: center;
+            background-color: white;
+            border-radius: 6px;
+            padding: 10px;
+            border: 1px solid #e8e8e8;
+        }
+        .chart {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            transition: transform 0.2s ease;
+        }
+        .chart:hover {
+            transform: scale(1.02);
         }
         """
 

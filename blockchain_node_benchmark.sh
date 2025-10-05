@@ -492,6 +492,7 @@ execute_data_analysis() {
                     echo "⚠️ 分析脚本执行失败: $(basename "$script")"
                 fi
             else
+                # 即使没有瓶颈也执行基础分析，确保图表生成
                 if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --output-dir "$BASE_DATA_DIR"; then
                     echo "⚠️ 分析脚本执行失败: $(basename "$script")"
                 fi
@@ -529,7 +530,7 @@ execute_bottleneck_window_analysis() {
         if [[ -f "${SCRIPT_DIR}/analysis/comprehensive_analysis.py" ]]; then
             python3 "${SCRIPT_DIR}/analysis/comprehensive_analysis.py" \
                 "$csv_file" \
-                --benchmark-mode "$BENCHMARK_MODE" \
+                --benchmark-mode "$benchmark_mode" \
                 --output-dir "$BASE_DATA_DIR" \
                 --time-window \
                 --start-time "$window_start" \
@@ -546,28 +547,40 @@ execute_performance_cliff_analysis() {
     
     echo "📉 执行性能悬崖分析..."
     
-    if [[ -z "$bottleneck_info" ]]; then
-        echo "⚠️ 无瓶颈信息，跳过性能悬崖分析"
-        return
-    fi
-    
-    local max_qps=$(echo "$bottleneck_info" | jq -r '.max_successful_qps // 0')
-    local bottleneck_qps=$(echo "$bottleneck_info" | jq -r '.bottleneck_qps // 0')
-    
-    if [[ $max_qps -gt 0 && $bottleneck_qps -gt 0 ]]; then
-        local performance_drop=$(awk "BEGIN {printf \"%.2f\", ($bottleneck_qps - $max_qps) * 100 / $max_qps}")
-        echo "📊 性能悬崖: 从 ${max_qps} QPS 到 ${bottleneck_qps} QPS (${performance_drop}%)"
-        
-        # 调用性能悬崖分析工具
-        if [[ -f "${SCRIPT_DIR}/analysis/qps_analyzer.py" ]]; then
+    # 调用性能悬崖分析工具 - 即使没有瓶颈信息也执行基础分析
+    if [[ -f "${SCRIPT_DIR}/analysis/qps_analyzer.py" ]]; then
+        if [[ -n "$bottleneck_info" ]]; then
+            # 有瓶颈信息时的完整分析
+            local max_qps=$(echo "$bottleneck_info" | jq -r '.max_successful_qps // 0')
+            local bottleneck_qps=$(echo "$bottleneck_info" | jq -r '.bottleneck_qps // 0')
+            
+            if [[ $max_qps -gt 0 && $bottleneck_qps -gt 0 ]]; then
+                local performance_drop=$(awk "BEGIN {printf \"%.2f\", ($bottleneck_qps - $max_qps) * 100 / $max_qps}")
+                echo "📊 性能悬崖: 从 ${max_qps} QPS 到 ${bottleneck_qps} QPS (${performance_drop}%)"
+                
+                python3 "${SCRIPT_DIR}/analysis/qps_analyzer.py" \
+                    "$csv_file" \
+                    --benchmark-mode "$benchmark_mode" \
+                    --cliff-analysis \
+                    --max-qps "$max_qps" \
+                    --bottleneck-qps "$bottleneck_qps" \
+                    --output-dir "$BASE_DATA_DIR"
+            else
+                echo "📊 执行基础性能分析（瓶颈数据不完整）"
+                python3 "${SCRIPT_DIR}/analysis/qps_analyzer.py" \
+                    "$csv_file" \
+                    --benchmark-mode "$benchmark_mode" \
+                    --output-dir "$BASE_DATA_DIR"
+            fi
+        else
+            echo "📊 执行基础性能分析（无瓶颈信息）"
             python3 "${SCRIPT_DIR}/analysis/qps_analyzer.py" \
                 "$csv_file" \
-                --benchmark-mode "$BENCHMARK_MODE" \
-                --cliff-analysis \
-                --max-qps "$max_qps" \
-                --bottleneck-qps "$bottleneck_qps"
+                --benchmark-mode "$benchmark_mode" \
+                --output-dir "$BASE_DATA_DIR"
         fi
     fi
+}
 }
 
 # 归档测试结果

@@ -969,27 +969,5 @@ def main():
         logger.error(f"❌ 综合分析执行失败: {e}")
         return 1
 
-
-# 演示功能（仅在直接运行时使用）
-def demo_comprehensive_analysis():
-    """演示综合分析功能"""
-    try:
-        analyzer = ComprehensiveAnalyzer(benchmark_mode="standard")
-        results = analyzer.run_comprehensive_analysis()
-
-        print("\n🎯 Analysis Summary:")
-        print(f"  Maximum QPS: {results['max_qps']:,}" if not pd.isna(results['max_qps']) else "  Maximum QPS: N/A")
-        print(f"  Data Points: {len(results['dataframe'])}")
-        print(f"  Bottlenecks: {len(results['bottlenecks'])}")
-        
-        return results
-
-    except Exception as e:
-        logger.error(f"❌ Comprehensive analysis failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-
 if __name__ == "__main__":
     main()

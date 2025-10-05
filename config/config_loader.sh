@@ -824,6 +824,9 @@ export NETWORK_INTERFACE BASE_MEMORY_DIR
 export BASE_FRAMEWORK_DIR BASE_DATA_DIR
 export BLOCKCHAIN_PROCESS_NAMES_STR="${BLOCKCHAIN_PROCESS_NAMES[*]}"
 
+# ENA字段配置 - 支持开发环境测试
+export ENA_ALLOWANCE_FIELDS=${ENA_ALLOWANCE_FIELDS:-"bw_in_allowance_exceeded,bw_out_allowance_exceeded,pps_allowance_exceeded,conntrack_allowance_exceeded,linklocal_allowance_exceeded,conntrack_allowance_available"}
+
 export CONFIG_ALREADY_LOADED="true"
 
 echo "🔧 RPC方法配置完成:" >&2

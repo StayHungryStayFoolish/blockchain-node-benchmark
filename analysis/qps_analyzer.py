@@ -1047,19 +1047,3 @@ if __name__ == "__main__":
         print("python qps_analyzer.py data.csv --cliff-analysis --max-qps 5000 --bottleneck-qps 3000")
     else:
         sys.exit(main())
-    print("analyzer = NodeQPSAnalyzer('/path/to/output/dir', 'standard', False)")
-    print("results = analyzer.run_qps_analysis()")
-    
-    # 演示功能
-    try:
-        analyzer = NodeQPSAnalyzer(benchmark_mode="standard", bottleneck_mode=False)
-        results = analyzer.run_qps_analysis()
-        if results:
-            print("🎯 QPS分析器演示完成")
-            print(f"📊 生成了 {len(results)} 个分析组件")
-            print(f"📈 最大QPS: {results.get('max_qps', 'N/A')}")
-        else:
-            print("⚠️ 分析未产生结果")
-    except Exception as e:
-        print(f"⚠️  演示运行失败: {e}")
-        print("这是正常的，因为可能没有实际的测试数据")
