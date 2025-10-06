@@ -334,12 +334,15 @@ class UnifiedChartStyle:
         text_kwargs = pos_config.copy()
         text_kwargs.update(kwargs)
         
-        # 提取transform参数
+        # 处理transform参数
         if text_kwargs.get('transform') == 'axes':
             text_kwargs['transform'] = ax.transAxes
-            del text_kwargs['transform']
         
-        return ax.text(text_kwargs['x'], text_kwargs['y'], text, **{k: v for k, v in text_kwargs.items() if k not in ['x', 'y']})
+        # 过滤掉非matplotlib参数
+        matplotlib_params = ['x', 'y', 'fontsize', 'ha', 'va', 'bbox', 'transform', 'color', 'weight']
+        filtered_kwargs = {k: v for k, v in text_kwargs.items() if k in matplotlib_params and k not in ['x', 'y']}
+        
+        return ax.text(text_kwargs['x'], text_kwargs['y'], text, **filtered_kwargs)
     
     @classmethod
     def setup_subplot_layout(cls, layout_type, **kwargs):

@@ -13,26 +13,21 @@ import matplotlib.font_manager as fm
 import seaborn as sns
 import glob
 import os
+import sys
 import json
 import argparse
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 from pathlib import Path
 
-# Configure font support for cross-platform compatibility
-def setup_font():
-    """Configure matplotlib font for cross-platform compatibility"""
-    # Use standard fonts that work across all platforms
-    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
-    plt.rcParams['axes.unicode_minus'] = False
-    print("✅ SUCCESS: QPS Analyzer using font: DejaVu Sans")
-    return True
+# 添加项目根目录到Python路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
 
-# Initialize font configuration
-setup_font()
+from visualization.chart_style_config import UnifiedChartStyle
 
 # 使用统一日志管理器
-import sys
 
 # 使用更健壮的路径管理
 current_dir = Path(__file__).parent

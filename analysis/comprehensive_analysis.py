@@ -15,19 +15,12 @@ import glob
 import os
 import sys
 
-# Configure font support for cross-platform compatibility
-def setup_font():
-    """Configure matplotlib font for cross-platform compatibility"""
-    # Use standard fonts that work across all platforms
-    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
-    plt.rcParams['axes.unicode_minus'] = False
-    print("✅ SUCCESS: Comprehensive Analysis using font: DejaVu Sans")
-    return True
-
-# Initialize font configuration
-setup_font()
-
 # 添加项目根目录到Python路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+
+from visualization.chart_style_config import UnifiedChartStyle
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.unified_logger import get_logger

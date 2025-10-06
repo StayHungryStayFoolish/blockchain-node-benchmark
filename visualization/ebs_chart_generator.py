@@ -46,6 +46,9 @@ class EBSChartGenerator:
         else:
             # DataFrame对象 - 兼容report_generator.py调用
             self.df = data_source
+            # 确保timestamp是datetime类型
+            if 'timestamp' in self.df.columns:
+                self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         
         # AWS基准值配置 - 使用DeviceManager统一读取（修复问题8）
         temp_device_manager = DeviceManager(self.df) if hasattr(self, 'df') and self.df is not None else None
@@ -53,8 +56,16 @@ class EBSChartGenerator:
             thresholds = temp_device_manager.get_threshold_values()
             self.data_baseline_iops = thresholds['data_baseline_iops']
             self.data_baseline_throughput = thresholds['data_baseline_throughput']
-            self.accounts_baseline_iops = thresholds['accounts_baseline_iops']
-            self.accounts_baseline_throughput = thresholds['accounts_baseline_throughput']
+            
+            # 只有在ACCOUNTS配置时才获取ACCOUNTS阈值
+            if 'accounts_baseline_iops' in thresholds:
+                self.accounts_baseline_iops = thresholds['accounts_baseline_iops']
+                self.accounts_baseline_throughput = thresholds['accounts_baseline_throughput']
+            else:
+                # ACCOUNTS未配置时使用环境变量默认值
+                self.accounts_baseline_iops = float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))
+                self.accounts_baseline_throughput = float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))
+            
             self.ebs_util_threshold = thresholds['ebs_util_threshold']
             self.ebs_latency_threshold = thresholds['ebs_latency_threshold']
             self.ebs_iops_threshold = thresholds['ebs_iops_threshold']
@@ -678,149 +689,6 @@ class EBSChartGenerator:
         # 检查数据列是否存在（最可靠的方法）
         accounts_cols = [col for col in self.df.columns if col.startswith('accounts_')]
         return len(accounts_cols) > 0
-        
-        if not data_configured:
-            print("❌ DATA设备数据未找到")
-            return None
-        
-        # 动态标题
-        title = 'EBS Performance Overview - DATA & ACCOUNTS Devices' if accounts_configured else 'EBS Performance Overview - DATA Device Only'
-        
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle(title, fontsize=16, fontweight='bold')
-        
-        # 1. AWS标准IOPS vs基准线（带利用率区间）
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
-        if data_iops_field and data_iops_field in self.df.columns:
-            ax1.plot(self.df['timestamp'], self.df[data_iops_field], 
-                    label='DATA Device AWS Standard IOPS', linewidth=2, color='blue')
-            ax1.axhline(y=self.data_baseline_iops, color='red', linestyle='--', alpha=0.7, 
-                       label=f'DATA Baseline: {self.data_baseline_iops}')
-            
-            # 添加利用率区间
-            ax1.axhspan(0, self.data_baseline_iops * 0.7, alpha=0.1, color='green', label='Safe Zone')
-            ax1.axhspan(self.data_baseline_iops * 0.7, self.data_baseline_iops * 0.9, 
-                       alpha=0.1, color='yellow', label='Warning Zone')
-            ax1.axhspan(self.data_baseline_iops * 0.9, self.data_baseline_iops * 1.2, 
-                       alpha=0.1, color='red', label='Critical Zone')
-            
-            # ACCOUNTS设备数据叠加
-            if accounts_configured:
-                accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
-                if accounts_iops_field and accounts_iops_field in self.df.columns:
-                    ax1.plot(self.df['timestamp'], self.df[accounts_iops_field], 
-                            label='ACCOUNTS Device AWS Standard IOPS', linewidth=2, color='orange')
-                    ax1.axhline(y=self.accounts_baseline_iops, color='purple', linestyle='--', alpha=0.7, 
-                               label=f'ACCOUNTS Baseline: {self.accounts_baseline_iops}')
-            
-            ax1.set_title('AWS Standard IOPS Performance Overview')
-            ax1.set_ylabel('AWS Standard IOPS')
-            ax1.legend()
-            ax1.grid(True, alpha=0.3)
-        
-        # 2. AWS标准Throughput vs基准线
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
-        if data_throughput_field and data_throughput_field in self.df.columns:
-            ax2.plot(self.df['timestamp'], self.df[data_throughput_field], 
-                    label='DATA Device AWS Standard Throughput', linewidth=2, color='green')
-            ax2.axhline(y=self.data_baseline_throughput, color='red', linestyle='--', alpha=0.7, 
-                       label=f'DATA Baseline: {self.data_baseline_throughput} MiB/s')
-            
-            # 添加利用率区间
-            ax2.axhspan(0, self.data_baseline_throughput * 0.7, alpha=0.1, color='green')
-            ax2.axhspan(self.data_baseline_throughput * 0.7, self.data_baseline_throughput * 0.9, 
-                       alpha=0.1, color='yellow')
-            ax2.axhspan(self.data_baseline_throughput * 0.9, self.data_baseline_throughput * 1.2, 
-                       alpha=0.1, color='red')
-            
-            # ACCOUNTS设备数据叠加
-            if accounts_configured:
-                accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
-                if accounts_throughput_field and accounts_throughput_field in self.df.columns:
-                    ax2.plot(self.df['timestamp'], self.df[accounts_throughput_field], 
-                            label='ACCOUNTS Device AWS Standard Throughput', linewidth=2, color='purple')
-                    ax2.axhline(y=self.accounts_baseline_throughput, color='purple', linestyle='--', alpha=0.7, 
-                               label=f'ACCOUNTS Baseline: {self.accounts_baseline_throughput} MiB/s')
-            
-            ax2.set_title('AWS Standard Throughput Performance Overview')
-            ax2.set_ylabel('AWS Standard Throughput (MiB/s)')
-            ax2.legend()
-            ax2.grid(True, alpha=0.3)
-        
-        # 3. 综合性能指标仪表盘
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
-        data_util_field = self.get_mapped_field('data_util')
-        data_avg_await_field = self.get_mapped_field('data_avg_await')
-        
-        if data_iops_field and data_util_field and data_avg_await_field and all(self.get_mapped_field(f) in self.df.columns for f in ['data_aws_standard_iops', 'data_util', 'data_avg_await']):
-            # 计算综合性能评分
-            iops_score = (self.df[data_iops_field] / self.data_baseline_iops).clip(0, 1)
-            util_score = (100 - self.df[data_util_field]) / 100  # 利用率越低越好
-            latency_score = np.where(self.df[data_avg_await_field] > 0, 
-                                   (self.ebs_latency_threshold - self.df[data_avg_await_field]) / self.ebs_latency_threshold, 
-                                   1).clip(0, 1)  # 延迟越低越好
-            
-            performance_score = (iops_score + util_score + latency_score) / 3 * 100
-            
-            ax3.plot(self.df['timestamp'], performance_score, 
-                    label='Performance Score', linewidth=2, color='purple')
-            ax3.axhline(y=80, color='green', linestyle='--', alpha=0.7, label='Excellent: 80+')
-            ax3.axhline(y=60, color='orange', linestyle='--', alpha=0.7, label='Good: 60+')
-            ax3.axhline(y=40, color='red', linestyle='--', alpha=0.7, label='Poor: <40')
-            
-            ax3.set_title('Composite Performance Score')
-            ax3.set_ylabel('Performance Score (0-100)')
-            ax3.set_ylim(0, 100)
-            ax3.legend()
-            ax3.grid(True, alpha=0.3)
-        
-        # 4. 关键指标统计摘要
-        ax4.axis('off')
-        summary_text = "EBS Performance Summary:\n\n"
-        
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
-        if data_iops_field and data_iops_field in self.df.columns:
-            iops_mean = self.df[data_iops_field].mean()
-            iops_max = self.df[data_iops_field].max()
-            iops_util = (iops_mean / self.data_baseline_iops * 100)
-            summary_text += f"AWS Standard IOPS:\n"
-            summary_text += f"  Average: {iops_mean:.1f} ({iops_util:.1f}% of baseline)\n"
-            summary_text += f"  Peak: {iops_max:.1f}\n\n"
-        
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
-        if data_throughput_field and data_throughput_field in self.df.columns:
-            tp_mean = self.df[data_throughput_field].mean()
-            tp_max = self.df[data_throughput_field].max()
-            tp_util = (tp_mean / self.data_baseline_throughput * 100)
-            summary_text += f"AWS Standard Throughput:\n"
-            summary_text += f"  Average: {tp_mean:.1f} MiB/s ({tp_util:.1f}% of baseline)\n"
-            summary_text += f"  Peak: {tp_max:.1f} MiB/s\n\n"
-        
-        data_util_field = self.get_mapped_field('data_util')
-        if data_util_field and data_util_field in self.df.columns:
-            util_mean = self.df[data_util_field].mean()
-            util_max = self.df[data_util_field].max()
-            summary_text += f"Device Utilization:\n"
-            summary_text += f"  Average: {util_mean:.1f}%\n"
-            summary_text += f"  Peak: {util_max:.1f}%\n\n"
-        
-        data_avg_await_field = self.get_mapped_field('data_avg_await')
-        if data_avg_await_field and data_avg_await_field in self.df.columns:
-            latency_mean = self.df[data_avg_await_field].mean()
-            latency_max = self.df[data_avg_await_field].max()
-            summary_text += f"Average Latency:\n"
-            summary_text += f"  Average: {latency_mean:.1f} ms\n"
-            summary_text += f"  Peak: {latency_max:.1f} ms"
-        
-        ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes, fontsize=10, 
-                verticalalignment='top',
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.5))
-        
-        plt.tight_layout()
-        chart_path = os.path.join(self.output_dir, self.CHART_FILES['overview'])
-        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        return chart_path
     
     def generate_ebs_bottleneck_analysis(self):
         """EBS Bottleneck Analysis Chart - Dual Device Support"""
@@ -945,6 +813,13 @@ class EBSChartGenerator:
             ax4.legend()
             ax4.grid(True, alpha=0.3)
         
+        # Format time axis elegantly - show HH:MM:SS only on all charts
+        import matplotlib.dates as mdates
+        
+        for ax in [ax1, ax2, ax3, ax4]:
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            ax.tick_params(axis='x', rotation=45)
+        
         plt.tight_layout()
         chart_path = os.path.join(self.output_dir, self.CHART_FILES['bottleneck'])
         plt.savefig(chart_path, dpi=300, bbox_inches='tight')
@@ -952,147 +827,6 @@ class EBSChartGenerator:
         
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
         print(f"✅ EBS Bottleneck Analysis saved: {os.path.basename(chart_path)} ({device_info} devices)")
-        return chart_path
-        
-        # 1. IOPS瓶颈检测
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
-        if data_iops_field and data_iops_field in self.df.columns:
-            threshold_iops = self.data_baseline_iops * (self.ebs_iops_threshold / 100)
-            ax1.plot(self.df['timestamp'], self.df[data_iops_field], 
-                    label='AWS Standard IOPS', linewidth=2, color='blue')
-            ax1.axhline(y=threshold_iops, color='red', linestyle='--', 
-                       label=f'Critical: {threshold_iops:.0f}')
-            ax1.axhline(y=self.data_baseline_iops * 0.7, color='orange', linestyle='--', alpha=0.7,
-                       label=f'Warning: {self.data_baseline_iops * 0.7:.0f}')
-            
-            # 标记瓶颈点
-            bottleneck_points = self.df[data_iops_field] > threshold_iops
-            warning_points = (self.df[data_iops_field] > self.data_baseline_iops * 0.7) & ~bottleneck_points
-            
-            if bottleneck_points.any():
-                ax1.scatter(self.df.loc[bottleneck_points, 'timestamp'], 
-                          self.df.loc[bottleneck_points, data_iops_field],
-                          color='red', s=50, marker='x', label='Critical Points', zorder=5)
-            if warning_points.any():
-                ax1.scatter(self.df.loc[warning_points, 'timestamp'], 
-                          self.df.loc[warning_points, data_iops_field],
-                          color='orange', s=30, marker='o', alpha=0.7, label='Warning Points', zorder=4)
-            
-            ax1.set_title('IOPS Bottleneck Detection')
-            ax1.set_ylabel('AWS Standard IOPS')
-            ax1.legend()
-            ax1.grid(True, alpha=0.3)
-        
-        # 2. Throughput瓶颈检测
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
-        if data_throughput_field and data_throughput_field in self.df.columns:
-            threshold_tp = self.data_baseline_throughput * (self.ebs_throughput_threshold / 100)
-            ax2.plot(self.df['timestamp'], self.df[data_throughput_field], 
-                    label='AWS Standard Throughput', linewidth=2, color='green')
-            ax2.axhline(y=threshold_tp, color='red', linestyle='--', 
-                       label=f'Critical: {threshold_tp:.0f} MiB/s')
-            ax2.axhline(y=self.data_baseline_throughput * 0.7, color='orange', linestyle='--', alpha=0.7,
-                       label=f'Warning: {self.data_baseline_throughput * 0.7:.0f} MiB/s')
-            
-            # 标记瓶颈点
-            tp_bottleneck = self.df[data_throughput_field] > threshold_tp
-            tp_warning = (self.df[data_throughput_field] > self.data_baseline_throughput * 0.7) & ~tp_bottleneck
-            
-            if tp_bottleneck.any():
-                ax2.scatter(self.df.loc[tp_bottleneck, 'timestamp'], 
-                          self.df.loc[tp_bottleneck, data_throughput_field],
-                          color='red', s=50, marker='x', label='Critical Points', zorder=5)
-            if tp_warning.any():
-                ax2.scatter(self.df.loc[tp_warning, 'timestamp'], 
-                          self.df.loc[tp_warning, data_throughput_field],
-                          color='orange', s=30, marker='o', alpha=0.7, label='Warning Points', zorder=4)
-            
-            ax2.set_title('Throughput Bottleneck Detection')
-            ax2.set_ylabel('AWS Standard Throughput (MiB/s)')
-            ax2.legend()
-            ax2.grid(True, alpha=0.3)
-        
-        # 3. 延迟瓶颈检测
-        data_avg_await_field = self.get_mapped_field('data_avg_await')
-        if data_avg_await_field and data_avg_await_field in self.df.columns:
-            ax3.plot(self.df['timestamp'], self.df[data_avg_await_field], 
-                    label='Average Latency', linewidth=2, color='purple')
-            ax3.axhline(y=self.ebs_latency_threshold, color='red', linestyle='--', 
-                       label=f'Critical: {self.ebs_latency_threshold} ms')
-            ax3.axhline(y=self.ebs_latency_threshold * 0.7, color='orange', linestyle='--', alpha=0.7,
-                       label=f'Warning: {self.ebs_latency_threshold * 0.7:.0f} ms')
-            
-            # 标记延迟瓶颈点
-            latency_bottleneck = self.df[data_avg_await_field] > self.ebs_latency_threshold
-            latency_warning = (self.df[data_avg_await_field] > self.ebs_latency_threshold * 0.7) & ~latency_bottleneck
-            
-            if latency_bottleneck.any():
-                ax3.scatter(self.df.loc[latency_bottleneck, 'timestamp'], 
-                          self.df.loc[latency_bottleneck, data_avg_await_field],
-                          color='red', s=50, marker='x', label='Critical Points', zorder=5)
-            if latency_warning.any():
-                ax3.scatter(self.df.loc[latency_warning, 'timestamp'], 
-                          self.df.loc[latency_warning, data_avg_await_field],
-                          color='orange', s=30, marker='o', alpha=0.7, label='Warning Points', zorder=4)
-            
-            ax3.set_title('Latency Bottleneck Detection')
-            ax3.set_ylabel('Average Latency (ms)')
-            ax3.legend()
-            ax3.grid(True, alpha=0.3)
-        
-        # 4. 瓶颈统计摘要
-        ax4.axis('off')
-        summary_text = "Bottleneck Analysis Summary:\n\n"
-        
-        total_points = len(self.df)
-        
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
-        if data_iops_field and data_iops_field in self.df.columns:
-            threshold_iops = self.data_baseline_iops * (self.ebs_iops_threshold / 100)
-            iops_bottlenecks = (self.df[data_iops_field] > threshold_iops).sum()
-            iops_warnings = ((self.df[data_iops_field] > self.data_baseline_iops * 0.7) & 
-                           (self.df[data_iops_field] <= threshold_iops)).sum()
-            
-            summary_text += f"IOPS Bottlenecks:\n"
-            summary_text += f"  Critical: {iops_bottlenecks} ({iops_bottlenecks/total_points*100:.1f}%)\n"
-            summary_text += f"  Warning: {iops_warnings} ({iops_warnings/total_points*100:.1f}%)\n\n"
-        
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
-        if data_throughput_field and data_throughput_field in self.df.columns:
-            threshold_tp = self.data_baseline_throughput * (self.ebs_throughput_threshold / 100)
-            tp_bottlenecks = (self.df[data_throughput_field] > threshold_tp).sum()
-            tp_warnings = ((self.df[data_throughput_field] > self.data_baseline_throughput * 0.7) & 
-                         (self.df[data_throughput_field] <= threshold_tp)).sum()
-            
-            summary_text += f"Throughput Bottlenecks:\n"
-            summary_text += f"  Critical: {tp_bottlenecks} ({tp_bottlenecks/total_points*100:.1f}%)\n"
-            summary_text += f"  Warning: {tp_warnings} ({tp_warnings/total_points*100:.1f}%)\n\n"
-        
-        data_avg_await_field = self.get_mapped_field('data_avg_await')
-        if data_avg_await_field and data_avg_await_field in self.df.columns:
-            latency_bottlenecks = (self.df[data_avg_await_field] > self.ebs_latency_threshold).sum()
-            latency_warnings = ((self.df[data_avg_await_field] > self.ebs_latency_threshold * 0.7) & 
-                              (self.df[data_avg_await_field] <= self.ebs_latency_threshold)).sum()
-            
-            summary_text += f"Latency Bottlenecks:\n"
-            summary_text += f"  Critical: {latency_bottlenecks} ({latency_bottlenecks/total_points*100:.1f}%)\n"
-            summary_text += f"  Warning: {latency_warnings} ({latency_warnings/total_points*100:.1f}%)\n\n"
-        
-        # 综合瓶颈评估
-        if data_iops_field and data_avg_await_field and all(self.get_mapped_field(f) in self.df.columns for f in ['data_aws_standard_iops', 'data_avg_await']):
-            combined_bottlenecks = ((self.df[data_iops_field] > self.data_baseline_iops * 0.9) | 
-                                  (self.df[data_avg_await_field] > self.ebs_latency_threshold)).sum()
-            summary_text += f"Combined Bottlenecks:\n"
-            summary_text += f"  Any Critical: {combined_bottlenecks} ({combined_bottlenecks/total_points*100:.1f}%)"
-        
-        ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes, fontsize=10, 
-                verticalalignment='top',
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="lightcoral", alpha=0.3))
-        
-        plt.tight_layout()
-        chart_path = os.path.join(self.output_dir, self.CHART_FILES['bottleneck'])
-        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
-        plt.close()
         return chart_path
     
     def generate_ebs_aws_standard_comparison(self):

@@ -14,22 +14,11 @@ import argparse
 from datetime import datetime
 import numpy as np
 from scipy.stats import pearsonr
+from .chart_style_config import UnifiedChartStyle
 
-# Configure font support for cross-platform compatibility
-def setup_font():
-    """Configure matplotlib font for cross-platform compatibility"""
-    import matplotlib.pyplot as plt
-    import matplotlib.font_manager as fm
-    # Use standard fonts that work across all platforms
-    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
-    plt.rcParams['axes.unicode_minus'] = False
-    print("SUCCESS: Report Generator using font: DejaVu Sans")
-    return True
-
-# Initialize font configuration when matplotlib is used
+# Initialize matplotlib configuration when available
 try:
     import matplotlib
-    setup_font()
 except ImportError:
     pass  # matplotlib not available, skip font setup
 
