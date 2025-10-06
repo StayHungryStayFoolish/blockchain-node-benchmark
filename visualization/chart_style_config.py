@@ -66,7 +66,11 @@ class UnifiedChartStyle:
         'pie': {
             'explode': (0.05, 0.05, 0.05, 0.05),  # 饼图分离度
             'autopct': '%1.1f%%',
-            'startangle': 90
+            'startangle': 90,
+            'text_overlap_fix': True,  # 启用文本重叠修复
+            'pctdistance': 0.85,       # 百分比文本距离
+            'labeldistance': 1.1,      # 标签距离
+            'dual_pie_spacing': 0.4    # 双饼图间距
         },
         'histogram': {
             'bins': 20,
@@ -77,6 +81,132 @@ class UnifiedChartStyle:
             'cmap': 'RdYlBu_r',
             'annot': True,
             'fmt': '.2f'
+        }
+    }
+    
+    # 高对比度颜色序列 - 确保6+颜色清晰区分
+    COLOR_PALETTE = [
+        '#1f77b4',  # 蓝色 - 主要数据
+        '#ff7f0e',  # 橙色 - 次要数据  
+        '#2ca02c',  # 绿色 - 正常状态
+        '#d62728',  # 红色 - 警告/错误
+        '#9467bd',  # 紫色 - 特殊数据
+        '#8c564b',  # 棕色 - 辅助数据
+        '#e377c2',  # 粉色 - 补充数据
+        '#7f7f7f',  # 灰色 - 背景数据
+        '#bcbd22',  # 黄绿 - 中性数据
+        '#17becf',  # 青色 - 网络数据
+        '#ff1493',  # 深粉 - 高对比度
+        '#00ced1',  # 深青 - 高对比度
+        '#ffd700',  # 金色 - 高对比度
+        '#32cd32',  # 酸橙绿 - 高对比度
+        '#ff6347',  # 番茄红 - 高对比度
+        '#4169e1',  # 皇家蓝 - 高对比度
+        '#da70d6',  # 兰花紫 - 高对比度
+        '#20b2aa',  # 浅海绿 - 高对比度
+        '#f0e68c'   # 卡其色 - 高对比度
+    ]
+    
+    # 子图布局配置 - 支持32张图表的所有布局
+    SUBPLOT_LAYOUTS = {
+        '2x2': {
+            'figsize': (16, 12),
+            'nrows': 2, 'ncols': 2,
+            'hspace': 0.3, 'wspace': 0.25,
+            'title_fontsize': 16,
+            'subtitle_fontsize': 12
+        },
+        '2x3': {
+            'figsize': (18, 12), 
+            'nrows': 2, 'ncols': 3,
+            'hspace': 0.35, 'wspace': 0.3,
+            'title_fontsize': 16,
+            'subtitle_fontsize': 11
+        },
+        '3x2': {
+            'figsize': (16, 15),
+            'nrows': 3, 'ncols': 2, 
+            'hspace': 0.4, 'wspace': 0.25,
+            'title_fontsize': 16,
+            'subtitle_fontsize': 11
+        },
+        '1x2': {
+            'figsize': (16, 8),
+            'nrows': 1, 'ncols': 2,
+            'hspace': 0.2, 'wspace': 0.3,
+            'title_fontsize': 16,
+            'subtitle_fontsize': 12
+        },
+        '2x1': {
+            'figsize': (12, 10),
+            'nrows': 2, 'ncols': 1,
+            'hspace': 0.3, 'wspace': 0.2,
+            'title_fontsize': 16,
+            'subtitle_fontsize': 12
+        },
+        'dual_pie': {  # 双饼图特殊布局
+            'figsize': (16, 8),
+            'nrows': 1, 'ncols': 2,
+            'hspace': 0.2, 'wspace': 0.4,  # 更大间距避免重叠
+            'title_fontsize': 14,
+            'subtitle_fontsize': 10,
+            'pie_text_distance': 1.2  # 饼图文本距离
+        }
+    }
+    
+    # 文本位置配置 - 统一文本框样式
+    TEXT_POSITIONS = {
+        'right_bottom': {
+            'x': 0.98, 'y': 0.02,
+            'ha': 'right', 'va': 'bottom',
+            'transform': 'axes',  # 相对于子图坐标
+            'bbox': {
+                'boxstyle': 'round,pad=0.3',
+                'facecolor': 'lightgray',
+                'alpha': 0.8,
+                'edgecolor': 'gray'
+            },
+            'fontsize': 9,
+            'fontweight': 'normal'
+        },
+        'left_bottom': {
+            'x': 0.02, 'y': 0.02,
+            'ha': 'left', 'va': 'bottom', 
+            'transform': 'axes',
+            'bbox': {
+                'boxstyle': 'round,pad=0.3',
+                'facecolor': 'lightgray',
+                'alpha': 0.8,
+                'edgecolor': 'gray'
+            },
+            'fontsize': 9,
+            'fontweight': 'normal'
+        },
+        'right_top': {
+            'x': 0.98, 'y': 0.98,
+            'ha': 'right', 'va': 'top',
+            'transform': 'axes',
+            'bbox': {
+                'boxstyle': 'round,pad=0.3',
+                'facecolor': 'lightgray', 
+                'alpha': 0.8,
+                'edgecolor': 'gray'
+            },
+            'fontsize': 9,
+            'fontweight': 'normal'
+        },
+        'center_bottom': {  # 饼图中心文本
+            'x': 0.5, 'y': 0.02,
+            'ha': 'center', 'va': 'bottom',
+            'transform': 'axes',
+            'bbox': {
+                'boxstyle': 'round,pad=0.3',
+                'facecolor': 'white',
+                'alpha': 0.9,
+                'edgecolor': 'gray'
+            },
+            'fontsize': 10,
+            'fontweight': 'bold'
         }
     }
     
@@ -127,6 +257,8 @@ class UnifiedChartStyle:
         plt.rcParams['legend.fontsize'] = cls.FONT_CONFIG['legend_size']
         plt.rcParams['xtick.labelsize'] = cls.FONT_CONFIG['text_size']
         plt.rcParams['ytick.labelsize'] = cls.FONT_CONFIG['text_size']
+        print("✅ SUCCESS: Unified Chart Style initialized")
+        return True
         
     @classmethod
     def apply_axis_style(cls, ax, title=None):
@@ -147,6 +279,16 @@ class UnifiedChartStyle:
         }
         default_kwargs.update(kwargs)
         return ax.text(x, y, text, **default_kwargs)
+    
+    @classmethod
+    def add_text_summary(cls, ax, summary_text, title):
+        """统一的文本摘要添加函数"""
+        ax.axis('off')
+        ax.text(0.05, 0.95, summary_text, transform=ax.transAxes, 
+               fontsize=cls.FONT_CONFIG['legend_size'], verticalalignment='top', 
+               fontfamily='monospace',
+               bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        ax.set_title(title, fontsize=cls.FONT_CONFIG['subtitle_size'])
         
     @classmethod
     def get_device_colors(cls, device_name):
@@ -174,25 +316,75 @@ class UnifiedChartStyle:
         return cls.MARKERS.get(marker_type, 'o')
     
     @classmethod
-    def get_scatter_config(cls, device_type='data', point_type='normal'):
-        """获取散点图完整配置"""
-        config = cls.CHART_CONFIGS['scatter'].copy()
+    def get_subplot_layout(cls, layout_type):
+        """获取子图布局配置"""
+        return cls.SUBPLOT_LAYOUTS.get(layout_type, cls.SUBPLOT_LAYOUTS['2x2'])
+    
+    @classmethod
+    def get_text_position(cls, position_type):
+        """获取文本位置配置"""
+        return cls.TEXT_POSITIONS.get(position_type, cls.TEXT_POSITIONS['right_bottom'])
+    
+    @classmethod
+    def apply_text_style(cls, ax, text, position='right_bottom', **kwargs):
+        """应用统一文本样式"""
+        pos_config = cls.get_text_position(position)
         
-        # 设备特定的marker
-        if device_type == 'accounts':
-            config['marker'] = cls.MARKERS['accounts_device']
-        else:
-            config['marker'] = cls.MARKERS['data_device']
+        # 合并配置和自定义参数
+        text_kwargs = pos_config.copy()
+        text_kwargs.update(kwargs)
+        
+        # 提取transform参数
+        if text_kwargs.get('transform') == 'axes':
+            text_kwargs['transform'] = ax.transAxes
+            del text_kwargs['transform']
+        
+        return ax.text(text_kwargs['x'], text_kwargs['y'], text, **{k: v for k, v in text_kwargs.items() if k not in ['x', 'y']})
+    
+    @classmethod
+    def setup_subplot_layout(cls, layout_type, **kwargs):
+        """设置子图布局"""
+        layout_config = cls.get_subplot_layout(layout_type)
+        
+        # 合并配置和自定义参数
+        subplot_kwargs = layout_config.copy()
+        subplot_kwargs.update(kwargs)
+        
+        # 提取matplotlib参数
+        figsize = subplot_kwargs.pop('figsize', (16, 12))
+        nrows = subplot_kwargs.pop('nrows', 2)
+        ncols = subplot_kwargs.pop('ncols', 2)
+        
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(nrows, ncols, figsize=figsize)
+        
+        # 应用间距
+        if 'hspace' in subplot_kwargs or 'wspace' in subplot_kwargs:
+            plt.subplots_adjust(
+                hspace=subplot_kwargs.get('hspace', 0.3),
+                wspace=subplot_kwargs.get('wspace', 0.25)
+            )
+        
+        return fig, axes, subplot_kwargs
+    
+    @classmethod
+    def fix_pie_text_overlap(cls, ax, labels, autopct_texts=None):
+        """修复饼图文本重叠问题"""
+        pie_config = cls.CHART_CONFIGS['pie']
+        
+        if pie_config.get('text_overlap_fix', False):
+            # 调整标签距离
+            if hasattr(ax, 'texts'):
+                for text in ax.texts:
+                    text.set_fontsize(pie_config.get('label_fontsize', 10))
             
-        # 点类型特定的marker
-        if point_type == 'critical':
-            config['marker'] = cls.MARKERS['critical_point']
-            config['size'] = 50
-        elif point_type == 'warning':
-            config['marker'] = cls.MARKERS['warning_point']
-            config['size'] = 30
-            
-        return config
+            # 调整百分比文本
+            if autopct_texts:
+                for text in autopct_texts:
+                    text.set_fontsize(pie_config.get('pct_fontsize', 9))
+                    text.set_weight('bold')
+        
+        return ax
     
     @classmethod
     def apply_standard_plot_order(cls, ax, data_func, threshold_func=None, title=None):

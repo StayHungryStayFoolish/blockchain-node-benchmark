@@ -19,18 +19,8 @@ import matplotlib.font_manager as fm
 import seaborn as sns
 from scipy import stats
 from sklearn.linear_model import LinearRegression
+from visualization.chart_style_config import UnifiedChartStyle
 
-# Configure font support for cross-platform compatibility
-def setup_font():
-    """Configure matplotlib font for cross-platform compatibility"""
-    # Use standard fonts that work across all platforms
-    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
-    plt.rcParams['axes.unicode_minus'] = False
-    print("SUCCESS: CPU-EBS Correlation Analyzer using font: DejaVu Sans")
-    return True
-
-# Initialize font configuration
-setup_font()
 from sklearn.metrics import r2_score
 import statsmodels.api as sm
 from typing import Dict, List, Tuple, Optional

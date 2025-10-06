@@ -11,18 +11,8 @@ import matplotlib.font_manager as fm
 import numpy as np
 import os
 from datetime import datetime
-
-# Configure font support for cross-platform compatibility
-def setup_font():
-    """Configure matplotlib font for cross-platform compatibility"""
-    # Use standard fonts that work across all platforms
-    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
-    plt.rcParams['axes.unicode_minus'] = False
-    print("✅ SUCCESS: EBS Charts using font: DejaVu Sans")
-    return True
-
-# Initialize font configuration
-setup_font()
+from .chart_style_config import UnifiedChartStyle
+from .device_manager import DeviceManager
 
 class EBSChartGenerator:
     # 统一的EBS图表文件命名规范
@@ -57,128 +47,49 @@ class EBSChartGenerator:
             # DataFrame对象 - 兼容report_generator.py调用
             self.df = data_source
         
-        # AWS基准值配置 - 从环境变量动态读取
-        self.data_baseline_iops = float(os.getenv('DATA_VOL_MAX_IOPS', '3000'))
-        self.data_baseline_throughput = float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '125'))
-        self.accounts_baseline_iops = float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '3000'))
-        self.accounts_baseline_throughput = float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '125'))
-        
-        # EBS瓶颈检测阈值配置（来自internal_config.sh）
-        self.ebs_util_threshold = float(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90'))
-        self.ebs_latency_threshold = float(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50'))
-        self.ebs_iops_threshold = float(os.getenv('BOTTLENECK_EBS_IOPS_THRESHOLD', '90'))
-        self.ebs_throughput_threshold = float(os.getenv('BOTTLENECK_EBS_THROUGHPUT_THRESHOLD', '90'))
+        # AWS基准值配置 - 使用DeviceManager统一读取（修复问题8）
+        temp_device_manager = DeviceManager(self.df) if hasattr(self, 'df') and self.df is not None else None
+        if temp_device_manager:
+            thresholds = temp_device_manager.get_threshold_values()
+            self.data_baseline_iops = thresholds['data_baseline_iops']
+            self.data_baseline_throughput = thresholds['data_baseline_throughput']
+            self.accounts_baseline_iops = thresholds['accounts_baseline_iops']
+            self.accounts_baseline_throughput = thresholds['accounts_baseline_throughput']
+            self.ebs_util_threshold = thresholds['ebs_util_threshold']
+            self.ebs_latency_threshold = thresholds['ebs_latency_threshold']
+            self.ebs_iops_threshold = thresholds['ebs_iops_threshold']
+            self.ebs_throughput_threshold = thresholds['ebs_throughput_threshold']
+        else:
+            # 回退到环境变量（保持兼容性）
+            self.data_baseline_iops = float(os.getenv('DATA_VOL_MAX_IOPS', '20000'))
+            self.data_baseline_throughput = float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700'))
+            self.accounts_baseline_iops = float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))
+            self.accounts_baseline_throughput = float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))
+            self.ebs_util_threshold = float(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90'))
+            self.ebs_latency_threshold = float(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50'))
+            self.ebs_iops_threshold = float(os.getenv('BOTTLENECK_EBS_IOPS_THRESHOLD', '90'))
+            self.ebs_throughput_threshold = float(os.getenv('BOTTLENECK_EBS_THROUGHPUT_THRESHOLD', '90'))
         
         # 添加框架统一方法
         self._init_framework_methods()
     
     def _init_framework_methods(self):
         """初始化框架统一方法"""
-        pass
-    
-    def _check_device_configured(self, logical_name: str) -> bool:
-        """统一的设备配置检测方法"""
-        if self.df is None:
-            return False
-        # 检查设备是否存在数据列
-        device_cols = [col for col in self.df.columns if col.startswith(f'{logical_name}_')]
-        return len(device_cols) > 0
-    
-    def get_device_columns_safe(self, device_prefix: str, metric_suffix: str) -> list:
-        """统一的设备字段获取方法"""
-        if self.df is None:
-            return []
-        matching_cols = []
-        for col in self.df.columns:
-            if col.startswith(f'{device_prefix}_') and metric_suffix in col:
-                matching_cols.append(col)
-        return matching_cols
-    
-    def _build_field_mapping(self):
-        """构建EBS字段名称映射 - 支持ACCOUNTS设备可选性"""
-        mapping = {}
-        
-        # 完整的字段后缀列表 - 基于实际CSV数据结构
-        all_suffixes = [
-            # AWS和基础字段
-            'aws_standard_iops', 'aws_standard_throughput_mibs', 'util', 'aqu_sz',
-            # IOPS相关字段 (r_s对应read_iops, w_s对应write_iops)
-            'r_s', 'w_s', 'total_iops',
-            # 延迟相关字段
-            'r_await', 'w_await', 'avg_await',
-            # 吞吐量相关字段
-            'read_throughput_mibs', 'write_throughput_mibs', 'total_throughput_mibs'
-        ]
-        
-        # 检查设备可用性
-        available_devices = []
-        
-        # DATA设备 - 必须存在
-        data_fields = [col for col in self.df.columns if col.startswith('data_')]
-        if data_fields:
-            available_devices.append('data')
-        
-        # ACCOUNTS设备 - 可选存在
-        accounts_fields = [col for col in self.df.columns if col.startswith('accounts_')]
-        if accounts_fields:
-            available_devices.append('accounts')
-        
-        # 只为可用设备构建映射
-        for device in available_devices:
-            for suffix in all_suffixes:
-                expected_field = f'{device}_{suffix}'
-                actual_field = self._find_field_by_pattern(f'{device}_.*_{suffix}')
-                if actual_field:  # 只映射实际存在的字段
-                    mapping[expected_field] = actual_field
-        
-        # 特殊映射：将常用的简化字段名映射到实际字段
-        if 'data' in available_devices:
-            mapping.update({
-                'data_read_iops': self._find_field_by_pattern(r'data_.*_r_s'),
-                'data_write_iops': self._find_field_by_pattern(r'data_.*_w_s')
-            })
-        
-        if 'accounts' in available_devices:
-            mapping.update({
-                'accounts_read_iops': self._find_field_by_pattern(r'accounts_.*_r_s'),
-                'accounts_write_iops': self._find_field_by_pattern(r'accounts_.*_w_s')
-            })
-            
-        return mapping
-    
-    def _find_field_by_pattern(self, pattern):
-        """根据模式查找实际字段名"""
-        import re
-        for col in self.df.columns:
-            if re.match(pattern, col):
-                return col
-        return None
+        # 使用DeviceManager统一管理字段映射
+        self.device_manager = DeviceManager(self.df)
+        self.field_mapping = self.device_manager.build_field_mapping()
     
     def get_mapped_field(self, field_name):
-        """动态获取映射后的实际字段名 - 重构为统一方法"""
-        # 解析字段名：device_metric格式
-        if '_' in field_name:
-            parts = field_name.split('_', 1)
-            if len(parts) == 2:
-                device_prefix, metric_suffix = parts
-                # 使用统一的字段获取方法
-                matching_cols = self.get_device_columns_safe(device_prefix, metric_suffix)
-                return matching_cols[0] if matching_cols else None
-        
-        # 直接字段名查找
-        return field_name if field_name in self.df.columns else None
+        """获取映射后的实际字段名 - 委托给DeviceManager"""
+        return self.device_manager.get_mapped_field(field_name)
     
     def get_field_data(self, field_name):
-        """安全获取字段数据 - 使用映射后的字段名"""
-        mapped_field = self.get_mapped_field(field_name)
-        if mapped_field and mapped_field in self.df.columns:
-            return self.df[mapped_field]
-        return None
+        """安全获取字段数据 - 委托给DeviceManager"""
+        return self.device_manager.get_field_data(field_name)
     
     def has_field(self, field_name):
-        """检查字段是否存在 - 使用映射后的字段名"""
-        mapped_field = self.get_mapped_field(field_name)
-        return mapped_field and mapped_field in self.df.columns
+        """检查字段是否存在 - 委托给DeviceManager"""
+        return self.device_manager.has_field(field_name)
     
     def validate_data_completeness(self):
         """EBS数据完整性验证"""
@@ -230,7 +141,7 @@ class EBSChartGenerator:
         fig.suptitle('AWS EBS Capacity Planning Analysis', fontsize=16, fontweight='bold')
         
         # 检查设备配置
-        accounts_configured = self._check_device_configured('accounts')
+        accounts_configured = self.device_manager.is_accounts_configured()
         
         # 1. AWS标准IOPS利用率分析 - 支持双设备
         data_iops_field = self.get_mapped_field('data_aws_standard_iops')
@@ -345,7 +256,7 @@ class EBSChartGenerator:
         """iostat性能分析 - 多维度专业分析"""
         
         # 检查设备配置
-        accounts_configured = self._check_device_configured('accounts')
+        accounts_configured = self.device_manager.is_accounts_configured()
         
         # 使用框架统一标题函数
         from .performance_visualizer import create_chart_title
@@ -509,7 +420,7 @@ class EBSChartGenerator:
         """瓶颈关联分析 - 多维度专业分析"""
         
         # 检查设备配置
-        accounts_configured = self._check_device_configured('accounts')
+        accounts_configured = self.device_manager.is_accounts_configured()
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle('EBS Bottleneck Correlation Analysis', fontsize=16, fontweight='bold')
@@ -643,8 +554,8 @@ class EBSChartGenerator:
         """EBS性能概览图表 - 支持DATA和ACCOUNTS双设备动态显示"""
         
         # 设备配置检测 - 使用统一方法
-        data_configured = self._check_device_configured('data')
-        accounts_configured = self._check_device_configured('accounts')
+        data_configured = True
+        accounts_configured = self.device_manager.is_accounts_configured()
         
         if not data_configured:
             print("❌ DATA设备数据未找到")
@@ -915,8 +826,8 @@ class EBSChartGenerator:
         """EBS Bottleneck Analysis Chart - Dual Device Support"""
         
         # Device configuration detection - 使用统一方法
-        data_configured = self._check_device_configured('data')
-        accounts_configured = self._check_device_configured('accounts')
+        data_configured = True
+        accounts_configured = self.device_manager.is_accounts_configured()
         
         if not data_configured:
             print("❌ DATA device data not found")
@@ -1188,8 +1099,8 @@ class EBSChartGenerator:
         """EBS AWS Standard Comparison Chart - Dual Device Support"""
         
         # Device configuration detection - 使用统一方法
-        data_configured = self._check_device_configured('data')
-        accounts_configured = self._check_device_configured('accounts')
+        data_configured = True
+        accounts_configured = self.device_manager.is_accounts_configured()
         
         if not data_configured:
             print("❌ DATA device data not found")
@@ -1355,8 +1266,8 @@ class EBSChartGenerator:
         """EBS Time Series Analysis Chart - Dual Device Support"""
         
         # Device configuration detection - 使用统一方法
-        data_configured = self._check_device_configured('data')
-        accounts_configured = self._check_device_configured('accounts')
+        data_configured = True
+        accounts_configured = self.device_manager.is_accounts_configured()
         
         if not data_configured:
             print("❌ DATA device data not found")
