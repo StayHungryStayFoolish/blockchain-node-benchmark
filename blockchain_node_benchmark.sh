@@ -581,7 +581,6 @@ execute_performance_cliff_analysis() {
         fi
     fi
 }
-}
 
 # 归档测试结果
 archive_test_results() {
