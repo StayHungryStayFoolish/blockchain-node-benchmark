@@ -112,9 +112,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
         except:
             self.unit_converter = None
         
-        # Set chart style
-        plt.style.use('seaborn-v0_8')
-        sns.set_palette("husl")
+        # Set chart style - 使用统一样式配置
+        from .chart_style_config import UnifiedChartStyle
+        UnifiedChartStyle.setup_matplotlib()
         
         # Using English label system directly
         self.font_manager = None
@@ -258,7 +258,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             axes = axes.reshape(-1, 1)
         
         # Using English title directly
-        fig.suptitle('CPU-EBS Pearson Correlation Analysis', fontsize=16, fontweight='bold')
+        fig.suptitle('CPU-EBS Pearson Correlation Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
         # 生成每个子图
         plot_idx = 0
@@ -366,7 +366,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             axes = axes.reshape(-1, 1)
         
         # Using English title directly
-        fig.suptitle('Linear Regression Analysis', fontsize=16, fontweight='bold')
+        fig.suptitle('Linear Regression Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
         for idx, (x_col, y_col, title) in enumerate(regression_configs):
             row, col = divmod(idx, cols)
@@ -390,7 +390,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax.plot(self.df[x_col], y_pred, 'r-', linewidth=2)
                 
                 # 设置标题和标签
-                ax.set_title(f'{title}\nR²={r2:.3f}, Coefficient={model.coef_[0]:.3f}', fontsize=12)
+                ax.set_title(f'{title}\nR²={r2:.3f}, Coefficient={model.coef_[0]:.3f}', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax.set_xlabel(x_col.replace('_', ' ').title())
                 ax.set_ylabel(y_col.replace('_', ' ').title())
                 ax.grid(True, alpha=0.3)
@@ -401,7 +401,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                        bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7))
             else:
                 ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes)
-                ax.set_title(title, fontsize=12)
+                ax.set_title(title, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
         
         plt.tight_layout()
         chart_file = os.path.join(self.output_dir, 'linear_regression_analysis.png')
@@ -449,7 +449,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             axes = [axes]
         
         # Using English title directly
-        fig.suptitle('Negative Correlation Analysis', fontsize=16, fontweight='bold')
+        fig.suptitle('Negative Correlation Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         for idx, (x_col, y_col, title) in enumerate(negative_configs):
             ax: Axes = axes[idx]  # 类型注解：明确指定为 matplotlib Axes 对象
@@ -468,7 +468,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 
                 # 设置标题和标签
                 correlation_type = "Negative" if corr < 0 else "Positive"
-                ax.set_title(f'{title}\nr={corr:.3f} ({correlation_type})', fontsize=12)
+                ax.set_title(f'{title}\nr={corr:.3f} ({correlation_type})', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
                 ax.set_xlabel(x_col.replace('_', ' ').title())
                 ax.set_ylabel(y_col.replace('_', ' ').title())
                 ax.grid(True, alpha=0.3)
@@ -479,10 +479,10 @@ class AdvancedChartGenerator(CSVDataProcessor):
                            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgreen", alpha=0.7))
                 else:
                     ax.text(0.05, 0.95, '⚠ Non-negative Correlation', transform=ax.transAxes,
-                           bbox=dict(boxstyle="round,pad=0.3", facecolor="orange", alpha=0.7))
+                           bbox=dict(boxstyle="round,pad=0.3", facecolor=UnifiedChartStyle.COLORS["accounts_primary"], alpha=0.7))
             else:
                 ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes)
-                ax.set_title(title, fontsize=12)
+                ax.set_title(title, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
         
         plt.tight_layout()
         chart_file = os.path.join(self.output_dir, 'negative_correlation_analysis.png')
@@ -546,7 +546,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                    cbar_kws={"shrink": .8})
         
         # Using English title directly
-        plt.title('CPU-EBS Performance Metrics Correlation Matrix', fontsize=16, fontweight='bold', pad=20)
+        plt.title('CPU-EBS Performance Metrics Correlation Matrix', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold', pad=20)
         plt.xticks(rotation=45, ha='right')
         plt.yticks(rotation=0)
         
@@ -578,7 +578,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         fig, axes = plt.subplots(3, 2, figsize=(18, 15))
         # Using English title directly
-        fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=16, fontweight='bold')
+        fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         # CPU Usage trends
         if 'cpu_iowait' in self.df.columns:
@@ -752,9 +752,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 return None
             
             # Chart styling with English labels
-            ax.set_title('ENA Network Limitation Trend Analysis', fontsize=16, fontweight='bold')
-            ax.set_xlabel('Time', fontsize=12)
-            ax.set_ylabel('Limitation Triggers (Cumulative)', fontsize=12)
+            ax.set_title('ENA Network Limitation Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
+            ax.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+            ax.set_ylabel('Limitation Triggers (Cumulative)', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
             ax.legend(loc='upper left')
             ax.grid(True, alpha=0.3)
             
@@ -797,17 +797,17 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # 绘制连接容量趋势
             ax.plot(self.df['timestamp'], self.df[available_field], 
-                   color='green', linewidth=2, marker='o', markersize=2, alpha=0.8)
+                   color=UnifiedChartStyle.COLORS["success"], linewidth=2, marker='o', markersize=2, alpha=0.8)
             
             # 添加警告线 (连接容量不足阈值)
             warning_threshold = 10000
-            ax.axhline(y=warning_threshold, color='red', linestyle='--', alpha=0.7, 
+            ax.axhline(y=warning_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7, 
                       label=f'Warning Threshold ({warning_threshold:,})')
             
             # Chart styling with English labels
-            ax.set_title('ENA Connection Capacity Monitoring', fontsize=16, fontweight='bold')
-            ax.set_xlabel('Time', fontsize=12)
-            ax.set_ylabel('Available Connections', fontsize=12)
+            ax.set_title('ENA Connection Capacity Monitoring', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
+            ax.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+            ax.set_ylabel('Available Connections', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
             ax.legend()
             ax.grid(True, alpha=0.3)
             
@@ -842,7 +842,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 创建2x2子图布局
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
             # Using English title directly
-            fig.suptitle('ENA Network Comprehensive Analysis', fontsize=16, fontweight='bold')
+            fig.suptitle('ENA Network Comprehensive Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
             
             # 1. 限制类型分布 (左上)
             ax1 = axes[0, 0]
@@ -863,7 +863,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax1.set_title('Limitation Type Distribution')
             else:
                 ax1.text(0.5, 0.5, 'No Network Limitations Detected', ha='center', va='center', 
-                        transform=ax1.transAxes, fontsize=12)
+                        transform=ax1.transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
                 ax1.set_title('Limitation Type Distribution')
             
             # 2. 连接容量状态 (右上)
@@ -877,8 +877,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             if available_field and available_field in self.df.columns:
                 capacity_data = self.df[available_field]
-                ax2.hist(capacity_data, bins=20, alpha=0.7, color='green', edgecolor='black')
-                ax2.axvline(capacity_data.mean(), color='red', linestyle='--', 
+                ax2.hist(capacity_data, bins=20, alpha=0.7, color=UnifiedChartStyle.COLORS["success"], edgecolor='black')
+                ax2.axvline(capacity_data.mean(), color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
                            label=f'Average: {capacity_data.mean():,.0f}')
                 ax2.set_title('Connection Capacity Distribution')
                 ax2.set_xlabel('Available Connections')
@@ -886,7 +886,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax2.legend()
             else:
                 ax2.text(0.5, 0.5, 'No Connection Capacity Data', ha='center', va='center', 
-                        transform=ax2.transAxes, fontsize=12)
+                        transform=ax2.transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
                 ax2.set_title('Connection Capacity Distribution')
             
             # 3. 限制严重程度时间线 (左下)
@@ -900,15 +900,15 @@ class AdvancedChartGenerator(CSVDataProcessor):
                     severity_score += (self.df[field] > 0).astype(int)
             
             if severity_score.max() > 0:
-                ax3.plot(self.df['timestamp'], severity_score, color='red', linewidth=2)
-                ax3.fill_between(self.df['timestamp'], severity_score, alpha=0.3, color='red')
+                ax3.plot(self.df['timestamp'], severity_score, color=UnifiedChartStyle.COLORS["critical"], linewidth=2)
+                ax3.fill_between(self.df['timestamp'], severity_score, alpha=0.3, color=UnifiedChartStyle.COLORS["critical"])
                 ax3.set_title('Network Limitation Severity')
                 ax3.set_xlabel('Time')
                 ax3.set_ylabel('Concurrent Limitation Types')
                 plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45)
             else:
                 ax3.text(0.5, 0.5, 'No Network Limitation Records', ha='center', va='center', 
-                        transform=ax3.transAxes, fontsize=12)
+                        transform=ax3.transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
                 ax3.set_title('Network Limitation Severity')
             
             # 4. ENA状态汇总 (右下)
@@ -944,7 +944,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax4.set_title('ENA Status Summary')
             else:
                 ax4.text(0.5, 0.5, 'No ENA Data', ha='center', va='center', 
-                        transform=ax4.transAxes, fontsize=12)
+                        transform=ax4.transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
                 ax4.set_title('ENA Status Summary')
             
             plt.tight_layout()
@@ -964,6 +964,15 @@ class AdvancedChartGenerator(CSVDataProcessor):
     def generate_all_charts(self) -> List[str]:
         """Generate all charts"""
         print("🎨 Starting complete CPU-EBS correlation analysis chart generation...")
+        
+        # 🎨 重构：应用统一样式配置
+        try:
+            from .chart_style_config import UnifiedChartStyle
+            unified_style = UnifiedChartStyle()
+            unified_style.setup_matplotlib()
+            print("✅ 统一样式已应用到高级图表")
+        except ImportError:
+            print("⚠️ 统一样式配置不可用，使用默认样式")
         
         all_charts = []
         
@@ -1038,9 +1047,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # Using English labels directly
             plt.title('Performance Metrics Correlation Heatmap', 
-                     fontsize=16, fontweight='bold', pad=20)
-            plt.xlabel('Performance Metrics', fontsize=12)
-            plt.ylabel('Performance Metrics', fontsize=12)
+                     fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold', pad=20)
+            plt.xlabel('Performance Metrics', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+            plt.ylabel('Performance Metrics', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
             
             # 旋转标签以提高可读性
             plt.xticks(rotation=45, ha='right')

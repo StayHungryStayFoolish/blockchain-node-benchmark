@@ -76,6 +76,13 @@ class NodeQPSAnalyzer:
 
         # Using English labels system directly
         
+        # 应用统一样式配置
+        try:
+            from visualization.chart_style_config import UnifiedChartStyle
+            UnifiedChartStyle.setup_matplotlib()
+        except ImportError:
+            pass
+        
         logger.info(f"🔍 QPS分析器初始化完成，输出目录: {output_dir}, 基准测试模式: {benchmark_mode}")
         if bottleneck_mode:
             logger.info("🚨 瓶颈分析模式已启用")
@@ -344,7 +351,7 @@ class NodeQPSAnalyzer:
             
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
             # Using English title directly
-            fig.suptitle('📉 Performance Cliff Analysis', fontsize=16, fontweight='bold', color='red')
+            fig.suptitle('📉 Performance Cliff Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold', color=UnifiedChartStyle.COLORS["critical"])
             
             # 1. QPS性能曲线
             qps_column = None
@@ -360,14 +367,14 @@ class NodeQPSAnalyzer:
                 max_qps = cliff_analysis['max_qps']
                 bottleneck_qps = cliff_analysis['bottleneck_qps']
                 
-                axes[0, 0].axhline(y=max_qps, color='green', linestyle='--', linewidth=2,
+                axes[0, 0].axhline(y=max_qps, color=UnifiedChartStyle.COLORS["success"], linestyle='--', linewidth=2,
                                  label=f'Max QPS: {max_qps}')
-                axes[0, 0].axhline(y=bottleneck_qps, color='red', linestyle='--', linewidth=2,
+                axes[0, 0].axhline(y=bottleneck_qps, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', linewidth=2,
                                  label=f'Bottleneck QPS: {bottleneck_qps}')
                 
                 # 填充悬崖区域
                 axes[0, 0].fill_between(df.index, max_qps, bottleneck_qps, 
-                                      alpha=0.3, color='red', label='Performance Cliff')
+                                      alpha=0.3, color=UnifiedChartStyle.COLORS["critical"], label='Performance Cliff')
                 
                 axes[0, 0].set_title('QPS Performance Cliff')
                 axes[0, 0].set_xlabel('Time')
@@ -409,12 +416,12 @@ class NodeQPSAnalyzer:
             recommendations = cliff_analysis.get('recommendations', [])
             if recommendations:
                 axes[1, 1].text(0.05, 0.95, 'Optimization Recommendations:', 
-                               transform=axes[1, 1].transAxes, fontsize=12, fontweight='bold',
+                               transform=axes[1, 1].transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"], fontweight='bold',
                                verticalalignment='top')
                 
                 for i, rec in enumerate(recommendations[:5]):
                     axes[1, 1].text(0.05, 0.85 - i*0.15, f"• {rec}", 
-                                   transform=axes[1, 1].transAxes, fontsize=10,
+                                   transform=axes[1, 1].transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"],
                                    verticalalignment='top', wrap=True)
                 
                 axes[1, 1].set_xlim(0, 1)
@@ -597,12 +604,12 @@ class NodeQPSAnalyzer:
         plt.style.use('default')
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         # Using English title directly
-        fig.suptitle('Blockchain Node QPS Performance Analysis Dashboard', fontsize=16, fontweight='bold')
+        fig.suptitle('Blockchain Node QPS Performance Analysis Dashboard', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
 
         # 1. CPU使用率 vs QPS
         if len(df) > 0:
             axes[0, 0].plot(df['current_qps'], df['cpu_usage'], 'bo-', alpha=0.7, markersize=4)
-            axes[0, 0].axhline(y=85, color='red', linestyle='--', alpha=0.8, label='Warning (85%)')
+            axes[0, 0].axhline(y=85, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.8, label='Warning (85%)')
             axes[0, 0].set_title('CPU Usage vs QPS')
             axes[0, 0].set_xlabel('QPS')
             axes[0, 0].set_ylabel('CPU %')
@@ -612,7 +619,7 @@ class NodeQPSAnalyzer:
         # 2. 内存使用率 vs QPS
         if len(df) > 0:
             axes[0, 1].plot(df['current_qps'], df['mem_usage'], 'go-', alpha=0.7, markersize=4)
-            axes[0, 1].axhline(y=90, color='red', linestyle='--', alpha=0.8, label='Warning (90%)')
+            axes[0, 1].axhline(y=90, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.8, label='Warning (90%)')
             axes[0, 1].set_title('Memory Usage vs QPS')
             axes[0, 1].set_xlabel('QPS')
             axes[0, 1].set_ylabel('Memory %')
@@ -622,7 +629,7 @@ class NodeQPSAnalyzer:
         # 3. RPC延迟 vs QPS
         if len(df) > 0:
             axes[1, 0].plot(df['current_qps'], df['rpc_latency_ms'], 'ro-', alpha=0.7, markersize=4)
-            axes[1, 0].axhline(y=1000, color='orange', linestyle='--', alpha=0.8, label='High Latency (1s)')
+            axes[1, 0].axhline(y=1000, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.8, label='High Latency (1s)')
             axes[1, 0].set_title('RPC Latency vs QPS')
             axes[1, 0].set_xlabel('QPS')
             axes[1, 0].set_ylabel('Latency (ms)')
@@ -635,9 +642,9 @@ class NodeQPSAnalyzer:
             if 'rpc_latency_ms' in df.columns:
                 mean_latency = df['rpc_latency_ms'].mean()
                 p95_latency = df['rpc_latency_ms'].quantile(0.95)
-                axes[1, 1].axvline(mean_latency, color='red', linestyle='--',
+                axes[1, 1].axvline(mean_latency, color=UnifiedChartStyle.COLORS["critical"], linestyle='--',
                                    label=f'Mean: {mean_latency:.1f}ms')
-                axes[1, 1].axvline(p95_latency, color='orange', linestyle='--',
+                axes[1, 1].axvline(p95_latency, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--',
                                    label=f'P95: {p95_latency:.1f}ms')
             axes[1, 1].set_title('RPC Latency Distribution')
             axes[1, 1].set_xlabel('Latency (ms)')

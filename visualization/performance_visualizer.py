@@ -693,20 +693,20 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file
 
     def create_await_threshold_analysis_chart(self):
-        """I/O Latency Threshold Analysis Chart"""
+        """Enhanced I/O Latency Threshold Analysis Chart"""
         
-        accounts_configured = self._is_accounts_configured()
-        title = 'I/O Latency Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'I/O Latency Threshold Analysis - DATA Device Only'
-        
+        # 先加载数据，再检查ACCOUNTS配置
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for await threshold analysis")
                 return None
+
+        accounts_configured = self._is_accounts_configured()
+        title = 'Enhanced I/O Await Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Enhanced I/O Await Threshold Analysis - DATA Device Only'
         
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle(title, fontsize=16)
+        fig, axes = plt.subplots(2, 2, figsize=(18, 14))
+        fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
-        thresholds = get_visualization_thresholds()
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
         
         if not data_await_cols:
@@ -717,102 +717,236 @@ class PerformanceVisualizer(CSVDataProcessor):
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
         accounts_await_col = accounts_await_cols[0] if accounts_await_cols else None
         
-        # 1. Latency Time Series with Thresholds
+        # 智能阈值设置 - 基于实际数据范围
+        data_max = self.df[data_await_col].max()
+        data_p95 = self.df[data_await_col].quantile(0.95)
+        data_p75 = self.df[data_await_col].quantile(0.75)
+        data_p50 = self.df[data_await_col].median()
+        
+        # DATA设备阈值
+        data_thresholds = {
+            'excellent': data_p50 * 0.6,    # 60% of median
+            'good': data_p75,               # P75
+            'warning': data_p95,            # P95  
+            'poor': data_p95 * 1.05,        # 105% of P95
+            'critical': data_max            # Maximum observed
+        }
+        
+        # ACCOUNTS设备独立阈值
+        accounts_thresholds = data_thresholds  # 默认使用DATA阈值
+        if accounts_configured and accounts_await_col:
+            accounts_max = self.df[accounts_await_col].max()
+            accounts_p95 = self.df[accounts_await_col].quantile(0.95)
+            accounts_p75 = self.df[accounts_await_col].quantile(0.75)
+            accounts_p50 = self.df[accounts_await_col].median()
+            
+            accounts_thresholds = {
+                'excellent': accounts_p50 * 0.6,
+                'good': accounts_p75,
+                'warning': accounts_p95,
+                'poor': accounts_p95 * 1.05,
+                'critical': accounts_max
+            }
+        
+        # 用于显示的统一阈值（取两者最大值）
+        enhanced_thresholds = data_thresholds
+        if accounts_configured and accounts_await_col:
+            enhanced_thresholds = {
+                'excellent': max(data_thresholds['excellent'], accounts_thresholds['excellent']),
+                'good': max(data_thresholds['good'], accounts_thresholds['good']),
+                'warning': max(data_thresholds['warning'], accounts_thresholds['warning']),
+                'poor': max(data_thresholds['poor'], accounts_thresholds['poor']),
+                'critical': max(data_thresholds['critical'], accounts_thresholds['critical'])
+            }
+
+        # 1. Enhanced Time Series with Multiple Thresholds
         axes[0, 0].plot(self.df['timestamp'], self.df[data_await_col], 
-                       label='DATA Device Average Latency', linewidth=2, color='blue')
+                       label='DATA Device Latency', linewidth=2.5, color=UnifiedChartStyle.COLORS['data_primary'])
         
         if accounts_configured and accounts_await_col:
             axes[0, 0].plot(self.df['timestamp'], self.df[accounts_await_col], 
-                           label='ACCOUNTS Device Average Latency', linewidth=2, color='orange')
+                           label='ACCOUNTS Device Latency', linewidth=2.5, color=UnifiedChartStyle.COLORS['accounts_primary'])
         
-        axes[0, 0].axhline(y=thresholds['io_warning'], color='orange', linestyle='--', alpha=0.7, 
-                          label=f'Warning: {thresholds["io_warning"]}ms')
-        axes[0, 0].axhline(y=thresholds['io_critical'], color='red', linestyle='--', alpha=0.7, 
-                          label=f'Critical: {thresholds["io_critical"]}ms')
+        # Multiple threshold lines with better colors
+        axes[0, 0].axhline(y=enhanced_thresholds['excellent'], color=UnifiedChartStyle.COLORS['success'], 
+                          linestyle='-', alpha=0.8, linewidth=1, label=f'Excellent (<{enhanced_thresholds["excellent"]:.2f}ms)')
+        axes[0, 0].axhline(y=enhanced_thresholds['good'], color='limegreen', 
+                          linestyle='--', alpha=0.8, linewidth=1.5, label=f'Good (<{enhanced_thresholds["good"]:.2f}ms)')
+        axes[0, 0].axhline(y=enhanced_thresholds['warning'], color=UnifiedChartStyle.COLORS['warning'], 
+                          linestyle='--', alpha=0.8, linewidth=2, label=f'Warning (<{enhanced_thresholds["warning"]:.2f}ms)')
+        axes[0, 0].axhline(y=enhanced_thresholds['critical'], color=UnifiedChartStyle.COLORS['critical'], 
+                          linestyle='--', alpha=0.8, linewidth=2, label=f'Critical (<{enhanced_thresholds["critical"]:.2f}ms)')
         
-        axes[0, 0].set_title('I/O Latency vs Thresholds')
+        axes[0, 0].set_title('I/O Latency Timeline with Performance Thresholds', 
+                            fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         axes[0, 0].set_ylabel('Average Latency (ms)')
-        axes[0, 0].legend()
+        axes[0, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], loc='upper left')
         axes[0, 0].grid(True, alpha=0.3)
+        axes[0, 0].tick_params(axis='x', rotation=45)
         
-        # 2. Latency Distribution
-        axes[0, 1].hist(self.df[data_await_col], bins=20, alpha=0.7, color='blue', 
-                       label='DATA Latency Distribution')
-        
-        if accounts_configured and accounts_await_col:
-            axes[0, 1].hist(self.df[accounts_await_col], bins=20, alpha=0.7, color='orange', 
-                           label='ACCOUNTS Latency Distribution')
-        
-        axes[0, 1].axvline(x=thresholds['io_warning'], color='orange', linestyle='--', alpha=0.7)
-        axes[0, 1].axvline(x=thresholds['io_critical'], color='red', linestyle='--', alpha=0.7)
-        axes[0, 1].set_title('Latency Distribution')
-        axes[0, 1].set_xlabel('Average Latency (ms)')
-        axes[0, 1].set_ylabel('Frequency')
-        axes[0, 1].legend()
-        axes[0, 1].grid(True, alpha=0.3)
-        
-        # 3. Threshold Violations
-        data_violations = self.df[data_await_col] > thresholds['io_critical']
-        data_warnings = (self.df[data_await_col] > thresholds['io_warning']) & (self.df[data_await_col] <= thresholds['io_critical'])
-        
-        # 初始化ACCOUNTS相关变量
-        accounts_violations = pd.Series(dtype=bool)
-        accounts_warnings = pd.Series(dtype=bool)
-        
-        axes[1, 0].plot(self.df['timestamp'], data_violations.astype(int), 
-                       label='DATA Critical Violations', linewidth=2, color='red', marker='o', markersize=3)
-        axes[1, 0].plot(self.df['timestamp'], data_warnings.astype(int) * 0.5, 
-                       label='DATA Warning Violations', linewidth=2, color='orange', marker='s', markersize=3)
+        # 2. Enhanced Distribution Analysis
+        import numpy as np
+        bins = np.linspace(0, max(enhanced_thresholds['critical'] * 1.2, self.df[data_await_col].max() * 1.1), 25)
+        axes[0, 1].hist(self.df[data_await_col], bins=bins, alpha=0.7, color=UnifiedChartStyle.COLORS['data_primary'], 
+                       edgecolor='black', linewidth=0.5, label='DATA Distribution')
         
         if accounts_configured and accounts_await_col:
-            accounts_violations = self.df[accounts_await_col] > thresholds['io_critical']
-            accounts_warnings = (self.df[accounts_await_col] > thresholds['io_warning']) & (self.df[accounts_await_col] <= thresholds['io_critical'])
-            
-            axes[1, 0].plot(self.df['timestamp'], accounts_violations.astype(int) + 0.1, 
-                           label='ACCOUNTS Critical Violations', linewidth=2, color='darkred', marker='o', markersize=3)
-            axes[1, 0].plot(self.df['timestamp'], accounts_warnings.astype(int) * 0.5 + 0.05, 
-                           label='ACCOUNTS Warning Violations', linewidth=2, color='darkorange', marker='s', markersize=3)
+            axes[0, 1].hist(self.df[accounts_await_col], bins=bins, alpha=0.6, color=UnifiedChartStyle.COLORS['accounts_primary'], 
+                           edgecolor='black', linewidth=0.5, label='ACCOUNTS Distribution')
         
-        axes[1, 0].set_title('Threshold Violation Timeline')
-        axes[1, 0].set_ylabel('Violation Status')
-        axes[1, 0].legend()
-        axes[1, 0].grid(True, alpha=0.3)
+        # Add threshold lines to histogram with labels
+        axes[0, 1].axvline(x=enhanced_thresholds['excellent'], color=UnifiedChartStyle.COLORS['success'], 
+                          linestyle='-', alpha=0.8, linewidth=1.5, label=f'Excellent ({enhanced_thresholds["excellent"]:.2f}ms)')
+        axes[0, 1].axvline(x=enhanced_thresholds['good'], color='limegreen', 
+                          linestyle='--', alpha=0.8, linewidth=1.5, label=f'Good ({enhanced_thresholds["good"]:.2f}ms)')
+        axes[0, 1].axvline(x=enhanced_thresholds['warning'], color=UnifiedChartStyle.COLORS['warning'], 
+                          linestyle='--', alpha=0.8, linewidth=1.5, label=f'Warning ({enhanced_thresholds["warning"]:.2f}ms)')
+        axes[0, 1].axvline(x=enhanced_thresholds['critical'], color=UnifiedChartStyle.COLORS['critical'], 
+                          linestyle='--', alpha=0.8, linewidth=1.5, label=f'Critical ({enhanced_thresholds["critical"]:.2f}ms)')
         
-        # 4. Summary Statistics
-        axes[1, 1].axis('off')
-        
+        # Add statistics
         data_mean = self.df[data_await_col].mean()
-        data_max = self.df[data_await_col].max()
-        data_violations_count = data_violations.sum()
-        
-        summary_lines = [
-            "I/O Latency Analysis Summary:",
-            "",
-            f"DATA Device:",
-            f"  Mean: {data_mean:.2f}ms",
-            f"  Max: {data_max:.2f}ms",
-            f"  Violations: {data_violations_count}",
-        ]
+        axes[0, 1].axvline(x=data_mean, color=UnifiedChartStyle.COLORS['data_primary'], 
+                          linestyle='-', alpha=0.9, linewidth=2, label=f'DATA Mean: {data_mean:.2f}ms')
         
         if accounts_configured and accounts_await_col:
             accounts_mean = self.df[accounts_await_col].mean()
-            accounts_max = self.df[accounts_await_col].max()
-            accounts_violations_count = accounts_violations.sum()
-            accounts_warnings_count = accounts_warnings.sum()
-            summary_lines.extend([
-                "",
-                f"ACCOUNTS Device:",
-                f"  Mean: {accounts_mean:.2f}ms",
-                f"  Max: {accounts_max:.2f}ms",
-                f"  Critical: {accounts_violations_count}",
-                f"  Warnings: {accounts_warnings_count}",
-            ])
+            axes[0, 1].axvline(x=accounts_mean, color=UnifiedChartStyle.COLORS['accounts_primary'], 
+                              linestyle='-', alpha=0.9, linewidth=2, label=f'ACCOUNTS Mean: {accounts_mean:.2f}ms')
         
-        summary_text = "\n".join(summary_lines)
+        axes[0, 1].set_title('Latency Distribution with Performance Bands', 
+                            fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        axes[0, 1].set_xlabel('Average Latency (ms)')
+        axes[0, 1].set_ylabel('Frequency')
+        axes[0, 1].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+        axes[0, 1].grid(True, alpha=0.3)
         
+        # 3. Enhanced Violation Timeline - 使用各自的阈值
+        data_violations = {
+            'critical': self.df[data_await_col] > data_thresholds['critical'],
+            'poor': (self.df[data_await_col] > data_thresholds['poor']) & (self.df[data_await_col] <= data_thresholds['critical']),
+            'warning': (self.df[data_await_col] > data_thresholds['warning']) & (self.df[data_await_col] <= data_thresholds['poor'])
+        }
+        
+        # Plot violation timelines with clearly different colors
+        axes[1, 0].plot(self.df['timestamp'], data_violations['critical'].astype(int) * 3, 
+                       label='DATA Critical', linewidth=3, color=UnifiedChartStyle.COLORS['critical'], marker='o', markersize=4)
+        axes[1, 0].plot(self.df['timestamp'], data_violations['poor'].astype(int) * 2, 
+                       label='DATA Poor', linewidth=2.5, color='darkorange', marker='s', markersize=3)
+        axes[1, 0].plot(self.df['timestamp'], data_violations['warning'].astype(int) * 1, 
+                       label='DATA Warning', linewidth=2, color=UnifiedChartStyle.COLORS['warning'], marker='^', markersize=3)
+        
+        if accounts_configured and accounts_await_col:
+            # ACCOUNTS使用自己的阈值
+            accounts_violations = {
+                'critical': self.df[accounts_await_col] > accounts_thresholds['critical'],
+                'poor': (self.df[accounts_await_col] > accounts_thresholds['poor']) & (self.df[accounts_await_col] <= accounts_thresholds['critical']),
+                'warning': (self.df[accounts_await_col] > accounts_thresholds['warning']) & (self.df[accounts_await_col] <= accounts_thresholds['poor'])
+            }
+            
+            # ACCOUNTS violations with clearly different colors (紫色系)
+            axes[1, 0].plot(self.df['timestamp'], accounts_violations['critical'].astype(int) * 3 + 0.1, 
+                           label='ACCOUNTS Critical', linewidth=3, color='purple', marker='o', markersize=4, alpha=0.8)
+            axes[1, 0].plot(self.df['timestamp'], accounts_violations['poor'].astype(int) * 2 + 0.1, 
+                           label='ACCOUNTS Poor', linewidth=2.5, color='mediumorchid', marker='s', markersize=3, alpha=0.8)
+            axes[1, 0].plot(self.df['timestamp'], accounts_violations['warning'].astype(int) * 1 + 0.1, 
+                           label='ACCOUNTS Warning', linewidth=2, color='plum', marker='^', markersize=3, alpha=0.8)
+        
+        axes[1, 0].set_title('Threshold Violation Timeline Analysis', 
+                            fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        axes[1, 0].set_xlabel('Time')
+        axes[1, 0].set_ylabel('Violation Severity Level')
+        axes[1, 0].set_ylim(-0.5, 4)
+        axes[1, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], ncol=2)
+        axes[1, 0].grid(True, alpha=0.3)
+        axes[1, 0].tick_params(axis='x', rotation=45)
+        
+        # 4. Enhanced Statistics Summary
+        axes[1, 1].axis('off')
+        axes[1, 1].set_title('Performance Analysis Summary', 
+                            fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=20)
+        
+        # Calculate detailed statistics
+        data_stats = {
+            'mean': self.df[data_await_col].mean(),
+            'p50': self.df[data_await_col].median(),
+            'p95': self.df[data_await_col].quantile(0.95),
+            'p99': self.df[data_await_col].quantile(0.99),
+            'max': self.df[data_await_col].max()
+        }
+        
+        # Calculate violation percentages - 使用DATA自己的阈值
+        total_points = len(self.df)
+        data_violations_pct = {
+            'excellent': (self.df[data_await_col] < data_thresholds['excellent']).sum() / total_points * 100,
+            'good': ((self.df[data_await_col] >= data_thresholds['excellent']) & 
+                     (self.df[data_await_col] < data_thresholds['good'])).sum() / total_points * 100,
+            'warning': ((self.df[data_await_col] >= data_thresholds['good']) & 
+                        (self.df[data_await_col] < data_thresholds['warning'])).sum() / total_points * 100,
+            'poor': ((self.df[data_await_col] >= data_thresholds['warning']) & 
+                     (self.df[data_await_col] < data_thresholds['poor'])).sum() / total_points * 100,
+            'critical': (self.df[data_await_col] >= data_thresholds['poor']).sum() / total_points * 100
+        }
+        
+        summary_text = f"""DATA Device Performance:
+  Mean: {data_stats['mean']:.2f}ms  |  P50: {data_stats['p50']:.2f}ms
+  P95: {data_stats['p95']:.2f}ms   |  P99: {data_stats['p99']:.2f}ms
+  Max: {data_stats['max']:.2f}ms
+
+Performance Distribution (DATA):
+  Excellent (<{data_thresholds['excellent']:.2f}ms): {data_violations_pct['excellent']:.1f}%
+  Good ({data_thresholds['excellent']:.2f}-{data_thresholds['good']:.2f}ms): {data_violations_pct['good']:.1f}%
+  Warning ({data_thresholds['good']:.2f}-{data_thresholds['warning']:.2f}ms): {data_violations_pct['warning']:.1f}%
+  Poor ({data_thresholds['warning']:.2f}-{data_thresholds['poor']:.2f}ms): {data_violations_pct['poor']:.1f}%
+  Critical (>{data_thresholds['poor']:.2f}ms): {data_violations_pct['critical']:.1f}%"""
+        
+        if accounts_configured and accounts_await_col:
+            accounts_stats = {
+                'mean': self.df[accounts_await_col].mean(),
+                'p50': self.df[accounts_await_col].median(),
+                'p95': self.df[accounts_await_col].quantile(0.95),
+                'p99': self.df[accounts_await_col].quantile(0.99),
+                'max': self.df[accounts_await_col].max()
+            }
+            
+            # Calculate ACCOUNTS violation percentages - 使用ACCOUNTS自己的阈值
+            accounts_violations_pct = {
+                'excellent': (self.df[accounts_await_col] < accounts_thresholds['excellent']).sum() / total_points * 100,
+                'good': ((self.df[accounts_await_col] >= accounts_thresholds['excellent']) & 
+                         (self.df[accounts_await_col] < accounts_thresholds['good'])).sum() / total_points * 100,
+                'warning': ((self.df[accounts_await_col] >= accounts_thresholds['good']) & 
+                            (self.df[accounts_await_col] < accounts_thresholds['warning'])).sum() / total_points * 100,
+                'poor': ((self.df[accounts_await_col] >= accounts_thresholds['warning']) & 
+                         (self.df[accounts_await_col] < accounts_thresholds['poor'])).sum() / total_points * 100,
+                'critical': (self.df[accounts_await_col] >= accounts_thresholds['poor']).sum() / total_points * 100
+            }
+            
+            summary_text += f"""
+
+ACCOUNTS Device Performance:
+  Mean: {accounts_stats['mean']:.2f}ms  |  P50: {accounts_stats['p50']:.2f}ms
+  P95: {accounts_stats['p95']:.2f}ms   |  P99: {accounts_stats['p99']:.2f}ms
+  Max: {accounts_stats['max']:.2f}ms
+
+Performance Distribution (ACCOUNTS):
+  Excellent (<{accounts_thresholds['excellent']:.2f}ms): {accounts_violations_pct['excellent']:.1f}%
+  Good ({accounts_thresholds['excellent']:.2f}-{accounts_thresholds['good']:.2f}ms): {accounts_violations_pct['good']:.1f}%
+  Warning ({accounts_thresholds['good']:.2f}-{accounts_thresholds['warning']:.2f}ms): {accounts_violations_pct['warning']:.1f}%
+  Poor ({accounts_thresholds['warning']:.2f}-{accounts_thresholds['poor']:.2f}ms): {accounts_violations_pct['poor']:.1f}%
+  Critical (>{accounts_thresholds['poor']:.2f}ms): {accounts_violations_pct['critical']:.1f}%"""
+
+        summary_text += f"""
+
+Recommendations:
+  • Target: Keep 95% of requests under P95 latency
+  • Monitor: P99 latency trends for early warning
+  • Alert: When performance degrades significantly"""
+        
+        # 使用UnifiedChartStyle统一的文本样式 (与bottleneck_identification保持一致)
         axes[1, 1].text(0.05, 0.95, summary_text, transform=axes[1, 1].transAxes, 
-                       fontsize=10, verticalalignment='top', fontfamily='monospace',
-                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+                       fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], 
+                       verticalalignment='top', 
+                       fontfamily=plt.rcParams['font.sans-serif'][0])
         
         plt.tight_layout()
         output_file = os.path.join(self.output_dir, 'await_threshold_analysis.png')
@@ -1600,170 +1734,362 @@ Data Points: {len(overhead_df)}"""
             return None
 
     def create_bottleneck_identification_chart(self):
-        """Bottleneck Identification Chart"""
+        """System Bottleneck Identification Analysis - 专业化系统瓶颈识别分析"""
+        print("📊 Generating System Bottleneck Identification Analysis...")
 
-        # Device configuration detection
-        accounts_configured = self._is_accounts_configured()
-        
-        # Dynamic title
-        title = 'Bottleneck Identification Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Bottleneck Identification Analysis - DATA Device Only'
-        
         # Check data availability
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
-                print("❌ Failed to load data for bottleneck identification analysis")
+                print("❌ Failed to load data for system bottleneck analysis")
                 return None
         
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle(title, fontsize=16, fontweight='bold')
+        # Device configuration detection
+        accounts_configured = self._is_accounts_configured()
+        
+        # Create professional figure layout
+        fig, axes = plt.subplots(2, 2, figsize=(18, 14))
+        fig.suptitle('System Bottleneck Identification Analysis', 
+                    fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
         # Get threshold values
         thresholds = get_visualization_thresholds()
         
-        # Find device columns
+        # === 系统资源数据收集 ===
+        system_resources = {}
+        
+        # CPU数据
+        if 'cpu_usage' in self.df.columns:
+            system_resources['CPU'] = self.df['cpu_usage']
+        
+        # Memory数据
+        if 'mem_usage' in self.df.columns:
+            system_resources['Memory'] = self.df['mem_usage']
+        
+        # EBS I/O数据 - DATA设备
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
+        if data_util_cols:
+            system_resources['DATA_IO'] = self.df[data_util_cols[0]]
+            data_util_col = data_util_cols[0]
         
-        if not data_util_cols:
-            print("❌ DATA device data not found")
-            return None
+        # EBS I/O数据 - ACCOUNTS设备
+        accounts_util_col = None
+        if accounts_configured:
+            accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
+            if accounts_util_cols:
+                system_resources['ACCOUNTS_IO'] = self.df[accounts_util_cols[0]]
+                accounts_util_col = accounts_util_cols[0]
         
-        data_util_col = data_util_cols[0]
+        # 专业瓶颈阈值定义
+        bottleneck_thresholds = {
+            'CPU': 85,
+            'Memory': 90,
+            'DATA_IO': 90,
+            'ACCOUNTS_IO': 90
+        }
         
-        # ACCOUNTS device columns
-        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
-        accounts_util_col = accounts_util_cols[0] if accounts_util_cols else None
+        # 系统瓶颈检测函数
+        def detect_system_bottlenecks(row_idx):
+            bottlenecks = {}
+            for resource, threshold in bottleneck_thresholds.items():
+                if resource in system_resources:
+                    value = system_resources[resource].iloc[row_idx] if row_idx < len(system_resources[resource]) else 0
+                    bottlenecks[resource] = value > threshold
+            return bottlenecks
         
-        # 1. Device Utilization Bottleneck Detection
-        axes[0, 0].plot(self.df['timestamp'], self.df[data_util_col], 
-                       label='DATA Device Utilization', linewidth=2, color='blue')
+        # === 1. 系统资源瓶颈时间线 (左上) ===
+        ax1 = axes[0, 0]
         
-        # ACCOUNTS device overlay
-        if accounts_configured and accounts_util_col:
-            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_util_col], 
-                           label='ACCOUNTS Device Utilization', linewidth=2, color='orange')
+        # 绘制各系统资源利用率
+        if 'CPU' in system_resources:
+            ax1.plot(self.df['timestamp'], system_resources['CPU'], 
+                    label='CPU Usage', linewidth=2.5, 
+                    color=UnifiedChartStyle.COLORS['data_primary'], alpha=0.8)
+            ax1.axhline(y=bottleneck_thresholds['CPU'], color=UnifiedChartStyle.COLORS['critical'], 
+                       linestyle='--', alpha=0.8, linewidth=2, label=f'CPU Bottleneck ({bottleneck_thresholds["CPU"]}%)')
         
-        # Bottleneck threshold lines
-        axes[0, 0].axhline(y=thresholds['critical'], color='red', linestyle='--', alpha=0.7, 
-                          label=f'Bottleneck Threshold: {thresholds["critical"]}%')
+        if 'Memory' in system_resources:
+            ax1.plot(self.df['timestamp'], system_resources['Memory'], 
+                    label='Memory Usage', linewidth=2.5, 
+                    color=UnifiedChartStyle.COLORS['accounts_primary'], alpha=0.8)
+            ax1.axhline(y=bottleneck_thresholds['Memory'], color=UnifiedChartStyle.COLORS['warning'], 
+                       linestyle='--', alpha=0.8, linewidth=2, label=f'Memory Bottleneck ({bottleneck_thresholds["Memory"]}%)')
         
-        axes[0, 0].set_title('Utilization Bottleneck Detection')
-        axes[0, 0].set_ylabel('Utilization (%)')
-        axes[0, 0].legend()
-        axes[0, 0].grid(True, alpha=0.3)
+        if 'DATA_IO' in system_resources:
+            ax1.plot(self.df['timestamp'], system_resources['DATA_IO'], 
+                    label='DATA I/O Utilization', linewidth=2.5, 
+                    color='#2E86AB', alpha=0.8)
+            ax1.axhline(y=bottleneck_thresholds['DATA_IO'], color='#E74C3C', 
+                       linestyle=':', alpha=0.8, linewidth=2, label=f'DATA I/O Bottleneck ({bottleneck_thresholds["DATA_IO"]}%)')
         
-        # 2. Bottleneck Timeline Chart (Right Top - axes[0,1])
-        bottleneck_timeline = self.df[data_util_col] > thresholds['critical']
-        axes[0, 1].plot(self.df['timestamp'], bottleneck_timeline.astype(int), 
-                       label='DATA Device Bottleneck Events', linewidth=2, color='red', marker='o', markersize=4)
+        if 'ACCOUNTS_IO' in system_resources:
+            ax1.plot(self.df['timestamp'], system_resources['ACCOUNTS_IO'], 
+                    label='ACCOUNTS I/O Utilization', linewidth=2.5, 
+                    color='#F39C12', alpha=0.8)
+            ax1.axhline(y=bottleneck_thresholds['ACCOUNTS_IO'], color='#8B4513', 
+                       linestyle=':', alpha=0.8, linewidth=2, label=f'ACCOUNTS I/O Bottleneck ({bottleneck_thresholds["ACCOUNTS_IO"]}%)')
         
-        if accounts_configured and accounts_util_cols:
-            accounts_util_col = accounts_util_cols[0]
-            accounts_bottleneck_timeline = self.df[accounts_util_col] > thresholds['critical']
-            axes[0, 1].plot(self.df['timestamp'], accounts_bottleneck_timeline.astype(int) + 0.1, 
-                           label='ACCOUNTS Device Bottleneck Events', linewidth=2, color='orange', marker='s', markersize=4)
+        # 计算综合瓶颈评分
+        bottleneck_scores = []
+        for i in range(len(self.df)):
+            bottlenecks = detect_system_bottlenecks(i)
+            score = sum(bottlenecks.values()) * 25  # 每个瓶颈25分，最高100分
+            bottleneck_scores.append(score)
         
-        axes[0, 1].set_title('Bottleneck Timeline Analysis')
-        axes[0, 1].set_ylabel('Bottleneck Status (0=Normal, 1=Bottleneck)')
-        axes[0, 1].legend()
-        axes[0, 1].grid(True, alpha=0.3)
-        axes[0, 1].set_ylim(-0.1, 1.3)
+        # 绘制综合瓶颈评分（右Y轴）
+        ax1_twin = ax1.twinx()
+        ax1_twin.fill_between(self.df['timestamp'], bottleneck_scores, alpha=0.3, 
+                             color='red', label='Bottleneck Score')
+        ax1_twin.set_ylabel('Bottleneck Score', color='red')
+        ax1_twin.set_ylim(0, 100)
         
-        # 3. Bottleneck Statistics Chart (Left Bottom - axes[1,0])
-        bottleneck_counts = ['Normal', 'Bottleneck']
-        data_normal = (self.df[data_util_col] <= thresholds['critical']).sum()
-        data_bottleneck = (self.df[data_util_col] > thresholds['critical']).sum()
-        data_counts = [data_normal, data_bottleneck]
+        ax1.set_title('System Resource Bottleneck Timeline', 
+                     fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax1.set_ylabel('Resource Utilization (%)')
+        ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], loc='upper left')
+        ax1.grid(True, alpha=0.3)
+        ax1.tick_params(axis='x', rotation=45)
         
-        if accounts_configured and accounts_util_cols:
-            accounts_util_col = accounts_util_cols[0]
-            accounts_normal = (self.df[accounts_util_col] <= thresholds['critical']).sum()
-            accounts_bottleneck = (self.df[accounts_util_col] > thresholds['critical']).sum()
-            accounts_counts = [accounts_normal, accounts_bottleneck]
+        # === 2. 瓶颈类型分布与严重程度 (右上) ===
+        ax2 = axes[0, 1]
+        
+        # 统计各类型瓶颈事件
+        bottleneck_stats = {}
+        for resource in system_resources.keys():
+            if resource in bottleneck_thresholds:
+                threshold = bottleneck_thresholds[resource]
+                bottleneck_count = (system_resources[resource] > threshold).sum()
+                bottleneck_stats[resource] = bottleneck_count
+        
+        # 计算复合瓶颈（多个资源同时瓶颈）
+        compound_bottlenecks = 0
+        for i in range(len(self.df)):
+            bottlenecks = detect_system_bottlenecks(i)
+            if sum(bottlenecks.values()) > 1:
+                compound_bottlenecks += 1
+        
+        if compound_bottlenecks > 0:
+            bottleneck_stats['Compound'] = compound_bottlenecks
+        
+        # 绘制瓶颈类型分布饼图
+        if bottleneck_stats and sum(bottleneck_stats.values()) > 0:
+            # 定义专业颜色
+            colors = {
+                'CPU': UnifiedChartStyle.COLORS['data_primary'],
+                'Memory': UnifiedChartStyle.COLORS['accounts_primary'],
+                'DATA_IO': '#2E86AB',
+                'ACCOUNTS_IO': '#F39C12',
+                'Compound': UnifiedChartStyle.COLORS['critical']
+            }
             
-            x_pos = range(len(bottleneck_counts))
-            width = 0.35
-            axes[1, 0].bar([x - width/2 for x in x_pos], data_counts, width, 
-                          label='DATA Device', color=['green', 'red'], alpha=0.7)
-            axes[1, 0].bar([x + width/2 for x in x_pos], accounts_counts, width, 
-                          label='ACCOUNTS Device', color=['lightgreen', 'lightcoral'], alpha=0.7)
-            axes[1, 0].set_xticks(x_pos)
-            axes[1, 0].set_xticklabels(bottleneck_counts)
-            axes[1, 0].legend()
-        else:
-            axes[1, 0].bar(bottleneck_counts, data_counts, color=['green', 'red'], alpha=0.7)
-        
-        axes[1, 0].set_title('Bottleneck Statistics')
-        axes[1, 0].set_ylabel('Number of Samples')
-        axes[1, 0].grid(True, alpha=0.3)
-        
-        # 4. Enhanced Summary Statistics (Right Bottom - axes[1,1])
-        axes[1, 1].axis('off')
-        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
-        summary_text = f"Bottleneck Analysis Summary ({device_info}):\\n\\n"
-        
-        # DATA device statistics
-        data_normal = (self.df[data_util_col] <= thresholds['critical']).sum()
-        data_bottleneck = (self.df[data_util_col] > thresholds['critical']).sum()
-        data_percentage = (data_bottleneck / len(self.df) * 100) if len(self.df) > 0 else 0
-        
-        summary_text += f"DATA Device:\\n"
-        summary_text += f"  Normal Samples: {data_normal}\\n"
-        summary_text += f"  Bottleneck Samples: {data_bottleneck}\\n"
-        summary_text += f"  Bottleneck Rate: {data_percentage:.1f}%\\n\\n"
-        
-        # ACCOUNTS device statistics
-        if accounts_configured and accounts_util_col:
-            accounts_normal = (self.df[accounts_util_col] <= thresholds['critical']).sum()
-            accounts_bottleneck = (self.df[accounts_util_col] > thresholds['critical']).sum()
-            accounts_percentage = (accounts_bottleneck / len(self.df) * 100) if len(self.df) > 0 else 0
+            labels = []
+            values = []
+            pie_colors = []
             
-            summary_text += f"ACCOUNTS Device:\\n"
-            summary_text += f"  Normal Samples: {accounts_normal}\\n"
-            summary_text += f"  Bottleneck Samples: {accounts_bottleneck}\\n"
-            summary_text += f"  Bottleneck Rate: {accounts_percentage:.1f}%"
-        else:
-            summary_text += "ACCOUNTS Device: Not Configured"
-        
-        axes[1, 1].text(0.05, 0.95, summary_text, transform=axes[1, 1].transAxes, 
-                       fontsize=10, verticalalignment='top', fontfamily='monospace',
-                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
-        axes[1, 1].set_title('Bottleneck Statistics Summary')
-        axes[0, 1].axis('off')
-        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
-        summary_text = f"Bottleneck Analysis Summary ({device_info}):\n\n"
-        
-        # DATA device bottleneck analysis
-        data_bottlenecks = self.df[data_util_col] > thresholds['critical']
-        data_bottleneck_count = data_bottlenecks.sum()
-        data_bottleneck_pct = (data_bottleneck_count / len(self.df) * 100)
-        
-        summary_text += f"DATA Device:\n"
-        summary_text += f"  Bottlenecks: {data_bottleneck_count} ({data_bottleneck_pct:.1f}%)\n"
-        summary_text += f"  Max Utilization: {self.df[data_util_col].max():.1f}%\n\n"
-        
-        # ACCOUNTS device bottleneck analysis
-        if accounts_configured and accounts_util_col:
-            accounts_bottlenecks = self.df[accounts_util_col] > thresholds['critical']
-            accounts_bottleneck_count = accounts_bottlenecks.sum()
-            accounts_bottleneck_pct = (accounts_bottleneck_count / len(self.df) * 100)
+            for resource, count in bottleneck_stats.items():
+                if count > 0:
+                    labels.append(f'{resource}\n({count} events)')
+                    values.append(count)
+                    pie_colors.append(colors.get(resource, 'gray'))
             
-            summary_text += f"ACCOUNTS Device:\n"
-            summary_text += f"  Bottlenecks: {accounts_bottleneck_count} ({accounts_bottleneck_pct:.1f}%)\n"
-            summary_text += f"  Max Utilization: {self.df[accounts_util_col].max():.1f}%"
+            if values:
+                wedges, texts, autotexts = ax2.pie(values, labels=labels, colors=pie_colors,
+                                                  autopct='%1.1f%%', startangle=90,
+                                                  textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
+                
+                ax2.set_title('Bottleneck Type Distribution', 
+                             fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            else:
+                ax2.text(0.5, 0.5, 'No Bottlenecks\nDetected', ha='center', va='center',
+                        transform=ax2.transAxes, 
+                        fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'],
+                        color=UnifiedChartStyle.COLORS['success'])
+                ax2.set_title('System Status: Healthy', 
+                             fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         else:
-            summary_text += "ACCOUNTS Device: Not Configured"
+            ax2.text(0.5, 0.5, 'System Running\nOptimally', ha='center', va='center',
+                    transform=ax2.transAxes, 
+                    fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'],
+                    color=UnifiedChartStyle.COLORS['success'])
+            ax2.set_title('System Status: Optimal', 
+                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         
-        axes[0, 1].text(0.05, 0.95, summary_text, transform=axes[0, 1].transAxes, 
-                       fontsize=11, verticalalignment='top', fontfamily='monospace',
-                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        # === 3. 系统资源利用率关联分析 (左下) ===
+        ax3 = axes[1, 0]
         
+        # 创建资源关联散点图
+        available_resources = list(system_resources.keys())
+        
+        if len(available_resources) >= 2:
+            # 选择最重要的两个资源进行关联分析
+            primary_resources = []
+            if 'CPU' in available_resources:
+                primary_resources.append('CPU')
+            if 'Memory' in available_resources:
+                primary_resources.append('Memory')
+            if 'DATA_IO' in available_resources and len(primary_resources) < 2:
+                primary_resources.append('DATA_IO')
+            if 'ACCOUNTS_IO' in available_resources and len(primary_resources) < 2:
+                primary_resources.append('ACCOUNTS_IO')
+            
+            if len(primary_resources) >= 2:
+                resource1, resource2 = primary_resources[0], primary_resources[1]
+                
+                # 创建散点图，颜色表示瓶颈状态
+                colors = []
+                for i in range(len(self.df)):
+                    bottlenecks = detect_system_bottlenecks(i)
+                    if bottlenecks.get(resource1, False) and bottlenecks.get(resource2, False):
+                        colors.append(UnifiedChartStyle.COLORS['critical'])  # 双重瓶颈
+                    elif bottlenecks.get(resource1, False) or bottlenecks.get(resource2, False):
+                        colors.append(UnifiedChartStyle.COLORS['warning'])   # 单一瓶颈
+                    else:
+                        colors.append(UnifiedChartStyle.COLORS['success'])   # 正常
+                
+                scatter = ax3.scatter(system_resources[resource1], system_resources[resource2], 
+                                    c=colors, alpha=0.6, s=30)
+                
+                # 添加瓶颈阈值线
+                ax3.axvline(x=bottleneck_thresholds[resource1], color=UnifiedChartStyle.COLORS['critical'], 
+                           linestyle='--', alpha=0.7, linewidth=2)
+                ax3.axhline(y=bottleneck_thresholds[resource2], color=UnifiedChartStyle.COLORS['critical'], 
+                           linestyle='--', alpha=0.7, linewidth=2)
+                
+                # 标注瓶颈区域
+                ax3.axvspan(bottleneck_thresholds[resource1], 100, alpha=0.1, color='red')
+                ax3.axhspan(bottleneck_thresholds[resource2], 100, alpha=0.1, color='red')
+                
+                ax3.set_xlabel(f'{resource1} Utilization (%)')
+                ax3.set_ylabel(f'{resource2} Utilization (%)')
+                ax3.set_title(f'{resource1} vs {resource2} Correlation Analysis', 
+                             fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+                
+                # 添加图例
+                from matplotlib.patches import Patch
+                legend_elements = [
+                    Patch(facecolor=UnifiedChartStyle.COLORS['success'], label='Normal'),
+                    Patch(facecolor=UnifiedChartStyle.COLORS['warning'], label='Single Bottleneck'),
+                    Patch(facecolor=UnifiedChartStyle.COLORS['critical'], label='Compound Bottleneck')
+                ]
+                ax3.legend(handles=legend_elements, fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+                ax3.grid(True, alpha=0.3)
+            else:
+                ax3.text(0.5, 0.5, 'Insufficient Resources\nfor Correlation Analysis', 
+                        ha='center', va='center', transform=ax3.transAxes, 
+                        fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        else:
+            ax3.text(0.5, 0.5, 'Insufficient Data\nfor Resource Analysis', 
+                    ha='center', va='center', transform=ax3.transAxes, 
+                    fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        
+        # === 4. 系统瓶颈诊断报告 (右下) ===
+        ax4 = axes[1, 1]
+        ax4.axis('off')
+        ax4.set_title('System Bottleneck Diagnostic Report', 
+                     fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=20)
+        
+        # 计算系统整体统计
+        total_samples = len(self.df)
+        total_bottleneck_events = sum(bottleneck_stats.values()) if bottleneck_stats else 0
+        
+        # 识别主要瓶颈资源
+        primary_bottleneck = 'None'
+        if bottleneck_stats:
+            primary_bottleneck = max(bottleneck_stats, key=bottleneck_stats.get) if bottleneck_stats else 'None'
+        
+        # 计算系统健康评级
+        overall_bottleneck_rate = (total_bottleneck_events / total_samples * 100) if total_samples > 0 else 0
+        
+        if overall_bottleneck_rate == 0:
+            health_status = "[EXCELLENT]"
+            health_desc = "No bottlenecks detected"
+            recommendations = ["System running optimally", "Continue monitoring"]
+        elif overall_bottleneck_rate < 5:
+            health_status = "[GOOD]"
+            health_desc = "Rare bottlenecks"
+            recommendations = ["Monitor peak usage periods", "Consider capacity planning"]
+        elif overall_bottleneck_rate < 15:
+            health_status = "[FAIR]"
+            health_desc = "Occasional bottlenecks"
+            recommendations = [f"Optimize {primary_bottleneck} usage", "Review workload distribution"]
+        elif overall_bottleneck_rate < 30:
+            health_status = "[POOR]"
+            health_desc = "Frequent bottlenecks"
+            recommendations = [f"Urgent: Scale {primary_bottleneck} resources", "Implement load balancing"]
+        else:
+            health_status = "[CRITICAL]"
+            health_desc = "Persistent bottlenecks"
+            recommendations = [f"Critical: Immediate {primary_bottleneck} scaling", "Emergency capacity increase"]
+        
+        # 生成专业诊断报告
+        summary_lines = [
+            f"System Bottleneck Diagnostic Report:",
+            "",
+            f"Overall Health: {health_status}",
+            f"Status: {health_desc}",
+            f"Analysis Period: {total_samples} samples",
+            "",
+            "Resource Analysis:"
+        ]
+        
+        # 各资源详细分析
+        for resource in system_resources.keys():
+            if resource in bottleneck_thresholds:
+                max_util = system_resources[resource].max()
+                avg_util = system_resources[resource].mean()
+                bottleneck_count = bottleneck_stats.get(resource, 0)
+                bottleneck_rate = (bottleneck_count / total_samples * 100) if total_samples > 0 else 0
+                
+                status_icon = "[HIGH]" if bottleneck_rate > 10 else "[MED]" if bottleneck_rate > 5 else "[LOW]"
+                
+                summary_lines.extend([
+                    f"  {status_icon} {resource}:",
+                    f"    Max: {max_util:.1f}% | Avg: {avg_util:.1f}%",
+                    f"    Bottlenecks: {bottleneck_count} ({bottleneck_rate:.1f}%)"
+                ])
+        
+        # 添加优化建议
+        summary_lines.extend([
+            "",
+            "Optimization Recommendations:"
+        ])
+        
+        for i, rec in enumerate(recommendations, 1):
+            summary_lines.append(f"  {i}. {rec}")
+        
+        # 添加复合瓶颈警告
+        if compound_bottlenecks > 0:
+            compound_rate = (compound_bottlenecks / total_samples * 100)
+            summary_lines.extend([
+                "",
+                f"WARNING: Compound Bottlenecks: {compound_bottlenecks} ({compound_rate:.1f}%)",
+                "   Multiple resources bottlenecked simultaneously"
+            ])
+        
+        summary_text = "\n".join(summary_lines)
+        
+        # 使用UnifiedChartStyle的统一文本样式，无背景框
+        ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes,
+                fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], 
+                verticalalignment='top', 
+                fontfamily=plt.rcParams['font.sans-serif'][0])
+        
+        # 应用统一布局
         plt.tight_layout()
+        plt.subplots_adjust(top=0.93)  # 为主标题留空间
         
+        # 保存文件
         output_file = os.path.join(self.output_dir, 'bottleneck_identification.png')
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.savefig(output_file, dpi=300, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
         plt.close()
         
-        print(f"✅ Bottleneck identification chart saved: {output_file} ({device_info} devices)")
+        device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
+        print(f"✅ System Bottleneck Identification Analysis saved: {output_file}")
+        print(f"   Device configuration: {device_info}")
+        print(f"   System health: {health_status} - {health_desc}")
+        print(f"   Primary bottleneck: {primary_bottleneck}")
+        
+        return output_file
 
         try:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -1873,8 +2199,8 @@ Data Points: {len(overhead_df)}"""
             return None
     
     def create_block_height_sync_chart(self):
-        """生成区块高度同步状态时序图表"""
-        print("📊 Generating block height synchronization chart...")
+        """生成区块高度同步状态综合分析图表 - 增强版4子图布局"""
+        print("📊 Generating enhanced block height synchronization analysis...")
         
         if not self.load_data():
             return None
@@ -1896,47 +2222,109 @@ Data Points: {len(overhead_df)}"""
             height_diff = pd.to_numeric(df_clean['block_height_diff'], errors='coerce')
             data_loss = pd.to_numeric(df_clean['data_loss'], errors='coerce')
             
-            # 创建图表
-            fig, ax = plt.subplots(figsize=(14, 8))
+            # 检查可选字段
+            local_height = None
+            mainnet_height = None
+            optional_fields = ['local_block_height', 'mainnet_block_height']
+            if all(field in df_clean.columns for field in optional_fields):
+                local_height = pd.to_numeric(df_clean['local_block_height'], errors='coerce')
+                mainnet_height = pd.to_numeric(df_clean['mainnet_block_height'], errors='coerce')
             
-            # 主曲线：区块高度差值
-            ax.plot(timestamps, height_diff, 
-                    color='#2E86AB', linewidth=2, 
-                    label='Block Height Difference (Mainnet - Local)', alpha=0.8)
+            # 创建2x2布局
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle('Block Height Synchronization Analysis', fontsize=16, fontweight='bold')
+            
+            # === 子图1: 区块高度对比 (左上) ===
+            ax1 = axes[0, 0]
+            if local_height is not None and mainnet_height is not None:
+                ax1.plot(timestamps, local_height, color='blue', linewidth=2, 
+                        label='Local Height', alpha=0.8)
+                ax1.plot(timestamps, mainnet_height, color='red', linewidth=2, 
+                        label='Mainnet Height', alpha=0.8)
+                ax1.set_title('Block Height Comparison')
+                ax1.set_ylabel('Block Height')
+                ax1.legend()
+                # 强制十进制格式显示，用逗号分隔
+                ax1.ticklabel_format(style='plain', axis='y', useOffset=False)
+                ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
+            else:
+                ax1.plot(timestamps, height_diff, color='blue', linewidth=2, 
+                        label='Height Difference', alpha=0.8)
+                ax1.axhline(y=0, color='green', linestyle='-', alpha=0.5, label='Perfect Sync')
+                ax1.set_title('Block Height Difference Timeline')
+                ax1.set_ylabel('Height Difference')
+                ax1.legend()
+            
+            ax1.grid(True, alpha=0.3)
+            ax1.tick_params(axis='x', rotation=45)
+            
+            # === 子图2: 高度差值详细分析 (右上) ===
+            ax2 = axes[0, 1]
+            
+            ax2.plot(timestamps, height_diff, color='#2E86AB', linewidth=2, 
+                    label='Height Difference', alpha=0.8)
             
             # 阈值线 - 使用配置变量
-            threshold = int(os.getenv('BLOCK_HEIGHT_DIFF_THRESHOLD', 50))
-            ax.axhline(y=threshold, color='#E74C3C', linestyle='--', 
-                      linewidth=2, alpha=0.7, label=f'Threshold (+{threshold})')
-            ax.axhline(y=-threshold, color='#E74C3C', linestyle='--', 
-                      linewidth=2, alpha=0.7, label=f'Threshold (-{threshold})')
+            threshold = int(os.getenv('BLOCK_HEIGHT_DIFF_THRESHOLD', '50'))
+            ax2.axhline(y=threshold, color='orange', linestyle='--', 
+                       linewidth=2, alpha=0.7, label=f'Warning (+{threshold})')
+            ax2.axhline(y=-threshold, color='orange', linestyle='--', 
+                       linewidth=2, alpha=0.7, label=f'Warning (-{threshold})')
+            ax2.axhline(y=0, color='green', linestyle='-', alpha=0.5, label='Perfect Sync')
             
             # 异常区域标注
-            anomaly_periods = self._identify_anomaly_periods(timestamps, data_loss)
-            for i, (start_time, end_time) in enumerate(anomaly_periods):
-                ax.axvspan(start_time, end_time, alpha=0.25, color='#E74C3C', 
-                          label='Data Loss Period' if i == 0 else "")
+            anomaly_mask = data_loss > 0
+            if anomaly_mask.any():
+                anomaly_periods = self._identify_anomaly_periods(timestamps, anomaly_mask)
+                for i, (start_time, end_time) in enumerate(anomaly_periods):
+                    ax2.axvspan(start_time, end_time, alpha=0.25, color='red', 
+                               label='Data Loss Period' if i == 0 else "")
             
-            # 图表美化
-            ax.set_title('Blockchain Node Synchronization Status', 
-                        fontsize=16, fontweight='bold', pad=20)
-            ax.set_xlabel('Time', fontsize=12)
-            ax.set_ylabel('Block Height Difference', fontsize=12)
-            ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
-            ax.legend(loc='upper right', framealpha=0.9)
+            ax2.set_title('Block Height Difference (Local - Mainnet)')
+            ax2.set_ylabel('Height Difference')
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+            ax2.tick_params(axis='x', rotation=45)
             
-            # 时间轴格式化
-            if len(timestamps) > 0:
-                ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M:%S'))
-                plt.xticks(rotation=45)
+            # === 子图3: 同步状态分布 (左下) ===
+            ax3 = axes[1, 0]
             
-            # 添加统计信息文本框
-            stats_text = self._generate_sync_stats_text(height_diff, data_loss)
-            ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
-                   verticalalignment='top', bbox=dict(boxstyle='round', 
-                   facecolor='wheat', alpha=0.8), fontsize=10)
+            sync_stats = self._calculate_sync_distribution(height_diff, threshold)
             
+            if sync_stats['values']:
+                colors = ['#2ECC71', '#F39C12', '#E74C3C']
+                wedges, texts, autotexts = ax3.pie(
+                    sync_stats['values'], 
+                    labels=sync_stats['labels'],
+                    colors=colors[:len(sync_stats['values'])],
+                    autopct='%1.1f%%',
+                    startangle=90,
+                    textprops={'fontsize': 10}
+                )
+                ax3.set_title('Synchronization Status Distribution')
+            else:
+                ax3.text(0.5, 0.5, 'No Data Available', ha='center', va='center',
+                        transform=ax3.transAxes, fontsize=12)
+                ax3.set_title('Synchronization Status Distribution (No Data)')
+            
+            # === 子图4: 分析摘要 (右下) ===
+            ax4 = axes[1, 1]
+            ax4.axis('off')
+            ax4.set_title('Synchronization Analysis Summary')
+            
+            if local_height is not None and mainnet_height is not None:
+                summary_text = self._generate_comprehensive_summary(
+                    height_diff, data_loss, sync_stats, timestamps, local_height, mainnet_height
+                )
+            else:
+                summary_text = self._generate_sync_stats_text(height_diff, data_loss)
+            
+            ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes,
+                    verticalalignment='top', fontsize=10, fontfamily='monospace')
+            
+            # 布局调整
             plt.tight_layout()
+            plt.subplots_adjust(top=0.93)
             
             # 保存文件
             output_file = os.path.join(self.output_dir, 'block_height_sync_chart.png')
@@ -1944,7 +2332,7 @@ Data Points: {len(overhead_df)}"""
                        facecolor='white', edgecolor='none')
             plt.close()
             
-            print(f"✅ Block height sync chart saved: {output_file}")
+            print(f"✅ Enhanced block height sync chart saved: {output_file}")
             return output_file
             
         except Exception as e:
@@ -1983,6 +2371,88 @@ Data Points: {len(overhead_df)}"""
 • Avg Difference: {avg_diff:.1f} blocks
 • Max Difference: {max_diff:.0f} blocks
 • Min Difference: {min_diff:.0f} blocks"""
+
+    def _calculate_sync_distribution(self, height_diff, threshold):
+        """计算同步状态分布"""
+        perfect_sync = (height_diff == 0).sum()
+        good_sync = ((height_diff.abs() > 0) & (height_diff.abs() <= threshold)).sum()
+        poor_sync = (height_diff.abs() > threshold).sum()
+        
+        total = len(height_diff)
+        
+        labels = []
+        values = []
+        
+        if perfect_sync > 0:
+            labels.append('Perfect Sync')
+            values.append(perfect_sync)
+        
+        if good_sync > 0:
+            labels.append('Good Sync')
+            values.append(good_sync)
+        
+        if poor_sync > 0:
+            labels.append('Poor Sync')
+            values.append(poor_sync)
+        
+        return {
+            'labels': labels,
+            'values': values,
+            'perfect_sync_pct': (perfect_sync / total) * 100,
+            'good_sync_pct': (good_sync / total) * 100,
+            'poor_sync_pct': (poor_sync / total) * 100
+        }
+
+    def _generate_comprehensive_summary(self, height_diff, data_loss, sync_stats, 
+                                      timestamps, local_height, mainnet_height):
+        """生成综合分析摘要"""
+        max_diff = height_diff.abs().max()
+        avg_diff = height_diff.abs().mean()
+        data_loss_events = (data_loss > 0).sum()
+        total_data_loss = data_loss.sum()
+        
+        duration = timestamps.iloc[-1] - timestamps.iloc[0]
+        duration_minutes = duration.total_seconds() / 60
+        
+        summary_lines = [
+            "Block Height Sync Analysis:",
+            "",
+            "Block Heights:",
+            f"  Local Start: {local_height.iloc[0]:,}",
+            f"  Local End: {local_height.iloc[-1]:,}",
+            f"  Mainnet End: {mainnet_height.iloc[-1]:,}",
+            f"  Max Diff: {max_diff}",
+            f"  Avg Diff: {avg_diff:.1f}",
+            "",
+            "Synchronization Stats:",
+            f"  Perfect Sync: {sync_stats['perfect_sync_pct']:.1f}%",
+            f"  Good Sync: {sync_stats['good_sync_pct']:.1f}%",
+            f"  Poor Sync: {sync_stats['poor_sync_pct']:.1f}%",
+            "",
+            "Data Loss:",
+            f"  Events: {data_loss_events}",
+            f"  Total: {total_data_loss}",
+            "",
+            "Sync Quality:",
+            f"  Duration: {duration_minutes:.1f}min",
+        ]
+        
+        if sync_stats['perfect_sync_pct'] > 90:
+            quality = "EXCELLENT"
+        elif sync_stats['perfect_sync_pct'] > 70:
+            quality = "GOOD"
+        elif sync_stats['perfect_sync_pct'] > 50:
+            quality = "FAIR"
+        else:
+            quality = "POOR"
+        
+        summary_lines.extend([
+            f"  Overall: {quality}",
+            "",
+            f"✓ Node well synchronized" if sync_stats['perfect_sync_pct'] > 50 else "⚠ Sync issues detected"
+        ])
+        
+        return "\n".join(summary_lines)
 
     def generate_all_ebs_charts(self):
         """生成所有EBS图表"""

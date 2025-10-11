@@ -78,11 +78,26 @@ class DeviceManager:
             'pps_allowance_exceeded': r'pps_allowance_exceeded',
             'conntrack_allowance_exceeded': r'conntrack_allowance_exceeded',
             'linklocal_allowance_exceeded': r'linklocal_allowance_exceeded',
-            'conntrack_allowance_available': r'conntrack_allowance_available',
+            'ena_bw_in_allowance_exceeded': r'ena_bw_in_allowance_exceeded',
+            'ena_bw_out_allowance_exceeded': r'ena_bw_out_allowance_exceeded',
+            'ena_pps_allowance_exceeded': r'ena_pps_allowance_exceeded',
+            'ena_conntrack_allowance_available': r'ena_conntrack_allowance_available',
+            'ena_conntrack_allowance_exceeded': r'ena_conntrack_allowance_exceeded',
             
-            # 监控开销字段
-            'monitoring_iops_per_sec': r'monitoring_iops_per_sec',
-            'monitoring_throughput_mibs_per_sec': r'monitoring_throughput_mibs_per_sec',
+            # 监控开销字段 - 使用正确的字段名
+            'monitoring_cpu_percent': r'monitoring_cpu',  # 实际字段名
+            'monitoring_mem_percent': r'monitoring_memory_percent',  # 实际字段名
+            'monitoring_iops_per_sec': r'monitoring_iops.*sec',
+            'monitoring_throughput_mibs_per_sec': r'monitoring_throughput.*sec',
+            
+            # QPS字段
+            'qps_actual': r'current_qps',  # 映射到实际存在的字段
+            'qps_target': r'current_qps',  # 映射到实际存在的字段
+            
+            # 区块链字段
+            'block_height': r'local_block_height',  # 映射到实际字段
+            'data_loss_blocks': r'data_loss',  # 修复映射
+            'conntrack_allowance_available': r'conntrack_allowance_available',
             
             # 区块链字段
             'local_block_height': r'local_block_height',
@@ -96,6 +111,25 @@ class DeviceManager:
             'current_qps': r'current_qps',
             'rpc_latency_ms': r'rpc_latency_ms',
             'qps_data_available': r'qps_data_available',
+            
+            # 扩展字段映射 - 解决21个问题的字段需求
+            # 读写分离字段 - 解决问题10,11,12的EBS设备信息
+            'data_read_iops': r'data_.*_r_s',
+            'data_write_iops': r'data_.*_w_s', 
+            'accounts_read_iops': r'accounts_.*_r_s',
+            'accounts_write_iops': r'accounts_.*_w_s',
+            
+            # 读写延迟字段
+            'data_read_latency': r'data_.*_r_await',
+            'data_write_latency': r'data_.*_w_await',
+            'accounts_read_latency': r'accounts_.*_r_await', 
+            'accounts_write_latency': r'accounts_.*_w_await',
+            
+            # 读写吞吐量字段
+            'data_read_throughput': r'data_.*_rkb_s',
+            'data_write_throughput': r'data_.*_wkb_s',
+            'accounts_read_throughput': r'accounts_.*_rkb_s',
+            'accounts_write_throughput': r'accounts_.*_wkb_s',
         }
     
     def get_mapped_field(self, field_name):
@@ -353,3 +387,103 @@ class DeviceManager:
         """检查字段是否存在 - 使用映射后的字段名"""
         mapped_field = self.get_mapped_field(field_name)
         return mapped_field and mapped_field in self.df.columns
+    
+    def get_device_label(self, device_name, metric_type):
+        """获取设备标签 - 解决问题8,10,11,12的设备信息缺失"""
+        device_map = {
+            'data': 'DATA Device',
+            'accounts': 'ACCOUNTS Device'
+        }
+        
+        metric_map = {
+            'aws_standard_iops': 'AWS Standard IOPS',
+            'aws_standard_throughput': 'AWS Standard Throughput', 
+            'utilization': 'Utilization',
+            'latency': 'Average Latency',
+            'efficiency': 'Efficiency (MiB/IOPS)'
+        }
+        
+        device_label = device_map.get(device_name.lower(), device_name)
+        metric_label = metric_map.get(metric_type, metric_type)
+        
+        return f"{device_label} {metric_label}"
+    
+    def get_qps_actual_value(self):
+        """获取实际QPS值 - 解决问题3的QPS显示错误"""
+        current_qps_field = self.get_mapped_field('current_qps')
+        
+        if current_qps_field and current_qps_field in self.df.columns:
+            # 获取最后一次有效记录的QPS值
+            qps_data = self.df[current_qps_field].dropna()
+            if len(qps_data) > 0:
+                return qps_data.iloc[-1]  # 最后一次记录
+        
+        return None
+    
+    def check_data_availability(self, field_list):
+        """检查数据可用性 - 解决问题14,15,16的数据缺失"""
+        available_fields = {}
+        missing_fields = []
+        
+        for field in field_list:
+            mapped_field = self.get_mapped_field(field)
+            if mapped_field and mapped_field in self.df.columns:
+                # 检查是否有有效数据
+                data = self.df[mapped_field].dropna()
+                if len(data) > 0 and not (data == 0).all():
+                    available_fields[field] = mapped_field
+                else:
+                    missing_fields.append(field)
+            else:
+                missing_fields.append(field)
+        
+        return available_fields, missing_fields
+    
+    def get_memory_fields(self):
+        """获取内存相关字段 - 解决问题15的memory数据缺失"""
+        memory_fields = ['mem_used', 'mem_total', 'mem_usage']
+        return self.check_data_availability(memory_fields)
+    
+    def get_monitoring_fields(self):
+        """获取监控开销字段 - 解决问题14,15的监控数据缺失"""
+        monitoring_fields = ['monitoring_iops_per_sec', 'monitoring_throughput_mibs_per_sec']
+        return self.check_data_availability(monitoring_fields)
+    
+    def create_device_aware_title(self, base_title):
+        """创建设备感知的标题 - 统一标题格式"""
+        device_info = self.get_device_info_text()
+        return f"{base_title} - {device_info['title_suffix']}"
+    
+    def get_ebs_device_data(self, device_name, metric_type):
+        """获取EBS设备数据 - 统一EBS数据获取"""
+        field_name = f"{device_name}_{metric_type}"
+        return self.get_field_data(field_name)
+    
+    def validate_ebs_configuration(self):
+        """验证EBS配置完整性 - 解决问题8的配置硬编码"""
+        validation_result = {
+            'data_configured': False,
+            'accounts_configured': False,
+            'missing_fields': [],
+            'config_issues': []
+        }
+        
+        # 检查DATA设备
+        data_fields = ['data_aws_standard_iops', 'data_util', 'data_avg_await']
+        data_available, data_missing = self.check_data_availability(data_fields)
+        validation_result['data_configured'] = len(data_available) > 0
+        validation_result['missing_fields'].extend(data_missing)
+        
+        # 检查ACCOUNTS设备
+        if self.is_accounts_configured():
+            accounts_fields = ['accounts_aws_standard_iops', 'accounts_util', 'accounts_avg_await']
+            accounts_available, accounts_missing = self.check_data_availability(accounts_fields)
+            validation_result['accounts_configured'] = len(accounts_available) > 0
+            validation_result['missing_fields'].extend(accounts_missing)
+        
+        # 检查配置一致性
+        thresholds = self.get_threshold_values()
+        if thresholds['data_baseline_iops'] == 20000:  # 默认值，可能是硬编码
+            validation_result['config_issues'].append('DATA baseline IOPS may be hardcoded')
+        
+        return validation_result

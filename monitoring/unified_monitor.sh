@@ -2000,7 +2000,7 @@ try:
     print(latency_ns / 1000000)  # 转换为毫秒
 except:
     print(0.0)
-" 2>/dev/null || echo "0.0")
+" 2>/dev/null | tr -d '\n\r' || echo "0.0")
                 fi
             fi
         fi
@@ -2041,8 +2041,18 @@ except:
             log_error "使用默认ENA数据: '$ena_data'"
         fi
         
+        # 清理所有变量中的换行符和特殊字符
+        current_qps=$(echo "$current_qps" | tr -d '\n\r' | head -c 20)
+        rpc_latency_ms=$(echo "$rpc_latency_ms" | tr -d '\n\r' | head -c 20)
+        qps_data_available=$(echo "$qps_data_available" | tr -d '\n\r' | head -c 10)
+        
         local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available"
     else
+        # 清理所有变量中的换行符和特殊字符
+        current_qps=$(echo "$current_qps" | tr -d '\n\r' | head -c 20)
+        rpc_latency_ms=$(echo "$rpc_latency_ms" | tr -d '\n\r' | head -c 20)
+        qps_data_available=$(echo "$qps_data_available" | tr -d '\n\r' | head -c 10)
+        
         local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available"
     fi
     

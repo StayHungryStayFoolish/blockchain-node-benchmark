@@ -347,7 +347,21 @@ class ComprehensiveAnalyzer:
         fig.suptitle('Blockchain Node QPS Ultimate Performance Analysis Dashboard', fontsize=16, fontweight='bold')
 
         # 检查QPS数据可用性
-        qps_available = 'qps_data_available' in df.columns and df['qps_data_available'].iloc[0] if len(df) > 0 else False
+        qps_available = False
+        if len(df) > 0 and 'qps_data_available' in df.columns:
+            try:
+                # 查找第一个非空值
+                qps_data_series = df['qps_data_available'].dropna()
+                if len(qps_data_series) > 0:
+                    first_valid_value = qps_data_series.iloc[0]
+                    # 处理字符串和布尔值
+                    if isinstance(first_valid_value, str):
+                        qps_available = first_valid_value.lower() in ['true', '1', 'yes']
+                    else:
+                        qps_available = bool(first_valid_value)
+            except Exception as e:
+                print(f"Warning: QPS data availability check failed: {e}")
+                qps_available = False
         
         # 1. CPU使用率 vs QPS
         if len(df) > 0 and 'cpu_usage' in df.columns and qps_available and 'current_qps' in df.columns:

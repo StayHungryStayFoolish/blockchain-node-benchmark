@@ -24,7 +24,7 @@ class UnifiedChartStyle:
     COLORS = {
         # 设备主色
         'data_primary': '#1f77b4',      # 蓝色 - DATA设备主色
-        'accounts_primary': '#ff7f0e',   # 橙色 - ACCOUNTS设备主色
+        'accounts_primary': '#ff9500',   # 深橙色 - ACCOUNTS设备主色 (区别于警告色)
         
         # 状态颜色
         'warning': '#ff7f0e',           # 橙色 - 警告
@@ -246,6 +246,30 @@ class UnifiedChartStyle:
         'annotation': 4     # 注释 - 顶层
     }
     
+    # 32个图表的布局配置
+    LAYOUT_CONFIGS = {
+        'performance_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'ebs_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'correlation_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'trend_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'comprehensive_3x2': {'figsize': (18, 15), 'layout': (3, 2)},
+        'single_chart': {'figsize': (14, 8), 'layout': (1, 1)},
+        'comparison_2x1': {'figsize': (16, 8), 'layout': (2, 1)},
+        'threshold_3x1': {'figsize': (18, 6), 'layout': (3, 1)},
+        'overhead_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'qps_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'efficiency_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'bottleneck_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'distribution_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'impact_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'cliff_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'qps_analysis_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'regression_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'capacity_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'matrix_single': {'figsize': (12, 10), 'layout': (1, 1)},
+        'heatmap_single': {'figsize': (12, 10), 'layout': (1, 1)}
+    }
+    
     @classmethod
     def setup_matplotlib(cls):
         """配置matplotlib全局样式"""
@@ -405,6 +429,70 @@ class UnifiedChartStyle:
         # 4. 应用统一样式
         if title:
             cls.apply_axis_style(ax, title)
+    
+    @classmethod
+    def format_time_axis_unified(cls, axes_list):
+        """统一时间轴格式化 - 解决问题1的时间重叠"""
+        import matplotlib.dates as mdates
+        
+        for ax in axes_list:
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            ax.tick_params(axis='x', rotation=45, labelsize=cls.FONT_CONFIG['text_size'])
+    
+    @classmethod
+    def apply_unified_text_layout(cls, ax, text_content, position='right_bottom'):
+        """统一文本布局应用 - 解决问题21的样式不统一"""
+        return cls.apply_text_style(ax, text_content, position)
+    
+    @classmethod
+    def fix_subplot_text_consistency(cls, axes_list, texts_list, position='right_bottom'):
+        """修复子图文本一致性 - 解决问题4,5,6的布局不一致"""
+        for ax, text in zip(axes_list, texts_list):
+            cls.apply_text_style(ax, text, position)
+    
+    @classmethod
+    def create_device_aware_layout(cls, layout_type, accounts_configured=False):
+        """创建设备感知的布局 - 解决EBS设备信息缺失问题"""
+        fig, axes, config = cls.setup_subplot_layout(layout_type)
+        
+        # 根据设备配置调整标题
+        if accounts_configured:
+            device_suffix = "DATA & ACCOUNTS Devices"
+        else:
+            device_suffix = "DATA Device Only"
+        
+        return fig, axes, config, device_suffix
+    
+    @classmethod
+    def get_device_color_scheme(cls, device_name, element_type='primary'):
+        """获取设备颜色方案 - 解决颜色冲突问题"""
+        device_colors = {
+            'data': {
+                'primary': cls.COLORS['data_primary'],      # 蓝色
+                'warning': '#87CEEB',                       # 浅蓝色 - 避免与orange冲突
+                'critical': cls.COLORS['critical'],         # 红色
+                'marker': cls.MARKERS['data_device']        # 圆形
+            },
+            'accounts': {
+                'primary': cls.COLORS['accounts_primary'],  # 橙色
+                'warning': '#FFA07A',                       # 浅橙色 - 避免冲突
+                'critical': '#9467bd',                      # 紫色
+                'marker': cls.MARKERS['accounts_device']    # 三角形
+            }
+        }
+        
+        return device_colors.get(device_name.lower(), device_colors['data']).get(element_type, cls.COLORS['data_primary'])
+    
+    @classmethod
+    def apply_qps_chart_style(cls, ax, qps_value, target_value=None):
+        """QPS图表专用样式 - 解决问题3,18的QPS显示"""
+        if target_value:
+            title = f"QPS Performance (Actual: {qps_value}, Target: {target_value})"
+        else:
+            title = f"QPS Performance (Current: {qps_value})"
+        
+        cls.apply_axis_style(ax, title)
+        return title
 
 # 初始化全局样式
 UnifiedChartStyle.setup_matplotlib()
