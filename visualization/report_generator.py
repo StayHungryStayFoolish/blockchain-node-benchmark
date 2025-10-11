@@ -12,9 +12,16 @@ import os
 import sys
 import argparse
 from datetime import datetime
+import sys
+import os
 import numpy as np
 from scipy.stats import pearsonr
-from .chart_style_config import UnifiedChartStyle
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+
+from visualization.chart_style_config import UnifiedChartStyle
 
 # Initialize matplotlib configuration when available
 try:

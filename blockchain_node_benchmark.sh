@@ -347,6 +347,20 @@ process_test_results() {
 execute_data_analysis() {
     echo "🔍 执行数据分析..."
     
+    # 解析benchmark_mode参数
+    local benchmark_mode=""
+    for arg in "$@"; do
+        case $arg in
+            --quick) benchmark_mode="quick" ;;
+            --standard) benchmark_mode="standard" ;;
+            --intensive) benchmark_mode="intensive" ;;
+        esac
+    done
+    
+    if [[ -z "$benchmark_mode" ]]; then
+        benchmark_mode="quick"
+    fi
+    
     # 使用软链接获取最新的性能数据文件
     local latest_csv="${LOGS_DIR}/performance_latest.csv"
     
@@ -488,12 +502,12 @@ execute_data_analysis() {
             
             # 如果检测到瓶颈，传递瓶颈模式参数
             if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
-                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --bottleneck-mode --output-dir "$BASE_DATA_DIR"; then
+                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --benchmark-mode "$benchmark_mode" --bottleneck-mode --output-dir "$BASE_DATA_DIR"; then
                     echo "⚠️ 分析脚本执行失败: $(basename "$script")"
                 fi
             else
                 # 即使没有瓶颈也执行基础分析，确保图表生成
-                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --output-dir "$BASE_DATA_DIR"; then
+                if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --benchmark-mode "$benchmark_mode" --output-dir "$BASE_DATA_DIR"; then
                     echo "⚠️ 分析脚本执行失败: $(basename "$script")"
                 fi
             fi
@@ -904,7 +918,7 @@ main() {
     
     # 阶段6: 执行数据分析
     echo "📋 阶段6: 执行数据分析"
-    if ! execute_data_analysis; then
+    if ! execute_data_analysis "${original_args[@]}"; then
         echo "❌ 数据分析失败，测试终止"
         exit 1
     fi

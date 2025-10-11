@@ -142,7 +142,7 @@ get_cached_block_height_data() {
     fi
     
     # 创建新的缓存数据（带毫秒时间戳）
-    local timestamp_ms=$(date +%s)000
+    local timestamp_ms=$(date +%s%3N)
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     local new_data
     new_data=$(jq -n \

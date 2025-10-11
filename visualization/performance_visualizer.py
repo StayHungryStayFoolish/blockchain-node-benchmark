@@ -16,9 +16,14 @@ import seaborn as sns
 import numpy as np
 from datetime import datetime
 from pathlib import Path
-from .ebs_chart_generator import EBSChartGenerator
-from .device_manager import DeviceManager
-from .chart_style_config import UnifiedChartStyle
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+
+from visualization.ebs_chart_generator import EBSChartGenerator
+from visualization.device_manager import DeviceManager
+from visualization.chart_style_config import UnifiedChartStyle
 
 def get_visualization_thresholds():
     temp_df = pd.DataFrame()
