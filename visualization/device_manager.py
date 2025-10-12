@@ -223,8 +223,8 @@ class DeviceManager:
         """从配置文件获取阈值配置"""
         # 基础阈值配置
         base_thresholds = {
-            'data_baseline_iops': int(os.getenv('DATA_VOL_MAX_IOPS', '20000')),
-            'data_baseline_throughput': int(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700')),
+            'data_baseline_iops': int(float(os.getenv('DATA_VOL_MAX_IOPS', '20000'))),
+            'data_baseline_throughput': int(float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700'))),
             
             # 瓶颈阈值
             'cpu_threshold': float(os.getenv('BOTTLENECK_CPU_THRESHOLD', '85')),
@@ -242,8 +242,8 @@ class DeviceManager:
         # 如果ACCOUNTS设备配置了，添加ACCOUNTS基准值
         if self.is_accounts_configured():
             base_thresholds.update({
-                'accounts_baseline_iops': int(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000')),
-                'accounts_baseline_throughput': int(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700')),
+                'accounts_baseline_iops': int(float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))),
+                'accounts_baseline_throughput': int(float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))),
             })
         
         return base_thresholds
