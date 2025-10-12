@@ -112,7 +112,8 @@ class UnifiedChartStyle:
         '2x2': {
             'figsize': (16, 12),
             'nrows': 2, 'ncols': 2,
-            'hspace': 0.3, 'wspace': 0.25,
+            'top': 0.90, 'bottom': 0.08, 'left': 0.08, 'right': 0.95,
+            'hspace': 0.35, 'wspace': 0.25,  # 增加hspace解决标题重叠
             'title_fontsize': 16,
             'subtitle_fontsize': 12
         },
@@ -369,7 +370,7 @@ class UnifiedChartStyle:
     
     @classmethod
     def setup_subplot_layout(cls, layout_type, **kwargs):
-        """设置子图布局"""
+        """设置子图布局 - 增强版，解决字体重叠问题"""
         layout_config = cls.get_subplot_layout(layout_type)
         
         # 合并配置和自定义参数
@@ -384,12 +385,18 @@ class UnifiedChartStyle:
         import matplotlib.pyplot as plt
         fig, axes = plt.subplots(nrows, ncols, figsize=figsize)
         
-        # 应用间距
-        if 'hspace' in subplot_kwargs or 'wspace' in subplot_kwargs:
-            plt.subplots_adjust(
-                hspace=subplot_kwargs.get('hspace', 0.3),
-                wspace=subplot_kwargs.get('wspace', 0.25)
-            )
+        # 先应用tight_layout自动优化
+        plt.tight_layout()
+        
+        # 再应用精确的布局调整，解决字体重叠问题
+        plt.subplots_adjust(
+            top=subplot_kwargs.get('top', 0.90),       # 为主标题留出空间
+            bottom=subplot_kwargs.get('bottom', 0.08), # 底部边距
+            left=subplot_kwargs.get('left', 0.08),     # 左边距
+            right=subplot_kwargs.get('right', 0.95),   # 右边距
+            hspace=subplot_kwargs.get('hspace', 0.35), # 垂直间距，避免标题重叠
+            wspace=subplot_kwargs.get('wspace', 0.25)  # 水平间距
+        )
         
         return fig, axes, subplot_kwargs
     

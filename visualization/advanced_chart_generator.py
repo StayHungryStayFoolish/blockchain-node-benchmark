@@ -20,11 +20,7 @@ import os
 import sys
 from pathlib import Path
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(script_dir)
-sys.path.insert(0, project_root)
-
-from visualization.chart_style_config import UnifiedChartStyle
+from .chart_style_config import UnifiedChartStyle
 from utils.ena_field_accessor import ENAFieldAccessor
 
 # Import unified CSV data processor

@@ -730,35 +730,28 @@ class PerformanceVisualizer(CSVDataProcessor):
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
         accounts_await_col = accounts_await_cols[0] if accounts_await_cols else None
         
-        # 智能阈值设置 - 基于实际数据范围
-        data_max = self.df[data_await_col].max()
-        data_p95 = self.df[data_await_col].quantile(0.95)
-        data_p75 = self.df[data_await_col].quantile(0.75)
-        data_p50 = self.df[data_await_col].median()
+        # 智能阈值设置 - 使用配置变量和统一计算规则
+        base_latency_threshold = int(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50'))
         
-        # DATA设备阈值
+        # DATA设备阈值 - 使用统一计算规则
         data_thresholds = {
-            'excellent': data_p50 * 0.6,    # 60% of median
-            'good': data_p75,               # P75
-            'warning': data_p95,            # P95  
-            'poor': data_p95 * 1.05,        # 105% of P95
-            'critical': data_max            # Maximum observed
+            'excellent': base_latency_threshold * 0.4,    # 40% of base threshold
+            'good': base_latency_threshold * 0.6,         # 60% of base threshold
+            'warning': base_latency_threshold * 0.8,      # 80% of base threshold (统一规则)
+            'poor': base_latency_threshold * 1.0,         # 100% of base threshold
+            'critical': base_latency_threshold * 1.2      # 120% of base threshold
         }
         
-        # ACCOUNTS设备独立阈值
+        # ACCOUNTS设备独立阈值 - 使用相同的配置规则
         accounts_thresholds = data_thresholds  # 默认使用DATA阈值
         if accounts_configured and accounts_await_col:
-            accounts_max = self.df[accounts_await_col].max()
-            accounts_p95 = self.df[accounts_await_col].quantile(0.95)
-            accounts_p75 = self.df[accounts_await_col].quantile(0.75)
-            accounts_p50 = self.df[accounts_await_col].median()
-            
+            # ACCOUNTS设备使用相同的配置阈值规则
             accounts_thresholds = {
-                'excellent': accounts_p50 * 0.6,
-                'good': accounts_p75,
-                'warning': accounts_p95,
-                'poor': accounts_p95 * 1.05,
-                'critical': accounts_max
+                'excellent': base_latency_threshold * 0.4,
+                'good': base_latency_threshold * 0.6,
+                'warning': base_latency_threshold * 0.8,
+                'poor': base_latency_threshold * 1.0,
+                'critical': base_latency_threshold * 1.2
             }
         
         # 用于显示的统一阈值（取两者最大值）
@@ -1778,12 +1771,12 @@ Data Points: {len(overhead_df)}"""
             if accounts_util_cols:
                 system_resources['ACCOUNTS_IO'] = self.df[accounts_util_cols[0]]
         
-        # 专业瓶颈阈值定义
+        # 专业瓶颈阈值定义 - 使用配置变量
         bottleneck_thresholds = {
-            'CPU': 85,
-            'Memory': 90,
-            'DATA_IO': 90,
-            'ACCOUNTS_IO': 90
+            'CPU': int(os.getenv('BOTTLENECK_CPU_THRESHOLD', '85')),
+            'Memory': int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', '90')),
+            'DATA_IO': int(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90')),
+            'ACCOUNTS_IO': int(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90'))
         }
         
         # 系统瓶颈检测函数
