@@ -6,6 +6,7 @@ Uses unified CSV data processor to ensure field access consistency and reliabili
 """
 
 import argparse
+from .chart_style_config import UnifiedChartStyle
 import os
 import sys
 import glob
@@ -79,7 +80,12 @@ def format_summary_text(device_info, data_stats, accounts_stats=None):
     return temp_manager.format_summary_text(device_info, data_stats, accounts_stats)
 
 def add_text_summary(ax, summary_text, title):
-    return UnifiedChartStyle.add_text_summary(ax, summary_text, title)
+    """辅助函数：统一文本摘要样式"""
+    ax.axis('off')
+    ax.text(0.05, 0.95, summary_text, transform=ax.transAxes, 
+           fontsize=11, verticalalignment='top', fontfamily='monospace',
+           bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+    ax.set_title(title)
 
 def create_chart_title(base_title, accounts_configured):
     if accounts_configured:
@@ -419,6 +425,12 @@ class PerformanceVisualizer(CSVDataProcessor):
     def create_correlation_visualization_chart(self):
         """CPU-EBS Performance Correlation Analysis - Dual Device Support"""
         
+        # Check data availability (与其他方法保持一致)
+        if not hasattr(self, 'df') or self.df is None:
+            if not self.load_data():
+                print("❌ Failed to load data for correlation analysis")
+                return None
+        
         # Device configuration detection
         data_configured = len([col for col in self.df.columns if col.startswith('data_')]) > 0
         accounts_configured = len([col for col in self.df.columns if col.startswith('accounts_')]) > 0
@@ -431,7 +443,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         title = 'CPU-EBS Performance Correlation Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'CPU-EBS Performance Correlation Analysis - DATA Device Only'
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle(title, fontsize=16, fontweight='bold')
+        fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
         # Get CPU and device fields
         cpu_iowait_col = 'cpu_iowait' if 'cpu_iowait' in self.df.columns else None
@@ -471,13 +483,13 @@ class PerformanceVisualizer(CSVDataProcessor):
         if cpu_iowait_col and data_util_cols:
             data_util_col = data_util_cols[0]
             axes[0, 0].scatter(self.df[cpu_iowait_col], self.df[data_util_col], 
-                             alpha=0.6, s=20, color='blue', label='DATA Device')
+                             alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'], label='DATA Device')
             
             # Add ACCOUNTS device if configured
             if accounts_configured and accounts_util_cols:
                 accounts_util_col = accounts_util_cols[0]
                 axes[0, 0].scatter(self.df[cpu_iowait_col], self.df[accounts_util_col], 
-                                 alpha=0.6, s=20, color='orange', label='ACCOUNTS Device')
+                                 alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['accounts_primary'], label='ACCOUNTS Device')
             
             # Calculate and display correlation
             data_corr = self.df[cpu_iowait_col].corr(self.df[data_util_col])
@@ -527,14 +539,14 @@ class PerformanceVisualizer(CSVDataProcessor):
             data_util_col = data_util_cols[0]
             data_aqu_col = data_aqu_cols[0]
             axes[1, 0].scatter(self.df[data_util_col], self.df[data_aqu_col], 
-                             alpha=0.6, s=20, color='blue', label='DATA Device')
+                             alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'], label='DATA Device')
             
             # Add ACCOUNTS device if configured
             if accounts_configured and accounts_util_cols and accounts_aqu_cols:
                 accounts_util_col = accounts_util_cols[0]
                 accounts_aqu_col = accounts_aqu_cols[0]
                 axes[1, 0].scatter(self.df[accounts_util_col], self.df[accounts_aqu_col], 
-                                 alpha=0.6, s=20, color='orange', label='ACCOUNTS Device')
+                                 alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['accounts_primary'], label='ACCOUNTS Device')
             
             axes[1, 0].set_xlabel('Device Utilization (%)')
             axes[1, 0].set_ylabel('Queue Depth')
@@ -543,7 +555,6 @@ class PerformanceVisualizer(CSVDataProcessor):
             axes[1, 0].grid(True, alpha=0.3)
         
         # 4. Correlation Summary
-        axes[1, 1].axis('off')
         summary_text = "CPU-EBS Correlation Summary:\n\n"
         
         if cpu_iowait_col and data_util_cols:
@@ -567,10 +578,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             summary_text += "ACCOUNTS Device: Not Configured\n"
             summary_text += "Configure ACCOUNTS_DEVICE for dual-device analysis"
         
-        axes[1, 1].text(0.05, 0.95, summary_text, transform=axes[1, 1].transAxes, 
-                       fontsize=11, verticalalignment='top', fontfamily='monospace',
-                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
-        axes[1, 1].set_title('Correlation Summary')
+        UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Correlation Summary')
         
         plt.tight_layout()
         
@@ -867,10 +875,6 @@ class PerformanceVisualizer(CSVDataProcessor):
         axes[1, 0].tick_params(axis='x', rotation=45)
         
         # 4. Enhanced Statistics Summary
-        axes[1, 1].axis('off')
-        axes[1, 1].set_title('Performance Analysis Summary', 
-                            fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=20)
-        
         # Calculate detailed statistics
         data_stats = {
             'mean': self.df[data_await_col].mean(),
@@ -947,11 +951,7 @@ Recommendations:
   • Monitor: P99 latency trends for early warning
   • Alert: When performance degrades significantly"""
         
-        # 使用UnifiedChartStyle统一的文本样式 (与bottleneck_identification保持一致)
-        axes[1, 1].text(0.05, 0.95, summary_text, transform=axes[1, 1].transAxes, 
-                       fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], 
-                       verticalalignment='top', 
-                       fontfamily=plt.rcParams['font.sans-serif'][0])
+        UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Performance Analysis Summary')
         
         plt.tight_layout()
         output_file = os.path.join(self.output_dir, 'await_threshold_analysis.png')
@@ -1756,9 +1756,6 @@ Data Points: {len(overhead_df)}"""
         fig.suptitle('System Bottleneck Identification Analysis', 
                     fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
-        # Get threshold values
-        thresholds = get_visualization_thresholds()
-        
         # === 系统资源数据收集 ===
         system_resources = {}
         
@@ -1774,15 +1771,12 @@ Data Points: {len(overhead_df)}"""
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         if data_util_cols:
             system_resources['DATA_IO'] = self.df[data_util_cols[0]]
-            data_util_col = data_util_cols[0]
         
         # EBS I/O数据 - ACCOUNTS设备
-        accounts_util_col = None
         if accounts_configured:
             accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
             if accounts_util_cols:
                 system_resources['ACCOUNTS_IO'] = self.df[accounts_util_cols[0]]
-                accounts_util_col = accounts_util_cols[0]
         
         # 专业瓶颈阈值定义
         bottleneck_thresholds = {
@@ -1897,9 +1891,9 @@ Data Points: {len(overhead_df)}"""
                     pie_colors.append(colors.get(resource, 'gray'))
             
             if values:
-                wedges, texts, autotexts = ax2.pie(values, labels=labels, colors=pie_colors,
-                                                  autopct='%1.1f%%', startangle=90,
-                                                  textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
+                ax2.pie(values, labels=labels, colors=pie_colors,
+                       autopct='%1.1f%%', startangle=90,
+                       textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
                 
                 ax2.set_title('Bottleneck Type Distribution', 
                              fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
@@ -1988,9 +1982,6 @@ Data Points: {len(overhead_df)}"""
         
         # === 4. 系统瓶颈诊断报告 (右下) ===
         ax4 = axes[1, 1]
-        ax4.axis('off')
-        ax4.set_title('System Bottleneck Diagnostic Report', 
-                     fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=20)
         
         # 计算系统整体统计
         total_samples = len(self.df)
@@ -2072,11 +2063,8 @@ Data Points: {len(overhead_df)}"""
         
         summary_text = "\n".join(summary_lines)
         
-        # 使用UnifiedChartStyle的统一文本样式，无背景框
-        ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes,
-                fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], 
-                verticalalignment='top', 
-                fontfamily=plt.rcParams['font.sans-serif'][0])
+        # 使用统一样式
+        UnifiedChartStyle.add_text_summary(ax4, summary_text, 'System Bottleneck Diagnostic Report')
         
         # 应用统一布局
         plt.tight_layout()
@@ -2095,94 +2083,6 @@ Data Points: {len(overhead_df)}"""
         print(f"   Primary bottleneck: {primary_bottleneck}")
         
         return output_file
-
-        try:
-            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle('System Bottleneck Identification Analysis', fontsize=16, fontweight='bold')
-            
-            # 1. Bottleneck time series
-            ax1 = axes[0, 0]
-            bottleneck_data = []
-            thresholds = get_visualization_thresholds()
-            
-            if 'cpu_usage' in self.df.columns:
-                cpu_bottleneck = (self.df['cpu_usage'] > thresholds['warning']).astype(int)
-                ax1.plot(self.df['timestamp'], cpu_bottleneck, label=f'CPU Bottleneck(>{thresholds["warning"]}%)', linewidth=2)
-                bottleneck_data.append(('CPU', cpu_bottleneck.sum()))
-            
-            if 'mem_usage' in self.df.columns:
-                mem_bottleneck = (self.df['mem_usage'] > thresholds['memory']).astype(int)
-                ax1.plot(self.df['timestamp'], mem_bottleneck, label=f'Memory Bottleneck(>{thresholds["memory"]}%)', linewidth=2)
-                bottleneck_data.append(('Memory', mem_bottleneck.sum()))
-            
-            data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
-            if data_util_cols:
-                io_bottleneck = (self.df[data_util_cols[0]] > thresholds['io_warning']).astype(int)
-                ax1.plot(self.df['timestamp'], io_bottleneck, label=f'I/O Bottleneck(>{thresholds["io_warning"]}%)', linewidth=2)
-                bottleneck_data.append(('I/O', io_bottleneck.sum()))
-            
-            ax1.set_title('Bottleneck Time Series')
-            ax1.set_ylabel('Bottleneck Status')
-            ax1.legend()
-            ax1.grid(True, alpha=0.3)
-            
-            # 2. Bottleneck frequency statistics
-            ax2 = axes[0, 1]
-            if bottleneck_data:
-                resources, counts = zip(*bottleneck_data)
-                ax2.bar(resources, counts, color=['red', 'orange', 'yellow'])
-                ax2.set_title('Bottleneck Frequency Statistics')
-                ax2.set_ylabel('Bottleneck Count')
-                for i, count in enumerate(counts):
-                    ax2.text(i, count + max(counts) * 0.01, str(count), ha='center')
-            
-            # 3. Resource utilization heatmap
-            ax3 = axes[1, 0]
-            resource_cols = []
-            if 'cpu_usage' in self.df.columns:
-                resource_cols.append('cpu_usage')
-            if 'mem_usage' in self.df.columns:
-                resource_cols.append('mem_usage')
-            if data_util_cols:
-                resource_cols.append(data_util_cols[0])
-            
-            if resource_cols:
-                resource_data = self.df[resource_cols].dropna()
-                if len(resource_data) > 0:
-                    im = ax3.imshow(resource_data.T, aspect='auto', cmap='RdYlBu_r')
-                    ax3.set_title('Resource Utilization Heatmap')
-                    ax3.set_yticks(range(len(resource_cols)))
-                    ax3.set_yticklabels(resource_cols)
-                    plt.colorbar(im, ax=ax3)
-            
-            # 4. Bottleneck analysis summary
-            ax4 = axes[1, 1]
-            ax4.axis('off')
-            summary_text = "Bottleneck Analysis Summary:\n\n"
-            total_points = len(self.df)
-            
-            for resource, count in bottleneck_data:
-                percentage = (count / total_points) * 100 if total_points > 0 else 0
-                summary_text += f"{resource} Bottleneck:\n"
-                summary_text += f"  Occurrences: {count}\n"
-                summary_text += f"  Percentage: {percentage:.1f}%\n\n"
-            
-            ax4.text(0.1, 0.9, summary_text, transform=ax4.transAxes, fontsize=10, 
-                     verticalalignment='top', bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', alpha=0.8))
-            
-            plt.tight_layout()
-            
-            # 保存图表
-            output_file = os.path.join(self.output_dir, 'bottleneck_identification.png')
-            plt.savefig(output_file, dpi=300, bbox_inches='tight')
-            plt.close()
-            
-            print(f"  ✅ Bottleneck identification analysis chart: {os.path.basename(output_file)}")
-            return output_file, {}
-            
-        except Exception as e:
-            print(f"❌ Bottleneck identification analysis chart generation failed: {e}")
-            return None
 
     # EBS委托方法 - 委托给EBS专用模块
     def generate_ebs_bottleneck_analysis(self):
@@ -2237,7 +2137,8 @@ Data Points: {len(overhead_df)}"""
             
             # 创建2x2布局
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle('Block Height Synchronization Analysis', fontsize=16, fontweight='bold')
+            fig.suptitle('Block Height Synchronization Analysis', 
+                        fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
             
             # === 子图1: 区块高度对比 (左上) ===
             ax1 = axes[0, 0]
@@ -2297,8 +2198,8 @@ Data Points: {len(overhead_df)}"""
             sync_stats = self._calculate_sync_distribution(height_diff, threshold)
             
             if sync_stats['values']:
-                colors = ['#2ECC71', '#F39C12', '#E74C3C']
-                wedges, texts, autotexts = ax3.pie(
+                colors = [UnifiedChartStyle.COLORS['success'], UnifiedChartStyle.COLORS['warning'], UnifiedChartStyle.COLORS['critical']]
+                ax3.pie(
                     sync_stats['values'], 
                     labels=sync_stats['labels'],
                     colors=colors[:len(sync_stats['values'])],
@@ -2313,10 +2214,6 @@ Data Points: {len(overhead_df)}"""
                 ax3.set_title('Synchronization Status Distribution (No Data)')
             
             # === 子图4: 分析摘要 (右下) ===
-            ax4 = axes[1, 1]
-            ax4.axis('off')
-            ax4.set_title('Synchronization Analysis Summary')
-            
             if local_height is not None and mainnet_height is not None:
                 summary_text = self._generate_comprehensive_summary(
                     height_diff, data_loss, sync_stats, timestamps, local_height, mainnet_height
@@ -2324,8 +2221,7 @@ Data Points: {len(overhead_df)}"""
             else:
                 summary_text = self._generate_sync_stats_text(height_diff, data_loss)
             
-            ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes,
-                    verticalalignment='top', fontsize=10, fontfamily='monospace')
+            UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Synchronization Analysis Summary')
             
             # 布局调整
             plt.tight_layout()

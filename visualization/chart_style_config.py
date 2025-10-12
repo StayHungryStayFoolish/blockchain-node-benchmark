@@ -306,12 +306,11 @@ class UnifiedChartStyle:
     
     @classmethod
     def add_text_summary(cls, ax, summary_text, title):
-        """统一的文本摘要添加函数"""
+        """统一的文本摘要添加函数 - 简洁样式"""
         ax.axis('off')
         ax.text(0.05, 0.95, summary_text, transform=ax.transAxes, 
-               fontsize=cls.FONT_CONFIG['legend_size'], verticalalignment='top', 
-               fontfamily='monospace',
-               bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+               fontsize=10, verticalalignment='top', 
+               fontfamily='monospace')
         ax.set_title(title, fontsize=cls.FONT_CONFIG['subtitle_size'])
         
     @classmethod
