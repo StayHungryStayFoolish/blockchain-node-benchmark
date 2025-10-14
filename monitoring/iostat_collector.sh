@@ -158,7 +158,7 @@ get_all_devices_data() {
     fi
     
     # ACCOUNTS 设备 - 使用accounts作为逻辑名前缀
-    if [[ -n "$ACCOUNTS_DEVICE" && -n "$ACCOUNTS_VOL_TYPE" ]]; then
+    if is_accounts_configured; then
         local accounts_stats=$(get_iostat_data "$ACCOUNTS_DEVICE" "accounts")
         if [[ -n "$device_data" ]]; then
             device_data="${device_data},$accounts_stats"
@@ -183,7 +183,7 @@ generate_all_devices_header() {
     fi
     
     # ACCOUNTS 设备表头 - 使用accounts作为逻辑名前缀
-    if [[ -n "$ACCOUNTS_DEVICE" && -n "$ACCOUNTS_VOL_TYPE" ]]; then
+    if is_accounts_configured; then
         local accounts_header=$(generate_device_header "$ACCOUNTS_DEVICE" "accounts")
         if [[ -n "$device_header" ]]; then
             device_header="${device_header},$accounts_header"

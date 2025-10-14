@@ -53,7 +53,7 @@ init_ebs_limits() {
     fi
     
     # ACCOUNTS卷限制
-    if [[ -n "$ACCOUNTS_VOL_TYPE" && -n "$ACCOUNTS_VOL_MAX_IOPS" && -n "$ACCOUNTS_DEVICE" ]]; then
+    if is_accounts_configured; then
         case "$ACCOUNTS_VOL_TYPE" in
             "gp3")
                 DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_iops"]="$ACCOUNTS_VOL_MAX_IOPS"

@@ -11,10 +11,12 @@ import subprocess
 import os
 import sys
 import argparse
-from datetime import datetime
-import sys
-import os
+import glob
+import traceback
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
+from datetime import datetime
 from scipy.stats import pearsonr
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,15 +24,8 @@ project_root = os.path.dirname(script_dir)
 sys.path.insert(0, project_root)
 
 from visualization.chart_style_config import UnifiedChartStyle
-
-# Initialize matplotlib configuration when available
-try:
-    import matplotlib
-except ImportError:
-    pass  # matplotlib not available, skip font setup
-
-# 添加项目根目录到路径，以便导入 utils 模块
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from visualization.device_manager import DeviceManager
+from visualization.performance_visualizer import format_time_axis
 from utils.ena_field_accessor import ENAFieldAccessor
 
 def safe_get_env_int(env_name, default_value=0):
@@ -221,8 +216,6 @@ class ReportGenerator:
     def _find_latest_monitoring_overhead_file(self):
         """自动发现最新的监控开销文件"""
         try:
-            import glob
-            import os
             
             # 获取logs目录路径 - 使用环境变量或current/logs结构
             logs_dir = os.getenv('LOGS_DIR', os.path.join(self.output_dir, 'current', 'logs'))
@@ -530,11 +523,11 @@ class ReportGenerator:
     def _generate_config_status_section(self):
         """生成配置状态检查部分"""
         ledger_status = "✅ 已配置" if self.config.get('LEDGER_DEVICE') else "❌ 未配置"
-        accounts_status = "✅ 已配置" if self.config.get('ACCOUNTS_DEVICE') else "⚠️ 未配置"
+        accounts_status = "✅ 已配置" if DeviceManager.is_accounts_configured() else "⚠️ 未配置"
         blockchain_node = self.config.get('BLOCKCHAIN_NODE', '通用')
         
         accounts_note = ""
-        if not self.config.get('ACCOUNTS_DEVICE'):
+        if not DeviceManager.is_accounts_configured():
             accounts_note = '<div class="warning"><strong>提示:</strong> ACCOUNTS Device未配置，仅监控DATA Device性能。建议配置ACCOUNTS_DEVICE以获得完整的存储性能分析。</div>'
         
         return f"""
@@ -865,8 +858,6 @@ class ReportGenerator:
     def _generate_resource_distribution_chart(self, df):
         """生成资源分布图表 - 3x2布局（CPU/Memory/Network/Monitoring）"""
         try:
-            import matplotlib.pyplot as plt
-            from .chart_style_config import UnifiedChartStyle
             
             UnifiedChartStyle.setup_matplotlib()
             
@@ -1028,9 +1019,6 @@ class ReportGenerator:
     def _generate_monitoring_impact_chart(self, overhead_df):
         """生成监控影响分析图 - 3x2布局"""
         try:
-            import matplotlib.pyplot as plt
-            import numpy as np
-            from .chart_style_config import UnifiedChartStyle
             
             UnifiedChartStyle.setup_matplotlib()
             
@@ -1104,11 +1092,11 @@ class ReportGenerator:
             # 子图3: I/O Operations (AWS EBS Standardized)
             x = np.arange(2)
             width = 0.35
-            bars3_1 = ax3.bar(x - width/2, [blockchain_iops, monitoring_iops], width, 
-                             label='IOPS', color=UnifiedChartStyle.COLORS['data_primary'], alpha=0.7)
+            ax3.bar(x - width/2, [blockchain_iops, monitoring_iops], width, 
+                   label='IOPS', color=UnifiedChartStyle.COLORS['data_primary'], alpha=0.7)
             ax3_twin = ax3.twinx()
-            bars3_2 = ax3_twin.bar(x + width/2, [blockchain_throughput, monitoring_throughput], width, 
-                                  label='Throughput', color=UnifiedChartStyle.COLORS['success'], alpha=0.7)
+            ax3_twin.bar(x + width/2, [blockchain_throughput, monitoring_throughput], width, 
+                        label='Throughput', color=UnifiedChartStyle.COLORS['success'], alpha=0.7)
             ax3.set_ylabel('IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax3_twin.set_ylabel('Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax3.set_title('I/O Operations (AWS EBS Standardized)', 
@@ -1150,7 +1138,6 @@ class ReportGenerator:
                 ax5.legend()
                 ax5.grid(True, alpha=0.3)
                 # 应用智能时间轴格式（根据时间跨度自动选择）
-                from visualization.performance_visualizer import format_time_axis
                 format_time_axis(ax5, overhead_df['timestamp'])
             else:
                 ax5.text(0.5, 0.5, 'No Time Series Data', ha='center', va='center', 
@@ -2350,7 +2337,6 @@ class ReportGenerator:
 
     def _generate_data_loss_stats_section(self):
         """生成data_loss_stats.json文件展示部分"""
-        import json
         
         # 检查归档中的stats文件
         stats_file = None
@@ -2423,7 +2409,6 @@ class ReportGenerator:
 
     def _discover_chart_files(self):
         """动态发现所有生成的图表文件 - 扫描多个目录，支持归档路径"""
-        import glob
         chart_patterns = ["*.png", "*.jpg", "*.svg"]
         chart_files = []
         
@@ -3408,8 +3393,6 @@ class ReportGenerator:
             return f"<div class='error'>性能摘要生成失败: {str(e)}</div>"
 
 def main():
-    import argparse
-    
     parser = argparse.ArgumentParser(description='报告生成器 - 增强版 + 瓶颈模式支持')
     parser.add_argument('performance_csv', help='系统性能监控CSV文件')
     parser.add_argument('-c', '--config', help='配置文件', default='config_loader.sh')

@@ -18,6 +18,7 @@ fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
 
 # 初始化统一日志管理器
 init_logger "unified_monitor" $LOG_LEVEL "${LOGS_DIR}/unified_monitor.log"
@@ -1858,8 +1859,8 @@ validate_monitoring_overhead_config() {
         validation_warnings+=("DATA设备基准值未完全配置")
     fi
 
-    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
-        if [[ -z "$ACCOUNTS_VOL_MAX_IOPS" || -z "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
+    if is_accounts_configured; then
+        if [[ -z "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
             validation_warnings+=("ACCOUNTS设备已配置但基准值缺失")
         fi
     fi
@@ -2192,7 +2193,7 @@ start_unified_monitoring() {
     # 显示配置状态
     log_info "DATA设备: $LEDGER_DEVICE"
 
-    if [[ -n "$ACCOUNTS_DEVICE" && -n "$ACCOUNTS_VOL_TYPE" ]]; then
+    if is_accounts_configured; then
         log_info "ACCOUNTS设备: $ACCOUNTS_DEVICE 卷类型: $ACCOUNTS_VOL_TYPE"
     else
         echo "ℹ️  ACCOUNTS设备未配置"

@@ -8,11 +8,20 @@ EBS专用图表生成器 - 完全独立的EBS性能分析模块
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
+import matplotlib.dates as mdates
 import numpy as np
 import os
+import sys
 from datetime import datetime
-from .chart_style_config import UnifiedChartStyle
-from .device_manager import DeviceManager
+from scipy.signal import find_peaks
+
+# Add project root to path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+
+from visualization.chart_style_config import UnifiedChartStyle
+from visualization.device_manager import DeviceManager
 
 class EBSChartGenerator:
     # 统一的EBS图表文件命名规范
@@ -30,7 +39,6 @@ class EBSChartGenerator:
         """智能构造函数 - 支持DataFrame和CSV路径"""
         
         # 加载框架配置
-        from .performance_visualizer import load_framework_config
         load_framework_config()
         
         if output_dir is None:
@@ -86,7 +94,6 @@ class EBSChartGenerator:
         
         # 应用统一样式配置
         try:
-            from .chart_style_config import UnifiedChartStyle
             UnifiedChartStyle.setup_matplotlib()
         except ImportError:
             pass
@@ -125,7 +132,6 @@ class EBSChartGenerator:
         """生成所有EBS图表 - 统一入口"""
         try:
             # 🎨 重构：应用统一样式配置
-            from .chart_style_config import UnifiedChartStyle
             unified_style = UnifiedChartStyle()
             unified_style.setup_matplotlib()
             print("✅ 统一样式已应用到EBS图表")
@@ -283,7 +289,6 @@ class EBSChartGenerator:
         accounts_configured = self.device_manager.is_accounts_configured()
         
         # 使用框架统一标题函数
-        from .performance_visualizer import create_chart_title
         title = create_chart_title('EBS iostat Performance Analysis', accounts_configured)
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
@@ -827,7 +832,6 @@ class EBSChartGenerator:
             ax4.grid(True, alpha=0.3)
         
         # Format time axis elegantly - show HH:MM:SS only on all charts
-        import matplotlib.dates as mdates
         
         for ax in [ax1, ax2, ax3, ax4]:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
@@ -1080,7 +1084,6 @@ class EBSChartGenerator:
         if data_iops_field and len(self.df) > 10:
             # 识别峰值和低谷
             try:
-                from scipy.signal import find_peaks
                 peaks, _ = find_peaks(self.df[data_iops_field], 
                                     height=self.df[data_iops_field].mean(),
                                     distance=5)

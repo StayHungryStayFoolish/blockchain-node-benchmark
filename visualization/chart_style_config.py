@@ -6,6 +6,7 @@
 
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
+import matplotlib.dates as mdates
 import os
 
 class UnifiedChartStyle:
@@ -388,7 +389,6 @@ class UnifiedChartStyle:
         nrows = subplot_kwargs.pop('nrows', 2)
         ncols = subplot_kwargs.pop('ncols', 2)
         
-        import matplotlib.pyplot as plt
         fig, axes = plt.subplots(nrows, ncols, figsize=figsize)
         
         # 先应用tight_layout自动优化
@@ -444,7 +444,6 @@ class UnifiedChartStyle:
     @classmethod
     def format_time_axis_unified(cls, axes_list):
         """统一时间轴格式化 - 解决问题1的时间重叠"""
-        import matplotlib.dates as mdates
         
         for ax in axes_list:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))

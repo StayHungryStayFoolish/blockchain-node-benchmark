@@ -26,24 +26,11 @@ project_root = os.path.dirname(script_dir)
 sys.path.insert(0, project_root)
 
 from visualization.chart_style_config import UnifiedChartStyle
+from utils.unified_logger import get_logger
 
 # 使用统一日志管理器
-
-# 使用更健壮的路径管理
-current_dir = Path(__file__).parent
-utils_dir = current_dir.parent / 'utils'
-if str(utils_dir) not in sys.path:
-    sys.path.insert(0, str(utils_dir))
-
-try:
-    from unified_logger import get_logger
-    logger = get_logger(__name__)
-    logger.info("✅ 统一日志管理器初始化成功")
-except ImportError as e:
-    # 降级到标准logging
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.warning(f"⚠️ 统一日志管理器不可用，使用标准logging: {e}")
+logger = get_logger(__name__)
+logger.info("✅ 统一日志管理器初始化成功")
 
 class NodeQPSAnalyzer:
     """区块链节点 QPS性能分析器 + 瓶颈模式支持 - 支持多种区块链"""
@@ -77,11 +64,7 @@ class NodeQPSAnalyzer:
         # Using English labels system directly
         
         # 应用统一样式配置
-        try:
-            from visualization.chart_style_config import UnifiedChartStyle
-            UnifiedChartStyle.setup_matplotlib()
-        except ImportError:
-            pass
+        UnifiedChartStyle.setup_matplotlib()
         
         logger.info(f"🔍 QPS分析器初始化完成，输出目录: {output_dir}, 基准测试模式: {benchmark_mode}")
         if bottleneck_mode:

@@ -20,65 +20,16 @@ import os
 import sys
 from pathlib import Path
 
-from .chart_style_config import UnifiedChartStyle
+# Add project root to path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+
+from visualization.chart_style_config import UnifiedChartStyle
 from utils.ena_field_accessor import ENAFieldAccessor
-
-# Import unified CSV data processor
-current_dir = Path(__file__).parent
-utils_dir = current_dir.parent / 'utils'
-sys.path.insert(0, str(utils_dir))
-
-try:
-    from utils.unified_logger import get_logger
-except ImportError:
-    try:
-        # Try importing from parent directory
-        import sys
-        import os
-        parent_dir = os.path.dirname(os.path.dirname(__file__))
-        sys.path.insert(0, parent_dir)
-        from utils.unified_logger import get_logger
-    except ImportError:
-        # Use basic logging functionality as fallback
-        import logging
-        def get_logger(name):
-            return logging.getLogger(name)
-
-try:
-    # Add parent directory to path for utils imports
-    import sys
-    from pathlib import Path
-    current_dir = Path(__file__).parent
-    utils_dir = current_dir.parent / 'utils'
-    if str(utils_dir) not in sys.path:
-        sys.path.insert(0, str(utils_dir))
-    
-    from csv_data_processor import CSVDataProcessor
-    from unit_converter import UnitConverter
-except ImportError as e:
-    logging.warning(f"Module import failed: {e}")
-    # Create placeholder classes
-    class CSVDataProcessor:
-        def __init__(self):
-            self.df = None
-        def load_csv_data(self, file): 
-            self.df = pd.read_csv(file)
-            return True
-        def clean_data(self):
-            return True
-        def has_field(self, name):
-            return name in self.df.columns if self.df is not None else False
-        def get_device_columns_safe(self, device_prefix: str, metric_suffix: str) -> List[str]:
-            if self.df is None:
-                return []
-            matching_cols = []
-            for col in self.df.columns:
-                if col.startswith(f'{device_prefix}_') and metric_suffix in col:
-                    matching_cols.append(col)
-            return matching_cols
-    
-    class UnitConverter:
-        pass
+from utils.unified_logger import get_logger
+from utils.csv_data_processor import CSVDataProcessor
+from utils.unit_converter import UnitConverter
 
 logger = get_logger(__name__)
 
@@ -111,7 +62,6 @@ class AdvancedChartGenerator(CSVDataProcessor):
             self.unit_converter = None
         
         # Set chart style - 使用统一样式配置
-        from .chart_style_config import UnifiedChartStyle
         UnifiedChartStyle.setup_matplotlib()
         
         # Using English label system directly
@@ -965,7 +915,6 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         # 🎨 重构：应用统一样式配置
         try:
-            from .chart_style_config import UnifiedChartStyle
             unified_style = UnifiedChartStyle()
             unified_style.setup_matplotlib()
             print("✅ 统一样式已应用到高级图表")

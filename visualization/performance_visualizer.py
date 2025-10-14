@@ -6,7 +6,6 @@ Uses unified CSV data processor to ensure field access consistency and reliabili
 """
 
 import argparse
-from .chart_style_config import UnifiedChartStyle
 import os
 import sys
 import glob
@@ -16,8 +15,10 @@ import matplotlib.font_manager as fm
 import matplotlib.dates as mdates
 import seaborn as sns
 import numpy as np
+import traceback
 from datetime import datetime
 from pathlib import Path
+from matplotlib.patches import Patch
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
@@ -26,6 +27,10 @@ sys.path.insert(0, project_root)
 from visualization.ebs_chart_generator import EBSChartGenerator
 from visualization.device_manager import DeviceManager
 from visualization.chart_style_config import UnifiedChartStyle
+from visualization.advanced_chart_generator import AdvancedChartGenerator
+from utils.csv_data_processor import CSVDataProcessor
+from utils.unit_converter import UnitConverter
+from analysis.cpu_ebs_correlation_analyzer import CPUEBSCorrelationAnalyzer
 
 def get_visualization_thresholds():
     temp_df = pd.DataFrame()
@@ -142,83 +147,6 @@ LABELS = {
     'threshold_analysis': 'Threshold Analysis'
 }
 
-# Import unified CSV data processor
-current_dir = Path(__file__).parent
-utils_dir = current_dir.parent / 'utils'
-analysis_dir = current_dir.parent / 'analysis'
-
-# Add paths to sys.path
-for path in [str(utils_dir), str(analysis_dir)]:
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
-def _import_optional_dependencies():
-    """优雅导入可选依赖，失败时返回占位符"""
-    dependencies = {}
-    
-    try:
-        # Add parent directory to path for utils imports
-        parent_dir = os.path.dirname(os.path.dirname(__file__))
-        sys.path.insert(0, parent_dir)
-        
-        from utils.csv_data_processor import CSVDataProcessor
-        from analysis.cpu_ebs_correlation_analyzer import CPUEBSCorrelationAnalyzer
-        from utils.unit_converter import UnitConverter
-        
-        # Import advanced_chart_generator using absolute import
-        from visualization.advanced_chart_generator import AdvancedChartGenerator
-        
-        dependencies.update({
-            'CSVDataProcessor': CSVDataProcessor,
-            'CPUEBSCorrelationAnalyzer': CPUEBSCorrelationAnalyzer,
-            'UnitConverter': UnitConverter,
-            'AdvancedChartGenerator': AdvancedChartGenerator,
-            'available': True
-        })
-        print("✅ Advanced analysis tools loaded")
-        
-    except ImportError as e:
-        print(f"⚠️ Advanced analysis tools unavailable: {e}")
-        print("📝 Using basic functionality mode")
-        
-        # 简化的占位符类
-        class PlaceholderTool:
-            def __init__(self, *args, **kwargs): pass
-            def __call__(self, *args, **kwargs): return self
-            def __getattr__(self, name): return lambda *args, **kwargs: None
-        
-        # 特殊的CSVDataProcessor占位符
-        class BasicCSVProcessor(PlaceholderTool):
-            def __init__(self):
-                super().__init__()
-                self.df = None
-            def load_csv_data(self, file): 
-                self.df = pd.read_csv(file)
-                return True
-            def clean_data(self): return True
-            def has_field(self, name): return name in self.df.columns if self.df is not None else False
-            def get_device_columns_safe(self, device_prefix: str, metric_suffix: str) -> list:
-                if self.df is None: return []
-                return [col for col in self.df.columns if col.startswith(f'{device_prefix}_') and metric_suffix in col]
-        
-        dependencies.update({
-            'CSVDataProcessor': BasicCSVProcessor,
-            'CPUEBSCorrelationAnalyzer': PlaceholderTool,
-            'UnitConverter': PlaceholderTool,
-            'AdvancedChartGenerator': PlaceholderTool,
-            'available': False
-        })
-    
-    return dependencies
-
-# 导入依赖
-_deps = _import_optional_dependencies()
-CSVDataProcessor = _deps['CSVDataProcessor']
-CPUEBSCorrelationAnalyzer = _deps['CPUEBSCorrelationAnalyzer']
-UnitConverter = _deps['UnitConverter']
-AdvancedChartGenerator = _deps['AdvancedChartGenerator']
-ADVANCED_TOOLS_AVAILABLE = _deps['available']
-
 class PerformanceVisualizer(CSVDataProcessor):
     """Performance Visualizer - Based on unified CSV data processor"""
     
@@ -247,18 +175,12 @@ class PerformanceVisualizer(CSVDataProcessor):
         }
         
         # 初始化新工具
-        if ADVANCED_TOOLS_AVAILABLE:
-            try:
-                self.unit_converter = UnitConverter()
-                self.correlation_analyzer = CPUEBSCorrelationAnalyzer(data_file)
-                self.chart_generator = AdvancedChartGenerator(data_file, self.output_dir)
-            except Exception as e:
-                print(f"⚠️ Advanced tools initialization failed: {e}")
-                self.unit_converter = None
-                self.correlation_analyzer = None
-                self.chart_generator = None
-        else:
-            # 当高级工具不可用时，设置为 None
+        try:
+            self.unit_converter = UnitConverter()
+            self.correlation_analyzer = CPUEBSCorrelationAnalyzer(data_file)
+            self.chart_generator = AdvancedChartGenerator(data_file, self.output_dir)
+        except Exception as e:
+            print(f"⚠️ Advanced tools initialization failed: {e}")
             self.unit_converter = None
             self.correlation_analyzer = None
             self.chart_generator = None
@@ -317,11 +239,6 @@ class PerformanceVisualizer(CSVDataProcessor):
             print(f"❌ Data loading failed: {e}")
             return False
     
-    def _is_accounts_configured(self):
-        """检查 ACCOUNTS Device是否配置和可用 - 委托给DeviceManager"""
-        device_manager = DeviceManager(self.df if hasattr(self, 'df') else pd.DataFrame())
-        return device_manager.is_accounts_configured()
-
     def create_performance_overview_chart(self):
         """✅ System Performance Overview Chart - Systematic Refactor"""
         
@@ -333,7 +250,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         # 加载配置
         load_framework_config()
         
-        accounts_configured = self._is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured()
         
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
         fig.suptitle('System Performance Overview', fontsize=16, fontweight='bold')
@@ -462,7 +379,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # Device configuration detection
         data_configured = len([col for col in self.df.columns if col.startswith('data_')]) > 0
-        accounts_configured = self._is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured()
         
         if not data_configured:
             print("❌ DATA device data not found")
@@ -623,7 +540,7 @@ class PerformanceVisualizer(CSVDataProcessor):
     def create_util_threshold_analysis_chart(self):
         """Device Utilization Threshold Analysis Chart - Systematic Refactor"""
         
-        accounts_configured = self._is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured()
         title = 'Device Utilization Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Device Utilization Threshold Analysis - DATA Device Only'
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -743,7 +660,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 print("❌ Failed to load data for await threshold analysis")
                 return None
 
-        accounts_configured = self._is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured()
         title = 'Enhanced I/O Await Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Enhanced I/O Await Threshold Analysis - DATA Device Only'
         
         fig, axes = plt.subplots(2, 2, figsize=(18, 14))
@@ -820,7 +737,6 @@ class PerformanceVisualizer(CSVDataProcessor):
         format_time_axis(axes[0, 0], self.df['timestamp'])
         
         # 2. Enhanced Distribution Analysis
-        import numpy as np
         bins = np.linspace(0, max(enhanced_thresholds['critical'] * 1.2, self.df[data_await_col].max() * 1.1), 25)
         axes[0, 1].hist(self.df[data_await_col], bins=bins, alpha=0.7, color=UnifiedChartStyle.COLORS['data_primary'], 
                        edgecolor='black', linewidth=0.5, label='DATA Distribution')
@@ -988,7 +904,7 @@ Recommendations:
     def create_device_comparison_chart(self):
         """Device Performance Comparison Chart"""
         
-        accounts_configured = self._is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured()
         
         if not accounts_configured:
             print("⚠️ ACCOUNTS device not configured, creating DATA-only comparison")
@@ -1274,7 +1190,7 @@ Data Points: {len(overhead_df)}"""
         
         try:
             # Use advanced chart generator
-            if ADVANCED_TOOLS_AVAILABLE and self.chart_generator is not None:
+            if self.chart_generator is not None:
                 print("🎨 Using advanced chart generator...")
                 advanced_charts = self.chart_generator.generate_all_charts()
                 if advanced_charts:
@@ -1476,11 +1392,11 @@ Data Points: {len(overhead_df)}"""
                         color='blue', linewidth=2, label=f'DATA EBS Latency ({window_size}-point avg)')
                 
                 # ACCOUNTS设备延迟
-                accounts_configured = self._is_accounts_configured()
+                accounts_configured = DeviceManager.is_accounts_configured()
                 if accounts_configured and accounts_await_cols:
                     accounts_await_col = accounts_await_cols[0]
                     accounts_await_smooth = self.df[accounts_await_col].rolling(window=window_size, center=True).mean()
-                    ax3.plot(self.df['timestamp'], accounts_await_smooth, 
+                    ax3.plot(self.df['timestamp'], accounts_await_smooth,
                             color='orange', linewidth=2, label=f'ACCOUNTS EBS Latency ({window_size}-point avg)')
                 
                 ax3.set_title('EBS Latency Trends (Smoothed - DATA & ACCOUNTS)')
@@ -1712,7 +1628,6 @@ Data Points: {len(overhead_df)}"""
             # 3. I/O efficiency analysis - 支持双设备
             ax3 = axes[1, 0]
             data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
-            accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
             
             if data_util_cols:
                 util_col = data_util_cols[0]
@@ -1721,13 +1636,15 @@ Data Points: {len(overhead_df)}"""
                 ax3.axvline(util_data.mean(), color='blue', linestyle='--', 
                            label=f'DATA Avg: {util_data.mean():.1f}%')
                 
-                # ACCOUNTS设备利用率分布
-                if accounts_util_cols:
-                    accounts_util_col = accounts_util_cols[0]
-                    accounts_util_data = self.df[accounts_util_col].dropna()
-                    ax3.hist(accounts_util_data, bins=20, alpha=0.7, color='orange', label='ACCOUNTS Device')
-                    ax3.axvline(accounts_util_data.mean(), color='orange', linestyle='--', 
-                               label=f'ACCOUNTS Avg: {accounts_util_data.mean():.1f}%')
+                # ACCOUNTS设备利用率分布（仅在配置时显示）
+                if DeviceManager.is_accounts_configured():
+                    accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
+                    if accounts_util_cols:
+                        accounts_util_col = accounts_util_cols[0]
+                        accounts_util_data = self.df[accounts_util_col].dropna()
+                        ax3.hist(accounts_util_data, bins=20, alpha=0.7, color='orange', label='ACCOUNTS Device')
+                        ax3.axvline(accounts_util_data.mean(), color='orange', linestyle='--', 
+                                   label=f'ACCOUNTS Avg: {accounts_util_data.mean():.1f}%')
                 
                 ax3.set_title('I/O Utilization Distribution (DATA + ACCOUNTS)')
                 ax3.set_xlabel('Utilization (%)')
@@ -1777,11 +1694,11 @@ Data Points: {len(overhead_df)}"""
                 return None
         
         # Device configuration detection
-        accounts_configured = self._is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured()
         
         # Create professional figure layout
         fig, axes = plt.subplots(2, 2, figsize=(18, 14))
-        fig.suptitle('System Bottleneck Identification Analysis', 
+        fig.suptitle('System Bottleneck Identification Analysis',
                     fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
         # === 系统资源数据收集 ===
@@ -1990,8 +1907,6 @@ Data Points: {len(overhead_df)}"""
                 ax3.set_title(f'{resource1} vs {resource2} Correlation Analysis', 
                              fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 
-                # 添加图例
-                from matplotlib.patches import Patch
                 legend_elements = [
                     Patch(facecolor=UnifiedChartStyle.COLORS['success'], label='Normal'),
                     Patch(facecolor=UnifiedChartStyle.COLORS['warning'], label='Single Bottleneck'),

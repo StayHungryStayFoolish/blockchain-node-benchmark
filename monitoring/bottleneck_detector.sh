@@ -23,6 +23,7 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
 
 # 初始化统一日志管理器
 init_logger "bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/bottleneck_detector.log"
@@ -36,7 +37,7 @@ build_device_field_patterns() {
     patterns+=("data_${LEDGER_DEVICE}_${field_type}")
     
     # ACCOUNTS设备模式（可选）
-    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
+    if is_accounts_configured; then
         patterns+=("accounts_${ACCOUNTS_DEVICE}_${field_type}")
     fi
 
@@ -188,7 +189,7 @@ initialize_bottleneck_counters() {
     BOTTLENECK_COUNTERS["ebs_aws_throughput"]=0
     
     # ACCOUNTS设备计数器 (如果配置了ACCOUNTS设备)
-    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
+    if is_accounts_configured; then
         BOTTLENECK_COUNTERS["accounts_ebs_util"]=0
         BOTTLENECK_COUNTERS["accounts_ebs_latency"]=0
         BOTTLENECK_COUNTERS["accounts_ebs_aws_iops"]=0
@@ -224,7 +225,7 @@ init_bottleneck_detection() {
         echo "  DATA设备基准: ${DATA_VOL_MAX_IOPS} IOPS, ${DATA_VOL_MAX_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
         
         # 修正：使用完整的ACCOUNTS检查逻辑，与其他地方保持一致
-        if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" && -n "$ACCOUNTS_VOL_MAX_IOPS" && -n "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
+        if is_accounts_configured && [[ -n "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
             echo "  ACCOUNTS设备基准: ${ACCOUNTS_VOL_MAX_IOPS} IOPS, ${ACCOUNTS_VOL_MAX_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
         fi
     fi
@@ -696,7 +697,7 @@ detect_all_ebs_bottlenecks() {
     fi
     
     # 检测ACCOUNTS设备 (如果配置了)
-    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
+    if is_accounts_configured; then
         local accounts_util=0 accounts_latency=0 accounts_aws_iops=0 accounts_throughput=0
         
         for i in "${!field_names[@]}"; do
@@ -796,7 +797,7 @@ detect_bottleneck() {
     fi
     
     # 检测ACCOUNTS设备EBS瓶颈 (如果配置)
-    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" ]]; then
+    if is_accounts_configured; then
         # 获取ACCOUNTS设备的性能指标
         local accounts_util=0
         local accounts_latency=0

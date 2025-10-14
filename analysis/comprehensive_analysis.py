@@ -14,6 +14,12 @@ import numpy as np
 import glob
 import os
 import sys
+import json
+import argparse
+import random
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, Tuple
+from pathlib import Path
 
 # 添加项目根目录到Python路径
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -21,14 +27,12 @@ project_root = os.path.dirname(script_dir)
 sys.path.insert(0, project_root)
 
 from visualization.chart_style_config import UnifiedChartStyle
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+from visualization.performance_visualizer import PerformanceVisualizer
 from utils.unified_logger import get_logger
-import json
-import argparse
-import random
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, Tuple
+from analysis.rpc_deep_analyzer import RpcDeepAnalyzer
+from analysis.qps_analyzer import NodeQPSAnalyzer
+
+logger = get_logger(__name__)
 
 class DataProcessor:
     """数据处理工具类 - 解决数据处理重复代码"""
@@ -117,38 +121,6 @@ class OperationLogger:
         return decorator
 
 # 配置日志
-logger = get_logger(__name__)
-
-# 添加路径以支持重组后的目录结构
-from pathlib import Path
-
-# 使用更健壮的路径管理
-current_dir = Path(__file__).parent
-project_root = current_dir.parent
-utils_dir = project_root / 'utils'
-visualization_dir = project_root / 'visualization'
-analysis_dir = current_dir  # 添加当前analysis目录
-
-# 添加路径到sys.path
-for path in [str(utils_dir), str(visualization_dir), str(analysis_dir)]:
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
-# 导入拆分后的模块
-try:
-    # 尝试相对导入（当作为模块导入时）
-    from .rpc_deep_analyzer import RpcDeepAnalyzer
-    from .qps_analyzer import NodeQPSAnalyzer
-    logger.info("✅ 所有分析模块加载成功")
-except ImportError:
-    try:
-        # 尝试直接导入（当直接运行脚本时）
-        from rpc_deep_analyzer import RpcDeepAnalyzer
-        from qps_analyzer import NodeQPSAnalyzer
-        logger.info("✅ 所有分析模块加载成功")
-    except ImportError as e:
-        logger.error(f"❌ 分析模块导入失败: {e}")
-
 class BottleneckAnalysisMode:
     """瓶颈分析模式配置"""
     
@@ -820,8 +792,6 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         # 4.1 生成性能可视化图表（包含阈值分析）
         print("\n🎨 Phase 4.1: Performance Visualization with Threshold Analysis")
         try:
-            from performance_visualizer import PerformanceVisualizer
-            
             # 保存临时CSV文件供performance_visualizer使用 - 使用进程ID和随机数避免冲突
             process_id = os.getpid()
             random_id = random.randint(1000, 9999)

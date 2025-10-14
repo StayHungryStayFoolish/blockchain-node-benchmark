@@ -160,21 +160,23 @@ class DeviceManager:
         self._field_cache[field_name] = None
         return None
     
-    def is_accounts_configured(self):
+    @staticmethod
+    def is_accounts_configured():
         """统一的ACCOUNTS设备配置检测方法
         
-        整合框架中的两套判断逻辑：
-        1. 环境变量检查 (performance_visualizer.py逻辑)
-        2. 数据列存在性检查 (ebs_chart_generator.py逻辑)
-        """
-        # 方法1: 检查环境变量配置
-        accounts_device = os.getenv('ACCOUNTS_DEVICE', '')
-        if not accounts_device:
-            # 如果环境变量未设置，直接检查数据列
-            return self._check_device_data_exists('accounts')
+        判断逻辑（配置驱动）：
+        检查 3 个关键环境变量是否都已配置：
+        1. ACCOUNTS_DEVICE - 设备名称（如 nvme2n1）
+        2. ACCOUNTS_VOL_TYPE - 卷类型（如 io2/gp3）
+        3. ACCOUNTS_VOL_MAX_IOPS - 最大IOPS
         
-        # 方法2: 检查数据列是否存在
-        return self._check_device_data_exists('accounts')
+        注意：不检查数据文件，因为配置是数据采集的前提
+        """
+        accounts_device = os.getenv('ACCOUNTS_DEVICE', '').strip()
+        accounts_vol_type = os.getenv('ACCOUNTS_VOL_TYPE', '').strip()
+        accounts_max_iops = os.getenv('ACCOUNTS_VOL_MAX_IOPS', '').strip()
+        
+        return bool(accounts_device and accounts_vol_type and accounts_max_iops)
     
     def _check_device_data_exists(self, logical_name: str) -> bool:
         """检查设备数据列是否存在"""
@@ -370,7 +372,6 @@ class DeviceManager:
     
     def find_field_by_pattern(self, pattern):
         """根据模式查找实际字段名"""
-        import re
         for col in self.df.columns:
             if re.match(pattern, col):
                 return col

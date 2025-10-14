@@ -206,6 +206,13 @@ convert_ebs_performance() {
 EOF
 }
 
+# 检查 ACCOUNTS 设备是否配置
+# 判断标准：3个关键环境变量都必须配置
+# 返回: 0=已配置, 1=未配置
+is_accounts_configured() {
+    [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" && -n "${ACCOUNTS_VOL_MAX_IOPS:-}" ]]
+}
+
 # 导出函数
 export -f convert_to_aws_standard_iops
 export -f convert_to_aws_standard_throughput
@@ -215,6 +222,7 @@ export -f calculate_weighted_avg_io_size
 export -f sectors_to_kib
 export -f convert_ebs_performance
 export -f analyze_instance_store_performance
+export -f is_accounts_configured
 
 # 如果直接执行此脚本，显示帮助信息
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
