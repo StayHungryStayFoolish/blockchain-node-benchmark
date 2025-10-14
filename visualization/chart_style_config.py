@@ -17,7 +17,7 @@ class UnifiedChartStyle:
         'subtitle_size': 12, 
         'label_size': 10,
         'legend_size': 9,
-        'text_size': 8
+        'text_size': 10  # Summary文本字体大小
     }
     
     # 统一颜色配置 - 扩展支持32张图表
@@ -112,8 +112,12 @@ class UnifiedChartStyle:
         '2x2': {
             'figsize': (16, 12),
             'nrows': 2, 'ncols': 2,
-            'top': 0.90, 'bottom': 0.08, 'left': 0.08, 'right': 0.95,
-            'hspace': 0.35, 'wspace': 0.25,  # 增加hspace解决标题重叠
+            'top': 0.93,
+            'bottom': 0.08,
+            'left': 0.08,
+            'right': 0.95,
+            'hspace': 0.30,
+            'wspace': 0.25,
             'title_fontsize': 16,
             'subtitle_fontsize': 12
         },
@@ -134,7 +138,9 @@ class UnifiedChartStyle:
         '1x2': {
             'figsize': (16, 8),
             'nrows': 1, 'ncols': 2,
-            'hspace': 0.2, 'wspace': 0.3,
+            'top': 0.85,     # 给饼图标题留足够空间
+            'hspace': 0.20,  # 适中的垂直间距
+            'wspace': 0.25,  # 适中的水平间距
             'title_fontsize': 16,
             'subtitle_fontsize': 12
         },
@@ -310,7 +316,7 @@ class UnifiedChartStyle:
         """统一的文本摘要添加函数 - 简洁样式"""
         ax.axis('off')
         ax.text(0.05, 0.95, summary_text, transform=ax.transAxes, 
-               fontsize=10, verticalalignment='top', 
+               fontsize=cls.FONT_CONFIG['text_size'], verticalalignment='top', 
                fontfamily='monospace')
         ax.set_title(title, fontsize=cls.FONT_CONFIG['subtitle_size'])
         
@@ -370,7 +376,7 @@ class UnifiedChartStyle:
     
     @classmethod
     def setup_subplot_layout(cls, layout_type, **kwargs):
-        """设置子图布局 - 增强版，解决字体重叠问题"""
+        """设置子图布局"""
         layout_config = cls.get_subplot_layout(layout_type)
         
         # 合并配置和自定义参数
@@ -388,15 +394,14 @@ class UnifiedChartStyle:
         # 先应用tight_layout自动优化
         plt.tight_layout()
         
-        # 再应用精确的布局调整，解决字体重叠问题
-        plt.subplots_adjust(
-            top=subplot_kwargs.get('top', 0.90),       # 为主标题留出空间
-            bottom=subplot_kwargs.get('bottom', 0.08), # 底部边距
-            left=subplot_kwargs.get('left', 0.08),     # 左边距
-            right=subplot_kwargs.get('right', 0.95),   # 右边距
-            hspace=subplot_kwargs.get('hspace', 0.35), # 垂直间距，避免标题重叠
-            wspace=subplot_kwargs.get('wspace', 0.25)  # 水平间距
-        )
+        # 只调整必要的参数
+        adjust_params = {}
+        for param in ['top', 'bottom', 'left', 'right', 'hspace', 'wspace']:
+            if param in subplot_kwargs:
+                adjust_params[param] = subplot_kwargs[param]
+            
+        if adjust_params:
+            plt.subplots_adjust(**adjust_params)
         
         return fig, axes, subplot_kwargs
     

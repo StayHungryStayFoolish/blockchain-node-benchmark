@@ -88,8 +88,8 @@ get_unified_epoch() {
 # 静默模式配置
 SILENT_MODE=${SILENT_MODE:-false}
 
-# 监控开销CSV表头定义 - 15个字段 (与unified_monitor.sh实际输出匹配)
-OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage"
+# 监控开销CSV表头定义 - 20个字段 (与unified_monitor.sh实际输出匹配)
+OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage,system_cached_gb,system_buffers_gb,system_anon_pages_gb,system_mapped_gb,system_shmem_gb"
 
 # 添加配置验证函数
 validate_overhead_csv_header() {
@@ -99,8 +99,8 @@ validate_overhead_csv_header() {
     fi
     
     local field_count=$(echo "$OVERHEAD_CSV_HEADER" | tr ',' '\n' | wc -l)
-    if [[ $field_count -ne 15 ]]; then
-        echo "警告: OVERHEAD_CSV_HEADER字段数量不正确，期望15个，实际${field_count}个" >&2
+    if [[ $field_count -ne 20 ]]; then
+        echo "警告: OVERHEAD_CSV_HEADER字段数量不正确，期望20个，实际${field_count}个" >&2
     fi
 }
 

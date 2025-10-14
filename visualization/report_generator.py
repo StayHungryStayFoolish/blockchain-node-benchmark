@@ -863,185 +863,330 @@ class ReportGenerator:
             print(f"Error generating resource usage charts: {e}")
             
     def _generate_resource_distribution_chart(self, df):
-        """生成资源分布饼图"""
+        """生成资源分布图表 - 3x2布局（CPU/Memory/Network/Monitoring）"""
         try:
             import matplotlib.pyplot as plt
+            from .chart_style_config import UnifiedChartStyle
             
-            # 计算平均值
-            monitoring_cpu = df['monitoring_cpu_percent'].mean() if 'monitoring_cpu_percent' in df.columns else 0
-            blockchain_cpu = df['blockchain_cpu_percent'].mean() if 'blockchain_cpu_percent' in df.columns else 0
-            system_cpu = df['system_cpu_usage'].mean() if 'system_cpu_usage' in df.columns else 100
-            other_cpu = max(0, system_cpu - monitoring_cpu - blockchain_cpu)
+            UnifiedChartStyle.setup_matplotlib()
             
-            monitoring_mem = df['monitoring_memory_percent'].mean() if 'monitoring_memory_percent' in df.columns else 0
-            blockchain_mem = df['blockchain_memory_percent'].mean() if 'blockchain_memory_percent' in df.columns else 0
-            system_mem = df['system_memory_usage'].mean() if 'system_memory_usage' in df.columns else 100
-            other_mem = max(0, system_mem - monitoring_mem - blockchain_mem)
+            # 读取CPU数据
+            blockchain_cpu = df['blockchain_cpu'].mean() if 'blockchain_cpu' in df.columns else 0
+            monitoring_cpu = df['monitoring_cpu'].mean() if 'monitoring_cpu' in df.columns else 0
+            system_cpu_cores = df['system_cpu_cores'].mean() if 'system_cpu_cores' in df.columns else 96
             
-            # 创建图表
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+            # 读取Memory数据
+            blockchain_rss_mb = df['blockchain_memory_mb'].mean() if 'blockchain_memory_mb' in df.columns else 0
+            system_memory_gb = df['system_memory_gb'].mean() if 'system_memory_gb' in df.columns else 739.70
+            cached_gb = df['system_cached_gb'].mean() if 'system_cached_gb' in df.columns else 0
+            anon_pages_gb = df['system_anon_pages_gb'].mean() if 'system_anon_pages_gb' in df.columns else 0
+            mapped_gb = df['system_mapped_gb'].mean() if 'system_mapped_gb' in df.columns else 0
             
-            # CPU分布饼图
-            cpu_sizes = [monitoring_cpu, blockchain_cpu, other_cpu]
-            cpu_labels = ['Monitoring', 'Blockchain Node', 'Others']
-            cpu_colors = ['#ff9999', '#66b3ff', '#99ff99']
-            ax1.pie(cpu_sizes, labels=cpu_labels, colors=cpu_colors, autopct='%1.1f%%', startangle=90)
-            ax1.axis('equal')
-            ax1.set_title('CPU Usage Distribution')
+            # 读取Network数据（跨文件）
+            net_total_gbps = 0
+            network_max_gbps = 25
+            if self.performance_csv and os.path.exists(self.performance_csv):
+                try:
+                    perf_df = pd.read_csv(self.performance_csv, usecols=['net_total_gbps'])
+                    net_total_gbps = perf_df['net_total_gbps'].mean() if 'net_total_gbps' in perf_df.columns else 0
+                    network_max_gbps = float(os.getenv('NETWORK_MAX_BANDWIDTH_GBPS', '25'))
+                except Exception as e:
+                    print(f"⚠️ 读取网络数据失败: {e}")
             
-            # 内存分布饼图
-            mem_sizes = [monitoring_mem, blockchain_mem, other_mem]
-            mem_labels = ['Monitoring', 'Blockchain Node', 'Others']
-            mem_colors = ['#ff9999', '#66b3ff', '#99ff99']
-            ax2.pie(mem_sizes, labels=mem_labels, colors=mem_colors, autopct='%1.1f%%', startangle=90)
-            ax2.axis('equal')
-            ax2.set_title('Memory Usage Distribution')
+            # 计算派生指标
+            blockchain_cores = blockchain_cpu / 100 if blockchain_cpu > 0 else 0
+            monitoring_cores = monitoring_cpu / 100 if monitoring_cpu > 0 else 0
+            idle_cores = max(0, system_cpu_cores - blockchain_cores - monitoring_cores)
+            
+            blockchain_rss_gb = blockchain_rss_mb / 1024
+            free_gb = max(0, system_memory_gb - anon_pages_gb - cached_gb)
+            file_mapped_gb = max(0, blockchain_rss_gb - anon_pages_gb)
+            
+            network_used_gbps = net_total_gbps
+            network_available_gbps = max(0, network_max_gbps - net_total_gbps)
+            network_utilization = (net_total_gbps / network_max_gbps * 100) if network_max_gbps > 0 else 0
+            
+            # 创建3x2布局
+            fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
+            fig.suptitle('System Resource Distribution Analysis', 
+                        fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold', y=0.995)
+            
+            # 子图1: CPU Core Usage
+            cpu_sizes = [blockchain_cores, monitoring_cores, idle_cores]
+            cpu_labels = [f'Blockchain\n{blockchain_cores:.2f} cores',
+                         f'Monitoring\n{monitoring_cores:.2f} cores',
+                         f'Idle\n{idle_cores:.2f} cores']
+            cpu_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning'],
+                         UnifiedChartStyle.COLORS['success']]
+            wedges1, texts1, autotexts1 = ax1.pie(cpu_sizes, labels=cpu_labels, colors=cpu_colors,
+                                                   autopct='%1.1f%%', startangle=45, labeldistance=1.15,
+                                                   textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
+            ax1.set_title(f'CPU Core Usage (Total: {system_cpu_cores:.0f} cores)', 
+                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+            for autotext in autotexts1:
+                autotext.set_fontsize(UnifiedChartStyle.FONT_CONFIG['text_size'])
+                autotext.set_color('white')
+                autotext.set_weight('bold')
+            
+            # 子图2: Memory Physical Distribution
+            mem_sizes = [anon_pages_gb, cached_gb, free_gb]
+            mem_labels = [f'AnonPages\n{anon_pages_gb:.2f} GB',
+                         f'Cached\n{cached_gb:.2f} GB',
+                         f'Free\n{free_gb:.2f} GB']
+            mem_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['info'],
+                         UnifiedChartStyle.COLORS['success']]
+            wedges2, texts2, autotexts2 = ax2.pie(mem_sizes, labels=mem_labels, colors=mem_colors,
+                                                   autopct='%1.1f%%', startangle=45, labeldistance=1.15,
+                                                   textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
+            ax2.set_title(f'Memory Distribution (Total: {system_memory_gb:.0f} GB)', 
+                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+            for autotext in autotexts2:
+                autotext.set_fontsize(UnifiedChartStyle.FONT_CONFIG['text_size'])
+                autotext.set_color('white')
+                autotext.set_weight('bold')
+            
+            # 子图3: Memory RSS Composition
+            if file_mapped_gb > 0:
+                rss_sizes = [anon_pages_gb, file_mapped_gb]
+                rss_labels = [f'Private\n{anon_pages_gb:.2f} GB',
+                             f'File Mapped\n{file_mapped_gb:.2f} GB']
+                rss_colors = [UnifiedChartStyle.COLORS['accounts_primary'], UnifiedChartStyle.COLORS['critical']]
+                wedges3, texts3, autotexts3 = ax3.pie(rss_sizes, labels=rss_labels, colors=rss_colors,
+                                                      autopct='%1.1f%%', startangle=45, labeldistance=1.15,
+                                                      textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
+                ax3.set_title(f'Blockchain RSS Composition ({blockchain_rss_gb:.2f} GB)', 
+                             fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+                for autotext in autotexts3:
+                    autotext.set_fontsize(UnifiedChartStyle.FONT_CONFIG['text_size'])
+                    autotext.set_color('white')
+                    autotext.set_weight('bold')
+            else:
+                ax3.text(0.5, 0.5, f'Blockchain RSS\n{blockchain_rss_gb:.2f} GB\n\n≈ Private Memory',
+                        ha='center', va='center', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+                ax3.set_title('Blockchain RSS Composition', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+                ax3.axis('off')
+            
+            # 子图4: Memory Breakdown
+            categories = ['AnonPages', 'Cached', 'Free']
+            values = [anon_pages_gb, cached_gb, free_gb]
+            colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['info'],
+                     UnifiedChartStyle.COLORS['success']]
+            bars = ax4.barh(categories, values, color=colors, alpha=0.7)
+            ax4.set_xlabel('Memory (GB)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax4.set_title('Memory Breakdown', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+            ax4.grid(True, alpha=0.3, axis='x')
+            for bar, val in zip(bars, values):
+                ax4.text(val + 5, bar.get_y() + bar.get_height()/2, f'{val:.2f} GB',
+                        va='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
+            
+            # 子图5: Network Bandwidth
+            if net_total_gbps > 0:
+                net_sizes = [network_used_gbps, network_available_gbps]
+                net_labels = [f'Used\n{network_used_gbps:.2f} Gbps',
+                             f'Available\n{network_available_gbps:.2f} Gbps']
+                net_colors = [UnifiedChartStyle.COLORS['critical'], UnifiedChartStyle.COLORS['success']]
+                wedges5, texts5, autotexts5 = ax5.pie(net_sizes, labels=net_labels, colors=net_colors,
+                                                      autopct='%1.1f%%', startangle=45, labeldistance=1.15,
+                                                      textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
+                ax5.set_title(f'Network Bandwidth (Max: {network_max_gbps:.0f} Gbps, Util: {network_utilization:.2f}%)', 
+                             fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+                for autotext in autotexts5:
+                    autotext.set_fontsize(UnifiedChartStyle.FONT_CONFIG['text_size'])
+                    autotext.set_color('white')
+                    autotext.set_weight('bold')
+            else:
+                ax5.text(0.5, 0.5, 'Network Data\nUnavailable',
+                        ha='center', va='center', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'],
+                        bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.5))
+                ax5.set_title('Network Bandwidth', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+                ax5.axis('off')
+            
+            # 子图6: Monitoring Overhead
+            overhead_categories = ['Blockchain', 'Monitoring']
+            overhead_values = [blockchain_cpu, monitoring_cpu]
+            overhead_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning']]
+            bars2 = ax6.bar(overhead_categories, overhead_values, color=overhead_colors, alpha=0.7)
+            ax6.set_ylabel('CPU Usage (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax6.set_title('Monitoring Overhead Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+            ax6.grid(True, alpha=0.3, axis='y')
+            for bar, val in zip(bars2, overhead_values):
+                ax6.text(bar.get_x() + bar.get_width()/2, val + max(overhead_values)*0.02, f'{val:.2f}%',
+                        ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             
             plt.tight_layout()
             reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
             plt.savefig(os.path.join(reports_dir, 'resource_distribution_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()
             
-        except Exception as e:
-            print(f"Error generating resource distribution chart: {e}")
-            
-    def _generate_ebs_baseline_chart(self, data_baseline_iops, data_actual_iops, data_baseline_throughput, data_actual_throughput,
-                                   accounts_baseline_iops, accounts_actual_iops, accounts_baseline_throughput, accounts_actual_throughput):
-        """生成EBS基准对比图表"""
-        try:
-            import matplotlib.pyplot as plt
-            import numpy as np
-            
-            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
-            
-            # DATA IOPS对比
-            categories = ['Baseline', 'Actual']
-            data_iops_values = [data_baseline_iops or 0, data_actual_iops or 0]
-            ax1.bar(categories, data_iops_values, color=['#3498db', '#27ae60'])
-            ax1.set_title('DATA Device IOPS Comparison', fontsize=12, fontweight='bold')
-            ax1.set_ylabel('IOPS')
-            for i, v in enumerate(data_iops_values):
-                ax1.text(i, v + max(data_iops_values) * 0.01, f'{v:.0f}', ha='center', va='bottom')
-            
-            # DATA Throughput对比
-            data_throughput_values = [data_baseline_throughput or 0, data_actual_throughput or 0]
-            ax2.bar(categories, data_throughput_values, color=['#3498db', '#27ae60'])
-            ax2.set_title('DATA Device Throughput Comparison', fontsize=12, fontweight='bold')
-            ax2.set_ylabel('MiB/s')
-            for i, v in enumerate(data_throughput_values):
-                ax2.text(i, v + max(data_throughput_values) * 0.01, f'{v:.1f}', ha='center', va='bottom')
-            
-            # ACCOUNTS IOPS对比
-            accounts_iops_values = [accounts_baseline_iops or 0, accounts_actual_iops or 0]
-            ax3.bar(categories, accounts_iops_values, color=['#e74c3c', '#f39c12'])
-            ax3.set_title('ACCOUNTS Device IOPS Comparison', fontsize=12, fontweight='bold')
-            ax3.set_ylabel('IOPS')
-            for i, v in enumerate(accounts_iops_values):
-                ax3.text(i, v + max(accounts_iops_values) * 0.01, f'{v:.0f}', ha='center', va='bottom')
-            
-            # ACCOUNTS Throughput对比
-            accounts_throughput_values = [accounts_baseline_throughput or 0, accounts_actual_throughput or 0]
-            ax4.bar(categories, accounts_throughput_values, color=['#e74c3c', '#f39c12'])
-            ax4.set_title('ACCOUNTS Device Throughput Comparison', fontsize=12, fontweight='bold')
-            ax4.set_ylabel('MiB/s')
-            for i, v in enumerate(accounts_throughput_values):
-                ax4.text(i, v + max(accounts_throughput_values) * 0.01, f'{v:.1f}', ha='center', va='bottom')
-            
-            plt.tight_layout()
-            
-            # 保存图表
-            reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
-            chart_path = os.path.join(reports_dir, 'ebs_baseline_comparison.png')
-            plt.savefig(chart_path, dpi=300, bbox_inches='tight')
-            plt.close()
-            
-            return os.path.relpath(chart_path, self.output_dir)
+            print(f"✅ 生成完成: resource_distribution_chart.png")
             
         except Exception as e:
-            print(f"Error generating EBS baseline chart: {e}")
-            return None
-            
+            print(f"❌ 资源分布图表生成失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def _generate_monitoring_impact_chart(self, overhead_df):
-        """生成监控影响分析图"""
+        """生成监控影响分析图 - 3x2布局"""
         try:
             import matplotlib.pyplot as plt
             import numpy as np
+            from .chart_style_config import UnifiedChartStyle
             
-            # 加载性能数据
-            perf_df = pd.read_csv(self.performance_csv)
-            if perf_df.empty:
-                return
-                
-            # 确保两个数据帧有相同的时间索引
-            overhead_df['timestamp'] = pd.to_datetime(overhead_df['timestamp'])
-            perf_df['timestamp'] = pd.to_datetime(perf_df['timestamp'])
+            UnifiedChartStyle.setup_matplotlib()
             
-            # 合并数据
-            merged_df = pd.merge_asof(perf_df.sort_values('timestamp'), 
-                                     overhead_df.sort_values('timestamp'), 
-                                     on='timestamp', 
-                                     direction='nearest')
+            # 读取性能数据获取AWS EBS标准化值
+            perf_df = pd.read_csv(self.performance_csv) if self.performance_csv and os.path.exists(self.performance_csv) else pd.DataFrame()
             
-            if merged_df.empty:
-                return
-                
-            # 创建图表
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+            # 计算平均值
+            blockchain_cpu = overhead_df['blockchain_cpu'].mean() if 'blockchain_cpu' in overhead_df.columns else 0
+            monitoring_cpu = overhead_df['monitoring_cpu'].mean() if 'monitoring_cpu' in overhead_df.columns else 0
+            blockchain_memory_mb = overhead_df['blockchain_memory_mb'].mean() if 'blockchain_memory_mb' in overhead_df.columns else 0
+            monitoring_memory_mb = overhead_df['monitoring_memory_mb'].mean() if 'monitoring_memory_mb' in overhead_df.columns else 0
+            system_cpu_cores = overhead_df['system_cpu_cores'].mean() if 'system_cpu_cores' in overhead_df.columns else 96
+            system_memory_gb = overhead_df['system_memory_gb'].mean() if 'system_memory_gb' in overhead_df.columns else 739.70
+            anon_pages_gb = overhead_df['system_anon_pages_gb'].mean() if 'system_anon_pages_gb' in overhead_df.columns else 0
+            cached_gb = overhead_df['system_cached_gb'].mean() if 'system_cached_gb' in overhead_df.columns else 0
+            mapped_gb = overhead_df['system_mapped_gb'].mean() if 'system_mapped_gb' in overhead_df.columns else 0
             
-            # 查找QPS列
-            qps_col = None
-            for col in merged_df.columns:
-                if 'qps' in col.lower() or 'tps' in col.lower() or 'throughput' in col.lower():
-                    qps_col = col
-                    break
+            # 从performance CSV获取AWS标准化I/O数据
+            blockchain_iops = perf_df['data_aws_standard_iops'].mean() if not perf_df.empty and 'data_aws_standard_iops' in perf_df.columns else 0
+            blockchain_throughput = perf_df['data_aws_standard_throughput_mibs'].mean() if not perf_df.empty and 'data_aws_standard_throughput_mibs' in perf_df.columns else 0
+            monitoring_iops = perf_df['monitoring_iops_per_sec'].mean() if not perf_df.empty and 'monitoring_iops_per_sec' in perf_df.columns else 0
+            monitoring_throughput = perf_df['monitoring_throughput_mibs_per_sec'].mean() if not perf_df.empty and 'monitoring_throughput_mibs_per_sec' in perf_df.columns else 0
             
-            # 监控CPU vs QPS
-            if qps_col and 'monitoring_cpu_percent' in merged_df.columns:
-                ax1.scatter(merged_df['monitoring_cpu_percent'], merged_df[qps_col], alpha=0.5)
-                ax1.set_xlabel('Monitoring CPU Usage (%)')
-                ax1.set_ylabel('System Throughput (QPS)')
-                ax1.set_title('Monitoring CPU Overhead vs System Throughput')
-                ax1.grid(True, linestyle='--', alpha=0.7)
-                
-                # 添加趋势线
-                z = np.polyfit(merged_df['monitoring_cpu_percent'], merged_df[qps_col], 1)
-                p = np.poly1d(z)
-                ax1.plot(merged_df['monitoring_cpu_percent'], p(merged_df['monitoring_cpu_percent']), "r--")
-                
-                # 计算相关系数
-                corr = merged_df['monitoring_cpu_percent'].corr(merged_df[qps_col])
-                ax1.annotate(f'相关系数: {corr:.2f}', xy=(0.05, 0.95), xycoords='axes fraction')
+            # 转换为核心数和GB
+            blockchain_cores = blockchain_cpu / 100
+            monitoring_cores = monitoring_cpu / 100
+            blockchain_memory_gb = blockchain_memory_mb / 1024
+            monitoring_memory_gb = monitoring_memory_mb / 1024
             
-            # 监控IOPS vs EBS性能
-            ebs_col = None
-            for col in merged_df.columns:
-                if 'ebs' in col.lower() and ('util' in col.lower() or 'iops' in col.lower()):
-                    ebs_col = col
-                    break
-                    
-            if ebs_col and 'monitoring_iops' in merged_df.columns:
-                ax2.scatter(merged_df['monitoring_iops'], merged_df[ebs_col], alpha=0.5)
-                ax2.set_xlabel('Monitoring IOPS')
-                ax2.set_ylabel('EBS Performance Metrics')
-                ax2.set_title('Monitoring I/O Overhead vs EBS Performance')
-                ax2.grid(True, linestyle='--', alpha=0.7)
+            # 计算占比
+            total_cpu = blockchain_cpu + monitoring_cpu
+            cpu_overhead_pct = (monitoring_cpu / total_cpu * 100) if total_cpu > 0 else 0
+            total_memory = blockchain_memory_gb + monitoring_memory_gb
+            memory_overhead_pct = (monitoring_memory_gb / total_memory * 100) if total_memory > 0 else 0
+            total_iops = blockchain_iops + monitoring_iops
+            io_overhead_pct = (monitoring_iops / total_iops * 100) if total_iops > 0 else 0
+            
+            # 创建3x2布局
+            fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
+            fig.suptitle('Monitoring Overhead Impact Analysis', 
+                        fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold', y=0.995)
+            
+            # 子图1: CPU Core Usage
+            cpu_categories = ['Blockchain', 'Monitoring']
+            cpu_values = [blockchain_cores, monitoring_cores]
+            cpu_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning']]
+            bars1 = ax1.bar(cpu_categories, cpu_values, color=cpu_colors, alpha=0.7)
+            ax1.set_ylabel('CPU Cores', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax1.set_title(f'CPU Core Usage (Total: {system_cpu_cores:.0f} cores)', 
+                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+            ax1.grid(True, alpha=0.3, axis='y')
+            for bar, val in zip(bars1, cpu_values):
+                pct = (val / system_cpu_cores * 100) if system_cpu_cores > 0 else 0
+                ax1.text(bar.get_x() + bar.get_width()/2, val + max(cpu_values)*0.02, 
+                        f'{val:.2f}\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
+            
+            # 子图2: Memory Usage
+            mem_categories = ['Blockchain', 'Monitoring']
+            mem_values = [blockchain_memory_gb, monitoring_memory_gb]
+            mem_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning']]
+            bars2 = ax2.bar(mem_categories, mem_values, color=mem_colors, alpha=0.7)
+            ax2.set_ylabel('Memory (GB)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax2.set_title(f'Memory Usage (Total: {system_memory_gb:.1f} GB)', 
+                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+            ax2.grid(True, alpha=0.3, axis='y')
+            for bar, val in zip(bars2, mem_values):
+                pct = (val / system_memory_gb * 100) if system_memory_gb > 0 else 0
+                ax2.text(bar.get_x() + bar.get_width()/2, val + max(mem_values)*0.02, 
+                        f'{val:.2f}\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
+            
+            # 子图3: I/O Operations (AWS EBS Standardized)
+            x = np.arange(2)
+            width = 0.35
+            bars3_1 = ax3.bar(x - width/2, [blockchain_iops, monitoring_iops], width, 
+                             label='IOPS', color=UnifiedChartStyle.COLORS['data_primary'], alpha=0.7)
+            ax3_twin = ax3.twinx()
+            bars3_2 = ax3_twin.bar(x + width/2, [blockchain_throughput, monitoring_throughput], width, 
+                                  label='Throughput', color=UnifiedChartStyle.COLORS['success'], alpha=0.7)
+            ax3.set_ylabel('IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax3_twin.set_ylabel('Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax3.set_title('I/O Operations (AWS EBS Standardized)', 
+                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+            ax3.set_xticks(x)
+            ax3.set_xticklabels(['Blockchain', 'Monitoring'])
+            ax3.legend(loc='upper left')
+            ax3_twin.legend(loc='upper right')
+            ax3.grid(True, alpha=0.3, axis='y')
+            
+            # 子图4: Memory Breakdown
+            mem_breakdown_labels = ['AnonPages', 'Cached', 'Mapped']
+            mem_breakdown_values = [anon_pages_gb, cached_gb, mapped_gb]
+            mem_breakdown_colors = [UnifiedChartStyle.COLORS['data_primary'], 
+                                   UnifiedChartStyle.COLORS['success'], 
+                                   UnifiedChartStyle.COLORS['accounts_primary']]
+            bars4 = ax4.bar(mem_breakdown_labels, mem_breakdown_values, color=mem_breakdown_colors, alpha=0.7)
+            ax4.set_ylabel('Memory (GB)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax4.set_title('System Memory Breakdown', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+            ax4.grid(True, alpha=0.3, axis='y')
+            for bar, val in zip(bars4, mem_breakdown_values):
+                ax4.text(bar.get_x() + bar.get_width()/2, val + max(mem_breakdown_values)*0.02, 
+                        f'{val:.2f}', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
+            
+            # 子图5: CPU Overhead Trend
+            if 'timestamp' in overhead_df.columns and 'monitoring_cpu' in overhead_df.columns and 'blockchain_cpu' in overhead_df.columns:
+                # 确保 timestamp 是 datetime 类型
+                if not pd.api.types.is_datetime64_any_dtype(overhead_df['timestamp']):
+                    overhead_df['timestamp'] = pd.to_datetime(overhead_df['timestamp'])
                 
-                # 添加趋势线
-                z = np.polyfit(merged_df['monitoring_iops'], merged_df[ebs_col], 1)
-                p = np.poly1d(z)
-                ax2.plot(merged_df['monitoring_iops'], p(merged_df['monitoring_iops']), "r--")
-                
-                # 计算相关系数
-                corr = merged_df['monitoring_iops'].corr(merged_df[ebs_col])
-                ax2.annotate(f'相关系数: {corr:.2f}', xy=(0.05, 0.95), xycoords='axes fraction')
+                overhead_df['cpu_overhead_pct'] = (overhead_df['monitoring_cpu'] / 
+                                                   (overhead_df['blockchain_cpu'] + overhead_df['monitoring_cpu']) * 100)
+                ax5.plot(overhead_df['timestamp'], overhead_df['cpu_overhead_pct'], 
+                        linewidth=2, color=UnifiedChartStyle.COLORS['warning'], alpha=0.7)
+                ax5.axhline(y=overhead_df['cpu_overhead_pct'].mean(), color=UnifiedChartStyle.COLORS['critical'], 
+                           linestyle='--', alpha=0.7, label=f'Average: {overhead_df["cpu_overhead_pct"].mean():.2f}%')
+                ax5.set_ylabel('Overhead (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax5.set_title('CPU Overhead Trend Over Time', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
+                ax5.legend()
+                ax5.grid(True, alpha=0.3)
+                # 应用智能时间轴格式（根据时间跨度自动选择）
+                from visualization.performance_visualizer import format_time_axis
+                format_time_axis(ax5, overhead_df['timestamp'])
+            else:
+                ax5.text(0.5, 0.5, 'No Time Series Data', ha='center', va='center', 
+                        fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+                ax5.axis('off')
+            
+            # 子图6: Monitoring Efficiency Summary
+            summary_lines = [
+                "Monitoring Overhead Summary:",
+                "",
+                f"CPU Overhead:     {cpu_overhead_pct:.2f}%",
+                f"Memory Overhead:  {memory_overhead_pct:.2f}%",
+                f"I/O Overhead:     {io_overhead_pct:.2f}%",
+                "",
+                "Absolute Values:",
+                f"  CPU:        {monitoring_cores:.2f} cores",
+                f"  Memory:     {monitoring_memory_gb:.2f} GB",
+                f"  IOPS:       {monitoring_iops:.0f}",
+                f"  Throughput: {monitoring_throughput:.2f} MiB/s",
+                "",
+                f"Efficiency Rating: {'Excellent' if cpu_overhead_pct < 1 else 'Good' if cpu_overhead_pct < 3 else 'Needs Optimization'}"
+            ]
+            summary_text = "\n".join(summary_lines)
+            UnifiedChartStyle.add_text_summary(ax6, summary_text, 'Monitoring Efficiency Summary')
             
             plt.tight_layout()
             reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
             plt.savefig(os.path.join(reports_dir, 'monitoring_impact_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()
             
+            print(f"✅ 生成完成: monitoring_impact_chart.png")
+            
         except Exception as e:
-            print(f"Error generating monitoring impact chart: {e}")
+            print(f"❌ 监控影响分析图表生成失败: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _generate_ebs_bottleneck_section(self):
         """生成EBS瓶颈分析部分 - 增强版支持多设备和根因分析"""

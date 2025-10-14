@@ -26,7 +26,7 @@ get_iostat_data() {
     local logical_name="$2"  # data 或 accounts
     
     if [[ -z "$device" || -z "$logical_name" ]]; then
-        echo "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"
+        echo "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"
         return
     fi
     
@@ -53,7 +53,7 @@ get_iostat_data() {
     local device_stats=$(tail -n 20 "$iostat_data_file" 2>/dev/null | awk "/^${device}[[:space:]]/ {latest=\$0} END {print latest}")
     
     if [[ -z "$device_stats" ]]; then
-        echo "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"
+        echo "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"
         return
     fi
     

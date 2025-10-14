@@ -23,7 +23,7 @@ BLOCKCHAIN_NODE=$(echo "$BLOCKCHAIN_NODE" | tr '[:upper:]' '[:lower:]')
 BLOCKCHAIN_PROCESS_NAMES=(
     "blockchain"
     "validator"
-    "node"
+    "node.service"
 )
 
 # 账户和目标文件配置

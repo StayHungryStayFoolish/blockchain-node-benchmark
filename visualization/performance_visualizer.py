@@ -13,6 +13,7 @@ import glob
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
+import matplotlib.dates as mdates
 import seaborn as sns
 import numpy as np
 from datetime import datetime
@@ -96,6 +97,31 @@ def create_chart_title(base_title, accounts_configured):
 def setup_font():
     return UnifiedChartStyle.setup_matplotlib()
 
+def format_time_axis(ax, df_timestamp):
+    """
+    格式化时间轴显示 - 根据时间跨度自动选择格式
+    
+    Args:
+        ax: matplotlib axis对象
+        df_timestamp: pandas datetime series
+    """
+    if len(df_timestamp) == 0:
+        return
+    
+    time_span = (df_timestamp.iloc[-1] - df_timestamp.iloc[0]).total_seconds()
+    
+    if time_span < 300:  # 小于5分钟，显示 时:分:秒
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+    elif time_span < 3600:  # 小于1小时，显示 时:分
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    elif time_span < 86400:  # 小于1天，显示 月-日 时:分
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
+    else:  # 大于1天，显示 月-日
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+    
+    ax.tick_params(axis='x', rotation=45)
+    plt.setp(ax.xaxis.get_majorticklabels(), ha='right')
+
 LABELS = {
     'performance_analysis': 'Performance Analysis',
     'time': 'Time',
@@ -139,10 +165,8 @@ def _import_optional_dependencies():
         from analysis.cpu_ebs_correlation_analyzer import CPUEBSCorrelationAnalyzer
         from utils.unit_converter import UnitConverter
         
-        # Import advanced_chart_generator from current directory
-        current_dir = os.path.dirname(__file__)
-        sys.path.insert(0, current_dir)
-        from advanced_chart_generator import AdvancedChartGenerator
+        # Import advanced_chart_generator using absolute import
+        from visualization.advanced_chart_generator import AdvancedChartGenerator
         
         dependencies.update({
             'CSVDataProcessor': CSVDataProcessor,
@@ -301,6 +325,11 @@ class PerformanceVisualizer(CSVDataProcessor):
     def create_performance_overview_chart(self):
         """✅ System Performance Overview Chart - Systematic Refactor"""
         
+        # 数据检查 - 确保数据已加载
+        if not hasattr(self, 'df') or self.df is None:
+            if not self.load_data():
+                return None
+        
         # 加载配置
         load_framework_config()
         
@@ -433,7 +462,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # Device configuration detection
         data_configured = len([col for col in self.df.columns if col.startswith('data_')]) > 0
-        accounts_configured = len([col for col in self.df.columns if col.startswith('accounts_')]) > 0
+        accounts_configured = self._is_accounts_configured()
         
         if not data_configured:
             print("❌ DATA device data not found")
@@ -503,7 +532,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
             axes[0, 0].set_xlabel('CPU I/O Wait (%)')
             axes[0, 0].set_ylabel('Device Utilization (%)')
-            axes[0, 0].set_title('CPU I/O Wait vs Device Utilization')
+            axes[0, 0].set_title('CPU I/O Wait vs Device Utilization', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             axes[0, 0].legend()
             axes[0, 0].grid(True, alpha=0.3)
         
@@ -530,7 +559,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
             axes[0, 1].set_xlabel('CPU I/O Wait (%)')
             axes[0, 1].set_ylabel('Average Latency (ms)')
-            axes[0, 1].set_title('CPU I/O Wait vs Device Latency')
+            axes[0, 1].set_title('CPU I/O Wait vs Device Latency', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             axes[0, 1].legend()
             axes[0, 1].grid(True, alpha=0.3)
         
@@ -550,7 +579,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             
             axes[1, 0].set_xlabel('Device Utilization (%)')
             axes[1, 0].set_ylabel('Queue Depth')
-            axes[1, 0].set_title('Device Utilization vs Queue Depth')
+            axes[1, 0].set_title('Device Utilization vs Queue Depth', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             axes[1, 0].legend()
             axes[1, 0].grid(True, alpha=0.3)
         
@@ -788,7 +817,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         axes[0, 0].set_ylabel('Average Latency (ms)')
         axes[0, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], loc='upper left')
         axes[0, 0].grid(True, alpha=0.3)
-        axes[0, 0].tick_params(axis='x', rotation=45)
+        format_time_axis(axes[0, 0], self.df['timestamp'])
         
         # 2. Enhanced Distribution Analysis
         import numpy as np
@@ -865,7 +894,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         axes[1, 0].set_ylim(-0.5, 4)
         axes[1, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], ncol=2)
         axes[1, 0].grid(True, alpha=0.3)
-        axes[1, 0].tick_params(axis='x', rotation=45)
+        format_time_axis(axes[1, 0], self.df['timestamp'])
         
         # 4. Enhanced Statistics Summary
         # Calculate detailed statistics
@@ -1122,13 +1151,15 @@ Recommendations:
                     monitoring_mem_field = field
                     break
             
-            # 创建图表
+            # 创建图表 - 使用统一样式
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle('Monitoring Overhead Analysis', fontsize=16, fontweight='bold')
+            fig.suptitle('Monitoring Overhead Analysis', 
+                        fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
             
             # 1. Resource consumption comparison
             ax1 = axes[0, 0]
-            ax1.set_title('System Resource Consumption Comparison')
+            ax1.set_title('System Resource Consumption Comparison',
+                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             
             if monitoring_cpu_field and monitoring_mem_field:
                 monitor_cpu = overhead_df[monitoring_cpu_field].mean()
@@ -1137,48 +1168,34 @@ Recommendations:
                 categories = ['CPU Usage (%)', 'Memory Usage (%)']
                 monitor_values = [monitor_cpu, monitor_mem]
                 
-                ax1.bar(categories, monitor_values, alpha=0.8)
-                ax1.set_ylabel('Usage Percentage (%)')
+                ax1.bar(categories, monitor_values, alpha=0.8, 
+                       color=[UnifiedChartStyle.COLORS['warning'], UnifiedChartStyle.COLORS['info']])
+                ax1.set_ylabel('Usage Percentage (%)', 
+                              fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax1.tick_params(axis='both', labelsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax1.grid(True, alpha=0.3)
             
             # 2. Monitoring overhead trends
             ax2 = axes[0, 1]
-            ax2.set_title('Monitoring Overhead Trends')
+            ax2.set_title('Monitoring Overhead Trends',
+                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             
             if 'timestamp' in overhead_df.columns and monitoring_cpu_field:
                 ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_cpu_field], 
-                        label='CPU Overhead', linewidth=2)
+                        label='CPU Overhead', linewidth=2, color=UnifiedChartStyle.COLORS['critical'])
                 if monitoring_mem_field:
                     ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_mem_field], 
-                            label='Memory Overhead', linewidth=2)
-                ax2.set_ylabel('Overhead (%)')
-                ax2.legend()
+                            label='Memory Overhead', linewidth=2, color=UnifiedChartStyle.COLORS['warning'])
+                ax2.set_ylabel('Overhead (%)', 
+                              fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+                ax2.tick_params(axis='both', labelsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax2.grid(True, alpha=0.3)
             
-            # 3. Statistics summary
+            # 3. Impact analysis - 移到左下角
             ax3 = axes[1, 0]
-            ax3.set_title('Overhead Statistics')
-            ax3.axis('off')
-            
-            if monitoring_cpu_field and monitoring_mem_field:
-                stats_text = f"""Monitoring Overhead Summary:
-
-CPU Overhead:
-  Average: {overhead_df[monitoring_cpu_field].mean():.2f}%
-  Maximum: {overhead_df[monitoring_cpu_field].max():.2f}%
-
-Memory Overhead:
-  Average: {overhead_df[monitoring_mem_field].mean():.2f}%
-  Maximum: {overhead_df[monitoring_mem_field].max():.2f}%
-
-Data Points: {len(overhead_df)}"""
-                
-                ax3.text(0.1, 0.9, stats_text, transform=ax3.transAxes, fontsize=10,
-                        verticalalignment='top', fontfamily='monospace')
-            
-            # 4. Impact analysis
-            ax4 = axes[1, 1]
-            ax4.set_title('Impact Analysis')
+            ax3.set_title('Impact Analysis',
+                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             
             if monitoring_cpu_field and monitoring_mem_field:
                 impact_categories = ['CPU Impact', 'Memory Impact']
@@ -1187,10 +1204,28 @@ Data Points: {len(overhead_df)}"""
                     overhead_df[monitoring_mem_field].mean()
                 ]
                 
-                colors = ['red' if x > 10 else 'orange' if x > 5 else 'green' for x in impact_values]
-                ax4.bar(impact_categories, impact_values, color=colors, alpha=0.7)
-                ax4.set_ylabel('Impact Percentage (%)')
-                ax4.grid(True, alpha=0.3)
+                colors = [UnifiedChartStyle.COLORS['critical'] if x > 10 else UnifiedChartStyle.COLORS['warning'] if x > 5 else UnifiedChartStyle.COLORS['success'] for x in impact_values]
+                ax3.bar(impact_categories, impact_values, color=colors, alpha=0.7)
+                ax3.set_ylabel('Impact Percentage (%)', 
+                              fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax3.tick_params(axis='both', labelsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
+                ax3.grid(True, alpha=0.3)
+            
+            # 4. Statistics summary - 修复：移到右下角，使用统一样式
+            if monitoring_cpu_field and monitoring_mem_field:
+                summary_text = f"""Monitoring Overhead Summary:
+
+• CPU Overhead:
+  - Average: {overhead_df[monitoring_cpu_field].mean():.2f}%
+  - Maximum: {overhead_df[monitoring_cpu_field].max():.2f}%
+
+• Memory Overhead:
+  - Average: {overhead_df[monitoring_mem_field].mean():.2f}%
+  - Maximum: {overhead_df[monitoring_mem_field].max():.2f}%
+
+Data Points: {len(overhead_df)}"""
+                
+                UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Overhead Analysis Summary')
             
             plt.tight_layout()
             output_file = os.path.join(self.output_dir, 'monitoring_overhead_analysis.png')
@@ -2128,29 +2163,29 @@ Data Points: {len(overhead_df)}"""
                 local_height = pd.to_numeric(df_clean['local_block_height'], errors='coerce')
                 mainnet_height = pd.to_numeric(df_clean['mainnet_block_height'], errors='coerce')
             
-            # 创建2x2布局
-            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            # 创建2x2布局 - 使用统一样式
+            fig, axes, layout = UnifiedChartStyle.setup_subplot_layout('2x2')
             fig.suptitle('Block Height Synchronization Analysis', 
-                        fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
+                        fontsize=layout['title_fontsize'], fontweight='bold')
             
             # === 子图1: 区块高度对比 (左上) ===
             ax1 = axes[0, 0]
             if local_height is not None and mainnet_height is not None:
-                ax1.plot(timestamps, local_height, color='blue', linewidth=2, 
+                ax1.plot(timestamps, local_height, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
                         label='Local Height', alpha=0.8)
-                ax1.plot(timestamps, mainnet_height, color='red', linewidth=2, 
+                ax1.plot(timestamps, mainnet_height, color=UnifiedChartStyle.COLORS['critical'], linewidth=2, 
                         label='Mainnet Height', alpha=0.8)
-                ax1.set_title('Block Height Comparison')
+                ax1.set_title('Block Height Comparison', fontsize=layout['subtitle_fontsize'])
                 ax1.set_ylabel('Block Height')
                 ax1.legend()
                 # 强制十进制格式显示，用逗号分隔
                 ax1.ticklabel_format(style='plain', axis='y', useOffset=False)
                 ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
             else:
-                ax1.plot(timestamps, height_diff, color='blue', linewidth=2, 
+                ax1.plot(timestamps, height_diff, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
                         label='Height Difference', alpha=0.8)
-                ax1.axhline(y=0, color='green', linestyle='-', alpha=0.5, label='Perfect Sync')
-                ax1.set_title('Block Height Difference Timeline')
+                ax1.axhline(y=0, color=UnifiedChartStyle.COLORS['success'], linestyle='-', alpha=0.5, label='Perfect Sync')
+                ax1.set_title('Block Height Difference Timeline', fontsize=layout['subtitle_fontsize'])
                 ax1.set_ylabel('Height Difference')
                 ax1.legend()
             
@@ -2160,26 +2195,26 @@ Data Points: {len(overhead_df)}"""
             # === 子图2: 高度差值详细分析 (右上) ===
             ax2 = axes[0, 1]
             
-            ax2.plot(timestamps, height_diff, color='#2E86AB', linewidth=2, 
+            ax2.plot(timestamps, height_diff, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
                     label='Height Difference', alpha=0.8)
             
             # 阈值线 - 使用配置变量
             threshold = int(os.getenv('BLOCK_HEIGHT_DIFF_THRESHOLD', '50'))
-            ax2.axhline(y=threshold, color='orange', linestyle='--', 
+            ax2.axhline(y=threshold, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', 
                        linewidth=2, alpha=0.7, label=f'Warning (+{threshold})')
-            ax2.axhline(y=-threshold, color='orange', linestyle='--', 
+            ax2.axhline(y=-threshold, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', 
                        linewidth=2, alpha=0.7, label=f'Warning (-{threshold})')
-            ax2.axhline(y=0, color='green', linestyle='-', alpha=0.5, label='Perfect Sync')
+            ax2.axhline(y=0, color=UnifiedChartStyle.COLORS['success'], linestyle='-', alpha=0.5, label='Perfect Sync')
             
             # 异常区域标注
             anomaly_mask = data_loss > 0
             if anomaly_mask.any():
                 anomaly_periods = self._identify_anomaly_periods(timestamps, anomaly_mask)
                 for i, (start_time, end_time) in enumerate(anomaly_periods):
-                    ax2.axvspan(start_time, end_time, alpha=0.25, color='red', 
+                    ax2.axvspan(start_time, end_time, alpha=0.25, color=UnifiedChartStyle.COLORS['critical'], 
                                label='Data Loss Period' if i == 0 else "")
             
-            ax2.set_title('Block Height Difference (Local - Mainnet)')
+            ax2.set_title('Block Height Difference (Local - Mainnet)', fontsize=layout['subtitle_fontsize'])
             ax2.set_ylabel('Height Difference')
             ax2.legend()
             ax2.grid(True, alpha=0.3)
@@ -2200,11 +2235,11 @@ Data Points: {len(overhead_df)}"""
                     startangle=90,
                     textprops={'fontsize': 10}
                 )
-                ax3.set_title('Synchronization Status Distribution')
+                ax3.set_title('Synchronization Status Distribution', fontsize=layout['subtitle_fontsize'])
             else:
                 ax3.text(0.5, 0.5, 'No Data Available', ha='center', va='center',
                         transform=ax3.transAxes, fontsize=12)
-                ax3.set_title('Synchronization Status Distribution (No Data)')
+                ax3.set_title('Synchronization Status Distribution (No Data)', fontsize=layout['subtitle_fontsize'])
             
             # === 子图4: 分析摘要 (右下) ===
             if local_height is not None and mainnet_height is not None:

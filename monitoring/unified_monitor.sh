@@ -656,24 +656,43 @@ get_system_dynamic_resources() {
         cpu_usage=$(top -l 2 -n 0 2>/dev/null | grep "CPU usage" | tail -1 | awk '{print $3}' | sed 's/%//' || echo "0.0")
     fi
 
-    # 获取系统内存使用率
+    # 获取系统内存使用率和详细信息
     local memory_usage=0
+    local cached_gb=0
+    local buffers_gb=0
+    local anon_pages_gb=0
+    local mapped_gb=0
+    local shmem_gb=0
+    
     if is_command_available "free"; then
         # Linux
         memory_usage=$(free 2>/dev/null | awk '/^Mem:/{printf "%.1f", $3/$2*100}' || echo "0.0")
-    elif [[ -r "/proc/meminfo" ]]; then
+    fi
+    
+    # 从/proc/meminfo读取详细内存信息
+    if [[ -r "/proc/meminfo" ]]; then
         # Linux fallback
         local mem_total_kb=$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "1")
         local mem_available_kb=$(grep "^MemAvailable:" /proc/meminfo | awk '{print $2}' 2>/dev/null)
+        local cached_kb=$(grep "^Cached:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+        local buffers_kb=$(grep "^Buffers:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+        local anon_pages_kb=$(grep "^AnonPages:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+        local mapped_kb=$(grep "^Mapped:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+        local shmem_kb=$(grep "^Shmem:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
+        
+        # 转换为GB
+        cached_gb=$(awk "BEGIN {printf \"%.2f\", ${cached_kb}/1024/1024}" 2>/dev/null || echo "0.00")
+        buffers_gb=$(awk "BEGIN {printf \"%.2f\", ${buffers_kb}/1024/1024}" 2>/dev/null || echo "0.00")
+        anon_pages_gb=$(awk "BEGIN {printf \"%.2f\", ${anon_pages_kb}/1024/1024}" 2>/dev/null || echo "0.00")
+        mapped_gb=$(awk "BEGIN {printf \"%.2f\", ${mapped_kb}/1024/1024}" 2>/dev/null || echo "0.00")
+        shmem_gb=$(awk "BEGIN {printf \"%.2f\", ${shmem_kb}/1024/1024}" 2>/dev/null || echo "0.00")
+        
         if [[ -z "$mem_available_kb" ]]; then
             local mem_free_kb=$(grep "^MemFree:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
             local mem_buffers_kb=$(grep "^Buffers:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
             local mem_cached_kb=$(grep "^Cached:" /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "0")
             mem_available_kb=$((mem_free_kb + mem_buffers_kb + mem_cached_kb))
         fi
-        local mem_used_kb=$((mem_total_kb - mem_available_kb))
-        memory_usage=$(awk "BEGIN {printf \"%.1f\", $mem_used_kb * 100 / $mem_total_kb}" 2>/dev/null || echo "0.0")
-
     fi
 
     # 获取磁盘使用率 (根分区)
@@ -686,10 +705,15 @@ get_system_dynamic_resources() {
     [[ "$cpu_usage" =~ ^[0-9]+\.?[0-9]*$ ]] || cpu_usage=0
     [[ "$memory_usage" =~ ^[0-9]+\.?[0-9]*$ ]] || memory_usage=0
     [[ "$disk_usage" =~ ^[0-9]+$ ]] || disk_usage=0
+    [[ "$cached_gb" =~ ^[0-9]+\.?[0-9]*$ ]] || cached_gb=0
+    [[ "$buffers_gb" =~ ^[0-9]+\.?[0-9]*$ ]] || buffers_gb=0
+    [[ "$anon_pages_gb" =~ ^[0-9]+\.?[0-9]*$ ]] || anon_pages_gb=0
+    [[ "$mapped_gb" =~ ^[0-9]+\.?[0-9]*$ ]] || mapped_gb=0
+    [[ "$shmem_gb" =~ ^[0-9]+\.?[0-9]*$ ]] || shmem_gb=0
 
-    log_debug "系统动态资源: CPU=${cpu_usage}%, 内存=${memory_usage}%, 磁盘=${disk_usage}%"
+    log_debug "系统动态资源: CPU=${cpu_usage}%, 内存=${memory_usage}%, 磁盘=${disk_usage}%, Cache=${cached_gb}GB, AnonPages=${anon_pages_gb}GB"
 
-    echo "${cpu_usage},${memory_usage},${disk_usage}"
+    echo "${cpu_usage},${memory_usage},${disk_usage},${cached_gb},${buffers_gb},${anon_pages_gb},${mapped_gb},${shmem_gb}"
 }
 
 # 发现区块链节点进程
@@ -1655,6 +1679,11 @@ collect_monitoring_overhead_data() {
     local system_cpu_usage=$(echo "$system_dynamic" | cut -d',' -f1)
     local system_memory_usage=$(echo "$system_dynamic" | cut -d',' -f2)
     local system_disk_usage=$(echo "$system_dynamic" | cut -d',' -f3)
+    local system_cached_gb=$(echo "$system_dynamic" | cut -d',' -f4)
+    local system_buffers_gb=$(echo "$system_dynamic" | cut -d',' -f5)
+    local system_anon_pages_gb=$(echo "$system_dynamic" | cut -d',' -f6)
+    local system_mapped_gb=$(echo "$system_dynamic" | cut -d',' -f7)
+    local system_shmem_gb=$(echo "$system_dynamic" | cut -d',' -f8)
 
     # 重构所有格式化调用 - 增强数据源头验证
     monitoring_cpu=$(clean_and_format_number "$monitoring_cpu" "float")
@@ -1679,9 +1708,14 @@ collect_monitoring_overhead_data() {
     system_cpu_usage=$(clean_and_format_number "$system_cpu_usage" "float")
     system_memory_usage=$(clean_and_format_number "$system_memory_usage" "float")
     system_disk_usage=$(clean_and_format_number "$system_disk_usage" "int")
+    system_cached_gb=$(clean_and_format_number "$system_cached_gb" "float")
+    system_buffers_gb=$(clean_and_format_number "$system_buffers_gb" "float")
+    system_anon_pages_gb=$(clean_and_format_number "$system_anon_pages_gb" "float")
+    system_mapped_gb=$(clean_and_format_number "$system_mapped_gb" "float")
+    system_shmem_gb=$(clean_and_format_number "$system_shmem_gb" "float")
 
     # 生成完整的数据行 - 确保所有变量都有有效值
-    local overhead_data_line="${timestamp},${monitoring_cpu},${monitoring_memory_percent},${monitoring_memory_mb},${monitoring_process_count},${blockchain_cpu},${blockchain_memory_percent},${blockchain_memory_mb},${blockchain_process_count},${system_cpu_cores},${system_memory_gb},${system_disk_gb},${system_cpu_usage},${system_memory_usage},${system_disk_usage}"
+    local overhead_data_line="${timestamp},${monitoring_cpu},${monitoring_memory_percent},${monitoring_memory_mb},${monitoring_process_count},${blockchain_cpu},${blockchain_memory_percent},${blockchain_memory_mb},${blockchain_process_count},${system_cpu_cores},${system_memory_gb},${system_disk_gb},${system_cpu_usage},${system_memory_usage},${system_disk_usage},${system_cached_gb},${system_buffers_gb},${system_anon_pages_gb},${system_mapped_gb},${system_shmem_gb}"
     
     # 调试：记录最终数据行格式
     log_debug "最终数据行: $(echo "$overhead_data_line" | cut -c1-150)..."
@@ -1719,8 +1753,13 @@ collect_monitoring_overhead_data() {
     local safe_system_cpu_usage="${system_cpu_usage:-0.00}"
     local safe_system_memory_usage="${system_memory_usage:-0.00}"
     local safe_system_disk_usage="${system_disk_usage:-0.00}"
+    local safe_system_cached_gb="${system_cached_gb:-0.00}"
+    local safe_system_buffers_gb="${system_buffers_gb:-0.00}"
+    local safe_system_anon_pages_gb="${system_anon_pages_gb:-0.00}"
+    local safe_system_mapped_gb="${system_mapped_gb:-0.00}"
+    local safe_system_shmem_gb="${system_shmem_gb:-0.00}"
     
-    echo "$safe_timestamp,$safe_monitoring_cpu,$safe_monitoring_memory_percent,$safe_monitoring_memory_mb,$safe_monitoring_process_count,$safe_blockchain_cpu,$safe_blockchain_memory_percent,$safe_blockchain_memory_mb,$safe_blockchain_process_count,$safe_system_cpu_cores,$safe_system_memory_gb,$safe_system_disk_gb,$safe_system_cpu_usage,$safe_system_memory_usage,$safe_system_disk_usage"
+    echo "$safe_timestamp,$safe_monitoring_cpu,$safe_monitoring_memory_percent,$safe_monitoring_memory_mb,$safe_monitoring_process_count,$safe_blockchain_cpu,$safe_blockchain_memory_percent,$safe_blockchain_memory_mb,$safe_blockchain_process_count,$safe_system_cpu_cores,$safe_system_memory_gb,$safe_system_disk_gb,$safe_system_cpu_usage,$safe_system_memory_usage,$safe_system_disk_usage,$safe_system_cached_gb,$safe_system_buffers_gb,$safe_system_anon_pages_gb,$safe_system_mapped_gb,$safe_system_shmem_gb"
 }
 
 # 写入监控开销日志
