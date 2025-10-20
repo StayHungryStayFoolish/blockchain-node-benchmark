@@ -902,133 +902,182 @@ Recommendations:
         return output_file
 
     def create_device_comparison_chart(self):
-        """Device Performance Comparison Chart"""
-        
-        accounts_configured = DeviceManager.is_accounts_configured()
-        
-        if not accounts_configured:
-            print("⚠️ ACCOUNTS device not configured, creating DATA-only comparison")
+        """Device Performance Comparison Chart - 3x2 Layout"""
         
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for device comparison")
                 return None
         
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        title = 'Device Performance Comparison - DATA & ACCOUNTS' if accounts_configured else 'Device Performance Analysis - DATA Only'
-        fig.suptitle(title, fontsize=16)
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         
-        # Find device columns
+        if not accounts_configured:
+            print("⚠️ ACCOUNTS device not configured, creating DATA-only comparison")
+        
+        fig, axes = plt.subplots(3, 2, figsize=(16, 18))
+        title = 'Device Performance Comparison - DATA & ACCOUNTS' if accounts_configured else 'Device Performance Analysis - DATA Only'
+        fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], 
+                    fontweight='bold', y=0.98)
+        
+        # 动态查找字段
+        data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col and 'aws' not in col]
+        data_tp_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_throughput_mibs' in col and 'aws' not in col]
+        data_aqu_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_aqu_sz')]
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
+        data_r_s_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_r_s')]
+        data_w_s_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_w_s')]
         
+        accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_iops' in col and 'aws' not in col] if accounts_configured else []
+        accounts_tp_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_throughput_mibs' in col and 'aws' not in col] if accounts_configured else []
+        accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_aqu_sz')] if accounts_configured else []
         accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
+        accounts_r_s_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_r_s')] if accounts_configured else []
+        accounts_w_s_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_w_s')] if accounts_configured else []
         
-        if not data_util_cols or not data_await_cols:
-            print("❌ Required DATA device metrics not found")
-            return None
+        # 子图1: IOPS & Throughput (双Y轴)
+        ax1 = axes[0, 0]
+        ax1_twin = ax1.twinx()
         
-        data_util_col = data_util_cols[0]
-        data_await_col = data_await_cols[0]
-        accounts_util_col = accounts_util_cols[0] if accounts_util_cols else None
-        accounts_await_col = accounts_await_cols[0] if accounts_await_cols else None
+        if data_iops_cols:
+            ax1.plot(self.df['timestamp'], self.df[data_iops_cols[0]], 
+                    label='DATA IOPS', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'])
+            if accounts_configured and accounts_iops_cols:
+                ax1.plot(self.df['timestamp'], self.df[accounts_iops_cols[0]], 
+                        label='ACCOUNTS IOPS', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'])
         
-        # 1. Utilization Comparison
-        axes[0, 0].plot(self.df['timestamp'], self.df[data_util_col], 
-                       label='DATA Utilization', linewidth=2, color='blue')
+        if data_tp_cols:
+            ax1_twin.plot(self.df['timestamp'], self.df[data_tp_cols[0]], 
+                         label='DATA Throughput', linewidth=2, linestyle='--', color=UnifiedChartStyle.COLORS['success'])
+            if accounts_configured and accounts_tp_cols:
+                ax1_twin.plot(self.df['timestamp'], self.df[accounts_tp_cols[0]], 
+                             label='ACCOUNTS Throughput', linewidth=2, linestyle='--', color=UnifiedChartStyle.COLORS['critical'])
         
-        if accounts_configured and accounts_util_col:
-            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_util_col], 
-                           label='ACCOUNTS Utilization', linewidth=2, color='orange')
+        ax1.set_title('IOPS & Throughput Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax1.set_ylabel('IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax1_twin.set_ylabel('Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax1.legend(loc='upper left', fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+        ax1_twin.legend(loc='upper right', fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+        ax1.grid(True, alpha=0.3)
+        format_time_axis(ax1, self.df['timestamp'])
         
-        axes[0, 0].set_title('Device Utilization Comparison')
-        axes[0, 0].set_ylabel('Utilization (%)')
-        axes[0, 0].legend()
-        axes[0, 0].grid(True, alpha=0.3)
+        # 子图2: Queue Depth
+        ax2 = axes[0, 1]
+        if data_aqu_cols:
+            ax2.plot(self.df['timestamp'], self.df[data_aqu_cols[0]], 
+                    label='DATA Queue Depth', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'])
+            if accounts_configured and accounts_aqu_cols:
+                ax2.plot(self.df['timestamp'], self.df[accounts_aqu_cols[0]], 
+                        label='ACCOUNTS Queue Depth', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'])
+            ax2.axhline(y=2.0, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', alpha=0.7, label='Warning (2.0)')
         
-        # 2. Latency Comparison
-        axes[0, 1].plot(self.df['timestamp'], self.df[data_await_col], 
-                       label='DATA Latency', linewidth=2, color='blue')
+        ax2.set_title('Queue Depth Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax2.set_ylabel('Queue Depth', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+        ax2.grid(True, alpha=0.3)
+        format_time_axis(ax2, self.df['timestamp'])
         
-        if accounts_configured and accounts_await_col:
-            axes[0, 1].plot(self.df['timestamp'], self.df[accounts_await_col], 
-                           label='ACCOUNTS Latency', linewidth=2, color='orange')
+        # 子图3: Utilization
+        ax3 = axes[1, 0]
+        if data_util_cols:
+            ax3.plot(self.df['timestamp'], self.df[data_util_cols[0]], 
+                    label='DATA Utilization', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'])
+            if accounts_configured and accounts_util_cols:
+                ax3.plot(self.df['timestamp'], self.df[accounts_util_cols[0]], 
+                        label='ACCOUNTS Utilization', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'])
+            ax3.axhline(y=80, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', alpha=0.7, label='Warning (80%)')
         
-        axes[0, 1].set_title('Device Latency Comparison')
-        axes[0, 1].set_ylabel('Average Latency (ms)')
-        axes[0, 1].legend()
-        axes[0, 1].grid(True, alpha=0.3)
+        ax3.set_title('Utilization Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax3.set_ylabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+        ax3.grid(True, alpha=0.3)
+        format_time_axis(ax3, self.df['timestamp'])
         
-        # 3. Performance Metrics Bar Chart
-        metrics = ['Mean Util (%)', 'Max Util (%)', 'Mean Latency (ms)', 'Max Latency (ms)']
-        data_values = [
-            self.df[data_util_col].mean(),
-            self.df[data_util_col].max(),
-            self.df[data_await_col].mean(),
-            self.df[data_await_col].max()
-        ]
+        # 子图4: Latency
+        ax4 = axes[1, 1]
+        if data_await_cols:
+            ax4.plot(self.df['timestamp'], self.df[data_await_cols[0]], 
+                    label='DATA Latency', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'])
+            if accounts_configured and accounts_await_cols:
+                ax4.plot(self.df['timestamp'], self.df[accounts_await_cols[0]], 
+                        label='ACCOUNTS Latency', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'])
+            ax4.axhline(y=10, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', alpha=0.7, label='Warning (10ms)')
         
-        x_pos = range(len(metrics))
-        bars1 = axes[1, 0].bar([x - 0.2 for x in x_pos], data_values, 0.4, 
-                              label='DATA Device', color='blue', alpha=0.7)
+        ax4.set_title('Latency Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax4.set_ylabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax4.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+        ax4.grid(True, alpha=0.3)
+        format_time_axis(ax4, self.df['timestamp'])
         
-        # 添加数值标签
-        for bar, value in zip(bars1, data_values):
-            axes[1, 0].text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(data_values)*0.01,
-                           f'{value:.1f}', ha='center', va='bottom', fontsize=8)
+        # 子图5: Read/Write IOPS
+        ax5 = axes[2, 0]
+        if data_r_s_cols and data_w_s_cols:
+            ax5.plot(self.df['timestamp'], self.df[data_r_s_cols[0]], 
+                    label='DATA Read', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'], alpha=0.7)
+            ax5.plot(self.df['timestamp'], self.df[data_w_s_cols[0]], 
+                    label='DATA Write', linewidth=2, color=UnifiedChartStyle.COLORS['critical'], alpha=0.7)
+            if accounts_configured and accounts_r_s_cols and accounts_w_s_cols:
+                ax5.plot(self.df['timestamp'], self.df[accounts_r_s_cols[0]], 
+                        label='ACCOUNTS Read', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'], alpha=0.7)
+                ax5.plot(self.df['timestamp'], self.df[accounts_w_s_cols[0]], 
+                        label='ACCOUNTS Write', linewidth=2, color='purple', alpha=0.7)
         
-        if accounts_configured and accounts_util_col and accounts_await_col:
-            accounts_values = [
-                self.df[accounts_util_col].mean(),
-                self.df[accounts_util_col].max(),
-                self.df[accounts_await_col].mean(),
-                self.df[accounts_await_col].max()
-            ]
-            bars2 = axes[1, 0].bar([x + 0.2 for x in x_pos], accounts_values, 0.4, 
-                                  label='ACCOUNTS Device', color='orange', alpha=0.7)
-            
-            # 添加数值标签
-            for bar, value in zip(bars2, accounts_values):
-                axes[1, 0].text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(accounts_values)*0.01,
-                               f'{value:.1f}', ha='center', va='bottom', fontsize=8)
+        ax5.set_title('Read/Write IOPS Breakdown', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax5.set_ylabel('IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax5.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+        ax5.grid(True, alpha=0.3)
+        format_time_axis(ax5, self.df['timestamp'])
         
-        axes[1, 0].set_title('Performance Metrics Comparison')
-        axes[1, 0].set_xticks(x_pos)
-        axes[1, 0].set_xticklabels(metrics, rotation=45, ha='right')
-        axes[1, 0].legend()
-        axes[1, 0].grid(True, alpha=0.3)
-        
-        # 4. Summary
-        axes[1, 1].axis('off')
-        
+        # 子图6: Summary
         summary_lines = [
-            "Device Comparison Summary:",
-            "",
-            f"DATA Device:",
-            f"  Avg Utilization: {self.df[data_util_col].mean():.1f}%",
-            f"  Avg Latency: {self.df[data_await_col].mean():.2f}ms",
+            "Device Performance Summary:",
+            "(Based on iostat raw sampling data)",
+            ""
         ]
         
-        if accounts_configured and accounts_util_col and accounts_await_col:
-            summary_lines.extend([
-                "",
-                f"ACCOUNTS Device:",
-                f"  Avg Utilization: {self.df[accounts_util_col].mean():.1f}%",
-                f"  Avg Latency: {self.df[accounts_await_col].mean():.2f}ms",
-            ])
+        if data_iops_cols:
+            data_iops_mean = self.df[data_iops_cols[0]].mean()
+            summary_lines.append(f"DATA Device:")
+            summary_lines.append(f"  Avg IOPS: {data_iops_mean:.0f}")
+            if data_util_cols:
+                summary_lines.append(f"  Avg Utilization: {self.df[data_util_cols[0]].mean():.1f}%")
+            if data_await_cols:
+                summary_lines.append(f"  Avg Latency: {self.df[data_await_cols[0]].mean():.2f}ms")
+            if data_r_s_cols and data_w_s_cols:
+                r_mean = self.df[data_r_s_cols[0]].mean()
+                w_mean = self.df[data_w_s_cols[0]].mean()
+                ratio = r_mean / w_mean if w_mean > 0 else float('inf')
+                summary_lines.append(f"  Read/Write: {ratio:.2f}:1 ({'Read' if ratio > 1 else 'Write'} intensive)")
+        
+        if accounts_configured and accounts_iops_cols:
+            accounts_iops_mean = self.df[accounts_iops_cols[0]].mean()
+            summary_lines.extend(["", "ACCOUNTS Device:"])
+            summary_lines.append(f"  Avg IOPS: {accounts_iops_mean:.0f}")
+            if accounts_util_cols:
+                summary_lines.append(f"  Avg Utilization: {self.df[accounts_util_cols[0]].mean():.1f}%")
+            if accounts_await_cols:
+                summary_lines.append(f"  Avg Latency: {self.df[accounts_await_cols[0]].mean():.2f}ms")
+            if accounts_r_s_cols and accounts_w_s_cols:
+                r_mean = self.df[accounts_r_s_cols[0]].mean()
+                w_mean = self.df[accounts_w_s_cols[0]].mean()
+                ratio = r_mean / w_mean if w_mean > 0 else float('inf')
+                summary_lines.append(f"  Read/Write: {ratio:.2f}:1 ({'Read' if ratio > 1 else 'Write'} intensive)")
+            
+            if data_iops_cols:
+                iops_ratio = data_iops_mean / accounts_iops_mean if accounts_iops_mean > 0 else 0
+                summary_lines.extend(["", f"IOPS Ratio: {iops_ratio:.1f}:1 (DATA:ACCOUNTS)"])
+                summary_lines.append(f"Primary Workload: {'DATA' if iops_ratio > 2 else 'Balanced'}")
         else:
             summary_lines.append("\nACCOUNTS Device: Not Configured")
         
         summary_text = "\n".join(summary_lines)
-        
-        axes[1, 1].text(0.05, 0.95, summary_text, transform=axes[1, 1].transAxes, 
-                       fontsize=11, verticalalignment='top', fontfamily='monospace',
-                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        UnifiedChartStyle.add_text_summary(axes[2, 1], summary_text, 'Performance Summary')
         
         UnifiedChartStyle.apply_layout('auto')
+        
         output_file = os.path.join(self.output_dir, 'device_performance_comparison.png')
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"

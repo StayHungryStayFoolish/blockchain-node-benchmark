@@ -161,22 +161,42 @@ class DeviceManager:
         return None
     
     @staticmethod
-    def is_accounts_configured():
+    def is_accounts_configured(df=None):
         """统一的ACCOUNTS设备配置检测方法
         
-        判断逻辑（配置驱动）：
-        检查 3 个关键环境变量是否都已配置：
-        1. ACCOUNTS_DEVICE - 设备名称（如 nvme2n1）
-        2. ACCOUNTS_VOL_TYPE - 卷类型（如 io2/gp3）
-        3. ACCOUNTS_VOL_MAX_IOPS - 最大IOPS
+        判断逻辑（配置驱动为主，数据验证为辅）：
+        1. 首要条件：检查环境变量是否配置（判断 ACCOUNTS 设备是否存在）
+        2. 次要条件（可选）：如果提供了 df，额外验证数据列是否存在
         
-        注意：不检查数据文件，因为配置是数据采集的前提
+        Args:
+            df: 可选的 DataFrame，如果提供则额外验证数据列
+        
+        Returns:
+            bool: ACCOUNTS 设备是否配置
         """
+        # 首要条件：检查环境变量（配置驱动）
         accounts_device = os.getenv('ACCOUNTS_DEVICE', '').strip()
         accounts_vol_type = os.getenv('ACCOUNTS_VOL_TYPE', '').strip()
         accounts_max_iops = os.getenv('ACCOUNTS_VOL_MAX_IOPS', '').strip()
         
-        return bool(accounts_device and accounts_vol_type and accounts_max_iops)
+        env_configured = bool(accounts_device and accounts_vol_type and accounts_max_iops)
+        
+        # 如果环境变量未配置，直接返回 False
+        if not env_configured:
+            # 兜底：如果提供了 df，检查数据列（用于读取历史数据场景）
+            if df is not None:
+                accounts_cols = [col for col in df.columns if col.startswith('accounts_')]
+                return len(accounts_cols) > 0
+            return False
+        
+        # 环境变量已配置，可选：验证数据列
+        if df is not None:
+            accounts_cols = [col for col in df.columns if col.startswith('accounts_')]
+            if len(accounts_cols) == 0:
+                # 环境变量配置了，但数据中没有 accounts_ 列（异常情况）
+                return False
+        
+        return True
     
     def _check_device_data_exists(self, logical_name: str) -> bool:
         """检查设备数据列是否存在"""

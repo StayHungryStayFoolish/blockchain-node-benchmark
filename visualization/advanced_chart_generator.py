@@ -26,6 +26,7 @@ project_root = os.path.dirname(script_dir)
 sys.path.insert(0, project_root)
 
 from visualization.chart_style_config import UnifiedChartStyle
+from visualization.device_manager import DeviceManager
 from utils.ena_field_accessor import ENAFieldAccessor
 from utils.unified_logger import get_logger
 from utils.csv_data_processor import CSVDataProcessor
@@ -479,9 +480,13 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 key_columns.append(col)
         
         # EBS相关列
+        device_manager = DeviceManager(self.df)
         ebs_patterns = ['util', 'aqu_sz', 'avg_await', 'r_s', 'w_s', 'total_iops', 'throughput_mibs']
         for pattern in ebs_patterns:
             matching_cols = [col for col in self.df.columns if pattern in col]
+            # 过滤 ACCOUNTS 设备列（如果未配置）
+            if not DeviceManager.is_accounts_configured(self.df):
+                matching_cols = [col for col in matching_cols if not col.startswith('accounts_')]
             key_columns.extend(matching_cols[:2])  # 最多取2个相关列
         
         # 移除重复并确保列存在
@@ -498,28 +503,34 @@ class AdvancedChartGenerator(CSVDataProcessor):
         # 创建热力图
         plt.figure(figsize=(14, 12))
         
-        # 使用自定义颜色映射
+        # 使用统一样式配置
+        heatmap_config = UnifiedChartStyle.CHART_CONFIGS['heatmap']
         mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
         
         sns.heatmap(correlation_matrix, 
                    mask=mask,
-                   annot=True, 
-                   cmap='RdBu_r', 
+                   annot=heatmap_config['annot'], 
+                   cmap=heatmap_config['cmap'], 
                    vmin=-1, 
                    vmax=1,
                    center=0,
                    square=True,
-                   fmt='.3f',
+                   fmt=heatmap_config['fmt'],
                    cbar_kws={"shrink": .8})
         
         # Using English title directly
-        plt.title('CPU-EBS Performance Metrics Correlation Matrix', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold', pad=20)
+        plt.title('CPU-EBS Performance Metrics Correlation Matrix', 
+                 fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], 
+                 fontweight='bold', pad=20)
         plt.xticks(rotation=45, ha='right')
         plt.yticks(rotation=0)
         
-        plt.tight_layout()
+        # 使用统一布局
+        UnifiedChartStyle.apply_layout('auto')
+        
         chart_file = os.path.join(self.output_dir, 'comprehensive_correlation_matrix.png')
-        plt.savefig(chart_file, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_file, dpi=300, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
         plt.close()
         
         chart_files.append(chart_file)

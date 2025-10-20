@@ -22,6 +22,7 @@ sys.path.insert(0, project_root)
 
 from visualization.chart_style_config import UnifiedChartStyle
 from visualization.device_manager import DeviceManager
+from visualization.performance_visualizer import load_framework_config, create_chart_title
 
 class EBSChartGenerator:
     # 统一的EBS图表文件命名规范
