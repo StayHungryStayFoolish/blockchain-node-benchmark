@@ -37,6 +37,25 @@ logger = get_logger(__name__)
 class AdvancedChartGenerator(CSVDataProcessor):
     """Advanced Chart Generator - Based on unified CSV data processor"""
     
+    @staticmethod
+    def _calculate_ena_delta_series(df: pd.DataFrame, field: str) -> pd.Series:
+        """
+        计算 ENA counter 字段相对于 baseline 的增量序列
+        
+        Args:
+            df: DataFrame with ENA data
+            field: ENA field name
+        
+        Returns:
+            pd.Series: Delta series relative to baseline
+        """
+        if field not in df.columns or len(df) < 2:
+            return pd.Series(0, index=df.index)
+        
+        baseline = int(df[field].iloc[0])
+        delta_series = (df[field] - baseline).clip(lower=0)
+        return delta_series
+    
     def __init__(self, data_file: str, output_dir: str = None):
         """
         Initialize chart generator
@@ -653,7 +672,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # 动态构建限制字段配置 - 基于实际可用字段
             limitation_fields = {}
-            field_colors = ['red', 'orange', 'blue', 'purple', 'green', 'brown']
+            field_colors = UnifiedChartStyle.COLOR_PALETTE[:6]
             color_index = 0
             
             for field in available_ena_fields:
@@ -669,42 +688,75 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 检查是否有任何限制数据
             has_limitation_data = False
             for field in limitation_fields.keys():
-                if field in self.df.columns and self.df[field].max() > 0:
-                    has_limitation_data = True
-                    break
-            
-            if not has_limitation_data:
-                print("  ℹ️ No ENA limitations detected, skipping limitation trend chart")
-                return None
+                if field in self.df.columns:
+                    delta_series = self._calculate_ena_delta_series(self.df, field)
+                    if delta_series.iloc[-1] > 0:
+                        has_limitation_data = True
+                        break
             
             # 创建图表
             fig, ax = plt.subplots(1, 1, figsize=(16, 8))
             
-            # Plot trend lines for each ENA limitation metric
-            lines_plotted = 0
-            for field, config in limitation_fields.items():
-                if field in self.df.columns:
-                    # 只显示有数据的字段 (最大值 > 0)
-                    if self.df[field].max() > 0:
-                        ax.plot(self.df['timestamp'], self.df[field], 
-                               label=config['label'], 
-                               color=config['color'],
-                               linewidth=2,
-                               marker='o',
-                               markersize=3,
-                               alpha=0.8)
-                        lines_plotted += 1
-            
-            if lines_plotted == 0:
-                plt.close()
-                return None
-            
-            # Chart styling with English labels
-            ax.set_title('ENA Network Limitation Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
-            ax.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
-            ax.set_ylabel('Limitation Triggers (Cumulative)', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
-            ax.legend(loc='upper left')
-            ax.grid(True, alpha=0.3)
+            if not has_limitation_data:
+                # 无限制事件时，显示提示信息
+                ax.text(0.5, 0.5, 'No ENA Network Limitations Detected\nAll limitation counters remain at 0 during test period', 
+                       ha='center', va='center', transform=ax.transAxes,
+                       fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"],
+                       bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.3))
+                ax.set_title('ENA Network Limitation Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
+                ax.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+                ax.set_ylabel('Limitation Triggers (Delta)', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+                ax.grid(True, alpha=0.3)
+            else:
+                # Plot trend lines for each ENA limitation metric
+                lines_plotted = 0
+                for field, config in limitation_fields.items():
+                    if field in self.df.columns:
+                        delta_series = self._calculate_ena_delta_series(self.df, field)
+                        # 只显示有增量数据的字段
+                        if delta_series.iloc[-1] > 0:
+                            ax.plot(self.df['timestamp'], delta_series, 
+                                   label=config['label'], 
+                                   color=config['color'],
+                                   linewidth=2,
+                                   marker='o',
+                                   markersize=3,
+                                   alpha=0.8)
+                            lines_plotted += 1
+                
+                if lines_plotted == 0:
+                    plt.close()
+                    return None
+                
+                # Chart styling with English labels
+                ax.set_title('ENA Network Limitation Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
+                ax.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+                ax.set_ylabel('Limitation Triggers (Delta)', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+                ax.legend(loc='upper left')
+                ax.grid(True, alpha=0.3)
+                
+                # 添加统计信息框（右上角）
+                stats_lines = ["Statistics:"]
+                for field, config in limitation_fields.items():
+                    if field in self.df.columns:
+                        delta_series = self._calculate_ena_delta_series(self.df, field)
+                        if delta_series.iloc[-1] > 0:
+                            total = int(delta_series.iloc[-1])
+                            events = (delta_series > 0).sum()
+                            stats_lines.append(f"{config['label']}:")
+                            stats_lines.append(f"  Total: {total:,}")
+                            stats_lines.append(f"  Events: {events}")
+                
+                # 添加测试时长
+                time_span = (self.df['timestamp'].iloc[-1] - self.df['timestamp'].iloc[0]).total_seconds()
+                stats_lines.append(f"\nDuration: {time_span/60:.1f} min")
+                
+                stats_text = "\n".join(stats_lines)
+                ax.text(0.98, 0.98, stats_text, transform=ax.transAxes,
+                       verticalalignment='top', horizontalalignment='right',
+                       fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'],
+                       fontfamily='monospace',
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
             
             # Time轴格式化
             plt.xticks(rotation=45)
@@ -712,7 +764,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # 保存图表
             chart_file = os.path.join(self.output_dir, 'ena_limitation_trends.png')
-            plt.savefig(chart_file, dpi=300, bbox_inches='tight')
+            plt.savefig(chart_file, dpi=300, bbox_inches='tight', 
+                       facecolor='white', edgecolor='none')
             plt.close()
             
             print(f"  ✅ ENA limitation trend chart generated: {os.path.basename(chart_file)}")
@@ -745,12 +798,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # 绘制连接容量趋势
             ax.plot(self.df['timestamp'], self.df[available_field], 
-                   color=UnifiedChartStyle.COLORS["success"], linewidth=2, marker='o', markersize=2, alpha=0.8)
-            
-            # 添加警告线 (连接容量不足阈值)
-            warning_threshold = 10000
-            ax.axhline(y=warning_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7, 
-                      label=f'Warning Threshold ({warning_threshold:,})')
+                   color=UnifiedChartStyle.COLORS["success"], linewidth=2, marker='o', markersize=2, alpha=0.8,
+                   label='Available Connections')
             
             # Chart styling with English labels
             ax.set_title('ENA Connection Capacity Monitoring', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
@@ -758,6 +807,29 @@ class AdvancedChartGenerator(CSVDataProcessor):
             ax.set_ylabel('Available Connections', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
             ax.legend()
             ax.grid(True, alpha=0.3)
+            
+            # 添加统计信息框（右上角）
+            capacity_data = self.df[available_field]
+            current = int(capacity_data.iloc[-1])
+            average = int(capacity_data.mean())
+            minimum = int(capacity_data.min())
+            maximum = int(capacity_data.max())
+            
+            stats_lines = [
+                "Statistics:",
+                "",
+                f"Current:  {current:,}",
+                f"Average:  {average:,}",
+                f"Minimum:  {minimum:,}",
+                f"Maximum:  {maximum:,}"
+            ]
+            
+            stats_text = "\n".join(stats_lines)
+            ax.text(0.98, 0.98, stats_text, transform=ax.transAxes,
+                   verticalalignment='top', horizontalalignment='right',
+                   fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'],
+                   fontfamily='monospace',
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
             
             # 格式化Y轴数值
             ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
@@ -768,7 +840,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # 保存图表
             chart_file = os.path.join(self.output_dir, 'ena_connection_capacity.png')
-            plt.savefig(chart_file, dpi=300, bbox_inches='tight')
+            plt.savefig(chart_file, dpi=300, bbox_inches='tight', 
+                       facecolor='white', edgecolor='none')
             plt.close()
             
             print(f"  ✅ ENA connection capacity chart generated: {os.path.basename(chart_file)}")
@@ -795,19 +868,32 @@ class AdvancedChartGenerator(CSVDataProcessor):
             # 1. 限制类型分布 (左上)
             ax1 = axes[0, 0]
             limitation_counts = {}
+            label_mapping = {
+                'Inbound Bandwidth Allowance Exceeded': 'Inbound Bandwidth\nAllowance Exceeded',
+                'Outbound Bandwidth Allowance Exceeded': 'Outbound Bandwidth\nAllowance Exceeded',
+                'PPS Allowance Exceeded': 'PPS Allowance\nExceeded',
+                'Connection Tracking Allowance Exceeded': 'Connection Tracking\nAllowance Exceeded',
+                'Link Local Allowance Exceeded': 'Link Local\nAllowance Exceeded'
+            }
             
             # 使用 ENAFieldAccessor 动态获取字段标签
             for field in available_fields:
                 if 'exceeded' in field:  # 只处理 exceeded 类型字段
                     field_analysis = ENAFieldAccessor.analyze_ena_field(self.df, field)
                     if field_analysis and field in self.df.columns:
-                        count = (self.df[field] > 0).sum()
-                        if count > 0:
-                            limitation_counts[field_analysis['display_name']] = count
+                        delta_series = self._calculate_ena_delta_series(self.df, field)
+                        delta_value = int(delta_series.iloc[-1])
+                        if delta_value > 0:
+                            full_label = field_analysis['display_name']
+                            wrapped_label = label_mapping.get(full_label, full_label)
+                            limitation_counts[wrapped_label] = delta_value
             
             if limitation_counts:
+                pie_config = UnifiedChartStyle.CHART_CONFIGS['pie']
                 ax1.pie(limitation_counts.values(), labels=limitation_counts.keys(), 
-                       autopct='%1.1f%%', startangle=90)
+                       autopct=pie_config['autopct'], startangle=pie_config['startangle'],
+                       pctdistance=pie_config['pctdistance'], 
+                       labeldistance=1.05)
                 ax1.set_title('Limitation Type Distribution')
             else:
                 ax1.text(0.5, 0.5, 'No Network Limitations Detected', ha='center', va='center', 
@@ -845,7 +931,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
             severity_score = pd.Series(0, index=self.df.index)
             for field in severity_fields:
                 if field in self.df.columns:
-                    severity_score += (self.df[field] > 0).astype(int)
+                    delta_series = self._calculate_ena_delta_series(self.df, field)
+                    severity_score += (delta_series > 0).astype(int)
             
             if severity_score.max() > 0:
                 ax3.plot(self.df['timestamp'], severity_score, color=UnifiedChartStyle.COLORS["critical"], linewidth=2)
@@ -863,6 +950,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             ax4 = axes[1, 1]
             # 创建状态汇总表格 - 使用 ENAFieldAccessor
             summary_data = []
+            
             for field in available_fields:
                 if field in self.df.columns:
                     field_analysis = ENAFieldAccessor.analyze_ena_field(self.df, field)
@@ -870,24 +958,32 @@ class AdvancedChartGenerator(CSVDataProcessor):
                         if field_analysis['type'] == 'gauge':  # available 类型字段
                             field_mean = self.df[field].mean()
                             field_min = self.df[field].min()
-                            summary_data.append([field_analysis['display_name'], 
-                                               f'{field_mean:,.0f}', 
-                                               f'{field_min:,.0f}'])
+                            unit = field_analysis.get('unit', 'connections')
+                            summary_data.append([
+                                field_analysis['display_name'], 
+                                f'{field_mean:,.0f} {unit}', 
+                                f'{field_min:,.0f} {unit}'
+                            ])
                         else:  # counter 类型字段 (exceeded)
-                            max_val = self.df[field].max()
-                            total_events = (self.df[field] > 0).sum()
-                            summary_data.append([field_analysis['display_name'], 
-                                               f'{max_val}', 
-                                               f'{total_events} events'])
+                            delta_series = self._calculate_ena_delta_series(self.df, field)
+                            delta_value = int(delta_series.iloc[-1])
+                            event_count = (delta_series > 0).sum()
+                            unit = field_analysis.get('unit', 'packets')
+                            summary_data.append([
+                                field_analysis['display_name'], 
+                                f'{delta_value} {unit}', 
+                                f'{event_count} events'
+                            ])
             
             if summary_data:
                 table = ax4.table(cellText=summary_data,
                                 colLabels=['Metric', 'Max/Avg Value', 'Event Count/Min Value'],
-                                cellLoc='center',
-                                loc='center')
+                                cellLoc='left',
+                                loc='center',
+                                colWidths=[0.5, 0.25, 0.25])
                 table.auto_set_font_size(False)
                 table.set_fontsize(9)
-                table.scale(1.2, 1.5)
+                table.scale(1, 2.2)
                 ax4.axis('off')
                 ax4.set_title('ENA Status Summary')
             else:
@@ -895,11 +991,13 @@ class AdvancedChartGenerator(CSVDataProcessor):
                         transform=ax4.transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
                 ax4.set_title('ENA Status Summary')
             
-            plt.tight_layout()
+            # 使用统一样式应用布局
+            UnifiedChartStyle.apply_layout('auto')
             
             # 保存图表
             chart_file = os.path.join(self.output_dir, 'ena_comprehensive_status.png')
-            plt.savefig(chart_file, dpi=300, bbox_inches='tight')
+            plt.savefig(chart_file, dpi=300, bbox_inches='tight', 
+                       facecolor='white', edgecolor='none')
             plt.close()
             
             print(f"  ✅ ENA comprehensive status chart generated: {os.path.basename(chart_file)}")

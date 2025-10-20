@@ -155,6 +155,9 @@ class ComprehensiveAnalyzer:
     def __init__(self, output_dir: Optional[str] = None, benchmark_mode: str = "standard", bottleneck_mode: Optional[BottleneckAnalysisMode] = None):
         """重构的初始化方法 - 确保所有属性正确初始化"""
         
+        # 应用统一样式
+        UnifiedChartStyle.setup_matplotlib()
+        
         # 输出目录处理 - 优先使用框架设置的环境变量
         if output_dir is None:
             output_dir = os.environ.get('BASE_DATA_DIR') or os.environ.get('DATA_DIR', os.path.join(os.path.expanduser('~'), 'blockchain-node-benchmark-result'))
@@ -299,20 +302,6 @@ class ComprehensiveAnalyzer:
         if len(df) == 0:
             print("❌ No QPS data for chart generation")
             return None
-
-        plt.style.use('default')
-        
-        # 设置全局图表样式
-        plt.rcParams.update({
-            'font.size': 10,
-            'axes.titlesize': 12,
-            'axes.labelsize': 10,
-            'xtick.labelsize': 9,
-            'ytick.labelsize': 9,
-            'legend.fontsize': 9,
-            'figure.titlesize': 14,
-            'font.family': 'DejaVu Sans'  # 确保跨平台字体兼容性
-        })
         
         fig, axes = plt.subplots(3, 2, figsize=(16, 18))
         # Using English title directly
@@ -443,19 +432,12 @@ class ComprehensiveAnalyzer:
                            ha='center', va='center', transform=axes[2, 1].transAxes, fontsize=12)
             axes[2, 1].set_title('QPS Performance Analysis (No Data)')
 
-        # 精确控制间距，解决标题重叠问题
-        plt.subplots_adjust(
-            top=0.90,      # 为主标题留出空间
-            bottom=0.08,   # 底部边距
-            left=0.08,     # 左边距
-            right=0.95,    # 右边距
-            hspace=0.40,   # 子图垂直间距 (解决标题重叠)
-            wspace=0.25    # 子图水平间距
-        )
+        # 使用统一样式应用布局
+        UnifiedChartStyle.apply_layout('auto')
         
         # 调整主标题位置
         fig.suptitle('Comprehensive Performance Analysis', 
-                     fontsize=16, fontweight='bold', y=0.95)
+                     fontsize=16, fontweight='bold', y=0.98)
         
         # 保存图表 - 使用文件管理器，同时创建当前版本和备份
         chart_file = self.file_manager.save_chart_with_backup('comprehensive_analysis_charts', plt)

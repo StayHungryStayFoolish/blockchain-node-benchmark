@@ -359,7 +359,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         for ax in axes.flat:
             ax.tick_params(axis='x', rotation=45)
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         
         output_file = os.path.join(self.output_dir, 'performance_overview.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
@@ -526,7 +526,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Correlation Summary')
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         
         output_file = os.path.join(self.output_dir, 'cpu_ebs_correlation_visualization.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
@@ -640,7 +640,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         summary_text = format_summary_text(device_info, data_stats, accounts_stats)
         add_text_summary(axes[1, 1], summary_text, 'Utilization Statistics')
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         
         output_file = os.path.join(self.output_dir, 'util_threshold_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
@@ -891,7 +891,7 @@ Recommendations:
         
         UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Performance Analysis Summary')
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         output_file = os.path.join(self.output_dir, 'await_threshold_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         plt.close()
@@ -1026,7 +1026,7 @@ Recommendations:
                        fontsize=11, verticalalignment='top', fontfamily='monospace',
                        bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         output_file = os.path.join(self.output_dir, 'device_performance_comparison.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         plt.close()
@@ -1143,7 +1143,7 @@ Data Points: {len(overhead_df)}"""
                 
                 UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Overhead Analysis Summary')
             
-            plt.tight_layout()
+            UnifiedChartStyle.apply_layout('auto')
             output_file = os.path.join(self.output_dir, 'monitoring_overhead_analysis.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
             plt.close()
@@ -1429,7 +1429,7 @@ Data Points: {len(overhead_df)}"""
             for ax in axes.flat:
                 ax.tick_params(axis='x', rotation=45)
             
-            plt.tight_layout()
+            UnifiedChartStyle.apply_layout('auto')
             
             # Save chart
             output_file = os.path.join(self.output_dir, 'smoothed_trend_analysis.png')
@@ -1547,7 +1547,7 @@ Data Points: {len(overhead_df)}"""
             ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes, fontsize=10, 
                      verticalalignment='top', bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', alpha=0.8))
             
-            plt.tight_layout()
+            UnifiedChartStyle.apply_layout('auto')
             
             # Save chart
             output_file = os.path.join(self.output_dir, 'qps_trend_analysis.png')
@@ -2010,7 +2010,7 @@ Data Points: {len(overhead_df)}"""
         UnifiedChartStyle.add_text_summary(ax4, summary_text, 'System Bottleneck Diagnostic Report')
         
         # 应用统一布局
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         plt.subplots_adjust(top=0.93)  # 为主标题留空间
         
         # 保存文件
@@ -2167,7 +2167,7 @@ Data Points: {len(overhead_df)}"""
             UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Synchronization Analysis Summary')
             
             # 布局调整
-            plt.tight_layout()
+            UnifiedChartStyle.apply_layout('auto')
             plt.subplots_adjust(top=0.93)
             
             # 保存文件

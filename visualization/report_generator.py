@@ -1004,7 +1004,7 @@ class ReportGenerator:
                 ax6.text(bar.get_x() + bar.get_width()/2, val + max(overhead_values)*0.02, f'{val:.2f}%',
                         ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             
-            plt.tight_layout()
+            UnifiedChartStyle.apply_layout('auto')
             reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
             plt.savefig(os.path.join(reports_dir, 'resource_distribution_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()
@@ -1163,7 +1163,7 @@ class ReportGenerator:
             summary_text = "\n".join(summary_lines)
             UnifiedChartStyle.add_text_summary(ax6, summary_text, 'Monitoring Efficiency Summary')
             
-            plt.tight_layout()
+            UnifiedChartStyle.apply_layout('auto')
             reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
             plt.savefig(os.path.join(reports_dir, 'monitoring_impact_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()

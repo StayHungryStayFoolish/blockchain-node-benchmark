@@ -113,11 +113,7 @@ class UnifiedChartStyle:
         '2x2': {
             'figsize': (16, 12),
             'nrows': 2, 'ncols': 2,
-            'top': 0.93,
-            'bottom': 0.08,
-            'left': 0.08,
-            'right': 0.95,
-            'hspace': 0.30,
+            'hspace': 0.35,
             'wspace': 0.25,
             'title_fontsize': 16,
             'subtitle_fontsize': 12
@@ -125,40 +121,63 @@ class UnifiedChartStyle:
         '2x3': {
             'figsize': (18, 12), 
             'nrows': 2, 'ncols': 3,
-            'hspace': 0.35, 'wspace': 0.3,
+            'top': 0.93,
+            'bottom': 0.08,
+            'left': 0.08,
+            'right': 0.95,
+            'hspace': 0.35,
+            'wspace': 0.3,
             'title_fontsize': 16,
             'subtitle_fontsize': 11
         },
         '3x2': {
             'figsize': (16, 15),
-            'nrows': 3, 'ncols': 2, 
-            'hspace': 0.4, 'wspace': 0.25,
+            'nrows': 3, 'ncols': 2,
+            'top': 0.94,
+            'bottom': 0.06,
+            'left': 0.08,
+            'right': 0.95,
+            'hspace': 0.4,
+            'wspace': 0.25,
             'title_fontsize': 16,
             'subtitle_fontsize': 11
         },
         '1x2': {
             'figsize': (16, 8),
             'nrows': 1, 'ncols': 2,
-            'top': 0.85,     # 给饼图标题留足够空间
-            'hspace': 0.20,  # 适中的垂直间距
-            'wspace': 0.25,  # 适中的水平间距
+            'top': 0.85,
+            'bottom': 0.12,
+            'left': 0.08,
+            'right': 0.95,
+            'hspace': 0.20,
+            'wspace': 0.25,
             'title_fontsize': 16,
             'subtitle_fontsize': 12
         },
         '2x1': {
             'figsize': (12, 10),
             'nrows': 2, 'ncols': 1,
-            'hspace': 0.3, 'wspace': 0.2,
+            'top': 0.93,
+            'bottom': 0.08,
+            'left': 0.10,
+            'right': 0.92,
+            'hspace': 0.3,
+            'wspace': 0.2,
             'title_fontsize': 16,
             'subtitle_fontsize': 12
         },
         'dual_pie': {  # 双饼图特殊布局
             'figsize': (16, 8),
             'nrows': 1, 'ncols': 2,
-            'hspace': 0.2, 'wspace': 0.4,  # 更大间距避免重叠
+            'top': 0.85,
+            'bottom': 0.12,
+            'left': 0.08,
+            'right': 0.95,
+            'hspace': 0.2,
+            'wspace': 0.4,
             'title_fontsize': 14,
             'subtitle_fontsize': 10,
-            'pie_text_distance': 1.2  # 饼图文本距离
+            'pie_text_distance': 1.2
         }
     }
     
@@ -281,6 +300,12 @@ class UnifiedChartStyle:
     @classmethod
     def setup_matplotlib(cls):
         """配置matplotlib全局样式"""
+        # 应用 seaborn 样式以获得统一的浅色背景
+        try:
+            plt.style.use('seaborn-v0_8')
+        except:
+            pass  # 如果样式不可用，继续使用默认样式
+        
         plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
         plt.rcParams['axes.unicode_minus'] = False
         plt.rcParams['font.size'] = cls.FONT_CONFIG['label_size']
@@ -404,6 +429,50 @@ class UnifiedChartStyle:
             plt.subplots_adjust(**adjust_params)
         
         return fig, axes, subplot_kwargs
+    
+    @classmethod
+    def apply_layout(cls, layout_type: str = 'auto', fig=None):
+        """
+        统一应用布局 - 避免在每个图表中重复调用 tight_layout 或 subplots_adjust
+        
+        Args:
+            layout_type: 布局类型
+                - 'auto': 使用 tight_layout 自动优化（推荐，适用于大多数图表）
+                - '2x2', '2x3', '3x2' 等: 使用预定义的 subplots_adjust 参数（用于特殊情况）
+            fig: matplotlib figure对象（可选）
+        
+        使用示例:
+            # 方式1: 自动布局（推荐）
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            # ... 绘制图表 ...
+            UnifiedChartStyle.apply_layout('auto')  # 替代 plt.tight_layout()
+            plt.savefig('chart.png')
+            
+            # 方式2: 使用预定义布局（特殊情况）
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            # ... 绘制图表 ...
+            UnifiedChartStyle.apply_layout('2x2', fig)  # 使用预定义的间距参数
+            plt.savefig('chart.png')
+        """
+        if layout_type == 'auto':
+            # 使用 tight_layout 自动优化
+            plt.tight_layout()
+        elif layout_type in cls.SUBPLOT_LAYOUTS:
+            # 使用预定义的布局参数
+            layout = cls.SUBPLOT_LAYOUTS[layout_type]
+            adjust_params = {}
+            for param in ['top', 'bottom', 'left', 'right', 'hspace', 'wspace']:
+                if param in layout:
+                    adjust_params[param] = layout[param]
+            
+            if adjust_params:
+                if fig:
+                    fig.subplots_adjust(**adjust_params)
+                else:
+                    plt.subplots_adjust(**adjust_params)
+        else:
+            # 默认使用 tight_layout
+            plt.tight_layout()
     
     @classmethod
     def fix_pie_text_overlap(cls, ax, labels, autopct_texts=None):

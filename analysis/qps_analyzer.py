@@ -44,6 +44,9 @@ class NodeQPSAnalyzer:
             benchmark_mode: 基准测试模式 (quick/standard/intensive)
             bottleneck_mode: 是否启用瓶颈分析模式
         """
+        # 应用统一样式
+        UnifiedChartStyle.setup_matplotlib()
+        
         if output_dir is None:
             output_dir = os.environ.get('DATA_DIR', os.path.join(os.path.expanduser('~'), 'blockchain-node-benchmark-result'))
         
@@ -584,7 +587,6 @@ class NodeQPSAnalyzer:
             print("❌ No QPS data for chart generation")
             return None
 
-        plt.style.use('default')
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         # Using English title directly
         fig.suptitle('Blockchain Node QPS Performance Analysis Dashboard', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
@@ -635,13 +637,15 @@ class NodeQPSAnalyzer:
             axes[1, 1].legend()
             axes[1, 1].grid(True, alpha=0.3)
 
-        plt.tight_layout()
+        # 使用统一样式应用布局
+        UnifiedChartStyle.apply_layout('auto')
         
         # 保存图表
         reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
         chart_file = os.path.join(reports_dir, 'qps_performance_analysis.png')
         os.makedirs(os.path.dirname(chart_file), exist_ok=True)
-        plt.savefig(chart_file, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_file, dpi=300, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
         print(f"✅ Performance charts saved: {chart_file}")
 
         return fig
