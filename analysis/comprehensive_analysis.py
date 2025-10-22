@@ -304,70 +304,65 @@ class ComprehensiveAnalyzer:
             return None
         
         fig, axes = plt.subplots(3, 2, figsize=(16, 18))
-        # Using English title directly
-        fig.suptitle('Blockchain Node QPS Ultimate Performance Analysis Dashboard', fontsize=16, fontweight='bold')
+        
+        # 先设置主标题（在 apply_layout 之前）
+        fig.suptitle('Comprehensive Performance Analysis', 
+                     fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], 
+                     fontweight='bold')
 
-        # 检查QPS数据可用性
-        qps_available = False
-        if len(df) > 0 and 'qps_data_available' in df.columns:
-            try:
-                # 查找第一个非空值
-                qps_data_series = df['qps_data_available'].dropna()
-                if len(qps_data_series) > 0:
-                    first_valid_value = qps_data_series.iloc[0]
-                    # 处理字符串和布尔值
-                    if isinstance(first_valid_value, str):
-                        qps_available = first_valid_value.lower() in ['true', '1', 'yes']
-                    else:
-                        qps_available = bool(first_valid_value)
-            except Exception as e:
-                print(f"Warning: QPS data availability check failed: {e}")
-                qps_available = False
+        # 简化QPS数据检查 - 只检查列是否存在
+        qps_available = 'current_qps' in df.columns and len(df) > 0
         
         # 1. CPU使用率 vs QPS
-        if len(df) > 0 and 'cpu_usage' in df.columns and qps_available and 'current_qps' in df.columns:
+        if 'current_qps' in df.columns and 'cpu_usage' in df.columns:
             axes[0, 0].plot(df['current_qps'], df['cpu_usage'], 'bo-', alpha=0.7, markersize=4)
             axes[0, 0].axhline(y=85, color='red', linestyle='--', alpha=0.8, label='Warning (85%)')
-            axes[0, 0].set_title('CPU Usage vs QPS')
-            axes[0, 0].set_xlabel('QPS')
-            axes[0, 0].set_ylabel('CPU %')
+            axes[0, 0].set_title('CPU Usage vs QPS', 
+                                fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[0, 0].set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[0, 0].set_ylabel('CPU %', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             axes[0, 0].legend()
             axes[0, 0].grid(True, alpha=0.3)
         else:
             axes[0, 0].text(0.5, 0.5, 'QPS Data Not Available\nfor CPU Analysis', ha='center', va='center',
                            transform=axes[0, 0].transAxes, fontsize=12)
-            axes[0, 0].set_title('CPU Usage vs QPS (No Data)')
+            axes[0, 0].set_title('CPU Usage vs QPS (No Data)', 
+                                fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
         # 2. 内存使用率 vs QPS
-        if len(df) > 0 and 'mem_usage' in df.columns and qps_available and 'current_qps' in df.columns:
+        if 'current_qps' in df.columns and 'mem_usage' in df.columns:
             axes[0, 1].plot(df['current_qps'], df['mem_usage'], 'go-', alpha=0.7, markersize=4)
             axes[0, 1].axhline(y=90, color='red', linestyle='--', alpha=0.8, label='Warning (90%)')
-            axes[0, 1].set_title('Memory Usage vs QPS')
-            axes[0, 1].set_xlabel('QPS')
-            axes[0, 1].set_ylabel('Memory %')
+            axes[0, 1].set_title('Memory Usage vs QPS', 
+                                fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[0, 1].set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[0, 1].set_ylabel('Memory %', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             axes[0, 1].legend()
             axes[0, 1].grid(True, alpha=0.3)
         else:
             axes[0, 1].text(0.5, 0.5, 'QPS Data Not Available\nfor Memory Analysis', ha='center', va='center',
                            transform=axes[0, 1].transAxes, fontsize=12)
-            axes[0, 1].set_title('Memory Usage vs QPS (No Data)')
+            axes[0, 1].set_title('Memory Usage vs QPS (No Data)', 
+                                fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
         # 3. RPC延迟 vs QPS
-        if len(df) > 0 and 'rpc_latency_ms' in df.columns and qps_available and 'current_qps' in df.columns and df['rpc_latency_ms'].notna().any():
+        if 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
             axes[1, 0].plot(df['current_qps'], df['rpc_latency_ms'], 'ro-', alpha=0.7, markersize=4)
             axes[1, 0].axhline(y=1000, color='orange', linestyle='--', alpha=0.8, label='High Latency (1s)')
-            axes[1, 0].set_title('RPC Latency vs QPS')
-            axes[1, 0].set_xlabel('QPS')
-            axes[1, 0].set_ylabel('Latency (ms)')
+            axes[1, 0].set_title('RPC Latency vs QPS', 
+                                fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[1, 0].set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[1, 0].set_ylabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             axes[1, 0].legend()
             axes[1, 0].grid(True, alpha=0.3)
         else:
             axes[1, 0].text(0.5, 0.5, 'QPS Data Not Available\nfor RPC Latency Analysis', ha='center', va='center',
                            transform=axes[1, 0].transAxes, fontsize=12)
-            axes[1, 0].set_title('RPC Latency vs QPS (No Data)')
+            axes[1, 0].set_title('RPC Latency vs QPS (No Data)', 
+                                fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
-        # 4. RPC延迟分布（移动到第2行第0列）
-        if len(df) > 0 and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
+        # 4. RPC延迟分布
+        if 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
             axes[2, 0].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
             if 'rpc_latency_ms' in df.columns:
                 mean_latency = df['rpc_latency_ms'].mean()
@@ -376,9 +371,9 @@ class ComprehensiveAnalyzer:
                                    label=f'Mean: {mean_latency:.1f}ms')
                 axes[2, 0].axvline(p95_latency, color='orange', linestyle='--',
                                    label=f'P95: {p95_latency:.1f}ms')
-            axes[2, 0].set_title('RPC Latency Distribution')
-            axes[2, 0].set_xlabel('Latency (ms)')
-            axes[2, 0].set_ylabel('Frequency')
+            axes[2, 0].set_title('RPC Latency Distribution', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[2, 0].set_xlabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[2, 0].set_ylabel('Frequency', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             axes[2, 0].legend()
             axes[2, 0].grid(True, alpha=0.3)
 
@@ -387,7 +382,7 @@ class ComprehensiveAnalyzer:
             # 过滤有效QPS数据 (基于验证的40个有效数据点)
             valid_qps_data = df[(df['current_qps'] > 0) & (df['rpc_latency_ms'].notna())].copy()
             
-            if len(valid_qps_data) >= 5:  # 确保有足够数据点
+            if len(valid_qps_data) >= 2:  # 确保有足够数据点
                 # 按QPS分组计算平均延迟
                 qps_groups = valid_qps_data.groupby('current_qps').agg({
                     'rpc_latency_ms': ['mean', 'std', 'count']
@@ -407,9 +402,9 @@ class ComprehensiveAnalyzer:
                                        (qps, latency), textcoords="offset points",
                                        xytext=(0,15), ha='center', fontsize=10, fontweight='bold')
                 
-                axes[2, 1].set_title('QPS vs Latency Performance Analysis')
-                axes[2, 1].set_xlabel('QPS (Queries Per Second)')
-                axes[2, 1].set_ylabel('Average RPC Latency (ms)')
+                axes[2, 1].set_title('QPS vs Latency Performance Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+                axes[2, 1].set_xlabel('QPS (Queries Per Second)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                axes[2, 1].set_ylabel('Average RPC Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 axes[2, 1].grid(True, alpha=0.3)
                 axes[2, 1].set_ylim(bottom=0)
                 
@@ -426,18 +421,14 @@ class ComprehensiveAnalyzer:
             else:
                 axes[2, 1].text(0.5, 0.5, f'Insufficient QPS Data\n({len(valid_qps_data)} valid points)',
                                ha='center', va='center', transform=axes[2, 1].transAxes, fontsize=12)
-                axes[2, 1].set_title('QPS Performance Analysis (Insufficient Data)')
+                axes[2, 1].set_title('QPS Performance Analysis (Insufficient Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         else:
             axes[2, 1].text(0.5, 0.5, 'QPS Data Not Available\nfor Performance Analysis',
                            ha='center', va='center', transform=axes[2, 1].transAxes, fontsize=12)
-            axes[2, 1].set_title('QPS Performance Analysis (No Data)')
+            axes[2, 1].set_title('QPS Performance Analysis (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
         # 使用统一样式应用布局
         UnifiedChartStyle.apply_layout('auto')
-        
-        # 调整主标题位置
-        fig.suptitle('Comprehensive Performance Analysis', 
-                     fontsize=16, fontweight='bold', y=0.98)
         
         # 保存图表 - 使用文件管理器，同时创建当前版本和备份
         chart_file = self.file_manager.save_chart_with_backup('comprehensive_analysis_charts', plt)

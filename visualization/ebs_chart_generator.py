@@ -20,9 +20,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.insert(0, project_root)
 
-from visualization.chart_style_config import UnifiedChartStyle
+from visualization.chart_style_config import UnifiedChartStyle, load_framework_config, create_chart_title
 from visualization.device_manager import DeviceManager
-from visualization.performance_visualizer import load_framework_config, create_chart_title
 
 class EBSChartGenerator:
     # 统一的EBS图表文件命名规范
@@ -104,6 +103,55 @@ class EBSChartGenerator:
         # 使用DeviceManager统一管理字段映射
         self.device_manager = DeviceManager(self.df)
         self.field_mapping = self.device_manager.build_field_mapping()
+        
+        # 🔧 修复: 动态重新计算 aws_standard_iops（修正旧数据）
+        self._recalculate_aws_standard_metrics()
+    
+    def _recalculate_aws_standard_metrics(self):
+        """重新计算AWS标准指标（修正旧的线性放大逻辑）"""
+        # 修正 DATA 设备的 aws_standard_iops
+        data_total_iops_field = self.get_mapped_field('data_total_iops')
+        data_rkb_field = self.get_mapped_field('data_rkb_s')
+        data_wkb_field = self.get_mapped_field('data_wkb_s')
+        data_aws_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        data_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
+        data_aws_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
+        
+        if all([data_total_iops_field, data_rkb_field, data_wkb_field, data_aws_iops_field]):
+            # 计算平均 IO 大小
+            total_throughput_kbs = self.df[data_rkb_field] + self.df[data_wkb_field]
+            avg_io_kib = total_throughput_kbs / self.df[data_total_iops_field].replace(0, 1)
+            
+            # 应用修正后的转换逻辑: 当 avg_io > 16 KiB 时不放大
+            self.df[data_aws_iops_field] = self.df[data_total_iops_field].where(
+                avg_io_kib > 16,
+                self.df[data_total_iops_field] * (avg_io_kib / 16)
+            )
+            
+            # Throughput 不需要转换
+            if data_throughput_field and data_aws_throughput_field:
+                self.df[data_aws_throughput_field] = self.df[data_throughput_field]
+        
+        # 修正 ACCOUNTS 设备的 aws_standard_iops
+        if self.device_manager.is_accounts_configured():
+            accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
+            accounts_rkb_field = self.get_mapped_field('accounts_rkb_s')
+            accounts_wkb_field = self.get_mapped_field('accounts_wkb_s')
+            accounts_aws_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
+            accounts_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
+            accounts_aws_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
+            
+            if all([accounts_total_iops_field, accounts_rkb_field, accounts_wkb_field, accounts_aws_iops_field]):
+                total_throughput_kbs = self.df[accounts_rkb_field] + self.df[accounts_wkb_field]
+                avg_io_kib = total_throughput_kbs / self.df[accounts_total_iops_field].replace(0, 1)
+                
+                self.df[accounts_aws_iops_field] = self.df[accounts_total_iops_field].where(
+                    avg_io_kib > 16,
+                    self.df[accounts_total_iops_field] * (avg_io_kib / 16)
+                )
+                
+                if accounts_throughput_field and accounts_aws_throughput_field:
+                    self.df[accounts_aws_throughput_field] = self.df[accounts_throughput_field]
     
     def get_mapped_field(self, field_name):
         """获取映射后的实际字段名 - 委托给DeviceManager"""
@@ -167,59 +215,63 @@ class EBSChartGenerator:
         return True
     
     def _create_aws_capacity_analysis(self):
-        """AWS容量规划分析 - 多维度专业分析"""
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+        """AWS容量规划分析 - 多维度专业分析（3×2对称布局）"""
+        fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
         fig.suptitle('AWS EBS Capacity Planning Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         # 检查设备配置
         accounts_configured = self.device_manager.is_accounts_configured()
         
-        # 1. AWS标准IOPS利用率分析 - 支持双设备
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
-        if data_iops_field and data_iops_field in self.df.columns:
-            utilization = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(0, 100)
-            ax1.plot(self.df['timestamp'], utilization, label='DATA IOPS Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
+        # 1. 实际IOPS利用率分析 - 用于容量规划决策
+        data_total_iops_field = self.get_mapped_field('data_total_iops')
+        if data_total_iops_field and data_total_iops_field in self.df.columns:
+            # 使用实际IOPS（非AWS标准转换）计算利用率
+            utilization = (self.df[data_total_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
+            ax1.plot(self.df['timestamp'], utilization, label='DATA Actual IOPS Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             
             # ACCOUNTS设备IOPS利用率
             if accounts_configured:
-                accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
-                if accounts_iops_field and accounts_iops_field in self.df.columns:
-                    accounts_utilization = (self.df[accounts_iops_field] / self.accounts_baseline_iops * 100).clip(0, 100)
-                    ax1.plot(self.df['timestamp'], accounts_utilization, label='ACCOUNTS IOPS Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
+                accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
+                if accounts_total_iops_field and accounts_total_iops_field in self.df.columns:
+                    accounts_utilization = (self.df[accounts_total_iops_field] / self.accounts_baseline_iops * 100).clip(lower=0)
+                    ax1.plot(self.df['timestamp'], accounts_utilization, label='ACCOUNTS Actual IOPS Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
             
             ax1.axhline(y=self.ebs_iops_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
                        label=f'Critical: {self.ebs_iops_threshold}%')
-            ax1.axhline(y=70, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.7, label='Warning: 70%')
-            ax1.set_title('AWS Standard IOPS Capacity Utilization')
-            ax1.set_ylabel('Utilization (%)')
-            ax1.legend()
+            ax1.axhline(y=self.ebs_iops_threshold * 0.8, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
+                       label=f'Warning: {self.ebs_iops_threshold * 0.8:.0f}%')
+            ax1.set_title('Actual IOPS Capacity Utilization (for Capacity Planning)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            ax1.set_ylabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
             ax1.grid(True, alpha=0.3)
         
-        # 2. AWS标准Throughput利用率分析 - 支持双设备
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
-        if data_throughput_field and data_throughput_field in self.df.columns:
-            throughput_util = (self.df[data_throughput_field] / self.data_baseline_throughput * 100).clip(0, 100)
-            ax2.plot(self.df['timestamp'], throughput_util, label='DATA Throughput Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
+        # 2. 实际Throughput利用率分析 - 用于容量规划决策
+        data_total_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
+        if data_total_throughput_field and data_total_throughput_field in self.df.columns:
+            # 使用实际Throughput（非AWS标准转换）计算利用率
+            throughput_util = (self.df[data_total_throughput_field] / self.data_baseline_throughput * 100).clip(lower=0)
+            ax2.plot(self.df['timestamp'], throughput_util, label='DATA Actual Throughput Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
             
             # ACCOUNTS设备Throughput利用率
             if accounts_configured:
-                accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
-                if accounts_throughput_field and accounts_throughput_field in self.df.columns:
-                    accounts_tp_util = (self.df[accounts_throughput_field] / self.accounts_baseline_throughput * 100).clip(0, 100)
-                    ax2.plot(self.df['timestamp'], accounts_tp_util, label='ACCOUNTS Throughput Utilization', linewidth=2, color='purple')
+                accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
+                if accounts_total_throughput_field and accounts_total_throughput_field in self.df.columns:
+                    accounts_tp_util = (self.df[accounts_total_throughput_field] / self.accounts_baseline_throughput * 100).clip(lower=0)
+                    ax2.plot(self.df['timestamp'], accounts_tp_util, label='ACCOUNTS Actual Throughput Utilization', linewidth=2, color='purple')
             
             ax2.axhline(y=self.ebs_throughput_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
                        label=f'Critical: {self.ebs_throughput_threshold}%')
-            ax2.axhline(y=70, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.7, label='Warning: 70%')
-            ax2.set_title('AWS Standard Throughput Capacity Utilization')
-            ax2.set_ylabel('Utilization (%)')
-            ax2.legend()
+            ax2.axhline(y=self.ebs_throughput_threshold * 0.8, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
+                       label=f'Warning: {self.ebs_throughput_threshold * 0.8:.0f}%')
+            ax2.set_title('Actual Throughput Capacity Utilization (for Capacity Planning)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            ax2.set_ylabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
             ax2.grid(True, alpha=0.3)
         
-        # 3. 容量规划预测（基于趋势分析）- 支持双设备
-        if data_iops_field and len(self.df) > 10:
+        # 3. IOPS容量规划预测（基于趋势分析）- 使用实际IOPS
+        if data_total_iops_field and len(self.df) > 10:
             # DATA设备IOPS趋势
-            iops_values = self.df[data_iops_field].rolling(window=10).mean()
+            iops_values = self.df[data_total_iops_field].rolling(window=10).mean()
             time_numeric = np.arange(len(iops_values))
             
             # 简单线性回归预测
@@ -228,58 +280,123 @@ class EBSChartGenerator:
                 coeffs = np.polyfit(time_numeric[valid_mask], iops_values[valid_mask], 1)
                 trend_line = np.polyval(coeffs, time_numeric)
                 
-                ax3.plot(self.df['timestamp'], iops_values, label='DATA IOPS Trend (10-min avg)', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
+                ax3.plot(self.df['timestamp'], iops_values, label='DATA Actual IOPS Trend (10-min avg)', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
                 ax3.plot(self.df['timestamp'], trend_line, label='DATA Linear Trend', linewidth=2, linestyle='--', color=UnifiedChartStyle.COLORS["critical"])
-                ax3.axhline(y=self.data_baseline_iops, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle=':', alpha=0.7, 
+                ax3.axhline(y=self.data_baseline_iops, color=UnifiedChartStyle.COLORS["warning"], linestyle=':', alpha=0.7, 
                            label=f'DATA Baseline: {self.data_baseline_iops}')
                 
                 # ACCOUNTS设备IOPS趋势
                 if accounts_configured:
-                    accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
-                    if accounts_iops_field and accounts_iops_field in self.df.columns:
-                        accounts_iops_values = self.df[accounts_iops_field].rolling(window=10).mean()
+                    accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
+                    if accounts_total_iops_field and accounts_total_iops_field in self.df.columns:
+                        accounts_iops_values = self.df[accounts_total_iops_field].rolling(window=10).mean()
                         accounts_valid_mask = ~np.isnan(accounts_iops_values)
                         if accounts_valid_mask.sum() > 5:
                             accounts_coeffs = np.polyfit(time_numeric[accounts_valid_mask], accounts_iops_values[accounts_valid_mask], 1)
                             accounts_trend_line = np.polyval(accounts_coeffs, time_numeric)
                             
-                            ax3.plot(self.df['timestamp'], accounts_iops_values, label='ACCOUNTS IOPS Trend (10-min avg)', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
+                            ax3.plot(self.df['timestamp'], accounts_iops_values, label='ACCOUNTS Actual IOPS Trend (10-min avg)', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
                             ax3.plot(self.df['timestamp'], accounts_trend_line, label='ACCOUNTS Linear Trend', linewidth=2, linestyle='--', color='purple')
                             ax3.axhline(y=self.accounts_baseline_iops, color='cyan', linestyle=':', alpha=0.7, 
                                        label=f'ACCOUNTS Baseline: {self.accounts_baseline_iops}')
                 
-                ax3.set_title('IOPS Capacity Planning Forecast (DATA + ACCOUNTS)')
-                ax3.set_ylabel('AWS Standard IOPS')
+                ax3.set_title('Actual IOPS Capacity Planning Forecast', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+                ax3.set_ylabel('Actual IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"], ncol=2)
                 ax3.grid(True, alpha=0.3)
         
-        # 4. 容量利用率分布分析 - 支持双设备
-        if data_iops_field:
-            data_utilization = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(0, 100)
-            ax4.hist(data_utilization, bins=20, alpha=0.7, color='skyblue', edgecolor='black', label='DATA Device')
-            ax4.axvline(x=data_utilization.mean(), color=UnifiedChartStyle.COLORS["data_primary"], linestyle='--', 
+        # 4. Throughput容量规划预测（基于趋势分析）- 使用实际Throughput
+        if data_total_throughput_field and len(self.df) > 10:
+            # DATA设备Throughput趋势
+            throughput_values = self.df[data_total_throughput_field].rolling(window=10).mean()
+            time_numeric = np.arange(len(throughput_values))
+            
+            # 简单线性回归预测
+            valid_mask = ~np.isnan(throughput_values)
+            if valid_mask.sum() > 5:
+                coeffs = np.polyfit(time_numeric[valid_mask], throughput_values[valid_mask], 1)
+                trend_line = np.polyval(coeffs, time_numeric)
+                
+                ax4.plot(self.df['timestamp'], throughput_values, label='DATA Throughput Trend (10-min avg)', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
+                ax4.plot(self.df['timestamp'], trend_line, label='DATA Linear Trend', linewidth=2, linestyle='--', color=UnifiedChartStyle.COLORS["critical"])
+                ax4.axhline(y=self.data_baseline_throughput, color=UnifiedChartStyle.COLORS["warning"], linestyle=':', alpha=0.7, 
+                           label=f'DATA Baseline: {self.data_baseline_throughput} MiB/s')
+                
+                # ACCOUNTS设备Throughput趋势
+                if accounts_configured:
+                    accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
+                    if accounts_throughput_field and accounts_throughput_field in self.df.columns:
+                        accounts_tp_values = self.df[accounts_total_throughput_field].rolling(window=10).mean()
+                        accounts_valid_mask = ~np.isnan(accounts_tp_values)
+                        if accounts_valid_mask.sum() > 5:
+                            accounts_coeffs = np.polyfit(time_numeric[accounts_valid_mask], accounts_tp_values[accounts_valid_mask], 1)
+                            accounts_trend_line = np.polyval(accounts_coeffs, time_numeric)
+                            
+                            ax4.plot(self.df['timestamp'], accounts_tp_values, label='ACCOUNTS Throughput Trend (10-min avg)', linewidth=2, color='purple')
+                            ax4.plot(self.df['timestamp'], accounts_trend_line, label='ACCOUNTS Linear Trend', linewidth=2, linestyle='--', color='darkviolet')
+                            ax4.axhline(y=self.accounts_baseline_throughput, color='cyan', linestyle=':', alpha=0.7, 
+                                       label=f'ACCOUNTS Baseline: {self.accounts_baseline_throughput} MiB/s')
+                
+                ax4.set_title('Throughput Capacity Planning Forecast', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+                ax4.set_ylabel('AWS Standard Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax4.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"], ncol=2)
+                ax4.grid(True, alpha=0.3)
+        
+        # 5. IOPS容量利用率分布分析 - 支持双设备
+        if data_total_iops_field:
+            data_utilization = (self.df[data_total_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
+            ax5.hist(data_utilization, bins=20, alpha=0.7, color='skyblue', edgecolor='black', label='DATA Device')
+            ax5.axvline(x=data_utilization.mean(), color=UnifiedChartStyle.COLORS["data_primary"], linestyle='--', 
                        label=f'DATA Mean: {data_utilization.mean():.1f}%')
             
             # ACCOUNTS设备利用率分布
             if accounts_configured:
-                accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
-                if accounts_iops_field and accounts_iops_field in self.df.columns:
-                    accounts_utilization = (self.df[accounts_iops_field] / self.accounts_baseline_iops * 100).clip(0, 100)
-                    ax4.hist(accounts_utilization, bins=20, alpha=0.7, color='lightcoral', edgecolor='black', label='ACCOUNTS Device')
-                    ax4.axvline(x=accounts_utilization.mean(), color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
+                if accounts_total_iops_field and accounts_total_iops_field in self.df.columns:
+                    accounts_utilization = (self.df[accounts_total_iops_field] / self.accounts_baseline_iops * 100).clip(lower=0)
+                    ax5.hist(accounts_utilization, bins=20, alpha=0.7, color='lightcoral', edgecolor='black', label='ACCOUNTS Device')
+                    ax5.axvline(x=accounts_utilization.mean(), color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', 
                                label=f'ACCOUNTS Mean: {accounts_utilization.mean():.1f}%')
             
-            ax4.axvline(x=self.ebs_iops_threshold, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', 
+            ax5.axvline(x=self.ebs_iops_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
                        label=f'Threshold: {self.ebs_iops_threshold}%')
-            ax4.set_title('IOPS Utilization Distribution (DATA + ACCOUNTS)')
-            ax4.set_xlabel('Utilization (%)')
-            ax4.set_ylabel('Frequency')
-            ax4.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
-            ax4.grid(True, alpha=0.3)
+            ax5.set_title('IOPS Utilization Distribution', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            ax5.set_xlabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax5.set_ylabel('Frequency', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax5.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
+            ax5.grid(True, alpha=0.3)
         
-        plt.tight_layout()
+        # 6. Throughput容量利用率分布分析 - 支持双设备
+        if data_total_throughput_field:
+            data_tp_utilization = (self.df[data_total_throughput_field] / self.data_baseline_throughput * 100).clip(lower=0)
+            ax6.hist(data_tp_utilization, bins=20, alpha=0.7, color='lightgreen', edgecolor='black', label='DATA Device')
+            ax6.axvline(x=data_tp_utilization.mean(), color=UnifiedChartStyle.COLORS["success"], linestyle='--', 
+                       label=f'DATA Mean: {data_tp_utilization.mean():.1f}%')
+            
+            # ACCOUNTS设备Throughput利用率分布
+            if accounts_configured:
+                accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
+                if accounts_total_throughput_field and accounts_total_throughput_field in self.df.columns:
+                    accounts_tp_utilization = (self.df[accounts_total_throughput_field] / self.accounts_baseline_throughput * 100).clip(lower=0)
+                    ax6.hist(accounts_tp_utilization, bins=20, alpha=0.7, color='plum', edgecolor='black', label='ACCOUNTS Device')
+                    ax6.axvline(x=accounts_tp_utilization.mean(), color='purple', linestyle='--', 
+                               label=f'ACCOUNTS Mean: {accounts_tp_utilization.mean():.1f}%')
+            
+            ax6.axvline(x=self.ebs_throughput_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Threshold: {self.ebs_throughput_threshold}%')
+            ax6.set_title('Throughput Utilization Distribution', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            ax6.set_xlabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax6.set_ylabel('Frequency', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax6.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
+            ax6.grid(True, alpha=0.3)
+        
+        # 统一时间轴格式（子图1-4有时间序列）- 智能格式
+        if 'timestamp' in self.df.columns:
+            UnifiedChartStyle.format_time_axis_unified([ax1, ax2, ax3, ax4], self.df['timestamp'])
+        
+        UnifiedChartStyle.apply_layout('auto')
         chart_path = os.path.join(self.output_dir, self.CHART_FILES['capacity'])
-        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         return chart_path
     
@@ -440,9 +557,9 @@ class EBSChartGenerator:
             ax4.grid(True, alpha=0.3)
             ax4.grid(True, alpha=0.3)
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         chart_path = os.path.join(self.output_dir, self.CHART_FILES['performance'])
-        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         return chart_path
     
@@ -455,36 +572,36 @@ class EBSChartGenerator:
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle('EBS Bottleneck Correlation Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
-        # 1. AWS标准利用率 vs 设备利用率关联 - 支持双设备
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        # 1. 实际利用率 vs 设备利用率关联 - 支持双设备
+        data_iops_field = self.get_mapped_field('data_total_iops')
         data_util_field = self.get_mapped_field('data_util')
         if data_iops_field and data_iops_field in self.df.columns and data_util_field and data_util_field in self.df.columns:
-            aws_iops_util = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(0, 100)
+            actual_iops_util = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
             
             # DATA设备散点图
             data_avg_await_field = self.get_mapped_field('data_avg_await')
             if data_avg_await_field and data_avg_await_field in self.df.columns:
-                scatter = ax1.scatter(aws_iops_util, self.df[data_util_field], 
+                scatter = ax1.scatter(actual_iops_util, self.df[data_util_field], 
                                     c=self.df[data_avg_await_field], cmap='YlOrRd', 
                                     alpha=0.6, s=30, label='DATA Device')
                 plt.colorbar(scatter, ax=ax1, label='Avg Latency (ms)')
             else:
-                ax1.scatter(aws_iops_util, self.df[data_util_field], alpha=0.6, s=30, label='DATA Device')
+                ax1.scatter(actual_iops_util, self.df[data_util_field], alpha=0.6, s=30, label='DATA Device')
             
             # ACCOUNTS设备散点图
             if accounts_configured:
-                accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
+                accounts_iops_field = self.get_mapped_field('accounts_total_iops')
                 accounts_util_field = self.get_mapped_field('accounts_util')
                 if accounts_iops_field and accounts_util_field and accounts_iops_field in self.df.columns and accounts_util_field in self.df.columns:
-                    accounts_aws_iops_util = (self.df[accounts_iops_field] / self.accounts_baseline_iops * 100).clip(0, 100)
-                    ax1.scatter(accounts_aws_iops_util, self.df[accounts_util_field], 
+                    accounts_actual_iops_util = (self.df[accounts_iops_field] / self.accounts_baseline_iops * 100).clip(lower=0)
+                    ax1.scatter(accounts_actual_iops_util, self.df[accounts_util_field], 
                                alpha=0.6, s=30, marker='^', color=UnifiedChartStyle.COLORS["accounts_primary"], label='ACCOUNTS Device')
             
             ax1.axhline(y=self.ebs_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
                        label=f'Device Util Threshold: {self.ebs_util_threshold}%')
             ax1.axvline(x=self.ebs_iops_threshold, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', 
                        label=f'AWS IOPS Threshold: {self.ebs_iops_threshold}%')
-            ax1.set_xlabel('AWS Standard IOPS Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
+            ax1.set_xlabel('AWS EBS IOPS Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
             ax1.set_ylabel('Device Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
             ax1.set_title('AWS IOPS vs Device Utilization', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
             ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
@@ -574,9 +691,9 @@ class EBSChartGenerator:
             ax4.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax4.grid(True, alpha=0.3)
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         chart_path = os.path.join(self.output_dir, self.CHART_FILES['correlation'])
-        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         return chart_path
     
@@ -694,9 +811,9 @@ class EBSChartGenerator:
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.5))
         ax4.set_title('Performance Summary')
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         chart_path = os.path.join(self.output_dir, self.CHART_FILES['overview'])
-        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
@@ -790,7 +907,8 @@ class EBSChartGenerator:
                     label='DATA Device Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             ax3.axhline(y=self.ebs_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
                        label=f'Critical: {self.ebs_util_threshold}%')
-            ax3.axhline(y=70, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.7, label='Warning: 70%')
+            ax3.axhline(y=self.ebs_util_threshold * 0.8, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
+                       label=f'Warning: {self.ebs_util_threshold * 0.8:.0f}%')
             
             # ACCOUNTS device overlay
             if accounts_configured:
@@ -818,7 +936,8 @@ class EBSChartGenerator:
                     label='DATA Device Average Latency', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             ax4.axhline(y=self.ebs_latency_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
                        label=f'Critical: {self.ebs_latency_threshold}ms')
-            ax4.axhline(y=20, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.7, label='Warning: 20ms')
+            ax4.axhline(y=self.ebs_latency_threshold * 0.4, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
+                       label=f'Warning: {self.ebs_latency_threshold * 0.4:.0f}ms')
             
             # ACCOUNTS device overlay
             if accounts_configured:
@@ -838,9 +957,9 @@ class EBSChartGenerator:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
             ax.tick_params(axis='x', rotation=45)
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         chart_path = os.path.join(self.output_dir, self.CHART_FILES['bottleneck'])
-        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
@@ -1008,9 +1127,9 @@ class EBSChartGenerator:
                 verticalalignment='top',
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.3))
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         chart_path = os.path.join(self.output_dir, self.CHART_FILES['comparison'])
-        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         return chart_path
     
@@ -1038,7 +1157,7 @@ class EBSChartGenerator:
         
         if data_iops_field and data_util_field and data_avg_await_field and all(self.get_mapped_field(f) in self.df.columns for f in ['data_aws_standard_iops', 'data_util', 'data_avg_await']):
             # 标准化数据到0-100范围便于比较
-            iops_normalized = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(0, 100)
+            iops_normalized = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
             util_normalized = self.df[data_util_field]
             latency_normalized = (self.df[data_avg_await_field] / self.ebs_latency_threshold * 100).clip(0, 200)
             
@@ -1174,9 +1293,9 @@ class EBSChartGenerator:
                 verticalalignment='top',
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow", alpha=0.5))
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         chart_path = os.path.join(self.output_dir, self.CHART_FILES['timeseries'])
-        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         return chart_path
     

@@ -8,6 +8,116 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import matplotlib.dates as mdates
 import os
+import subprocess
+import sys
+
+# =====================================================================
+# 框架配置工具函数
+# =====================================================================
+
+# 配置缓存 - 避免重复执行 Shell 脚本
+_config_cache = None
+_config_loaded = False
+
+def load_framework_config(force_reload=False):
+    """
+    加载框架配置 - 通过 Shell source 获取完整配置
+    
+    这是唯一正确的方式，因为：
+    1. 配置文件包含 Shell 函数、数组、算术运算等复杂语法
+    2. 需要执行动态计算（io2 吞吐量、AWS 环境检测等）
+    3. 保证与生产环境（Shell 调用 Python）的行为完全一致
+    
+    智能检测：
+    - 如果环境变量已由 Shell 加载（生产环境），直接使用
+    - 如果环境变量未加载（测试环境），执行 Shell 脚本
+    
+    参数:
+        force_reload: 强制重新加载配置（默认 False，使用缓存）
+    
+    返回:
+        dict: 配置字典
+    """
+    global _config_cache, _config_loaded
+    
+    # 使用缓存（除非强制重新加载）
+    if _config_loaded and not force_reload:
+        return _config_cache or {}
+    
+    # 检测关键环境变量是否已加载（由 Shell 预先加载）
+    # 如果这些变量存在，说明 Shell 已经 source 了 config_loader.sh
+    key_vars = [
+        'DATA_VOL_MAX_IOPS',
+        'BOTTLENECK_CPU_THRESHOLD',
+        'BASE_DATA_DIR',
+        'CONFIG_ALREADY_LOADED'  # Shell 脚本设置的标记
+    ]
+    
+    already_loaded = any(os.getenv(var) for var in key_vars)
+    
+    if already_loaded and not force_reload:
+        # 环境变量已由 Shell 加载，直接使用
+        config = {k: v for k, v in os.environ.items()}
+        _config_cache = config
+        _config_loaded = True
+        return config
+    
+    # 环境变量未加载，需要执行 Shell 脚本
+    try:
+        # 获取配置文件路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        config_dir = os.path.join(current_dir, '..', 'config')
+        config_loader = os.path.join(config_dir, 'config_loader.sh')
+        
+        if not os.path.exists(config_loader):
+            print(f"⚠️  配置文件不存在: {config_loader}", file=sys.stderr)
+            _config_loaded = True
+            _config_cache = {}
+            return {}
+        
+        # 通过 Shell source 加载配置并导出环境变量
+        # 使用 env 命令获取所有环境变量
+        script = f'source "{config_loader}" 2>/dev/null && env'
+        
+        result = subprocess.run(
+            ['bash', '-c', script],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(config_loader)
+        )
+        
+        if result.returncode != 0:
+            print(f"⚠️  配置加载失败: {result.stderr}", file=sys.stderr)
+            _config_loaded = True
+            _config_cache = {}
+            return {}
+        
+        # 解析环境变量
+        config = {}
+        for line in result.stdout.splitlines():
+            if '=' in line:
+                key, value = line.split('=', 1)
+                config[key] = value
+                os.environ[key] = value
+        
+        # 缓存配置
+        _config_cache = config
+        _config_loaded = True
+        
+        return config
+        
+    except Exception as e:
+        print(f"⚠️  配置加载异常: {e}", file=sys.stderr)
+        _config_loaded = True
+        _config_cache = {}
+        return {}
+
+def create_chart_title(base_title, accounts_configured):
+    """创建统一的图表标题"""
+    if accounts_configured:
+        return f"{base_title} - DATA & ACCOUNTS Devices"
+    else:
+        return f"{base_title} - DATA Device Only"
 
 class UnifiedChartStyle:
     """统一图表样式配置"""
@@ -444,6 +554,7 @@ class UnifiedChartStyle:
         使用示例:
             # 方式1: 自动布局（推荐）
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle('Chart Title', fontsize=16, fontweight='bold')
             # ... 绘制图表 ...
             UnifiedChartStyle.apply_layout('auto')  # 替代 plt.tight_layout()
             plt.savefig('chart.png')
@@ -455,8 +566,9 @@ class UnifiedChartStyle:
             plt.savefig('chart.png')
         """
         if layout_type == 'auto':
-            # 使用 tight_layout 自动优化
-            plt.tight_layout()
+            # 使用 tight_layout 自动优化，并为 suptitle 预留空间
+            # rect=[left, bottom, right, top] - top < 1.0 为主标题预留空间
+            plt.tight_layout(rect=[0, 0, 1, 0.98])
         elif layout_type in cls.SUBPLOT_LAYOUTS:
             # 使用预定义的布局参数
             layout = cls.SUBPLOT_LAYOUTS[layout_type]
@@ -511,12 +623,34 @@ class UnifiedChartStyle:
             cls.apply_axis_style(ax, title)
     
     @classmethod
-    def format_time_axis_unified(cls, axes_list):
-        """统一时间轴格式化 - 解决问题1的时间重叠"""
+    def format_time_axis_unified(cls, axes_list, df_timestamp=None):
+        """
+        统一时间轴格式化 - 智能选择格式
+        
+        Args:
+            axes_list: matplotlib axes列表
+            df_timestamp: pandas datetime series (可选，用于智能格式选择)
+        """
+        if df_timestamp is not None and len(df_timestamp) > 0:
+            # 智能格式：根据时间跨度自动选择
+            time_span = (df_timestamp.iloc[-1] - df_timestamp.iloc[0]).total_seconds()
+            
+            if time_span < 300:  # 小于5分钟
+                date_format = '%H:%M:%S'
+            elif time_span < 3600:  # 小于1小时
+                date_format = '%H:%M'
+            elif time_span < 86400:  # 小于1天
+                date_format = '%m-%d %H:%M'
+            else:  # 大于1天
+                date_format = '%m-%d'
+        else:
+            # 默认格式
+            date_format = '%H:%M:%S'
         
         for ax in axes_list:
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter(date_format))
             ax.tick_params(axis='x', rotation=45, labelsize=cls.FONT_CONFIG['text_size'])
+            plt.setp(ax.xaxis.get_majorticklabels(), ha='right')
     
     @classmethod
     def apply_unified_text_layout(cls, ax, text_content, position='right_bottom'):

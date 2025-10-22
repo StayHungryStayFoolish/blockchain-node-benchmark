@@ -271,11 +271,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
                     # 隐藏多余的子图
                     axes[i, j].set_visible(False)
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         
         # 保存图表
         output_file = os.path.join(self.output_dir, 'pearson_correlation_analysis.png')
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         
         chart_files.append(output_file)
@@ -371,9 +371,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes)
                 ax.set_title(title, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         chart_file = os.path.join(self.output_dir, 'linear_regression_analysis.png')
-        plt.savefig(chart_file, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         
         chart_files.append(chart_file)
@@ -452,9 +452,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes)
                 ax.set_title(title, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         chart_file = os.path.join(self.output_dir, 'negative_correlation_analysis.png')
-        plt.savefig(chart_file, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         
         chart_files.append(chart_file)
@@ -611,9 +611,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
         for ax in axes.flat:
             ax.tick_params(axis='x', rotation=45)
         
-        plt.tight_layout()
+        UnifiedChartStyle.apply_layout('auto')
         chart_file = os.path.join(self.output_dir, 'performance_trend_analysis.png')
-        plt.savefig(chart_file, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         
         chart_files.append(chart_file)
@@ -771,7 +771,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # Time轴格式化
             plt.xticks(rotation=45)
-            plt.tight_layout()
+            UnifiedChartStyle.apply_layout('auto')
             
             # 保存图表
             chart_file = os.path.join(self.output_dir, 'ena_limitation_trends.png')
@@ -847,7 +847,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             # Time轴格式化
             plt.xticks(rotation=45)
-            plt.tight_layout()
+            UnifiedChartStyle.apply_layout('auto')
             
             # 保存图表
             chart_file = os.path.join(self.output_dir, 'ena_connection_capacity.png')
@@ -1111,11 +1111,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
             plt.xticks(rotation=45, ha='right')
             plt.yticks(rotation=0)
             
-            plt.tight_layout()
+            UnifiedChartStyle.apply_layout('auto')
             
             # 保存图表
             chart_file = os.path.join(self.output_dir, 'performance_correlation_heatmap.png')
-            plt.savefig(chart_file, dpi=300, bbox_inches='tight')
+            plt.savefig(chart_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
             plt.close()
             
             print(f"  ✅ Correlation heatmap: {os.path.basename(chart_file)}")

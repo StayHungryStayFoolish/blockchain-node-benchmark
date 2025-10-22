@@ -24,6 +24,7 @@ fi
 # 转换实际IOPS为AWS标准IOPS
 # 参数: actual_iops actual_avg_io_size_kib
 # 返回: AWS标准IOPS (基于16 KiB)
+# 修复逻辑: 当 avg_io > 16 KiB 时不放大，避免误判容量需求
 convert_to_aws_standard_iops() {
     local actual_iops=$1
     local actual_avg_io_size_kib=$2
@@ -38,33 +39,34 @@ convert_to_aws_standard_iops() {
         return
     fi
     
-    local aws_standard_iops=$(awk "BEGIN {printf \"%.2f\", $actual_iops * ($actual_avg_io_size_kib / $AWS_EBS_BASELINE_IO_SIZE_KIB)}")
-    echo "$aws_standard_iops"
+    # 🔧 修复: 当 avg_io > 16 KiB 时，不放大（EBS 会聚合大块 IO）
+    if (( $(awk "BEGIN {print ($actual_avg_io_size_kib > $AWS_EBS_BASELINE_IO_SIZE_KIB) ? 1 : 0}") )); then
+        # avg_io > 16 KiB: 不放大，直接返回实际 IOPS
+        echo "$actual_iops"
+    else
+        # avg_io <= 16 KiB: 按比例缩小（小块 IO 效率低）
+        local aws_standard_iops=$(awk "BEGIN {printf \"%.2f\", $actual_iops * ($actual_avg_io_size_kib / $AWS_EBS_BASELINE_IO_SIZE_KIB)}")
+        echo "$aws_standard_iops"
+    fi
 }
 
 # 转换实际throughput为AWS标准throughput
 # 参数: actual_throughput_mibs actual_avg_io_size_kib
-# 返回: AWS标准throughput (基于128 KiB)
+# 返回: AWS标准throughput (MiB/s)
+# 修复逻辑: Throughput 不需要转换，直接返回实际值
 convert_to_aws_standard_throughput() {
     local actual_throughput_mibs="$1"
     local actual_avg_io_size_kib="$2"
     
     # 输入验证
-    if [[ -z "$actual_throughput_mibs" || -z "$actual_avg_io_size_kib" ]]; then
-        echo "错误: convert_to_aws_standard_throughput需要2个参数" >&2
+    if [[ -z "$actual_throughput_mibs" ]]; then
+        echo "错误: convert_to_aws_standard_throughput需要throughput参数" >&2
         return 1
     fi
     
-    # 避免除零错误
-    if [[ $(awk "BEGIN {print ($actual_avg_io_size_kib == 0) ? 1 : 0}") -eq 1 ]]; then
-        echo "$actual_throughput_mibs"  # IO大小为0时，返回原始值
-        return 0
-    fi
-    
-    # 使用system_config.sh中定义的AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB变量
-    local aws_standard_throughput=$(awk "BEGIN {printf \"%.2f\", $actual_throughput_mibs * ($actual_avg_io_size_kib / $AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB)}")
-    
-    echo "$aws_standard_throughput"
+    # 🔧 修复: Throughput 不需要按 128 KiB 基准转换，直接返回实际值
+    # AWS EBS Throughput 配置的就是实际 MiB/s，不需要标准化
+    echo "$actual_throughput_mibs"
 }
 
 # 计算io2 Block Express自动吞吐量

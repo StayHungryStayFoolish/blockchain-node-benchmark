@@ -26,7 +26,7 @@ sys.path.insert(0, project_root)
 
 from visualization.ebs_chart_generator import EBSChartGenerator
 from visualization.device_manager import DeviceManager
-from visualization.chart_style_config import UnifiedChartStyle
+from visualization.chart_style_config import UnifiedChartStyle, load_framework_config, create_chart_title
 from visualization.advanced_chart_generator import AdvancedChartGenerator
 from utils.csv_data_processor import CSVDataProcessor
 from utils.unit_converter import UnitConverter
@@ -36,49 +36,6 @@ def get_visualization_thresholds():
     temp_df = pd.DataFrame()
     temp_manager = DeviceManager(temp_df)
     return temp_manager.get_visualization_thresholds()
-
-def read_config_file(config_path):
-    """读取配置文件并返回环境变量字典"""
-    config_vars = {}
-    try:
-        with open(config_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    # 移除行内注释和引号，处理变量替换
-                    value = value.split('#')[0].strip().strip('"\'')
-                    
-                    # 跳过包含变量替换的行（如$auto_throughput）
-                    if '$' in value:
-                        continue
-                        
-                    config_vars[key] = value
-    except FileNotFoundError:
-        pass
-    return config_vars
-
-def load_framework_config():
-    """加载框架配置 - 使用动态路径检测"""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config_dir = os.path.join(current_dir, '..', 'config')
-    
-    config_files = [
-        'user_config.sh',
-        'internal_config.sh', 
-        'system_config.sh',
-        'config_loader.sh'
-    ]
-    
-    config = {}
-    for config_file in config_files:
-        config_path = os.path.join(config_dir, config_file)
-        if os.path.exists(config_path):
-            config.update(read_config_file(config_path))
-    
-    # 更新环境变量
-    os.environ.update(config)
-    return config
 
 def format_summary_text(device_info, data_stats, accounts_stats=None):
     temp_df = pd.DataFrame()
@@ -92,12 +49,6 @@ def add_text_summary(ax, summary_text, title):
            fontsize=11, verticalalignment='top', fontfamily='monospace',
            bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
     ax.set_title(title)
-
-def create_chart_title(base_title, accounts_configured):
-    if accounts_configured:
-        return f"{base_title} - DATA & ACCOUNTS Devices"
-    else:
-        return f"{base_title} - DATA Device Only"
 
 def setup_font():
     return UnifiedChartStyle.setup_matplotlib()
@@ -250,7 +201,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         # 加载配置
         load_framework_config()
         
-        accounts_configured = DeviceManager.is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
         fig.suptitle('System Performance Overview', fontsize=16, fontweight='bold')
@@ -379,7 +330,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         # Device configuration detection
         data_configured = len([col for col in self.df.columns if col.startswith('data_')]) > 0
-        accounts_configured = DeviceManager.is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         
         if not data_configured:
             print("❌ DATA device data not found")
@@ -540,7 +491,7 @@ class PerformanceVisualizer(CSVDataProcessor):
     def create_util_threshold_analysis_chart(self):
         """Device Utilization Threshold Analysis Chart - Systematic Refactor"""
         
-        accounts_configured = DeviceManager.is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         title = 'Device Utilization Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Device Utilization Threshold Analysis - DATA Device Only'
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -660,7 +611,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 print("❌ Failed to load data for await threshold analysis")
                 return None
 
-        accounts_configured = DeviceManager.is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         title = 'Enhanced I/O Await Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Enhanced I/O Await Threshold Analysis - DATA Device Only'
         
         fig, axes = plt.subplots(2, 2, figsize=(18, 14))
@@ -917,7 +868,7 @@ Recommendations:
         fig, axes = plt.subplots(3, 2, figsize=(16, 18))
         title = 'Device Performance Comparison - DATA & ACCOUNTS' if accounts_configured else 'Device Performance Analysis - DATA Only'
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], 
-                    fontweight='bold', y=0.98)
+                    fontweight='bold')
         
         # 动态查找字段
         data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col and 'aws' not in col]
@@ -1032,7 +983,7 @@ Recommendations:
         # 子图6: Summary
         summary_lines = [
             "Device Performance Summary:",
-            "(Based on iostat raw sampling data)",
+            "(Based on iostat raw data)",
             ""
         ]
         
@@ -1099,7 +1050,7 @@ Recommendations:
             # 智能字段映射配置
             field_mapping = {
                 'monitoring_cpu': ['monitoring_cpu_percent', 'monitoring_cpu', 'monitor_cpu'],
-                'monitoring_memory': ['monitoring_mem_percent', 'monitoring_memory_percent', 'monitor_memory']
+                'monitoring_memory': ['monitoring_memory_mb', 'monitoring_mem_mb', 'monitor_memory_mb']
             }
             
             # 查找实际字段
@@ -1128,10 +1079,28 @@ Recommendations:
             
             if monitoring_cpu_field and monitoring_mem_field:
                 monitor_cpu = overhead_df[monitoring_cpu_field].mean()
-                monitor_mem = overhead_df[monitoring_mem_field].mean()
+                monitor_mem_raw = overhead_df[monitoring_mem_field].mean()
                 
-                categories = ['CPU Usage (%)', 'Memory Usage (%)']
-                monitor_values = [monitor_cpu, monitor_mem]
+                # 如果是MB单位，转换为百分比
+                if 'mb' in monitoring_mem_field.lower():
+                    system_memory_gb = overhead_df['system_memory_gb'].mean() if 'system_memory_gb' in overhead_df.columns else 739.70
+                    monitor_mem = (monitor_mem_raw / 1024 / system_memory_gb * 100)
+                else:
+                    monitor_mem = monitor_mem_raw
+                
+                # 检测 memory 数据是否有效
+                mem_data_valid = monitor_mem > 0.001
+                
+                if mem_data_valid:
+                    categories = ['CPU Usage (%)', 'Memory Usage (%)']
+                    monitor_values = [monitor_cpu, monitor_mem]
+                else:
+                    categories = ['CPU Usage (%)']
+                    monitor_values = [monitor_cpu]
+                    ax1.text(0.7, 0.5, 'Memory data\nunavailable\n(all zeros)', 
+                            transform=ax1.transAxes, ha='center', va='center',
+                            fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'],
+                            bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
                 
                 ax1.bar(categories, monitor_values, alpha=0.8, 
                        color=[UnifiedChartStyle.COLORS['warning'], UnifiedChartStyle.COLORS['info']])
@@ -1148,9 +1117,13 @@ Recommendations:
             if 'timestamp' in overhead_df.columns and monitoring_cpu_field:
                 ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_cpu_field], 
                         label='CPU Overhead', linewidth=2, color=UnifiedChartStyle.COLORS['critical'])
-                if monitoring_mem_field:
+                if monitoring_mem_field and overhead_df[monitoring_mem_field].mean() > 0:
                     ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_mem_field], 
                             label='Memory Overhead', linewidth=2, color=UnifiedChartStyle.COLORS['warning'])
+                else:
+                    ax2.text(0.7, 0.9, 'Memory: N/A', transform=ax2.transAxes,
+                            fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'],
+                            bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
                 ax2.set_ylabel('Overhead (%)', 
                               fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
@@ -1163,11 +1136,19 @@ Recommendations:
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             
             if monitoring_cpu_field and monitoring_mem_field:
-                impact_categories = ['CPU Impact', 'Memory Impact']
-                impact_values = [
-                    overhead_df[monitoring_cpu_field].mean(),
-                    overhead_df[monitoring_mem_field].mean()
-                ]
+                cpu_impact = overhead_df[monitoring_cpu_field].mean()
+                mem_impact = overhead_df[monitoring_mem_field].mean()
+                
+                if mem_impact > 0:
+                    impact_categories = ['CPU Impact', 'Memory Impact']
+                    impact_values = [cpu_impact, mem_impact]
+                else:
+                    impact_categories = ['CPU Impact']
+                    impact_values = [cpu_impact]
+                    ax3.text(0.7, 0.5, 'Memory\nN/A', transform=ax3.transAxes,
+                            ha='center', va='center',
+                            fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'],
+                            bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
                 
                 colors = [UnifiedChartStyle.COLORS['critical'] if x > 10 else UnifiedChartStyle.COLORS['warning'] if x > 5 else UnifiedChartStyle.COLORS['success'] for x in impact_values]
                 ax3.bar(impact_categories, impact_values, color=colors, alpha=0.7)
@@ -1441,7 +1422,7 @@ Data Points: {len(overhead_df)}"""
                         color='blue', linewidth=2, label=f'DATA EBS Latency ({window_size}-point avg)')
                 
                 # ACCOUNTS设备延迟
-                accounts_configured = DeviceManager.is_accounts_configured()
+                accounts_configured = DeviceManager.is_accounts_configured(self.df)
                 if accounts_configured and accounts_await_cols:
                     accounts_await_col = accounts_await_cols[0]
                     accounts_await_smooth = self.df[accounts_await_col].rolling(window=window_size, center=True).mean()
@@ -1686,7 +1667,7 @@ Data Points: {len(overhead_df)}"""
                            label=f'DATA Avg: {util_data.mean():.1f}%')
                 
                 # ACCOUNTS设备利用率分布（仅在配置时显示）
-                if DeviceManager.is_accounts_configured():
+                if DeviceManager.is_accounts_configured(self.df):
                     accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
                     if accounts_util_cols:
                         accounts_util_col = accounts_util_cols[0]
@@ -1743,7 +1724,7 @@ Data Points: {len(overhead_df)}"""
                 return None
         
         # Device configuration detection
-        accounts_configured = DeviceManager.is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         
         # Create professional figure layout
         fig, axes = plt.subplots(2, 2, figsize=(18, 14))
@@ -1803,7 +1784,7 @@ Data Points: {len(overhead_df)}"""
         if 'Memory' in system_resources:
             ax1.plot(self.df['timestamp'], system_resources['Memory'], 
                     label='Memory Usage', linewidth=2.5, 
-                    color=UnifiedChartStyle.COLORS['accounts_primary'], alpha=0.8)
+                    color=UnifiedChartStyle.COLORS['purple'], alpha=0.8)
             ax1.axhline(y=bottleneck_thresholds['Memory'], color=UnifiedChartStyle.COLORS['warning'], 
                        linestyle='--', alpha=0.8, linewidth=2, label=f'Memory Bottleneck ({bottleneck_thresholds["Memory"]}%)')
         
@@ -1868,7 +1849,7 @@ Data Points: {len(overhead_df)}"""
             # 定义专业颜色
             colors = {
                 'CPU': UnifiedChartStyle.COLORS['data_primary'],
-                'Memory': UnifiedChartStyle.COLORS['accounts_primary'],
+                'Memory': UnifiedChartStyle.COLORS['purple'],
                 'DATA_IO': '#2E86AB',
                 'ACCOUNTS_IO': '#F39C12',
                 'Compound': UnifiedChartStyle.COLORS['critical']
@@ -2060,7 +2041,6 @@ Data Points: {len(overhead_df)}"""
         
         # 应用统一布局
         UnifiedChartStyle.apply_layout('auto')
-        plt.subplots_adjust(top=0.93)  # 为主标题留空间
         
         # 保存文件
         output_file = os.path.join(self.output_dir, 'bottleneck_identification.png')
@@ -2217,7 +2197,6 @@ Data Points: {len(overhead_df)}"""
             
             # 布局调整
             UnifiedChartStyle.apply_layout('auto')
-            plt.subplots_adjust(top=0.93)
             
             # 保存文件
             output_file = os.path.join(self.output_dir, 'block_height_sync_chart.png')
