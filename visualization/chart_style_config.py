@@ -653,6 +653,28 @@ class UnifiedChartStyle:
             plt.setp(ax.xaxis.get_majorticklabels(), ha='right')
     
     @classmethod
+    def format_time_axis(cls, ax, timestamps):
+        """
+        单个 ax 的时间轴格式化 - 智能选择格式
+        
+        Args:
+            ax: matplotlib axes对象
+            timestamps: pandas datetime series
+        """
+        if len(timestamps) == 0:
+            return
+        time_range = (timestamps.max() - timestamps.min()).total_seconds()
+        if time_range < 300:  # < 5分钟
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+        elif time_range < 3600:  # < 1小时
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        elif time_range < 86400:  # < 1天
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
+        else:  # > 1天
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    @classmethod
     def apply_unified_text_layout(cls, ax, text_content, position='right_bottom'):
         """统一文本布局应用 - 解决问题21的样式不统一"""
         return cls.apply_text_style(ax, text_content, position)

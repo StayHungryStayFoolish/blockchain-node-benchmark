@@ -361,7 +361,22 @@ class ComprehensiveAnalyzer:
             axes[1, 0].set_title('RPC Latency vs QPS (No Data)', 
                                 fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
-        # 4. RPC延迟分布
+        # 4. EBS IOPS vs QPS
+        ebs_iops_fields = [col for col in df.columns if 'total_iops' in col]
+        if 'current_qps' in df.columns and ebs_iops_fields:
+            total_iops = df[ebs_iops_fields].sum(axis=1)
+            axes[1, 1].scatter(df['current_qps'], total_iops, 
+                              alpha=0.6, color=UnifiedChartStyle.COLORS['warning'])
+            axes[1, 1].set_title('EBS IOPS vs QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[1, 1].set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[1, 1].set_ylabel('Total IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[1, 1].grid(True, alpha=0.3)
+        else:
+            axes[1, 1].text(0.5, 0.5, 'EBS IOPS Data\nNot Available', ha='center', va='center',
+                           transform=axes[1, 1].transAxes, fontsize=12)
+            axes[1, 1].set_title('EBS IOPS vs QPS (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+
+        # 5. RPC延迟分布
         if 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
             axes[2, 0].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
             if 'rpc_latency_ms' in df.columns:
@@ -377,10 +392,10 @@ class ComprehensiveAnalyzer:
             axes[2, 0].legend()
             axes[2, 0].grid(True, alpha=0.3)
 
-        # 5. QPS Performance Analysis (替换Performance Cliff Detection)
+        # 6. QPS Performance Analysis (替换Performance Cliff Detection)
         if len(df) > 0 and qps_available and 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns:
-            # 过滤有效QPS数据 (基于验证的40个有效数据点)
-            valid_qps_data = df[(df['current_qps'] > 0) & (df['rpc_latency_ms'].notna())].copy()
+            # 过滤有效QPS数据 - 排除 rpc_latency_ms=0 的无效数据
+            valid_qps_data = df[(df['current_qps'] > 0) & (df['rpc_latency_ms'] > 0)].copy()
             
             if len(valid_qps_data) >= 2:  # 确保有足够数据点
                 # 按QPS分组计算平均延迟

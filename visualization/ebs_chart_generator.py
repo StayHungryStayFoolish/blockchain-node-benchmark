@@ -970,12 +970,7 @@ class EBSChartGenerator:
         """EBS AWS Standard Comparison Chart - Dual Device Support"""
         
         # Device configuration detection - 使用统一方法
-        data_configured = True
         accounts_configured = self.device_manager.is_accounts_configured()
-        
-        if not data_configured:
-            print("❌ DATA device data not found")
-            return None
         
         # Dynamic title
         title = 'EBS AWS Standard Comparison - DATA & ACCOUNTS Devices' if accounts_configured else 'EBS AWS Standard Comparison - DATA Device Only'
@@ -988,7 +983,7 @@ class EBSChartGenerator:
         data_total_iops_field = self.get_mapped_field('data_total_iops')
         if data_iops_field and data_total_iops_field and data_iops_field in self.df.columns and data_total_iops_field in self.df.columns:
             ax1.plot(self.df['timestamp'], self.df[data_total_iops_field], 
-                    label='DATA Raw IOPS', linewidth=2, alpha=0.7, color='lightblue')
+                    label='DATA Raw IOPS', linewidth=2, alpha=0.5, color=UnifiedChartStyle.COLORS["data_primary"])
             ax1.plot(self.df['timestamp'], self.df[data_iops_field], 
                     label='DATA AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             
@@ -998,29 +993,30 @@ class EBSChartGenerator:
                 accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
                 if accounts_iops_field and accounts_total_iops_field and accounts_iops_field in self.df.columns and accounts_total_iops_field in self.df.columns:
                     ax1.plot(self.df['timestamp'], self.df[accounts_total_iops_field], 
-                            label='ACCOUNTS Raw IOPS', linewidth=2, alpha=0.7, color='lightsalmon')
+                            label='ACCOUNTS Raw IOPS', linewidth=2, alpha=0.5, color=UnifiedChartStyle.COLORS["accounts_primary"])
                     ax1.plot(self.df['timestamp'], self.df[accounts_iops_field], 
                             label='ACCOUNTS AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
             
             ax1.axhline(y=self.data_baseline_iops, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
                        label=f'DATA Baseline: {self.data_baseline_iops}')
             if accounts_configured:
-                ax1.axhline(y=self.accounts_baseline_iops, color='purple', linestyle='--', alpha=0.7,
+                ax1.axhline(y=self.accounts_baseline_iops, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7,
                            label=f'ACCOUNTS Baseline: {self.accounts_baseline_iops}')
             
-            ax1.set_title('IOPS: AWS Standard vs Raw Performance')
-            ax1.set_ylabel('IOPS')
-            ax1.legend()
+            ax1.set_title('IOPS: AWS Standard vs Raw Performance', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+            ax1.set_ylabel('IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
+            ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax1.grid(True, alpha=0.3)
+            UnifiedChartStyle.format_time_axis(ax1, self.df['timestamp'])
         
         # 2. Throughput对比分析 - 支持双设备
         data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
         data_total_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
-        if data_throughput_field and data_throughput_field in self.df.columns and data_total_throughput_field and data_total_throughput_field in self.df.columns:
+        if data_throughput_field and data_total_throughput_field and data_throughput_field in self.df.columns and data_total_throughput_field in self.df.columns:
             ax2.plot(self.df['timestamp'], self.df[data_total_throughput_field], 
-                    label='DATA Raw Throughput', linewidth=2, alpha=0.7, color='lightgreen')
+                    label='DATA Raw Throughput', linewidth=2.5, linestyle='--', alpha=0.7, color=UnifiedChartStyle.COLORS["data_primary"])
             ax2.plot(self.df['timestamp'], self.df[data_throughput_field], 
-                    label='DATA AWS Standard Throughput', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
+                    label='DATA AWS Standard Throughput', linewidth=2, linestyle='-', color=UnifiedChartStyle.COLORS["data_primary"])
             
             # ACCOUNTS设备Throughput对比
             if accounts_configured:
@@ -1028,47 +1024,30 @@ class EBSChartGenerator:
                 accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
                 if accounts_throughput_field and accounts_total_throughput_field and accounts_throughput_field in self.df.columns and accounts_total_throughput_field in self.df.columns:
                     ax2.plot(self.df['timestamp'], self.df[accounts_total_throughput_field], 
-                            label='ACCOUNTS Raw Throughput', linewidth=2, alpha=0.7, color='lightcoral')
+                            label='ACCOUNTS Raw Throughput', linewidth=2.5, linestyle='--', alpha=0.7, color=UnifiedChartStyle.COLORS["accounts_primary"])
                     ax2.plot(self.df['timestamp'], self.df[accounts_throughput_field], 
-                            label='ACCOUNTS AWS Standard Throughput', linewidth=2, color=UnifiedChartStyle.COLORS["critical"])
+                            label='ACCOUNTS AWS Standard Throughput', linewidth=2, linestyle='-', color=UnifiedChartStyle.COLORS["accounts_primary"])
             
             ax2.axhline(y=self.data_baseline_throughput, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
                        label=f'DATA Baseline: {self.data_baseline_throughput} MiB/s')
             if accounts_configured:
-                ax2.axhline(y=self.accounts_baseline_throughput, color='purple', linestyle='--', alpha=0.7,
+                ax2.axhline(y=self.accounts_baseline_throughput, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7,
                            label=f'ACCOUNTS Baseline: {self.accounts_baseline_throughput} MiB/s')
             
-            ax2.set_title('Throughput: AWS Standard vs Raw Performance')
-            ax2.set_ylabel('Throughput (MiB/s)')
-            ax2.legend()
+            ax2.set_title('Throughput: AWS Standard vs Raw Performance', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+            ax2.set_ylabel('Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
+            ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax2.grid(True, alpha=0.3)
+            UnifiedChartStyle.format_time_axis(ax2, self.df['timestamp'])
         
-        # 3. 转换效率分析（AWS标准化的影响）
-        if all(col in self.df.columns for col in ['data_aws_standard_iops', 'data_total_iops']):
-            # 计算转换比率
-            conversion_ratio = np.where(self.df[data_total_iops_field] > 0,
-                                      self.df[data_iops_field] / self.df[data_total_iops_field],
-                                      1)
-            
-            ax3.plot(self.df['timestamp'], conversion_ratio, 
-                    label='AWS/Raw IOPS Ratio', linewidth=2, color='purple')
-            ax3.axhline(y=1.0, color='gray', linestyle='--', alpha=0.7, label='1:1 Ratio')
-            ax3.axhline(y=conversion_ratio.mean(), color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.7,
-                       label=f'Average: {conversion_ratio.mean():.2f}')
-            
-            ax3.set_title('AWS Standardization Impact (Conversion Ratio)')
-            ax3.set_ylabel('AWS Standard / Raw IOPS')
-            ax3.legend()
-            ax3.grid(True, alpha=0.3)
-        
-        # 3. Performance Efficiency Analysis (Left Bottom - axes[1,0])
+        # 3. Performance Efficiency Analysis
         data_iops_field = self.get_mapped_field('data_aws_standard_iops')
         data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
         
         if data_iops_field and data_throughput_field and all(field in self.df.columns for field in [data_iops_field, data_throughput_field]):
             # Calculate efficiency ratio (MiB/s per IOPS)
-            efficiency = self.df[data_throughput_field] / (self.df[data_iops_field] + 1)  # +1 to avoid division by zero
-            ax3.plot(self.df['timestamp'], efficiency, label='DATA Device Efficiency (MiB/IOPS)', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
+            efficiency = self.df[data_throughput_field] / (self.df[data_iops_field] + 1)
+            ax3.plot(self.df['timestamp'], efficiency, label='DATA Device Efficiency', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             
             # ACCOUNTS device efficiency
             if accounts_configured:
@@ -1077,57 +1056,67 @@ class EBSChartGenerator:
                 if all(field and field in self.df.columns for field in [accounts_iops_field, accounts_throughput_field]):
                     accounts_efficiency = self.df[accounts_throughput_field] / (self.df[accounts_iops_field] + 1)
                     ax3.plot(self.df['timestamp'], accounts_efficiency, 
-                            label='ACCOUNTS Device Efficiency (MiB/IOPS)', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
+                            label='ACCOUNTS Device Efficiency', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
             
-            ax3.set_title('Performance Efficiency Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"], fontweight='bold', pad=15)
-            ax3.set_ylabel('Throughput per IOPS (MiB/IOPS)', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"], fontweight='bold')
-            ax3.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"], fontweight='bold')
-            ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"], frameon=True, fancybox=True, shadow=True)
+            ax3.set_title('Performance Efficiency Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+            ax3.set_ylabel('Throughput per IOPS (MiB/IOPS)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
+            ax3.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
+            ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax3.grid(True, alpha=0.3)
+            UnifiedChartStyle.format_time_axis(ax3, self.df['timestamp'])
         
-        # 4. Enhanced Capacity Utilization Summary
-        ax4.axis('off')
-        comparison_text = "AWS Standard vs Raw Comparison:\n\n"
+        # 4. Summary
+        summary_lines = ["AWS Standard vs Raw Comparison:", ""]
         
-        if data_iops_field and data_total_iops_field and all(self.get_mapped_field(f) in self.df.columns for f in ['data_aws_standard_iops', 'data_total_iops']):
+        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        data_total_iops_field = self.get_mapped_field('data_total_iops')
+        if data_iops_field and data_total_iops_field and all(f in self.df.columns for f in [data_iops_field, data_total_iops_field]):
             raw_mean = self.df[data_total_iops_field].mean()
             aws_mean = self.df[data_iops_field].mean()
             iops_diff_pct = ((aws_mean - raw_mean) / raw_mean * 100) if raw_mean > 0 else 0
             
-            comparison_text += f"IOPS Analysis:\n"
-            comparison_text += f"  Raw Average: {raw_mean:.1f}\n"
-            comparison_text += f"  AWS Standard Average: {aws_mean:.1f}\n"
-            comparison_text += f"  Difference: {iops_diff_pct:+.1f}%\n\n"
+            summary_lines.extend([
+                "IOPS Analysis:",
+                f"  Raw Average:          {raw_mean:.1f}",
+                f"  AWS Standard Average: {aws_mean:.1f}",
+                f"  Difference:           {iops_diff_pct:+.1f}%",
+                ""
+            ])
         
-        if data_throughput_field and data_total_throughput_field and all(self.get_mapped_field(f) in self.df.columns for f in ['data_aws_standard_throughput_mibs', 'data_total_throughput_mibs']):
+        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
+        data_total_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
+        if data_throughput_field and data_total_throughput_field and all(f in self.df.columns for f in [data_throughput_field, data_total_throughput_field]):
             raw_tp_mean = self.df[data_total_throughput_field].mean()
             aws_tp_mean = self.df[data_throughput_field].mean()
             tp_diff_pct = ((aws_tp_mean - raw_tp_mean) / raw_tp_mean * 100) if raw_tp_mean > 0 else 0
             
-            comparison_text += f"Throughput Analysis:\n"
-            comparison_text += f"  Raw Average: {raw_tp_mean:.1f} MiB/s\n"
-            comparison_text += f"  AWS Standard Average: {aws_tp_mean:.1f} MiB/s\n"
-            comparison_text += f"  Difference: {tp_diff_pct:+.1f}%\n\n"
+            summary_lines.extend([
+                "Throughput Analysis:",
+                f"  Raw Average:          {raw_tp_mean:.1f} MiB/s",
+                f"  AWS Standard Average: {aws_tp_mean:.1f} MiB/s",
+                f"  Difference:           {tp_diff_pct:+.1f}%",
+                ""
+            ])
         
         # 基准线利用率对比
         data_iops_field = self.get_mapped_field('data_aws_standard_iops')
         if data_iops_field and data_iops_field in self.df.columns:
             aws_utilization = (self.df[data_iops_field] / self.data_baseline_iops * 100).mean()
-            comparison_text += f"AWS Baseline Utilization:\n"
-            comparison_text += f"  Average: {aws_utilization:.1f}%\n"
+            summary_lines.extend([
+                "AWS Baseline Utilization:",
+                f"  Average: {aws_utilization:.1f}%"
+            ])
             
             if aws_utilization > 80:
-                comparison_text += f"  Status: [HIGH] High utilization\n"
+                summary_lines.append("  Status: [HIGH] High utilization")
             elif aws_utilization > 60:
-                comparison_text += f"  Status: [MOD] Moderate utilization\n"
+                summary_lines.append("  Status: [MOD] Moderate utilization")
             else:
-                comparison_text += f"  Status: [LOW] Low utilization\n"
+                summary_lines.append("  Status: [LOW] Low utilization")
         
-        ax4.text(0.05, 0.95, comparison_text, transform=ax4.transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"], 
-                verticalalignment='top',
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.3))
+        UnifiedChartStyle.add_text_summary(ax4, "\n".join(summary_lines), "Comparison Summary")
         
-        UnifiedChartStyle.apply_layout('auto')
+        UnifiedChartStyle.apply_layout(fig, 'auto')
         chart_path = os.path.join(self.output_dir, self.CHART_FILES['comparison'])
         plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()

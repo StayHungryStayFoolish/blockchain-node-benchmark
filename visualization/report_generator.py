@@ -1101,6 +1101,24 @@ class ReportGenerator:
                         f'{val:.2f}\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             
             # 子图3: Monitoring I/O Impact
+            # 计算 I/O 开销百分比 - 使用 DeviceManager 动态获取字段
+            device_manager = DeviceManager(perf_df) if not perf_df.empty else None
+            data_total_iops = 0
+            accounts_total_iops = 0
+            
+            if device_manager:
+                data_iops_field = device_manager.get_mapped_field('data_total_iops')
+                if data_iops_field and data_iops_field in perf_df.columns:
+                    data_total_iops = perf_df[data_iops_field].mean()
+                
+                if device_manager.is_accounts_configured():
+                    accounts_iops_field = device_manager.get_mapped_field('accounts_total_iops')
+                    if accounts_iops_field and accounts_iops_field in perf_df.columns:
+                        accounts_total_iops = perf_df[accounts_iops_field].mean()
+            
+            total_system_iops = data_total_iops + accounts_total_iops
+            io_overhead_pct = (monitoring_iops / total_system_iops * 100) if total_system_iops > 0 else 0
+            
             if monitoring_iops > 0.01 or monitoring_throughput > 0.01:
                 io_categories = ['IOPS/sec', 'Throughput\n(MiB/s)']
                 io_values = [monitoring_iops, monitoring_throughput]

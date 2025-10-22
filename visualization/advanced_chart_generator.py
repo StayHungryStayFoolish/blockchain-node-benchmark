@@ -81,6 +81,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
         except:
             self.unit_converter = None
         
+        # Initialize device_manager (will be set after data is loaded)
+        self.device_manager = None
+        
         # Set chart style - 使用统一样式配置
         UnifiedChartStyle.setup_matplotlib()
         
@@ -123,6 +126,8 @@ class AdvancedChartGenerator(CSVDataProcessor):
             success = self.load_csv_data(self.data_file)
             if success:
                 self.clean_data()  # Clean data
+                # Initialize device_manager after data is loaded
+                self.device_manager = DeviceManager(self.df)
                 logger.info(f"✅ Data loaded successfully: {len(self.df)} rows")
                 self.print_field_info()  # 打印字段信息用于调试
             return success
@@ -162,37 +167,45 @@ class AdvancedChartGenerator(CSVDataProcessor):
         print("📊 Generating Pearson correlation charts...")
         chart_files = []
         
-        # Check Device configuration
-        data_configured = self._check_device_configured('data')
-        accounts_configured = self._check_device_configured('accounts')
+        # Check Device configuration - 使用统一方法
+        accounts_configured = self.device_manager.is_accounts_configured()
         
-        # Use safe field access method
-        cpu_iowait_field = self.get_field_name_safe('cpu_iowait')
-        if not cpu_iowait_field:
+        # Use device_manager for field access
+        cpu_iowait_field = 'cpu_iowait'
+        if cpu_iowait_field not in self.df.columns:
             print("⚠️ CPU I/O Wait field not found, skipping correlation analysis")
             return []
         
-        # 获取Device字段
+        # 获取Device字段 - 使用DeviceManager
         device_util_cols = []
         device_aqu_cols = []
         device_await_cols = []
         
-        if data_configured:
-            device_util_cols.extend(self._get_device_columns_safe('data', 'util'))
-            device_aqu_cols.extend(self._get_device_columns_safe('data', 'aqu_sz'))
-            device_await_cols.extend(self._get_device_columns_safe('data', 'avg_await'))
+        # DATA设备（必须存在）
+        for col in self.df.columns:
+            if col.startswith('data_') and col.endswith('_util'):
+                device_util_cols.append(col)
+            elif col.startswith('data_') and col.endswith('_aqu_sz'):
+                device_aqu_cols.append(col)
+            elif col.startswith('data_') and col.endswith('_avg_await'):
+                device_await_cols.append(col)
         
+        # ACCOUNTS设备（可选）
         if accounts_configured:
-            device_util_cols.extend(self._get_device_columns_safe('accounts', 'util'))
-            device_aqu_cols.extend(self._get_device_columns_safe('accounts', 'aqu_sz'))
-            device_await_cols.extend(self._get_device_columns_safe('accounts', 'avg_await'))
+            for col in self.df.columns:
+                if col.startswith('accounts_') and col.endswith('_util'):
+                    device_util_cols.append(col)
+                elif col.startswith('accounts_') and col.endswith('_aqu_sz'):
+                    device_aqu_cols.append(col)
+                elif col.startswith('accounts_') and col.endswith('_avg_await'):
+                    device_await_cols.append(col)
         
         # 构建绘图配置
         plot_configs = []
         
         for util_col in device_util_cols:
             device_name = util_col.split('_')[0].upper()
-            plot_configs.append((cpu_iowait_field, util_col, f'CPU I/O Wait vs {device_name}Device Utilization'))
+            plot_configs.append((cpu_iowait_field, util_col, f'CPU I/O Wait vs {device_name} Device Utilization'))
         
         for aqu_col in device_aqu_cols:
             device_name = aqu_col.split('_')[0].upper()
@@ -200,7 +213,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         for await_col in device_await_cols:
             device_name = await_col.split('_')[0].upper()
-            plot_configs.append((cpu_iowait_field, await_col, f'CPU I/O Wait vs {device_name}DeviceLatency'))
+            plot_configs.append((cpu_iowait_field, await_col, f'CPU I/O Wait vs {device_name} Device Latency'))
         
         if not plot_configs:
             print("  ⚠️ No configured devices, skipping Pearson correlation chart generation")
@@ -215,7 +228,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         else:
             rows, cols = 2, 4
         
-        fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 5*rows))
+        fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 4*rows))
         
         # 确保axes始终是二维数组，便于统一处理
         if total_plots == 1:
@@ -234,11 +247,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
             for j in range(cols):
                 if plot_idx < len(plot_configs):
                     cpu_col, ebs_col, title = plot_configs[plot_idx]
-                    ax: Axes = axes[i, j]  # 类型注解：明确指定为 matplotlib Axes 对象
+                    ax: Axes = axes[i, j]
                     
                     try:
                         # 安全获取数据
-                        cpu_data = self.df.get('cpu_iowait', pd.Series(dtype=float))
+                        cpu_data = self.df[cpu_col] if cpu_col in self.df.columns else pd.Series(dtype=float)
                         ebs_data = self.df[ebs_col] if ebs_col in self.df.columns else pd.Series(dtype=float)
                         
                         if len(cpu_data) > 0 and len(ebs_data) > 0:
@@ -246,32 +259,34 @@ class AdvancedChartGenerator(CSVDataProcessor):
                             corr, p_value = stats.pearsonr(cpu_data, ebs_data)
                             
                             # 绘制散点图
-                            ax.scatter(cpu_data, ebs_data, alpha=0.6, s=20)
+                            ax.scatter(cpu_data, ebs_data, alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'])
                             
                             # Add trend line
                             z = np.polyfit(cpu_data, ebs_data, 1)
                             p = np.poly1d(z)
-                            ax.plot(cpu_data, p(cpu_data), "r--", alpha=0.8)
+                            ax.plot(cpu_data, p(cpu_data), color=UnifiedChartStyle.COLORS['critical'], linestyle='--', alpha=0.8, linewidth=2)
                             
-                            ax.set_xlabel('CPU I/O Wait (%)')
-                            ax.set_ylabel(ebs_col.replace('_', ' ').title())
-                            ax.set_title(f'{title}\nr={corr:.3f}, p={p_value:.3f}')
+                            ax.set_xlabel('CPU I/O Wait (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                            ax.set_ylabel(ebs_col.replace('_', ' ').title(), fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                            ax.set_title(f'{title}\nr={corr:.3f}, p={p_value:.3f}', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                             ax.grid(True, alpha=0.3)
                         else:
-                            ax.text(0.5, 0.5, 'Insufficient Data', ha='center', va='center', transform=ax.transAxes)
-                            ax.set_title(title)
+                            ax.text(0.5, 0.5, 'Insufficient Data', ha='center', va='center', transform=ax.transAxes, 
+                                   fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
+                            ax.set_title(title, fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                     
                     except Exception as e:
                         print(f"⚠️ Subplot generation failed: {e}")
-                        ax.text(0.5, 0.5, f'Generation Failed\n{str(e)}', ha='center', va='center', transform=ax.transAxes)
-                        ax.set_title(title)
+                        ax.text(0.5, 0.5, f'Generation Failed\n{str(e)}', ha='center', va='center', transform=ax.transAxes,
+                               fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
+                        ax.set_title(title, fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                     
                     plot_idx += 1
                 else:
                     # 隐藏多余的子图
                     axes[i, j].set_visible(False)
         
-        UnifiedChartStyle.apply_layout('auto')
+        UnifiedChartStyle.apply_layout(fig, 'auto')
         
         # 保存图表
         output_file = os.path.join(self.output_dir, 'pearson_correlation_analysis.png')
