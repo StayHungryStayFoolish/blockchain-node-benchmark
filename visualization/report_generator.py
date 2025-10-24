@@ -286,7 +286,7 @@ class ReportGenerator:
                     return False
                 
                 field_count = len(header.split(','))
-                expected_fields = 15  # 根据配置的字段数量
+                expected_fields = 20  # 根据配置的字段数量
                 
                 if field_count < 10:  # 最少应该有10个基本字段
                     print(f"⚠️ 监控开销CSV字段数量过少，期望至少10个，实际{field_count}个")
@@ -2128,7 +2128,13 @@ class ReportGenerator:
                     <li><strong>数据完整性</strong>: 监控数据的完整性百分比</li>
                 </ul>
                 <p><strong>生产环境建议</strong>: 总监控开销通常占系统资源的1-3%，可以忽略不计。</p>
-                <p><strong>注意</strong>: 监控系统主要读取/proc虚拟文件系统，IOPS/Throughput开销极小（通常 &lt; 0.01）。</p>
+                <p><strong>IOPS/Throughput 为 0 的原因</strong>:</p>
+                <ul style="margin-top: 5px;">
+                    <li>监控系统主要读取 <code>/proc</code> 虚拟文件系统，内核不计入物理 I/O 统计</li>
+                    <li>实际 I/O 开销 &lt; 0.00005 IOPS/s，即使使用 4 位小数精度（%.4f）仍显示为 0.0000</li>
+                    <li>这证明监控系统设计高效，对生产环境几乎无影响</li>
+                    <li>如需查看极小值，可在源码中将精度提升至 %.6f 或更高</li>
+                </ul>
             </div>
             """
             

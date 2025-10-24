@@ -855,7 +855,11 @@ Recommendations:
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
         print(f"✅ I/O latency threshold analysis chart saved: {output_file} ({device_info} devices)")
         
-        return output_file
+        violations_summary = {'data': data_violations_pct}
+        if accounts_configured and accounts_await_col:
+            violations_summary['accounts'] = accounts_violations_pct
+        
+        return output_file, violations_summary
 
     def create_device_comparison_chart(self):
         """Device Performance Comparison Chart - 3x2 Layout"""
