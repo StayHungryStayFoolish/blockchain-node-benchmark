@@ -69,9 +69,11 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         self.data_file = data_file
         if output_dir:
-            self.output_dir = os.getenv('REPORTS_DIR', os.path.join(output_dir, 'current', 'reports'))
+            self.output_dir = os.getenv('REPORTS_DIR', output_dir)
         else:
-            self.output_dir = os.getenv('REPORTS_DIR', os.path.join(os.path.dirname(data_file), 'current', 'reports'))
+            # 从 CSV 文件路径推导 reports 目录: logs -> current -> reports
+            base_dir = os.path.dirname(os.path.dirname(data_file))
+            self.output_dir = os.getenv('REPORTS_DIR', os.path.join(base_dir, 'reports'))
         
         # 确保输出目录存在
         os.makedirs(self.output_dir, exist_ok=True)
@@ -80,9 +82,6 @@ class AdvancedChartGenerator(CSVDataProcessor):
             self.unit_converter = UnitConverter()
         except:
             self.unit_converter = None
-        
-        # Initialize device_manager (will be set after data is loaded)
-        self.device_manager = None
         
         # Set chart style - 使用统一样式配置
         UnifiedChartStyle.setup_matplotlib()
@@ -126,8 +125,6 @@ class AdvancedChartGenerator(CSVDataProcessor):
             success = self.load_csv_data(self.data_file)
             if success:
                 self.clean_data()  # Clean data
-                # Initialize device_manager after data is loaded
-                self.device_manager = DeviceManager(self.df)
                 logger.info(f"✅ Data loaded successfully: {len(self.df)} rows")
                 self.print_field_info()  # 打印字段信息用于调试
             return success
@@ -168,7 +165,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         chart_files = []
         
         # Check Device configuration - 使用统一方法
-        accounts_configured = self.device_manager.is_accounts_configured()
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         
         # Use device_manager for field access
         cpu_iowait_field = 'cpu_iowait'
@@ -306,21 +303,20 @@ class AdvancedChartGenerator(CSVDataProcessor):
         print("📈 Generating regression analysis charts...")
         chart_files = []
         
-        # 检查Device配置
-        data_configured = self._check_device_configured('data')
-        accounts_configured = self._check_device_configured('accounts')
+        # 检查Device配置 - 使用统一方法
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         
-        # 使用安全的列获取方法
-        data_r_cols = self._get_device_columns_safe('data', '_r_s')
-        data_w_cols = self._get_device_columns_safe('data', '_w_s')
-        accounts_r_cols = self._get_device_columns_safe('accounts', '_r_s')
-        accounts_w_cols = self._get_device_columns_safe('accounts', '_w_s')
+        # 动态获取设备列 - 直接遍历 DataFrame columns
+        data_r_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_r_s')]
+        data_w_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_w_s')]
+        accounts_r_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_r_s')] if accounts_configured else []
+        accounts_w_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_w_s')] if accounts_configured else []
         
         # 构建回归配置
         regression_configs = []
-        if data_configured and data_r_cols:
+        if data_r_cols:
             regression_configs.append(('cpu_usr', data_r_cols[0], 'User CPU vs DATA Read Requests'))
-        if data_configured and data_w_cols:
+        if data_w_cols:
             regression_configs.append(('cpu_sys', data_w_cols[0], 'System CPU vs DATA Write Requests'))
         if accounts_configured and accounts_r_cols:
             regression_configs.append(('cpu_usr', accounts_r_cols[0], 'User CPU vs ACCOUNTS Read Requests'))
@@ -353,7 +349,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         
         for idx, (x_col, y_col, title) in enumerate(regression_configs):
             row, col = divmod(idx, cols)
-            ax: Axes = axes[row, col]  # 类型注解：明确指定为 matplotlib Axes 对象
+            ax: Axes = axes[row, col]
             
             if x_col in self.df.columns and y_col and y_col in self.df.columns:
                 # 准备数据
@@ -369,24 +365,25 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 r2 = model.score(X, y)
                 
                 # 绘制散点图和回归线
-                ax.scatter(self.df[x_col], self.df[y_col], alpha=0.6, s=20)
-                ax.plot(self.df[x_col], y_pred, 'r-', linewidth=2)
+                ax.scatter(self.df[x_col], self.df[y_col], alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'])
+                ax.plot(self.df[x_col], y_pred, color=UnifiedChartStyle.COLORS['critical'], linestyle='-', linewidth=2)
                 
                 # 设置标题和标签
                 ax.set_title(f'{title}\nR²={r2:.3f}, Coefficient={model.coef_[0]:.3f}', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-                ax.set_xlabel(x_col.replace('_', ' ').title())
-                ax.set_ylabel(y_col.replace('_', ' ').title())
+                ax.set_xlabel(x_col.replace('_', ' ').title(), fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax.set_ylabel(y_col.replace('_', ' ').title(), fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax.grid(True, alpha=0.3)
                 
                 # 添加回归方程
                 equation = f'y = {model.coef_[0]:.3f}x + {model.intercept_:.3f}'
-                ax.text(0.05, 0.95, equation, transform=ax.transAxes,
-                       bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7))
+                ax.text(0.05, 0.95, equation, transform=ax.transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'],
+                       verticalalignment='top')
             else:
-                ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes)
+                ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes,
+                       fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax.set_title(title, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
         
-        UnifiedChartStyle.apply_layout('auto')
+        UnifiedChartStyle.apply_layout(fig, 'auto')
         chart_file = os.path.join(self.output_dir, 'linear_regression_analysis.png')
         plt.savefig(chart_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
@@ -404,17 +401,16 @@ class AdvancedChartGenerator(CSVDataProcessor):
         print("📉 Generating negative correlation analysis charts...")
         chart_files = []
         
-        # 检查Device配置
-        data_configured = self._check_device_configured('data')
-        accounts_configured = self._check_device_configured('accounts')
+        # 检查Device配置 - 使用统一方法
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         
-        # 使用安全的列获取方法
-        data_aqu_cols = self._get_device_columns_safe('data', 'aqu_sz')
-        accounts_aqu_cols = self._get_device_columns_safe('accounts', 'aqu_sz')
+        # 动态获取设备列
+        data_aqu_cols = [col for col in self.df.columns if col.startswith('data_') and 'aqu_sz' in col]
+        accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'aqu_sz' in col] if accounts_configured else []
         
         # 构建负相关配置
         negative_configs = []
-        if data_configured and data_aqu_cols:
+        if data_aqu_cols:
             negative_configs.append(('cpu_idle', data_aqu_cols[0], 'CPU Idle vs DATA Queue Length'))
         if accounts_configured and accounts_aqu_cols:
             negative_configs.append(('cpu_idle', accounts_aqu_cols[0], 'CPU Idle vs ACCOUNTS Queue Length'))
@@ -435,39 +431,40 @@ class AdvancedChartGenerator(CSVDataProcessor):
         fig.suptitle('Negative Correlation Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         for idx, (x_col, y_col, title) in enumerate(negative_configs):
-            ax: Axes = axes[idx]  # 类型注解：明确指定为 matplotlib Axes 对象
+            ax: Axes = axes[idx]
             
             if x_col in self.df.columns and y_col and y_col in self.df.columns:
                 # 计算相关性
                 corr, p_value = stats.pearsonr(self.df[x_col], self.df[y_col])
                 
                 # 绘制散点图
-                ax.scatter(self.df[x_col], self.df[y_col], alpha=0.6, s=20)
+                ax.scatter(self.df[x_col], self.df[y_col], alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'])
                 
                 # 添加回归线
                 z = np.polyfit(self.df[x_col], self.df[y_col], 1)
                 p = np.poly1d(z)
-                ax.plot(self.df[x_col], p(self.df[x_col]), "r--", alpha=0.8)
+                ax.plot(self.df[x_col], p(self.df[x_col]), color=UnifiedChartStyle.COLORS['critical'], linestyle='--', alpha=0.8, linewidth=2)
                 
                 # 设置标题和标签
                 correlation_type = "Negative" if corr < 0 else "Positive"
                 ax.set_title(f'{title}\nr={corr:.3f} ({correlation_type})', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
-                ax.set_xlabel(x_col.replace('_', ' ').title())
-                ax.set_ylabel(y_col.replace('_', ' ').title())
+                ax.set_xlabel(x_col.replace('_', ' ').title(), fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax.set_ylabel(y_col.replace('_', ' ').title(), fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax.grid(True, alpha=0.3)
                 
                 # 高亮负相关
                 if corr < 0:
                     ax.text(0.05, 0.95, '✓ Negative Correlation', transform=ax.transAxes,
-                           bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgreen", alpha=0.7))
+                           fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'], verticalalignment='top')
                 else:
                     ax.text(0.05, 0.95, '⚠ Non-negative Correlation', transform=ax.transAxes,
-                           bbox=dict(boxstyle="round,pad=0.3", facecolor=UnifiedChartStyle.COLORS["accounts_primary"], alpha=0.7))
+                           fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'], verticalalignment='top')
             else:
-                ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes)
+                ax.text(0.5, 0.5, 'Data Not Available', ha='center', va='center', transform=ax.transAxes,
+                       fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax.set_title(title, fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
         
-        UnifiedChartStyle.apply_layout('auto')
+        UnifiedChartStyle.apply_layout(fig, 'auto')
         chart_file = os.path.join(self.output_dir, 'negative_correlation_analysis.png')
         plt.savefig(chart_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
@@ -495,7 +492,6 @@ class AdvancedChartGenerator(CSVDataProcessor):
                 key_columns.append(col)
         
         # EBS相关列
-        device_manager = DeviceManager(self.df)
         ebs_patterns = ['util', 'aqu_sz', 'avg_await', 'r_s', 'w_s', 'total_iops', 'throughput_mibs']
         for pattern in ebs_patterns:
             matching_cols = [col for col in self.df.columns if pattern in col]
@@ -561,72 +557,105 @@ class AdvancedChartGenerator(CSVDataProcessor):
         print("📈 Generating performance trend analysis...")
         chart_files = []
         
-        # 确保有Time戳列
+        # 确保有timestamp列
         if 'timestamp' not in self.df.columns:
             print("  ⚠️ Missing timestamp column, skipping trend analysis")
             return []
         
-        # 转换Time戳
-        self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
+        # 转换timestamp
+        if not pd.api.types.is_datetime64_any_dtype(self.df['timestamp']):
+            self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
+        
+        # 检查 ACCOUNTS 设备配置
+        accounts_configured = DeviceManager.is_accounts_configured(self.df)
         
         fig, axes = plt.subplots(3, 2, figsize=(18, 15))
-        # Using English title directly
         fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         # CPU Usage trends
         if 'cpu_iowait' in self.df.columns:
-            axes[0, 0].plot(self.df['timestamp'], self.df['cpu_iowait'], 'b-', alpha=0.7)
-            axes[0, 0].set_title('CPU I/O Wait Time Trends')
-            axes[0, 0].set_ylabel('I/O Wait (%)')
+            axes[0, 0].plot(self.df['timestamp'], self.df['cpu_iowait'], color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, alpha=0.7)
+            axes[0, 0].set_title('CPU I/O Wait Time Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[0, 0].set_ylabel('I/O Wait (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             axes[0, 0].grid(True, alpha=0.3)
+            UnifiedChartStyle.format_time_axis(axes[0, 0], self.df['timestamp'])
         
-        # EBS utilization trends - using unified field format matching
-        util_cols = [col for col in self.df.columns if 
-                    (col.startswith('data_') and col.endswith('_util')) or 
-                    (col.startswith('accounts_') and col.endswith('_util'))]
-        if util_cols:
-            axes[0, 1].plot(self.df['timestamp'], self.df[util_cols[0]], 'r-', alpha=0.7)
-            axes[0, 1].set_title('EBS Device Utilization Trends')
-            axes[0, 1].set_ylabel('Utilization (%)')
+        # EBS utilization trends - 显示 DATA 和 ACCOUNTS
+        data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
+        accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
+        
+        if data_util_cols:
+            axes[0, 1].plot(self.df['timestamp'], self.df[data_util_cols[0]], color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, alpha=0.7, label='DATA')
+        if accounts_util_cols:
+            axes[0, 1].plot(self.df['timestamp'], self.df[accounts_util_cols[0]], color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, alpha=0.7, label='ACCOUNTS')
+        if data_util_cols or accounts_util_cols:
+            axes[0, 1].set_title('EBS Device Utilization Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[0, 1].set_ylabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[0, 1].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             axes[0, 1].grid(True, alpha=0.3)
+            UnifiedChartStyle.format_time_axis(axes[0, 1], self.df['timestamp'])
         
-        # IOPS trends
-        iops_cols = [col for col in self.df.columns if 'total_iops' in col]
-        if iops_cols:
-            axes[1, 0].plot(self.df['timestamp'], self.df[iops_cols[0]], 'g-', alpha=0.7)
-            axes[1, 0].set_title('IOPS Trends')
-            axes[1, 0].set_ylabel('IOPS')
+        # IOPS trends - 显示 DATA 和 ACCOUNTS
+        data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col]
+        accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_iops' in col] if accounts_configured else []
+        
+        if data_iops_cols:
+            axes[1, 0].plot(self.df['timestamp'], self.df[data_iops_cols[0]], color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, alpha=0.7, label='DATA')
+        if accounts_iops_cols:
+            axes[1, 0].plot(self.df['timestamp'], self.df[accounts_iops_cols[0]], color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, alpha=0.7, label='ACCOUNTS')
+        if data_iops_cols or accounts_iops_cols:
+            axes[1, 0].set_title('IOPS Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[1, 0].set_ylabel('IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[1, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             axes[1, 0].grid(True, alpha=0.3)
+            UnifiedChartStyle.format_time_axis(axes[1, 0], self.df['timestamp'])
         
-        # Throughput trends
-        throughput_cols = [col for col in self.df.columns if 'throughput' in col and 'mibs' in col]
-        if throughput_cols:
-            axes[1, 1].plot(self.df['timestamp'], self.df[throughput_cols[0]], 'm-', alpha=0.7)
-            axes[1, 1].set_title('Throughput Trends')
-            axes[1, 1].set_ylabel('Throughput (MiB/s)')
+        # Throughput trends - 显示 DATA 和 ACCOUNTS
+        data_throughput_cols = [col for col in self.df.columns if col.startswith('data_') and 'throughput' in col and 'mibs' in col]
+        accounts_throughput_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'throughput' in col and 'mibs' in col] if accounts_configured else []
+        
+        if data_throughput_cols:
+            axes[1, 1].plot(self.df['timestamp'], self.df[data_throughput_cols[0]], color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, alpha=0.7, label='DATA')
+        if accounts_throughput_cols:
+            axes[1, 1].plot(self.df['timestamp'], self.df[accounts_throughput_cols[0]], color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, alpha=0.7, label='ACCOUNTS')
+        if data_throughput_cols or accounts_throughput_cols:
+            axes[1, 1].set_title('Throughput Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[1, 1].set_ylabel('Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[1, 1].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             axes[1, 1].grid(True, alpha=0.3)
+            UnifiedChartStyle.format_time_axis(axes[1, 1], self.df['timestamp'])
         
-        # Latency trends
-        await_cols = [col for col in self.df.columns if 'avg_await' in col]
-        if await_cols:
-            axes[2, 0].plot(self.df['timestamp'], self.df[await_cols[0]], 'orange', alpha=0.7)
-            axes[2, 0].set_title('I/O Latency Trends')
-            axes[2, 0].set_ylabel('Latency (ms)')
+        # Latency trends - 显示 DATA 和 ACCOUNTS
+        data_await_cols = [col for col in self.df.columns if col.startswith('data_') and 'avg_await' in col]
+        accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'avg_await' in col] if accounts_configured else []
+        
+        if data_await_cols:
+            axes[2, 0].plot(self.df['timestamp'], self.df[data_await_cols[0]], color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, alpha=0.7, label='DATA')
+        if accounts_await_cols:
+            axes[2, 0].plot(self.df['timestamp'], self.df[accounts_await_cols[0]], color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, alpha=0.7, label='ACCOUNTS')
+        if data_await_cols or accounts_await_cols:
+            axes[2, 0].set_title('I/O Latency Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[2, 0].set_ylabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[2, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             axes[2, 0].grid(True, alpha=0.3)
+            UnifiedChartStyle.format_time_axis(axes[2, 0], self.df['timestamp'])
         
-        # Queue depth trends
-        queue_cols = [col for col in self.df.columns if 'aqu_sz' in col]
-        if queue_cols:
-            axes[2, 1].plot(self.df['timestamp'], self.df[queue_cols[0]], 'purple', alpha=0.7)
-            axes[2, 1].set_title('I/O Queue Depth Trends')
-            axes[2, 1].set_ylabel('Queue Depth')
+        # Queue depth trends - 显示 DATA 和 ACCOUNTS
+        data_queue_cols = [col for col in self.df.columns if col.startswith('data_') and 'aqu_sz' in col]
+        accounts_queue_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'aqu_sz' in col] if accounts_configured else []
+        
+        if data_queue_cols:
+            axes[2, 1].plot(self.df['timestamp'], self.df[data_queue_cols[0]], color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, alpha=0.7, label='DATA')
+        if accounts_queue_cols:
+            axes[2, 1].plot(self.df['timestamp'], self.df[accounts_queue_cols[0]], color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, alpha=0.7, label='ACCOUNTS')
+        if data_queue_cols or accounts_queue_cols:
+            axes[2, 1].set_title('I/O Queue Depth Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[2, 1].set_ylabel('Queue Depth', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            axes[2, 1].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             axes[2, 1].grid(True, alpha=0.3)
+            UnifiedChartStyle.format_time_axis(axes[2, 1], self.df['timestamp'])
         
-        # 格式化x轴
-        for ax in axes.flat:
-            ax.tick_params(axis='x', rotation=45)
-        
-        UnifiedChartStyle.apply_layout('auto')
+        UnifiedChartStyle.apply_layout(fig, 'auto')
         chart_file = os.path.join(self.output_dir, 'performance_trend_analysis.png')
         plt.savefig(chart_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
@@ -1079,6 +1108,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
         生成性能指标相关性热力图
         基于现有的71个CSV字段映射生成全面的相关性分析
         """
+        if not self.load_data():
+            return []
+        
         print("\n📊 Generating correlation heatmap...")
         
         try:
@@ -1126,7 +1158,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             plt.xticks(rotation=45, ha='right')
             plt.yticks(rotation=0)
             
-            UnifiedChartStyle.apply_layout('auto')
+            plt.tight_layout()
             
             # 保存图表
             chart_file = os.path.join(self.output_dir, 'performance_correlation_heatmap.png')

@@ -928,13 +928,13 @@ get_monitoring_overhead_legacy() {
         fi
     done
 
-    # 计算每秒真实速率
-    local real_iops=$(awk "BEGIN {printf \"%.2f\", ($total_read_ops_diff + $total_write_ops_diff) / $MONITOR_INTERVAL}" 2>/dev/null || echo "0.00")
-    local real_throughput=$(awk "BEGIN {printf \"%.6f\", ($total_read_bytes_diff + $total_write_bytes_diff) / $MONITOR_INTERVAL / 1024 / 1024}" 2>/dev/null || echo "0.000000")
+    # 计算每秒真实速率（提高精度以捕获极小值）
+    local real_iops=$(awk "BEGIN {printf \"%.4f\", ($total_read_ops_diff + $total_write_ops_diff) / $MONITOR_INTERVAL}" 2>/dev/null || echo "0.0000")
+    local real_throughput=$(awk "BEGIN {printf \"%.8f\", ($total_read_bytes_diff + $total_write_bytes_diff) / $MONITOR_INTERVAL / 1024 / 1024}" 2>/dev/null || echo "0.00000000")
 
     # 确保数值格式正确
-    real_iops=$(printf "%.2f" "$real_iops" 2>/dev/null || echo "0.00")
-    real_throughput=$(printf "%.6f" "$real_throughput" 2>/dev/null || echo "0.000000")
+    real_iops=$(printf "%.4f" "$real_iops" 2>/dev/null || echo "0.0000")
+    real_throughput=$(printf "%.8f" "$real_throughput" 2>/dev/null || echo "0.00000000")
 
     log_debug "监控开销统计: 进程数=${process_count}, CPU=${monitoring_cpu}%, 内存=${monitoring_memory_percent}%(${monitoring_memory_mb}MB), 真实IOPS=${real_iops}, 真实吞吐量=${real_throughput}MiB/s"
 
