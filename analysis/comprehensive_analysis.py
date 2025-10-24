@@ -294,8 +294,7 @@ class ComprehensiveAnalyzer:
             logger.error(f"❌ 瓶颈相关性分析失败: {e}")
             return {}
 
-    def generate_ultimate_performance_charts(self, df: pd.DataFrame, 
-                                           rpc_deep_analysis: Dict[str, Any]) -> Optional[plt.Figure]:
+    def generate_ultimate_performance_charts(self, df: pd.DataFrame) -> Optional[plt.Figure]:
         """生成终极性能图表，整合所有分析结果"""
         print("\n📈 Generating ultimate performance charts...")
 
@@ -521,8 +520,6 @@ class ComprehensiveAnalyzer:
     def _calculate_comprehensive_bottleneck_score(bottleneck_types: list, 
                                                 avg_cpu: float, avg_mem: float, avg_rpc: float) -> float:
         """计算综合瓶颈严重程度评分 - 基于实际监控数据"""
-        
-        total_score = 0.0
         
         # 系统资源瓶颈评分 (权重: 0.7)
         resource_score = 0.0
@@ -775,7 +772,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
         # 3. 生成综合图表和报告
         print("\n📈 Phase 3: Comprehensive Reporting")
-        self.generate_ultimate_performance_charts(df, rpc_deep_analysis)
+        self.generate_ultimate_performance_charts(df)
         
         # 4.1 生成性能可视化图表（包含阈值分析）
         print("\n🎨 Phase 4.1: Performance Visualization with Threshold Analysis")

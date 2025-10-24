@@ -587,25 +587,6 @@ class UnifiedChartStyle:
             plt.tight_layout()
     
     @classmethod
-    def fix_pie_text_overlap(cls, ax, labels, autopct_texts=None):
-        """修复饼图文本重叠问题"""
-        pie_config = cls.CHART_CONFIGS['pie']
-        
-        if pie_config.get('text_overlap_fix', False):
-            # 调整标签距离
-            if hasattr(ax, 'texts'):
-                for text in ax.texts:
-                    text.set_fontsize(pie_config.get('label_fontsize', 10))
-            
-            # 调整百分比文本
-            if autopct_texts:
-                for text in autopct_texts:
-                    text.set_fontsize(pie_config.get('pct_fontsize', 9))
-                    text.set_weight('bold')
-        
-        return ax
-    
-    @classmethod
     def apply_standard_plot_order(cls, ax, data_func, threshold_func=None, title=None):
         """应用标准绘制顺序 - 解决网格线覆盖问题"""
         # 1. 先设置网格（底层）

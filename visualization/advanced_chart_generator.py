@@ -353,16 +353,16 @@ class AdvancedChartGenerator(CSVDataProcessor):
             
             if x_col in self.df.columns and y_col and y_col in self.df.columns:
                 # 准备数据
-                X = self.df[[x_col]].values
+                x = self.df[[x_col]].values
                 y = self.df[y_col].values
                 
                 # 线性回归
                 model = LinearRegression()
-                model.fit(X, y)
-                y_pred = model.predict(X)
+                model.fit(x, y)
+                y_pred = model.predict(x)
                 
                 # 计算R²
-                r2 = model.score(X, y)
+                r2 = model.score(x, y)
                 
                 # 绘制散点图和回归线
                 ax.scatter(self.df[x_col], self.df[y_col], alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'])

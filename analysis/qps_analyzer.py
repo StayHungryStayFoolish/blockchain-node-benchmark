@@ -810,13 +810,13 @@ class NodeQPSAnalyzer:
         bottleneck_score = performance_evaluation.get('bottleneck_score', 0)
         
         if performance_level == "优秀":
-            return f"当前配置可稳定处理高负载 (已测试至 {max_qps:,} QPS，无明显瓶颈)" if not pd.isna(max_qps) else "当前配置可稳定处理高负载 (测试数据不足，无明显瓶颈)"
+            return f"当前配置可稳定处理高负载 (已测试至 {max_qps:,} QPS，瓶颈评分: {bottleneck_score:.3f})" if not pd.isna(max_qps) else f"当前配置可稳定处理高负载 (测试数据不足，瓶颈评分: {bottleneck_score:.3f})"
         elif performance_level == "良好":
-            return f"当前配置可处理中高负载 (已测试至 {max_qps:,} QPS，轻微瓶颈)" if not pd.isna(max_qps) else "当前配置可处理中高负载 (测试数据不足，轻微瓶颈)"
+            return f"当前配置可处理中高负载 (已测试至 {max_qps:,} QPS，瓶颈评分: {bottleneck_score:.3f})" if not pd.isna(max_qps) else f"当前配置可处理中高负载 (测试数据不足，瓶颈评分: {bottleneck_score:.3f})"
         elif performance_level == "一般":
-            return f"当前配置适合中等负载 (已测试至 {max_qps:,} QPS，存在瓶颈)" if not pd.isna(max_qps) else "当前配置适合中等负载 (测试数据不足，存在瓶颈)"
+            return f"当前配置适合中等负载 (已测试至 {max_qps:,} QPS，瓶颈评分: {bottleneck_score:.3f})" if not pd.isna(max_qps) else f"当前配置适合中等负载 (测试数据不足，瓶颈评分: {bottleneck_score:.3f})"
         elif performance_level == "需要优化":
-            return f"当前配置需要优化以处理高负载 (已测试至 {max_qps:,} QPS，严重瓶颈)" if not pd.isna(max_qps) else "当前配置需要优化以处理高负载 (测试数据不足，严重瓶颈)"
+            return f"当前配置需要优化以处理高负载 (已测试至 {max_qps:,} QPS，瓶颈评分: {bottleneck_score:.3f})" if not pd.isna(max_qps) else f"当前配置需要优化以处理高负载 (测试数据不足，瓶颈评分: {bottleneck_score:.3f})"
         else:
             return f"需要intensive基准测试模式进行准确的容量评估"
 

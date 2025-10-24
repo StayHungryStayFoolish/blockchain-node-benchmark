@@ -434,25 +434,32 @@ class ReportGenerator:
         return warnings, performance_metrics
     
     def _calculate_data_completeness(self):
-        """计算监控数据完整性 - 对比 overhead CSV 和 performance CSV 的行数"""
+        """计算监控数据完整性 - 文件存在、有数据、字段完整即为100%"""
         try:
-            # 获取 overhead CSV 的样本数
-            overhead_count = self.overhead_data.get('sample_count', 0)
+            # 检查 performance CSV 文件
+            if not os.path.exists(self.performance_csv):
+                return 0.0
             
-            # 获取 performance CSV 的样本数
-            if os.path.exists(self.performance_csv):
-                perf_df = pd.read_csv(self.performance_csv)
-                perf_count = len(perf_df)
-                
-                # 计算完整性百分比
-                if perf_count > 0:
-                    completeness = (overhead_count / perf_count) * 100
-                    return min(completeness, 100.0)  # 确保不超过100%
+            perf_df = pd.read_csv(self.performance_csv)
             
-            # 如果无法对比，假设完整性为100%（如果有数据）
-            return 100.0 if overhead_count > 0 else 0.0
-        except Exception as e:
+            # 检查是否有数据行
+            if len(perf_df) == 0:
+                return 0.0
+            
+            # 检查关键字段是否存在（字段完整性）
+            required_fields = ['timestamp', 'cpu_usage', 'mem_usage']
+            missing_fields = [f for f in required_fields if f not in perf_df.columns]
+            
+            if missing_fields:
+                # 有缺失字段，计算部分完整性
+                return (len(required_fields) - len(missing_fields)) / len(required_fields) * 100
+            
+            # 文件存在 + 有数据 + 字段完整 = 100%
             return 100.0
+            
+        except Exception as e:
+            print(f"⚠️ 计算数据完整性时出错: {e}")
+            return 0.0
     
     def _format_monitoring_io(self, value, metric_type='iops'):
         """格式化监控IO值，显示极小值"""
@@ -766,257 +773,6 @@ class ReportGenerator:
         '''
         
         return html
-        """生成EBS分析报告HTML片段 - 增强版双层统计"""
-        if not warnings and not performance_metrics:
-            return ""
-        
-        # 读取CSV数据计算统计信息
-        try:
-            df = pd.read_csv(self.performance_csv)
-        except:
-            df = None
-        
-        html = """
-        <div class="section">
-            <h2>&#128202; EBS性能分析结果</h2>
-            
-            <div class="subsection">
-                <h3>&#9888; 性能警告</h3>
-        """
-        
-        if warnings:
-            html += '<div class="warning-list" style="margin: 15px 0;">'
-            for warning in warnings:
-                color = "#dc3545" if warning['type'] == '高利用率' else "#fd7e14"
-                unit = "%" if warning['type'] == '高利用率' else "ms"
-                html += f'''
-                <div style="border-left: 4px solid {color}; padding: 12px; margin: 8px 0; background: #f8f9fa; border-radius: 4px;">
-                    <strong style="color: {color};">{warning['device']}</strong> - {warning['type']}: <strong>{warning['value']}{unit}</strong>
-                    <small style="color: #6c757d; display: block; margin-top: 4px;">发生时间: {warning.get('data_time', warning['timestamp'])}</small>
-                </div>
-                '''
-            html += '</div>'
-        else:
-            html += '<p style="color: #28a745; font-weight: bold;">&#9989; 未发现性能异常</p>'
-        
-        html += '</div>'
-        
-        # 第一层：AWS EBS 基准数据统计
-        html += '''
-            <div class="subsection">
-                <h3>&#128200; AWS EBS 基准性能统计</h3>
-        '''
-        
-        if df is not None and not df.empty:
-            # 获取配置的基准值
-            data_max_iops = self.config.get('DATA_VOL_MAX_IOPS', 'N/A')
-            data_max_throughput = self.config.get('DATA_VOL_MAX_THROUGHPUT', 'N/A')
-            accounts_max_iops = self.config.get('ACCOUNTS_VOL_MAX_IOPS', 'N/A')
-            accounts_max_throughput = self.config.get('ACCOUNTS_VOL_MAX_THROUGHPUT', 'N/A')
-            
-            # 计算实际使用的统计数据
-            stats_data = {}
-            
-            # DATA Device AWS标准字段
-            data_iops_col = [col for col in df.columns if col.startswith('data_') and col.endswith('_aws_standard_iops')]
-            data_throughput_col = [col for col in df.columns if col.startswith('data_') and col.endswith('_aws_standard_throughput_mibs')]
-            
-            if data_iops_col:
-                stats_data['DATA_IOPS_Min'] = df[data_iops_col[0]].min()
-                stats_data['DATA_IOPS_Max'] = df[data_iops_col[0]].max()
-                stats_data['DATA_IOPS_Avg'] = df[data_iops_col[0]].mean()
-            
-            if data_throughput_col:
-                stats_data['DATA_Throughput_Min'] = df[data_throughput_col[0]].min()
-                stats_data['DATA_Throughput_Max'] = df[data_throughput_col[0]].max()
-                stats_data['DATA_Throughput_Avg'] = df[data_throughput_col[0]].mean()
-            
-            # ACCOUNTS Device AWS标准字段
-            accounts_iops_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith('_aws_standard_iops')]
-            accounts_throughput_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith('_aws_standard_throughput_mibs')]
-            
-            if accounts_iops_col:
-                stats_data['ACCOUNTS_IOPS_Min'] = df[accounts_iops_col[0]].min()
-                stats_data['ACCOUNTS_IOPS_Max'] = df[accounts_iops_col[0]].max()
-                stats_data['ACCOUNTS_IOPS_Avg'] = df[accounts_iops_col[0]].mean()
-            
-            if accounts_throughput_col:
-                stats_data['ACCOUNTS_Throughput_Min'] = df[accounts_throughput_col[0]].min()
-                stats_data['ACCOUNTS_Throughput_Max'] = df[accounts_throughput_col[0]].max()
-                stats_data['ACCOUNTS_Throughput_Avg'] = df[accounts_throughput_col[0]].mean()
-            
-            html += f'''
-                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
-                    <thead>
-                        <tr>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">设备</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">指标</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">配置基准</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">最小值</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">平均值</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">最大值</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td rowspan="2" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">DATA Device</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">IOPS</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_max_iops}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('DATA_IOPS_Min', 'N/A'):.0f if isinstance(stats_data.get('DATA_IOPS_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('DATA_IOPS_Avg', 'N/A'):.0f if isinstance(stats_data.get('DATA_IOPS_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('DATA_IOPS_Max', 'N/A'):.0f if isinstance(stats_data.get('DATA_IOPS_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Throughput (MiB/s)</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_max_throughput}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('DATA_Throughput_Min', 'N/A'):.1f if isinstance(stats_data.get('DATA_Throughput_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('DATA_Throughput_Avg', 'N/A'):.1f if isinstance(stats_data.get('DATA_Throughput_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('DATA_Throughput_Max', 'N/A'):.1f if isinstance(stats_data.get('DATA_Throughput_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-            '''
-            
-            # 如果有ACCOUNTS设备数据，添加ACCOUNTS行
-            if accounts_iops_col or accounts_throughput_col:
-                html += f'''
-                        <tr>
-                            <td rowspan="2" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">ACCOUNTS Device</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">IOPS</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{accounts_max_iops}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('ACCOUNTS_IOPS_Min', 'N/A'):.0f if isinstance(stats_data.get('ACCOUNTS_IOPS_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('ACCOUNTS_IOPS_Avg', 'N/A'):.0f if isinstance(stats_data.get('ACCOUNTS_IOPS_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('ACCOUNTS_IOPS_Max', 'N/A'):.0f if isinstance(stats_data.get('ACCOUNTS_IOPS_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Throughput (MiB/s)</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{accounts_max_throughput}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('ACCOUNTS_Throughput_Min', 'N/A'):.1f if isinstance(stats_data.get('ACCOUNTS_Throughput_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('ACCOUNTS_Throughput_Avg', 'N/A'):.1f if isinstance(stats_data.get('ACCOUNTS_Throughput_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{stats_data.get('ACCOUNTS_Throughput_Max', 'N/A'):.1f if isinstance(stats_data.get('ACCOUNTS_Throughput_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                '''
-            
-            html += '''
-                    </tbody>
-                </table>
-            '''
-        else:
-            html += '<p style="color: #6c757d;">暂无AWS EBS基准数据</p>'
-        
-        html += '</div>'
-        
-        # 第二层：iostat 原生采样数据统计
-        html += '''
-            <div class="subsection">
-                <h3>&#128200; iostat 原生采样数据统计</h3>
-        '''
-        
-        if df is not None and not df.empty:
-            iostat_stats = {}
-            
-            # DATA Device iostat字段
-            for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
-                data_col = [col for col in df.columns if col.startswith('data_') and col.endswith(f'_{metric}')]
-                if data_col:
-                    iostat_stats[f'DATA_{metric}_Min'] = df[data_col[0]].min()
-                    iostat_stats[f'DATA_{metric}_Max'] = df[data_col[0]].max()
-                    iostat_stats[f'DATA_{metric}_Avg'] = df[data_col[0]].mean()
-            
-            # ACCOUNTS Device iostat字段
-            for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
-                accounts_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith(f'_{metric}')]
-                if accounts_col:
-                    iostat_stats[f'ACCOUNTS_{metric}_Min'] = df[accounts_col[0]].min()
-                    iostat_stats[f'ACCOUNTS_{metric}_Max'] = df[accounts_col[0]].max()
-                    iostat_stats[f'ACCOUNTS_{metric}_Avg'] = df[accounts_col[0]].mean()
-            
-            html += '''
-                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
-                    <thead>
-                        <tr>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">设备</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">指标</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">最小值</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">平均值</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">最大值</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            '''
-            
-            # DATA Device 数据
-            if any(k.startswith('DATA_') for k in iostat_stats.keys()):
-                html += f'''
-                        <tr>
-                            <td rowspan="4" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">DATA Device</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">IOPS</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_total_iops_Min', 'N/A'):.0f if isinstance(iostat_stats.get('DATA_total_iops_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_total_iops_Avg', 'N/A'):.0f if isinstance(iostat_stats.get('DATA_total_iops_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_total_iops_Max', 'N/A'):.0f if isinstance(iostat_stats.get('DATA_total_iops_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Throughput (MiB/s)</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_total_throughput_mibs_Min', 'N/A'):.1f if isinstance(iostat_stats.get('DATA_total_throughput_mibs_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_total_throughput_mibs_Avg', 'N/A'):.1f if isinstance(iostat_stats.get('DATA_total_throughput_mibs_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_total_throughput_mibs_Max', 'N/A'):.1f if isinstance(iostat_stats.get('DATA_total_throughput_mibs_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Utilization (%)</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_util_Min', 'N/A'):.1f if isinstance(iostat_stats.get('DATA_util_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_util_Avg', 'N/A'):.1f if isinstance(iostat_stats.get('DATA_util_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_util_Max', 'N/A'):.1f if isinstance(iostat_stats.get('DATA_util_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Latency (ms)</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_avg_await_Min', 'N/A'):.2f if isinstance(iostat_stats.get('DATA_avg_await_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_avg_await_Avg', 'N/A'):.2f if isinstance(iostat_stats.get('DATA_avg_await_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('DATA_avg_await_Max', 'N/A'):.2f if isinstance(iostat_stats.get('DATA_avg_await_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                '''
-            
-            # ACCOUNTS Device 数据
-            if any(k.startswith('ACCOUNTS_') for k in iostat_stats.keys()):
-                html += f'''
-                        <tr>
-                            <td rowspan="4" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">ACCOUNTS Device</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">IOPS</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_total_iops_Min', 'N/A'):.0f if isinstance(iostat_stats.get('ACCOUNTS_total_iops_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_total_iops_Avg', 'N/A'):.0f if isinstance(iostat_stats.get('ACCOUNTS_total_iops_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_total_iops_Max', 'N/A'):.0f if isinstance(iostat_stats.get('ACCOUNTS_total_iops_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Throughput (MiB/s)</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_total_throughput_mibs_Min', 'N/A'):.1f if isinstance(iostat_stats.get('ACCOUNTS_total_throughput_mibs_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_total_throughput_mibs_Avg', 'N/A'):.1f if isinstance(iostat_stats.get('ACCOUNTS_total_throughput_mibs_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_total_throughput_mibs_Max', 'N/A'):.1f if isinstance(iostat_stats.get('ACCOUNTS_total_throughput_mibs_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Utilization (%)</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_util_Min', 'N/A'):.1f if isinstance(iostat_stats.get('ACCOUNTS_util_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_util_Avg', 'N/A'):.1f if isinstance(iostat_stats.get('ACCOUNTS_util_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_util_Max', 'N/A'):.1f if isinstance(iostat_stats.get('ACCOUNTS_util_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Latency (ms)</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_avg_await_Min', 'N/A'):.2f if isinstance(iostat_stats.get('ACCOUNTS_avg_await_Min'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_avg_await_Avg', 'N/A'):.2f if isinstance(iostat_stats.get('ACCOUNTS_avg_await_Avg'), (int, float)) else 'N/A'}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{iostat_stats.get('ACCOUNTS_avg_await_Max', 'N/A'):.2f if isinstance(iostat_stats.get('ACCOUNTS_avg_await_Max'), (int, float)) else 'N/A'}</td>
-                        </tr>
-                '''
-            
-            html += '''
-                    </tbody>
-                </table>
-            '''
-        else:
-            html += '<p style="color: #6c757d;">暂无iostat采样数据</p>'
-        
-        html += '''
-            </div>
-        </div>
-        '''
-        
-        return html
-    
     def generate_html_report(self):
         """生成HTML报告 - 使用安全的字段访问"""
         try:
@@ -1838,18 +1594,16 @@ class ReportGenerator:
         monitoring_throughput_avg = overhead_data.get('monitoring_throughput_mibs_avg', 0)
         
         # 估算监控开销对EBS的影响
-        # 这里使用简化的估算，实际应该基于更复杂的相关性分析
-        impact_level = "低"
-        impact_percent = 0
-
-        if monitoring_iops_avg > 100:
+        # 注意：监控系统读取 /proc 虚拟文件系统，IOPS 通常 < 0.01
+        if monitoring_iops_avg > 1.0:  # 极高（异常情况）
             impact_level = "高"
-            impact_percent = min(90, monitoring_iops_avg / 200 * 100)
-        elif monitoring_iops_avg > 50:
+            impact_percent = min(90, monitoring_iops_avg * 50)  # 1 IOPS = 50%
+        elif monitoring_iops_avg > 0.1:  # 较高
             impact_level = "中"
-            impact_percent = min(50, monitoring_iops_avg / 100 * 100)
-        else:
-            impact_percent = min(20, monitoring_iops_avg / 50 * 100)
+            impact_percent = min(50, monitoring_iops_avg * 100)  # 0.1 IOPS = 10%
+        else:  # 正常（< 0.1 IOPS）
+            impact_level = "低"
+            impact_percent = min(20, monitoring_iops_avg * 200)  # 0.01 IOPS = 2%
         
         # 根据影响程度生成不同的HTML
         if impact_level == "高":

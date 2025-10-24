@@ -605,7 +605,15 @@ class PerformanceVisualizer(CSVDataProcessor):
         plt.close()
         print(f"✅ Utilization threshold analysis chart saved: {output_file} ({device_info} devices)")
         
-        return output_file
+        violations_summary = {
+            'data_critical': (self.df[data_util_col] > thresholds['critical']).sum(),
+            'data_warning': ((self.df[data_util_col] > thresholds['warning']) & (self.df[data_util_col] <= thresholds['critical'])).sum()
+        }
+        if accounts_configured and accounts_util_col:
+            violations_summary['accounts_critical'] = (self.df[accounts_util_col] > thresholds['critical']).sum()
+            violations_summary['accounts_warning'] = ((self.df[accounts_util_col] > thresholds['warning']) & (self.df[accounts_util_col] <= thresholds['critical'])).sum()
+        
+        return output_file, violations_summary
 
     def create_await_threshold_analysis_chart(self):
         """Enhanced I/O Latency Threshold Analysis Chart"""
@@ -790,6 +798,8 @@ class PerformanceVisualizer(CSVDataProcessor):
                      (self.df[data_await_col] < data_thresholds['poor'])).sum() / total_points * 100,
             'critical': (self.df[data_await_col] >= data_thresholds['poor']).sum() / total_points * 100
         }
+        
+        accounts_violations_pct = {}
         
         summary_text = f"""DATA Device Performance:
   Mean: {data_stats['mean']:.2f}ms  |  P50: {data_stats['p50']:.2f}ms
@@ -1025,6 +1035,7 @@ Recommendations:
                 summary_lines.append(f"  Read/Write: {ratio:.2f}:1 ({'Read' if ratio > 1 else 'Write'} intensive)")
             
             if data_iops_cols:
+                data_iops_mean = self.df[data_iops_cols[0]].mean()
                 iops_ratio = data_iops_mean / accounts_iops_mean if accounts_iops_mean > 0 else 0
                 summary_lines.extend(["", f"IOPS Ratio: {iops_ratio:.1f}:1 (DATA:ACCOUNTS)"])
                 summary_lines.append(f"Primary Workload: {'DATA' if iops_ratio > 2 else 'Balanced'}")
@@ -1508,7 +1519,7 @@ Data Points: {len(overhead_df)}"""
                         numeric_data = pd.to_numeric(self.df[col], errors='coerce')
                         if not numeric_data.isna().all():
                             qps_cols.append(col)
-                    except (ValueError, TypeError, AttributeError) as e:
+                    except (ValueError, TypeError, AttributeError):
                         continue
             
             if not qps_cols:
@@ -2051,8 +2062,8 @@ Data Points: {len(overhead_df)}"""
                     else:
                         colors.append(UnifiedChartStyle.COLORS['success'])   # 正常
                 
-                scatter = ax3.scatter(system_resources[resource1], system_resources[resource2], 
-                                    c=colors, alpha=0.6, s=30)
+                ax3.scatter(system_resources[resource1], system_resources[resource2], 
+                           c=colors, alpha=0.6, s=30)
                 
                 # 添加瓶颈阈值线
                 ax3.axvline(x=bottleneck_thresholds[resource1], color=UnifiedChartStyle.COLORS['critical'], 

@@ -247,12 +247,12 @@ class CPUEBSCorrelationAnalyzer:
         
         # 1-2: User CPU vs 读请求, System CPU vs 写请求 (DATA设备)
         if data_r_cols and 'cpu_usr' in self.df.columns:
-            X = self.df[['cpu_usr']].values
+            x = self.df[['cpu_usr']].values
             y = self.df[data_r_cols[0]].values
             
             model = LinearRegression()
-            model.fit(X, y)
-            r2 = r2_score(y, model.predict(X))
+            model.fit(x, y)
+            r2 = r2_score(y, model.predict(x))
             
             results['usr_cpu_vs_data_reads'] = {
                 'r_squared': r2,
@@ -264,12 +264,12 @@ class CPUEBSCorrelationAnalyzer:
             print(f"  ✅ User CPU vs DATA读请求: R²={r2:.4f}, 系数={model.coef_[0]:.4f}")
         
         if data_w_cols and 'cpu_sys' in self.df.columns:
-            X = self.df[['cpu_sys']].values
+            x = self.df[['cpu_sys']].values
             y = self.df[data_w_cols[0]].values
             
             model = LinearRegression()
-            model.fit(X, y)
-            r2 = r2_score(y, model.predict(X))
+            model.fit(x, y)
+            r2 = r2_score(y, model.predict(x))
             
             results['sys_cpu_vs_data_writes'] = {
                 'r_squared': r2,
@@ -284,12 +284,12 @@ class CPUEBSCorrelationAnalyzer:
         accounts_configured = self._check_device_configured('accounts')
         
         if accounts_configured and accounts_r_cols and 'cpu_usr' in self.df.columns:
-            X = self.df[['cpu_usr']].values
+            x = self.df[['cpu_usr']].values
             y = self.df[accounts_r_cols[0]].values
             
             model = LinearRegression()
-            model.fit(X, y)
-            r2 = r2_score(y, model.predict(X))
+            model.fit(x, y)
+            r2 = r2_score(y, model.predict(x))
             
             results['usr_cpu_vs_accounts_reads'] = {
                 'r_squared': r2,
@@ -302,12 +302,12 @@ class CPUEBSCorrelationAnalyzer:
         
         # ACCOUNTS设备写请求分析 (仅在ACCOUNTS设备配置时执行)
         if accounts_configured and accounts_w_cols and 'cpu_sys' in self.df.columns:
-            X = self.df[['cpu_sys']].values
+            x = self.df[['cpu_sys']].values
             y = self.df[accounts_w_cols[0]].values
             
             model = LinearRegression()
-            model.fit(X, y)
-            r2 = r2_score(y, model.predict(X))
+            model.fit(x, y)
+            r2 = r2_score(y, model.predict(x))
             
             results['sys_cpu_vs_accounts_writes'] = {
                 'r_squared': r2,
@@ -400,12 +400,12 @@ class CPUEBSCorrelationAnalyzer:
         # 1: 软中断 vs I/O请求合并 (DATA设备)
         if data_rrqm_cols and data_wrqm_cols and 'cpu_soft' in self.df.columns:
             try:
-                X = self.df[[data_rrqm_cols[0], data_wrqm_cols[0]]].values
+                x = self.df[[data_rrqm_cols[0], data_wrqm_cols[0]]].values
                 y = self.df['cpu_soft'].values
                 
                 # 添加常数项
-                X_with_const = sm.add_constant(X)
-                model = sm.OLS(y, X_with_const).fit()
+                x_with_const = sm.add_constant(x)
+                model = sm.OLS(y, x_with_const).fit()
                 
                 results['soft_vs_data_merge'] = {
                     'r_squared': model.rsquared,
@@ -421,11 +421,11 @@ class CPUEBSCorrelationAnalyzer:
         # 2: CPU使用率 vs I/O请求大小 (DATA设备)
         if data_rareq_cols and data_wareq_cols and 'cpu_usr' in self.df.columns and 'cpu_sys' in self.df.columns:
             try:
-                X = self.df[[data_rareq_cols[0], data_wareq_cols[0]]].values
+                x = self.df[[data_rareq_cols[0], data_wareq_cols[0]]].values
                 y = (self.df['cpu_usr'] + self.df['cpu_sys']).values
                 
-                X_with_const = sm.add_constant(X)
-                model = sm.OLS(y, X_with_const).fit()
+                x_with_const = sm.add_constant(x)
+                model = sm.OLS(y, x_with_const).fit()
                 
                 results['cpu_vs_data_io_size'] = {
                     'r_squared': model.rsquared,
@@ -444,12 +444,12 @@ class CPUEBSCorrelationAnalyzer:
         # 3: 软中断 vs I/O请求合并 (ACCOUNTS设备)
         if accounts_configured and accounts_rrqm_cols and accounts_wrqm_cols and 'cpu_soft' in self.df.columns:
             try:
-                X = self.df[[accounts_rrqm_cols[0], accounts_wrqm_cols[0]]].values
+                x = self.df[[accounts_rrqm_cols[0], accounts_wrqm_cols[0]]].values
                 y = self.df['cpu_soft'].values
                 
                 # 添加常数项
-                X_with_const = sm.add_constant(X)
-                model = sm.OLS(y, X_with_const).fit()
+                x_with_const = sm.add_constant(x)
+                model = sm.OLS(y, x_with_const).fit()
                 
                 results['soft_vs_accounts_merge'] = {
                     'r_squared': model.rsquared,
@@ -465,11 +465,11 @@ class CPUEBSCorrelationAnalyzer:
         # 4: CPU使用率 vs I/O请求大小 (ACCOUNTS设备)
         if accounts_configured and accounts_rareq_cols and accounts_wareq_cols and 'cpu_usr' in self.df.columns and 'cpu_sys' in self.df.columns:
             try:
-                X = self.df[[accounts_rareq_cols[0], accounts_wareq_cols[0]]].values
+                x = self.df[[accounts_rareq_cols[0], accounts_wareq_cols[0]]].values
                 y = (self.df['cpu_usr'] + self.df['cpu_sys']).values
                 
-                X_with_const = sm.add_constant(X)
-                model = sm.OLS(y, X_with_const).fit()
+                x_with_const = sm.add_constant(x)
+                model = sm.OLS(y, x_with_const).fit()
                 
                 results['cpu_vs_accounts_io_size'] = {
                     'r_squared': model.rsquared,

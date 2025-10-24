@@ -324,8 +324,8 @@ class EBSChartGenerator:
                 
                 # ACCOUNTS设备Throughput趋势
                 if accounts_configured:
-                    accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
-                    if accounts_throughput_field and accounts_throughput_field in self.df.columns:
+                    accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
+                    if accounts_total_throughput_field and accounts_total_throughput_field in self.df.columns:
                         accounts_tp_values = self.df[accounts_total_throughput_field].rolling(window=10).mean()
                         accounts_valid_mask = ~np.isnan(accounts_tp_values)
                         if accounts_valid_mask.sum() > 5:
