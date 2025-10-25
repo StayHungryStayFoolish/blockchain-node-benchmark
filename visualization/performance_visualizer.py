@@ -917,11 +917,11 @@ Recommendations:
         threshold_violations = {}
         if data_await_col:
             threshold_violations['data_avg_await'] = self._analyze_threshold_violations(
-                self.df[data_await_col], self.await_thresholds, 'data_avg_await'
+                self.df[data_await_col], data_thresholds, 'data_avg_await'
             )
         if accounts_configured and accounts_await_col:
             threshold_violations['accounts_avg_await'] = self._analyze_threshold_violations(
-                self.df[accounts_await_col], self.await_thresholds, 'accounts_avg_await'
+                self.df[accounts_await_col], accounts_thresholds, 'accounts_avg_await'
             )
         
         return output_file, threshold_violations
@@ -1371,6 +1371,12 @@ Data Points: {len(overhead_df)}"""
             if overhead_chart:
                 chart_files.append(overhead_chart)
                 threshold_analysis_results['overhead_analysis'] = overhead_analysis
+            
+            # Generate performance cliff analysis chart
+            print("📊 Generating performance cliff analysis chart...")
+            cliff_chart = self.create_performance_cliff_analysis_chart()
+            if cliff_chart:
+                chart_files.append(cliff_chart)
             
             # Print threshold analysis summary
             self._print_threshold_analysis_summary(threshold_analysis_results)
