@@ -1,0 +1,57 @@
+# Commercial License
+
+## Overview
+
+This software is available under a dual-license model:
+- **AGPL 3.0** for open-source use
+- **Commercial License** for proprietary/commercial use
+
+## When You Need a Commercial License
+
+You need a commercial license if you want to:
+
+1. **Use in closed-source products**
+   - Integrate into proprietary software
+   - Build commercial services without open-sourcing
+
+2. **Avoid AGPL obligations**
+   - No requirement to open-source your modifications
+   - No requirement to open-source your entire service
+
+3. **Commercial deployment**
+   - Cloud service providers offering managed services
+   - Enterprise internal deployment
+   - SaaS platforms using this framework
+
+## What's Included
+
+- ✅ Perpetual license for the purchased version
+- ✅ Closed-source usage rights
+- ✅ Commercial deployment rights
+- ✅ Technical support (optional)
+- ✅ Custom development (optional)
+
+## Pricing
+
+Contact us for pricing based on:
+- Company size
+- Deployment scale
+- Support requirements
+- Custom features
+
+## Contact
+
+For commercial licensing inquiries:
+- Open a GitHub Issue with label: `commercial-license`
+- Or contact the repository maintainer through GitHub
+
+## FAQ
+
+**Q: Can I try before buying?**
+A: Yes, use the AGPL version for evaluation.
+
+**Q: What if I'm a startup?**
+A: We offer special pricing for startups and small teams.
+
+**Q: Do you offer source code access?**
+A: Yes, commercial license includes full source code access.
