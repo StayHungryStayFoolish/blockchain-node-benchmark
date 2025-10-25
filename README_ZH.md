@@ -262,11 +262,6 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 
 查看基于真实测试数据生成的完整示例报告（标准模式，90+ 分钟）：
 
-**English Version:**
-- [HTML Report](./docs/image/performance_report_en_20251025_150834.html) - Interactive HTML with all charts
-- [PDF Report](./docs/image/performance_report_en_20251025_150834.pdf) - Printable PDF version
-
-**中文版本:**
 - [HTML 报告](./docs/image/performance_report_zh_20251025_150834.html) - 包含所有图表的交互式 HTML
 - [PDF 报告](./docs/image/performance_report_zh_20251025_150834.pdf) - 可打印的 PDF 版本
 

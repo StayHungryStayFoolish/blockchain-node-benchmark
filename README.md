@@ -262,17 +262,13 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # Ultra-high-frequency monitoring interval
 
 View complete sample reports generated from real test data (Standard mode, 90+ minutes):
 
-**English Version:**
 - [HTML Report](./docs/image/performance_report_en_20251025_150834.html) - Interactive HTML with all charts
 - [PDF Report](./docs/image/performance_report_en_20251025_150834.pdf) - Printable PDF version
-
-**中文版本:**
-- [HTML 报告](./docs/image/performance_report_zh_20251025_150834.html) - 包含所有图表的交互式 HTML
-- [PDF 报告](./docs/image/performance_report_zh_20251025_150834.pdf) - 可打印的 PDF 版本
 
 ### 32 Professional Charts (Complete Framework Coverage)
 
 **Advanced Analysis Charts (9 charts)**:
+
 1. `pearson_correlation_analysis.png` - Pearson Correlation Analysis
 2. `linear_regression_analysis.png` - Linear Regression Analysis
 3. `negative_correlation_analysis.png` - Negative Correlation Analysis
@@ -284,6 +280,7 @@ View complete sample reports generated from real test data (Standard mode, 90+ m
 9. `performance_correlation_heatmap.png` - Performance Correlation Heatmap
 
 **EBS Professional Charts (7 charts)**:
+
 10. `ebs_aws_capacity_planning.png` - AWS Capacity Planning Analysis
 11. `ebs_iostat_performance.png` - Iostat Performance Analysis
 12. `ebs_bottleneck_correlation.png` - Bottleneck Correlation Analysis
@@ -293,6 +290,7 @@ View complete sample reports generated from real test data (Standard mode, 90+ m
 16. `ebs_time_series_analysis.png` - EBS Time Series Analysis
 
 **Core Performance Charts (11 charts)**:
+
 17. `performance_overview.png` - Performance Overview
 18. `cpu_ebs_correlation_visualization.png` - CPU-EBS Correlation Analysis
 19. `device_performance_comparison.png` - Device Performance Comparison
@@ -306,6 +304,7 @@ View complete sample reports generated from real test data (Standard mode, 90+ m
 27. `util_threshold_analysis.png` - Utilization Threshold Analysis
 
 **Additional Analysis Charts (5 charts)**:
+
 28. `resource_distribution_chart.png` - Resource Distribution Chart
 29. `monitoring_impact_chart.png` - Monitoring Impact Analysis
 30. `comprehensive_analysis_charts.png` - Comprehensive Analysis Charts
