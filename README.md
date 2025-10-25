@@ -258,6 +258,18 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # Ultra-high-frequency monitoring interval
 
 ## 📈 Generated Reports
 
+### Sample Reports
+
+View complete sample reports generated from real test data (Standard mode, 90+ minutes):
+
+**English Version:**
+- [HTML Report](./docs/image/performance_report_en_20251025_150834.html) - Interactive HTML with all charts
+- [PDF Report](./docs/image/performance_report_en_20251025_150834.pdf) - Printable PDF version
+
+**中文版本:**
+- [HTML 报告](./docs/image/performance_report_zh_20251025_150834.html) - 包含所有图表的交互式 HTML
+- [PDF 报告](./docs/image/performance_report_zh_20251025_150834.pdf) - 可打印的 PDF 版本
+
 ### 32 Professional Charts (Complete Framework Coverage)
 
 **Advanced Analysis Charts (9 charts)**:
