@@ -160,7 +160,7 @@ graph TB
     
     subgraph "Data Integration Stage"
         B1[unified_monitor.sh<br/>Data aggregation and formatting]
-        B2[CSV header generation<br/>generate_csv_header()]
+        B2[CSV header generation<br/>generate csv header]
         B3[Symlink creation<br/>performance_latest.csv]
         B4[Real-time data stream<br/>tail -F monitoring]
     end
@@ -219,19 +219,19 @@ graph LR
         A1[unified_monitor.sh startup]
         A2[Generate timestamped filename<br/>performance_YYYYMMDD_HHMMSS.csv]
         A3[Create symlink<br/>performance_latest.csv]
-        A4[Write CSV header<br/>generate_csv_header()]
+        A4[Write CSV header<br/>generate csv header]
     end
     
     subgraph "Real-time Data Stream"
-        B1[Data collection loop<br/>log_performance_data()]
-        B2[Write to timestamped file<br/>safe_write_csv()]
+        B1[Data collection loop<br/>log performance data]
+        B2[Write to timestamped file<br/>safe write csv]
         B3[EBS detector monitoring<br/>tail -F performance_latest.csv]
         B4[Dynamic field mapping<br/>CSV_FIELD_MAP]
     end
     
     subgraph "File Rotation Support"
         C1[Detect CSV format changes<br/>timestamp format validation]
-        C2[Reinitialize mapping<br/>init_csv_field_mapping()]
+        C2[Reinitialize mapping<br/>init csv field mapping]
         C3[Symlink auto-follow<br/>ln -sf new file]
         C4[Seamless data stream switch<br/>tail -F continues working]
     end
