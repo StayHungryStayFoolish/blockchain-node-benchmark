@@ -18,13 +18,13 @@ ACCOUNTS_DEVICE="nvme2n1"
 # Data volume configuration
 DATA_VOL_TYPE="io2"                    # Options: "gp3" | "io2" | "instance-store"
 DATA_VOL_SIZE="2000"                   # Current required data size to keep both snapshot archive and unarchived version of it
-DATA_VOL_MAX_IOPS="20000"              # Max IOPS for EBS volumes (REQUIRED for "instance-store")
+DATA_VOL_MAX_IOPS="30000"              # Max IOPS for EBS volumes (REQUIRED for "instance-store")
 DATA_VOL_MAX_THROUGHPUT="700"          # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for "io2")
 
 # Accounts volume configuration (optional)
 ACCOUNTS_VOL_TYPE="io2"                # Options: "gp3" | "io2" | "instance-store"
 ACCOUNTS_VOL_SIZE="500"                # Current required data size to keep both snapshot archive and unarchived version of it
-ACCOUNTS_VOL_MAX_IOPS="20000"          # Max IOPS for EBS volumes (REQUIRED for "instance-store")
+ACCOUNTS_VOL_MAX_IOPS="30000"          # Max IOPS for EBS volumes (REQUIRED for "instance-store")
 ACCOUNTS_VOL_MAX_THROUGHPUT="700"      # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for "io2")
 
 # ----- 网络监控配置 -----

@@ -190,6 +190,53 @@ class PerformanceVisualizer(CSVDataProcessor):
             print(f"❌ Data loading failed: {e}")
             return False
     
+    def _analyze_threshold_violations(self, data_series, thresholds, metric_name):
+        """Threshold violation analysis"""
+        if data_series.empty:
+            return {
+                'total_points': 0,
+                'warning_violations': 0,
+                'critical_violations': 0,
+                'warning_percentage': 0.0,
+                'critical_percentage': 0.0,
+                'max_value': 0.0,
+                'avg_value': 0.0,
+                'metric_name': metric_name,
+                'error': 'Data is empty'
+            }
+        
+        valid_data = data_series.dropna()
+        if len(valid_data) == 0:
+            return {
+                'total_points': len(data_series),
+                'warning_violations': 0,
+                'critical_violations': 0,
+                'warning_percentage': 0.0,
+                'critical_percentage': 0.0,
+                'max_value': 0.0,
+                'avg_value': 0.0,
+                'metric_name': metric_name,
+                'error': 'All data is NaN'
+            }
+        
+        total_points = len(valid_data)
+        violations = {
+            'warning': len(valid_data[valid_data > thresholds['warning']]),
+            'critical': len(valid_data[valid_data > thresholds['critical']])
+        }
+        
+        return {
+            'total_points': total_points,
+            'warning_violations': violations['warning'],
+            'critical_violations': violations['critical'],
+            'warning_percentage': (violations['warning'] / total_points * 100) if total_points > 0 else 0,
+            'critical_percentage': (violations['critical'] / total_points * 100) if total_points > 0 else 0,
+            'max_value': valid_data.max(),
+            'avg_value': valid_data.mean(),
+            'metric_name': metric_name,
+            'valid_data_ratio': len(valid_data) / len(data_series) * 100
+        }
+    
     def create_performance_overview_chart(self):
         """✅ System Performance Overview Chart - Systematic Refactor"""
         
@@ -605,15 +652,17 @@ class PerformanceVisualizer(CSVDataProcessor):
         plt.close()
         print(f"✅ Utilization threshold analysis chart saved: {output_file} ({device_info} devices)")
         
-        violations_summary = {
-            'data_critical': (self.df[data_util_col] > thresholds['critical']).sum(),
-            'data_warning': ((self.df[data_util_col] > thresholds['warning']) & (self.df[data_util_col] <= thresholds['critical'])).sum()
-        }
+        threshold_violations = {}
+        if data_util_col:
+            threshold_violations['data_util'] = self._analyze_threshold_violations(
+                self.df[data_util_col], self.util_thresholds, 'data_util'
+            )
         if accounts_configured and accounts_util_col:
-            violations_summary['accounts_critical'] = (self.df[accounts_util_col] > thresholds['critical']).sum()
-            violations_summary['accounts_warning'] = ((self.df[accounts_util_col] > thresholds['warning']) & (self.df[accounts_util_col] <= thresholds['critical'])).sum()
+            threshold_violations['accounts_util'] = self._analyze_threshold_violations(
+                self.df[accounts_util_col], self.util_thresholds, 'accounts_util'
+            )
         
-        return output_file, violations_summary
+        return output_file, threshold_violations
 
     def create_await_threshold_analysis_chart(self):
         """Enhanced I/O Latency Threshold Analysis Chart"""
@@ -865,11 +914,17 @@ Recommendations:
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
         print(f"✅ I/O latency threshold analysis chart saved: {output_file} ({device_info} devices)")
         
-        violations_summary = {'data': data_violations_pct}
+        threshold_violations = {}
+        if data_await_col:
+            threshold_violations['data_avg_await'] = self._analyze_threshold_violations(
+                self.df[data_await_col], self.await_thresholds, 'data_avg_await'
+            )
         if accounts_configured and accounts_await_col:
-            violations_summary['accounts'] = accounts_violations_pct
+            threshold_violations['accounts_avg_await'] = self._analyze_threshold_violations(
+                self.df[accounts_await_col], self.await_thresholds, 'accounts_avg_await'
+            )
         
-        return output_file, violations_summary
+        return output_file, threshold_violations
 
     def create_device_comparison_chart(self):
         """Device Performance Comparison Chart - 3x2 Layout"""

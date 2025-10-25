@@ -8,10 +8,10 @@ A professional multi blockchain node performance benchmarking framework with com
 
 ## 🎯 Key Features
 
-- **Multi-Mode QPS Testing**: Quick (7min), Standard (15min), and Intensive (2hr) testing modes
+- **Multi-Mode QPS Testing**: Quick (15+min), Standard (90+min), and Intensive (8+hr) testing modes
 - **Real-Time Performance Monitoring**: 73-79 performance metrics including CPU, Memory, EBS, Network, ENA
 - **Intelligent Bottleneck Detection**: 6-dimensional bottleneck detection with scientific evaluation algorithms
-- **Professional Visualization**: 18 types of professional charts and comprehensive HTML reports
+- **Professional Visualization**: 32 professional charts and comprehensive HTML reports
 - **AWS Deep Integration**: EBS performance baselines, ENA network monitoring, EC2 instance optimization
 - **Blockchain Node Specialization**: Block height monitoring, validator log analysis, RPC performance analysis
 
@@ -36,13 +36,13 @@ which sar       # Network monitoring tool
 ### Basic Usage
 
 ```bash
-# Quick test (7 minutes)
+# Quick test (15+ minutes)
 ./blockchain_node_benchmark.sh --quick
 
-# Standard test (15 minutes)
+# Standard test (90+ minutes)
 ./blockchain_node_benchmark.sh --standard
 
-# Intensive test (up to 2 hours with automatic bottleneck detection)
+# Intensive test (up to 8 hours with automatic bottleneck detection)
 ./blockchain_node_benchmark.sh --intensive
 ```
 
@@ -60,11 +60,11 @@ which sar       # Network monitoring tool
 
 ## 📊 Testing Modes
 
-| Mode | Duration | QPS Range | Step Size | Use Case |
-|------|----------|-----------|-----------|----------|
-| **Quick** | 7 minutes | 1000-3000 | 500 QPS | Basic performance verification |
-| **Standard** | 15 minutes | 1000-5000 | 500 QPS | Comprehensive performance evaluation |
-| **Intensive** | Up to 2 hours | 1000-unlimited | 250 QPS | Intelligent bottleneck detection |
+| Mode | Duration      | QPS Range | Step Size | Use Case |
+|------|---------------|-----------|-----------|----------|
+| **Quick** | 15+ minutes   | 1000-3000 | 500 QPS | Basic performance verification |
+| **Standard** | 90+ minutes   | 1000-5000 | 500 QPS | Comprehensive performance evaluation |
+| **Intensive** | Up to 8 hours | 1000-unlimited | 250 QPS | Intelligent bottleneck detection |
 
 ## 🔍 Monitoring Metrics
 
@@ -89,51 +89,52 @@ which sar       # Network monitoring tool
 ## 📈 Generated Reports
 
 ### 32 Professional Charts (Complete Framework Coverage)
+
 **Advanced Analysis Charts (9 charts)**:
-1. `pearson_correlation_analysis.png` - Pearson相关性分析
-2. `linear_regression_analysis.png` - 线性回归分析
-3. `negative_correlation_analysis.png` - 负相关分析
-4. `ena_limitation_trends.png` - ENA限制趋势
-5. `ena_connection_capacity.png` - ENA连接容量
-6. `ena_comprehensive_status.png` - ENA综合状态
-7. `comprehensive_correlation_matrix.png` - 综合相关性矩阵
-8. `performance_trend_analysis.png` - 性能趋势分析
-9. `performance_correlation_heatmap.png` - 相关性热力图
+1. `pearson_correlation_analysis.png` - Pearson Correlation Analysis
+2. `linear_regression_analysis.png` - Linear Regression Analysis
+3. `negative_correlation_analysis.png` - Negative Correlation Analysis
+4. `ena_limitation_trends.png` - ENA Limitation Trends
+5. `ena_connection_capacity.png` - ENA Connection Capacity
+6. `ena_comprehensive_status.png` - ENA Comprehensive Status
+7. `comprehensive_correlation_matrix.png` - Comprehensive Correlation Matrix
+8. `performance_trend_analysis.png` - Performance Trend Analysis
+9. `performance_correlation_heatmap.png` - Performance Correlation Heatmap
 
 **EBS Professional Charts (7 charts)**:
-10. `ebs_aws_capacity_planning.png` - AWS容量规划分析
-11. `ebs_iostat_performance.png` - Iostat性能分析
-12. `ebs_bottleneck_correlation.png` - 瓶颈相关性分析
-13. `ebs_performance_overview.png` - EBS性能概览
-14. `ebs_bottleneck_analysis.png` - EBS瓶颈分析
-15. `ebs_aws_standard_comparison.png` - EBS AWS标准对比
-16. `ebs_time_series_analysis.png` - EBS时间序列
+10. `ebs_aws_capacity_planning.png` - AWS Capacity Planning Analysis
+11. `ebs_iostat_performance.png` - Iostat Performance Analysis
+12. `ebs_bottleneck_correlation.png` - Bottleneck Correlation Analysis
+13. `ebs_performance_overview.png` - EBS Performance Overview
+14. `ebs_bottleneck_analysis.png` - EBS Bottleneck Analysis
+15. `ebs_aws_standard_comparison.png` - EBS AWS Standard Comparison
+16. `ebs_time_series_analysis.png` - EBS Time Series Analysis
 
 **Core Performance Charts (11 charts)**:
-17. `performance_overview.png` - 性能概览图表
-18. `cpu_ebs_correlation_visualization.png` - CPU-EBS相关性分析
-19. `device_performance_comparison.png` - 设备性能对比
-20. `await_threshold_analysis.png` - I/O延迟阈值分析
-21. `monitoring_overhead_analysis.png` - 监控开销分析
-22. `qps_trend_analysis.png` - QPS趋势分析
-23. `resource_efficiency_analysis.png` - 资源效率分析
-24. `bottleneck_identification.png` - 瓶颈识别图表
-25. `block_height_sync_chart.png` - 区块高度同步图表
-26. `smoothed_trend_analysis.png` - 平滑趋势分析
-27. `util_threshold_analysis.png` - 利用率阈值分析
+17. `performance_overview.png` - Performance Overview
+18. `cpu_ebs_correlation_visualization.png` - CPU-EBS Correlation Analysis
+19. `device_performance_comparison.png` - Device Performance Comparison
+20. `await_threshold_analysis.png` - I/O Latency Threshold Analysis
+21. `monitoring_overhead_analysis.png` - Monitoring Overhead Analysis
+22. `qps_trend_analysis.png` - QPS Trend Analysis
+23. `resource_efficiency_analysis.png` - Resource Efficiency Analysis
+24. `bottleneck_identification.png` - Bottleneck Identification
+25. `block_height_sync_chart.png` - Block Height Sync Chart
+26. `smoothed_trend_analysis.png` - Smoothed Trend Analysis
+27. `util_threshold_analysis.png` - Utilization Threshold Analysis
 
 **Additional Analysis Charts (5 charts)**:
-28. `resource_distribution_chart.png` - 资源分布图表
-29. `monitoring_impact_chart.png` - 监控影响分析
-30. `comprehensive_analysis_charts.png` - 综合分析图表
-31. `performance_cliff_analysis.png` - 性能悬崖分析
-32. `qps_performance_analysis.png` - QPS性能分析
+28. `resource_distribution_chart.png` - Resource Distribution Chart
+29. `monitoring_impact_chart.png` - Monitoring Impact Analysis
+30. `comprehensive_analysis_charts.png` - Comprehensive Analysis Charts
+31. `performance_cliff_analysis.png` - Performance Cliff Analysis
+32. `qps_performance_analysis.png` - QPS Performance Analysis
 
 ### HTML Report Sections
 - **Executive Summary**: Test overview and key findings
 - **Performance Analysis**: Detailed performance metrics analysis
 - **Bottleneck Analysis**: Bottleneck detection results and optimization recommendations
-- **Chart Gallery**: All 18 professional visualization charts
+- **Chart Gallery**: All 32 professional visualization charts
 - **EBS Analysis**: Storage performance deep dive
 - **ENA Analysis**: Network performance analysis (AWS environments)
 - **Blockchain Node Analysis**: Blockchain-specific metrics analysis
@@ -148,17 +149,24 @@ LOCAL_RPC_URL="http://localhost:8899"
 BLOCKCHAIN_NODE="Solana"
 
 # EBS device configuration
-LEDGER_DEVICE="nvme1n1"      # DATA device
+LEDGER_DEVICE="nvme1n1"      # DATA device (required)
 ACCOUNTS_DEVICE="nvme2n1"    # ACCOUNTS device (optional)
 
-# Volume configuration
+# DATA volume configuration (required)
 DATA_VOL_TYPE="io2"          # io2/gp3/instance-store
-DATA_VOL_MAX_IOPS="20000"    # Maximum IOPS
+DATA_VOL_MAX_IOPS="30000"    # Maximum IOPS
 DATA_VOL_MAX_THROUGHPUT="700" # Maximum throughput (MiB/s)
+
+# ACCOUNTS volume configuration (optional)
+ACCOUNTS_VOL_TYPE="io2"      # io2/gp3/instance-store
+ACCOUNTS_VOL_MAX_IOPS="30000" # Maximum IOPS
+ACCOUNTS_VOL_MAX_THROUGHPUT="500" # Maximum throughput (MiB/s)
 
 # Network configuration
 NETWORK_MAX_BANDWIDTH_GBPS=25 # Network bandwidth (Gbps)
 ```
+
+**Note:** ACCOUNTS device is optional. If not configured, the framework will only monitor the DATA device.
 
 ### Advanced Configuration
 
@@ -320,6 +328,36 @@ for mode in quick standard intensive; do
     sleep 60  # Wait for system recovery
 done
 ```
+
+## 📚 Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+### Core Documentation
+
+#### [Architecture Overview](./docs/architecture-overview.md)
+- 4-layer modular architecture design
+- Component interaction and data flow
+- 32 professional charts breakdown
+- System integration points
+
+#### [Configuration Guide](./docs/configuration-guide.md)
+- 4-layer configuration system (User/System/Internal/Dynamic)
+- EBS volume configuration (gp3/io2/instance-store)
+- Network and ENA settings
+- Blockchain-specific parameters
+
+#### [Monitoring Mechanism](./docs/monitoring-mechanism.md)
+- Dual-layer monitoring architecture
+- 73-79 performance metrics collection
+- Self-monitoring and overhead analysis
+- AWS standard conversion formulas
+
+#### [Blockchain Testing Features](./docs/blockchain-testing-features.md)
+- Single vs Mixed RPC testing modes
+- Multi-blockchain support (Solana/Ethereum/BSC/Base/Polygon/Scroll/Starknet/Sui)
+- RPC method configuration
+- Real transaction data testing
 
 ## 🤝 Contributing
 

@@ -23,6 +23,7 @@ BLOCKCHAIN_NODE=$(echo "$BLOCKCHAIN_NODE" | tr '[:upper:]' '[:lower:]')
 BLOCKCHAIN_PROCESS_NAMES=(
     "blockchain"
     "validator"
+    "agave-validator"
     "node.service"
 )
 

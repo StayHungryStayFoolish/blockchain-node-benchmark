@@ -1983,8 +1983,53 @@ class ReportGenerator:
         else:
             html += f'<p style="color: #6c757d;">{self.t["no_iostat_data"]}</p>'
         
+        html += '</div>'
+        
+        # Add EBS Bottleneck Analysis subsection
+        html += f'''
+            <div class="subsection">
+                <h3>&#128192; {self.t['ebs_bottleneck_analysis']}</h3>
+        '''
+        
+        # Load bottleneck info
+        bottleneck_info = self._load_bottleneck_info()
+        
+        if bottleneck_info and 'ebs_bottlenecks' in bottleneck_info and bottleneck_info['ebs_bottlenecks']:
+            ebs_bottlenecks = bottleneck_info['ebs_bottlenecks']
+            
+            html += '<div class="warning-list" style="margin: 15px 0;">'
+            for bottleneck in ebs_bottlenecks:
+                device_type = bottleneck.get('device_type', 'DATA')
+                bottleneck_type = bottleneck.get('type', 'Unknown')
+                severity = bottleneck.get('severity', 'Medium')
+                details = bottleneck.get('details', {})
+                
+                color = "#dc3545" if severity == "High" else "#fd7e14"
+                
+                details_html = ""
+                for key, value in details.items():
+                    details_html += f"<li><strong>{key}:</strong> {value}</li>"
+                
+                html += f'''
+                <div style="border-left: 4px solid {color}; padding: 12px; margin: 8px 0; background: #f8f9fa; border-radius: 4px;">
+                    <strong style="color: {color};">{device_type} Device</strong> - {bottleneck_type} <span style="color: {color};">({severity})</span>
+                    <ul style="margin: 8px 0; padding-left: 20px;">
+                        {details_html}
+                    </ul>
+                </div>
+                '''
+            html += '</div>'
+        else:
+            html += f'''
+                <div class="success" style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                    <h4 style="color: #155724; margin: 0 0 8px 0;">&#9989; {self.t['no_ebs_bottleneck_detected']}</h4>
+                    <p style="color: #155724; margin: 0;">{self.t['no_ebs_bottleneck_found']}</p>
+                </div>
+            '''
+        
+        html += '</div>'
+        
         html += '''
-            </div>
         </div>
         '''
         
@@ -2125,14 +2170,14 @@ class ReportGenerator:
                         </tr>
                         <tr>
                             <td>{self.t['memory_usage_rate']}</td>
-                            <td>{format_num(monitoring_memory_percent_avg)}% ({format_num(monitoring_memory_ratio)}%)</td>
-                            <td>{format_num(blockchain_memory_percent_avg)}% ({format_num(blockchain_memory_ratio)}%)</td>
+                            <td>{format_num(monitoring_memory_percent_avg)}%</td>
+                            <td>{format_num(blockchain_memory_percent_avg)}%</td>
                             <td>{format_num(max(0, system_memory_usage_avg - monitoring_memory_percent_avg - blockchain_memory_percent_avg))}%</td>
                         </tr>
                         <tr>
                             <td>{self.t['memory_usage_amount']}</td>
                             <td>{format_num(monitoring_memory_mb_avg)} MB</td>
-                            <td>{format_num(blockchain_memory_mb_avg)} MB</td>
+                            <td>{format_num(blockchain_memory_mb_avg/1024)} GB</td>
                             <td>{format_num(system_memory_gb*1024 - monitoring_memory_mb_avg - blockchain_memory_mb_avg)} MB</td>
                         </tr>
                         <tr>
@@ -2171,14 +2216,14 @@ class ReportGenerator:
                     <p>{self.t['monitoring_resource_analysis']}</p>
                     <ul>
                         <li>{self.t['cpu_overhead']}: {format_num(monitoring_cpu_ratio)}%</li>
-                        <li>{self.t['memory_overhead']}: {format_num(monitoring_memory_ratio)}%</li>
+                        <li>{self.t['memory_overhead']}: {format_num(monitoring_memory_percent_avg)}% ({format_num(monitoring_memory_mb_avg)} MB)</li>
                         <li>{self.t['io_overhead']}: {format_num(monitoring_iops_avg)} {self.t['iops']}</li>
                     </ul>
                     
                     <p>{self.t['blockchain_resource_analysis']}</p>
                     <ul>
                         <li>{self.t['cpu_usage']}: {format_num(blockchain_cpu_ratio)}%</li>
-                        <li>{self.t['memory_usage']}: {format_num(blockchain_memory_ratio)}%</li>
+                        <li>{self.t['memory_usage']}: {format_num(blockchain_memory_percent_avg)}% ({format_num(blockchain_memory_mb_avg/1024)} GB)</li>
                     </ul>
                     
                     <p class="{'warning' if monitoring_cpu_avg > 5 else 'success'}">
@@ -2266,37 +2311,6 @@ class ReportGenerator:
                             <li><strong>{self.t['monitoring_io_vs_ebs']}</strong>: {self.t['monitoring_io_ebs_relationship']}</li>
                         </ul>
                     </div>
-                </div>
-                
-                <div class="info-card">
-                    <h3>&#128221; {self.t['production_planning_recommendations']}</h3>
-                    <p>{self.t['planning_based_on_analysis']}</p>
-                    <table class="data-table">
-                        <tr>
-                            <th>{self.t['resource_type']}</th>
-                            <th>{self.t['test_env_usage']}</th>
-                            <th>{self.t['monitoring_overhead_label']}</th>
-                            <th>{self.t['production_recommendation']}</th>
-                        </tr>
-                        <tr>
-                            <td>{self.t['cpu']}</td>
-                            <td>{overhead_data.get('system_cpu_usage_avg', 0):.2f}%</td>
-                            <td>{overhead_data.get('monitoring_cpu_percent_avg', 0):.2f}%</td>
-                            <td>{self.t['at_least']} {int(overhead_data.get('system_cpu_cores_avg', 1))} {self.t['cores']}</td>
-                        </tr>
-                        <tr>
-                            <td>{self.t['memory_usage']}</td>
-                            <td>{overhead_data.get('system_memory_usage_avg', 0):.2f}%</td>
-                            <td>{overhead_data.get('monitoring_memory_mb_avg', 0):.2f} MB</td>
-                            <td>{self.t['at_least']} {max(4, int(overhead_data.get('system_memory_gb_avg', 4)))} GB</td>
-                        </tr>
-                        <tr>
-                            <td>{self.t['ebs_iops']}</td>
-                            <td>N/A</td>
-                            <td>{overhead_data.get('monitoring_iops_avg', 0):.2f}</td>
-                            <td>{self.t['reserve']} {int(overhead_data.get('monitoring_iops_max', 0) * 1.5)} {self.t['iops_margin']}</td>
-                        </tr>
-                    </table>
                 </div>
             </div>
             """
@@ -2620,12 +2634,14 @@ class ReportGenerator:
                         ax3.text(bar.get_x() + bar.get_width()/2, val + max(io_values)*0.02, 
                                 f'{val:.3f}', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             else:
-                ax3.text(0.5, 0.5, 'Monitoring I/O\nData Unavailable\n(All values are 0)', 
-                        ha='center', va='center',
+                ax3.text(0.5, 0.5, 'Monitoring I/O Data Unavailable\n(All values are 0)', 
+                        ha='center', va='center', transform=ax3.transAxes,
                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'],
-                        bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
+                        bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.3))
                 ax3.set_title('Monitoring I/O Operations', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
-                ax3.axis('off')
+                ax3.set_xlabel('I/O Type', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax3.set_ylabel('Monitoring I/O', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax3.grid(True, alpha=0.3)
             
             # Subplot 4: System Memory Overview (using basic memory data)
             if mem_used > 0 and mem_total > 0:
@@ -3148,212 +3164,7 @@ class ReportGenerator:
             </div>
         </div>
         """
-    
-    def _generate_ebs_baseline_analysis_section(self, df):
-        """Improved EBS baseline analysis section"""
-        try:
-            # Safely get environment variables
-            def safe_get_env_float(env_name, default_value=0.0):
-                """Safely get environment variable and convert to float"""
-                try:
-                    value = os.getenv(env_name)
-                    if value and value != 'N/A' and value.strip():
-                        return float(value)
-                    return default_value
-                except (ValueError, TypeError):
-                    return default_value
-            
-            # Get EBS baseline configuration
-            data_baseline_iops = safe_get_env_float('DATA_VOL_MAX_IOPS')
-            data_baseline_throughput = safe_get_env_float('DATA_VOL_MAX_THROUGHPUT')
-            accounts_baseline_iops = safe_get_env_float('ACCOUNTS_VOL_MAX_IOPS')
-            accounts_baseline_throughput = safe_get_env_float('ACCOUNTS_VOL_MAX_THROUGHPUT')
-            
-            # Safe utilization calculation function
-            def safe_calculate_utilization(actual_value, baseline_value, metric_name):
-                """Safe utilization calculation"""
-                try:
-                    if baseline_value is None or baseline_value == 0:
-                        return self.t['baseline_not_configured']
-                    
-                    if pd.isna(actual_value) or actual_value == 0:
-                        return "0.0%"
-                    
-                    utilization = (actual_value / baseline_value) * 100
-                    return f"{utilization:.1f}%"
-                    
-                except Exception as e:
-                    print(f"⚠️ {metric_name} {self.t['utilization_calc_failed']}: {e}")
-                    return self.t['calculation_error']
-            
-            # Safe field search and data extraction
-            def safe_get_metric_average(df, field_patterns, metric_name):
-                """Safely get metric average"""
-                try:
-                    matching_cols = []
-                    for pattern in field_patterns:
-                        matching_cols.extend([col for col in df.columns if pattern in col])
-                    
-                    if not matching_cols:
-                        print(f"⚠️ {self.t['field_not_found']} {metric_name}")
-                        return None
-                    
-                    # Use first matching field
-                    col = matching_cols[0]
-                    data = df[col].dropna()
-                    
-                    if len(data) == 0:
-                        print(f"⚠️ {metric_name} {self.t['data_empty']}")
-                        return None
-                    
-                    return data.mean()
-                    
-                except Exception as e:
-                    print(f"⚠️ {metric_name} {self.t['data_extraction_failed']}: {e}")
-                    return None
-            
-            # Calculate DATA Device metrics
-            data_actual_iops = safe_get_metric_average(df, ['data_', 'aws_standard_iops'], 'DATA AWS Standard IOPS')
-            data_actual_throughput = safe_get_metric_average(df, ['data_', 'total_throughput_mibs'], 'DATA Throughput')
-            
-            # Calculate ACCOUNTS Device metrics
-            accounts_actual_iops = safe_get_metric_average(df, ['accounts_', 'aws_standard_iops'], 'ACCOUNTS AWS Standard IOPS')
-            accounts_actual_throughput = safe_get_metric_average(df, ['accounts_', 'total_throughput_mibs'], 'ACCOUNTS Throughput')
-            
-            # Calculate utilization
-            data_iops_utilization = safe_calculate_utilization(data_actual_iops, data_baseline_iops, 'DATA IOPS')
-            data_throughput_utilization = safe_calculate_utilization(data_actual_throughput, data_baseline_throughput, 'DATAThroughput')
-            accounts_iops_utilization = safe_calculate_utilization(accounts_actual_iops, accounts_baseline_iops, 'ACCOUNTS IOPS')
-            accounts_throughput_utilization = safe_calculate_utilization(accounts_actual_throughput, accounts_baseline_throughput, 'ACCOUNTSThroughput')
-            
-            # Smart warning check
-            def check_utilization_warning(utilization_str):
-                """Check if utilization needs warning"""
-                try:
-                    if utilization_str in [self.t['baseline_not_configured'], self.t['calculation_error'], '0.0%']:
-                        return False
-                    
-                    value = float(utilization_str.rstrip('%'))
-                    thresholds = get_visualization_thresholds()
-                    return value > thresholds['warning']
-                except:
-                    return False
-            
-            warnings = []
-            if check_utilization_warning(data_iops_utilization):
-                warnings.append(f"DATA {self.t['device_iops_high']}: {data_iops_utilization}")
-            if check_utilization_warning(data_throughput_utilization):
-                warnings.append(f"DATA {self.t['device_throughput_high']}: {data_throughput_utilization}")
-            if check_utilization_warning(accounts_iops_utilization):
-                warnings.append(f"ACCOUNTS {self.t['device_iops_high']}: {accounts_iops_utilization}")
-            if check_utilization_warning(accounts_throughput_utilization):
-                warnings.append(f"ACCOUNTS {self.t['device_throughput_high']}: {accounts_throughput_utilization}")
-            
-            # Generate HTML report
-            warning_section = ""
-            if warnings:
-                warning_items = ''.join([f'<li>{warning}</li>' for warning in warnings])
-                warning_section = f"""
-                <div class="warning">
-                    <h4>&#9888; {self.t['high_utilization_warning']}</h4>
-                    <ul>
-                        {warning_items}
-                    </ul>
-                    <p><strong>{self.t['recommendation_label']}</strong>: {self.t['consider_upgrade_ebs']}</p>
-                </div>
-                """
-            
-            
-            # Preprocess display values to avoid formatting errors
-            data_actual_iops_display = f"{data_actual_iops:.0f}" if data_actual_iops is not None and data_actual_iops > 0 else "Data Not Available"
-            data_actual_throughput_display = f"{data_actual_throughput:.1f}" if data_actual_throughput is not None and data_actual_throughput > 0 else "Data Not Available"
-            accounts_actual_iops_display = f"{accounts_actual_iops:.0f}" if accounts_actual_iops is not None and accounts_actual_iops > 0 else "Data Not Available"
-            accounts_actual_throughput_display = f"{accounts_actual_throughput:.1f}" if accounts_actual_throughput is not None and accounts_actual_throughput > 0 else "Data Not Available"
-            
-            return f"""
-            <div class="section">
-                <h2>&#128202; {self.t['ebs_aws_baseline_analysis']}</h2>
-                
-                {warning_section}
-                
-                <div class="table-container">
-                    <table class="performance-table">
-                        <thead>
-                            <tr>
-                                <th>{self.t['device_name']}</th>
-                                <th>{self.t['metric_type']}</th>
-                                <th>{self.t['baseline_value']}</th>
-                                <th>{self.t['actual_value']}</th>
-                                <th>{self.t['utilization_label']}</th>
-                                <th>{self.t['status_label']}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td rowspan="2"><strong>DATA Device</strong><br><small>({self.t['ledger_storage']})</small></td>
-                                <td>{self.t['iops']}</td>
-                                <td>{data_baseline_iops or self.t['not_configured']}</td>
-                                <td>{data_actual_iops_display}</td>
-                                <td style="color: {'red' if check_utilization_warning(data_iops_utilization) else 'green'}; font-weight: bold;">{data_iops_utilization}</td>
-                                <td>{"⚠️ " + self.t['warning_label'] if check_utilization_warning(data_iops_utilization) else "✅ " + self.t['normal_label']}</td>
-                            </tr>
-                            <tr>
-                                <td>{self.t['throughput_mibs']}</td>
-                                <td>{data_baseline_throughput or self.t['not_configured']}</td>
-                                <td>{data_actual_throughput_display}</td>
-                                <td style="color: {'red' if check_utilization_warning(data_throughput_utilization) else 'green'}; font-weight: bold;">{data_throughput_utilization}</td>
-                                <td>{"⚠️ " + self.t['warning_label'] if check_utilization_warning(data_throughput_utilization) else "✅ " + self.t['normal_label']}</td>
-                            </tr>
-                            <tr>
-                                <td rowspan="2"><strong>ACCOUNTS Device</strong><br><small>({self.t['accounts_storage']})</small></td>
-                                <td>{self.t['iops']}</td>
-                                <td>{accounts_baseline_iops or self.t['not_configured']}</td>
-                                <td>{accounts_actual_iops_display}</td>
-                                <td style="color: {'red' if check_utilization_warning(accounts_iops_utilization) else 'green'}; font-weight: bold;">{accounts_iops_utilization}</td>
-                                <td>{"⚠️ " + self.t['warning_label'] if check_utilization_warning(accounts_iops_utilization) else "✅ " + self.t['normal_label']}</td>
-                            </tr>
-                            <tr>
-                                <td>{self.t['throughput_mibs']}</td>
-                                <td>{accounts_baseline_throughput or self.t['not_configured']}</td>
-                                <td>{accounts_actual_throughput_display}</td>
-                                <td style="color: {'red' if check_utilization_warning(accounts_throughput_utilization) else 'green'}; font-weight: bold;">{accounts_throughput_utilization}</td>
-                                <td>{"⚠️ " + self.t['warning_label'] if check_utilization_warning(accounts_throughput_utilization) else "✅ " + self.t['normal_label']}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div class="info">
-                    <h4>&#128202; {self.t['ebs_baseline_notes']}</h4>
-                    <ul>
-                        <li><strong>{self.t['baseline_value']}</strong>: {self.t['baseline_configured_via_env']}</li>
-                        <li><strong>{self.t['actual_value']}</strong>: {self.t['avg_performance_during_test']}</li>
-                        <li><strong>{self.t['utilization_label']}</strong>: {self.t['actual_vs_baseline_percentage']}</li>
-                        <li><strong>{self.t['warning_threshold_label']}</strong>: {self.t['utilization_exceeds_warning']}{get_visualization_thresholds()['warning']}%</li>
-                    </ul>
-                    <p><strong>{self.t['configuration_method']}</strong>: {self.t['set_env_variables']} DATA_VOL_MAX_IOPS, DATA_VOL_MAX_THROUGHPUT, ACCOUNTS_VOL_MAX_IOPS, ACCOUNTS_VOL_MAX_THROUGHPUT</p>
-                </div>
-            </div>
-            """
-            
-        except Exception as e:
-            print(f"❌ {self.t['ebs_baseline_generation_failed']}: {e}")
-            return f"""
-            <div class="section">
-                <h2>&#128202; {self.t['ebs_aws_baseline_analysis']}</h2>
-                <div class="warning">
-                    <h4>&#10060; {self.t['baseline_analysis_failed']}</h4>
-                    <p>{self.t['error_message_label']}: {str(e)[:100]}</p>
-                    <p>{self.t['please_check_label']}</p>
-                    <ul>
-                        <li>{self.t['env_config_correct']}</li>
-                        <li>{self.t['csv_contains_fields']}</li>
-                        <li>{self.t['data_format_correct']}</li>
-                    </ul>
-                </div>
-            </div>
-            """
-    
+
     def _generate_ena_warnings_section(self, df):
         """Generate ENA network warning section - using ENAFieldAccessor"""
         try:
@@ -4132,8 +3943,6 @@ class ReportGenerator:
             block_height_fields = [col for col in df.columns if 'block_height' in col.lower() or 'height' in col.lower()]
             
             # Generate each section - using actually existing methods
-            ebs_analysis = self._generate_ebs_baseline_analysis_section(df)
-            ebs_bottleneck_analysis = self._generate_ebs_bottleneck_section()
             monitoring_overhead_analysis = self._generate_monitoring_overhead_section()
             monitoring_overhead_detailed = self._generate_monitoring_overhead_detailed_section()
             production_resource_planning = self._generate_production_resource_planning_section()
@@ -4184,8 +3993,6 @@ class ReportGenerator:
                     {charts_section}
                     {monitoring_overhead_analysis}
                     {monitoring_overhead_detailed}
-                    {ebs_analysis}
-                    {ebs_bottleneck_analysis}
                     {production_resource_planning}
                     {ena_warnings}
                     {ena_data_table}
