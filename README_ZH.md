@@ -2,7 +2,8 @@
 
 [English](README.md) | [中文](README_ZH.md)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Commercial License](https://img.shields.io/badge/License-Commercial-green.svg)](LICENSE.COMMERCIAL)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Shell Script](https://img.shields.io/badge/shell-bash-green.svg)](https://www.gnu.org/software/bash/)
 
@@ -469,4 +470,19 @@ python3 -m pytest tests/
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
+本项目采用双许可证模式：
+
+### 开源许可证（AGPL 3.0）
+- 个人、学术和开源项目免费使用
+- 修改后必须开源
+- 网络使用需要公开源码
+- 详见 [LICENSE](LICENSE) 文件
+
+### 商业许可证
+- 商业/专有用途需要购买
+- 允许闭源集成
+- 无 AGPL 义务
+- 提供企业支持
+- 详见 [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL) 文件
+
+**联系方式：** 在 GitHub 提交 Issue 并添加 `commercial-license` 标签咨询商业许可

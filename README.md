@@ -2,7 +2,8 @@
 
 [English](README.md) | [中文](README_ZH.md)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Commercial License](https://img.shields.io/badge/License-Commercial-green.svg)](LICENSE.COMMERCIAL)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Shell Script](https://img.shields.io/badge/shell-bash-green.svg)](https://www.gnu.org/software/bash/)
 
@@ -469,4 +470,19 @@ python3 -m pytest tests/
 
 ## 📄 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is dual-licensed:
+
+### Open Source License (AGPL 3.0)
+- Free for personal, academic, and open-source projects
+- Modifications must be open-sourced
+- Network use requires source disclosure
+- See [LICENSE](LICENSE) for full terms
+
+### Commercial License
+- Required for commercial/proprietary use
+- Closed-source integration allowed
+- No AGPL obligations
+- Enterprise support available
+- See [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL) for details
+
+**Contact:** Open a GitHub Issue with label `commercial-license` for commercial licensing inquiries
