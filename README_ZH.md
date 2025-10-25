@@ -447,6 +447,15 @@ done
 
 ## 🤝 贡献
 
+我们欢迎贡献！贡献本项目即表示您同意以下条款：
+
+### 贡献者许可协议（CLA）
+
+提交 Pull Request 即表示您同意：
+- 您的贡献将同时在 AGPL 3.0 和商业许可证下授权
+- 您授予项目维护者在商业版本中使用您贡献的权利
+- 您有权提交这些贡献（无第三方知识产权冲突）
+
 ### 开发环境设置
 ```bash
 # 克隆仓库
@@ -456,9 +465,18 @@ cd blockchain-node-benchmark
 # 安装开发依赖
 pip3 install -r requirements.txt
 
-# 运行测试
-python3 -m pytest tests/
+# 验证安装
+python3 --version
+bash --version
 ```
+
+### 贡献指南
+
+1. **Fork 和分支**：从 `main` 创建功能分支
+2. **代码风格**：Python 遵循 PEP 8，bash 脚本使用 shellcheck
+3. **文档**：更新相关文档
+4. **提交信息**：使用清晰、描述性的提交信息
+5. **Pull Request**：提交 PR 并附上详细说明
 
 ### 添加新的监控指标
 1. 在 `monitoring/unified_monitor.sh` 中添加数据收集逻辑
@@ -466,6 +484,9 @@ python3 -m pytest tests/
 3. 在 Python 分析脚本中添加相应的分析逻辑
 4. 更新可视化组件以生成相关图表
 
+### 有疑问？
+
+对于任何贡献相关的问题，请提交带有 `question` 标签的 Issue。
 
 
 ## 📄 许可证

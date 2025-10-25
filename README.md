@@ -447,6 +447,15 @@ done
 
 ## 🤝 Contributing
 
+We welcome contributions! By contributing to this project, you agree to the following:
+
+### Contributor License Agreement (CLA)
+
+By submitting a pull request, you agree that:
+- Your contributions will be licensed under both AGPL 3.0 and our Commercial License
+- You grant the project maintainers the right to use your contributions in commercial versions
+- You have the right to submit the contributions (no third-party IP conflicts)
+
 ### Development Environment Setup
 ```bash
 # Clone the repository
@@ -456,9 +465,18 @@ cd blockchain-node-benchmark
 # Install development dependencies
 pip3 install -r requirements.txt
 
-# Run tests
-python3 -m pytest tests/
+# Verify installation
+python3 --version
+bash --version
 ```
+
+### Contribution Guidelines
+
+1. **Fork and Branch**: Create a feature branch from `main`
+2. **Code Style**: Follow PEP 8 for Python, use shellcheck for bash scripts
+3. **Documentation**: Update relevant documentation
+4. **Commit Messages**: Use clear, descriptive commit messages
+5. **Pull Request**: Submit PR with detailed description
 
 ### Adding New Monitoring Metrics
 1. Add data collection logic in `monitoring/unified_monitor.sh`
@@ -466,6 +484,9 @@ python3 -m pytest tests/
 3. Add corresponding analysis logic in Python analysis scripts
 4. Update visualization components to generate related charts
 
+### Questions?
+
+Open an issue with the `question` label for any contribution-related questions.
 
 
 ## 📄 License
