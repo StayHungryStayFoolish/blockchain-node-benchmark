@@ -15,6 +15,47 @@ A professional multi blockchain node performance benchmarking framework with com
 - **AWS Deep Integration**: EBS performance baselines, ENA network monitoring, EC2 instance optimization
 - **Blockchain Node Specialization**: Block height monitoring, validator log analysis, RPC performance analysis
 
+## ⚙️ Required Configuration
+
+**Before running the framework**, you must configure the following parameters in `config/config_loader.sh`:
+
+```bash
+# 1. RPC Endpoint (Required)
+LOCAL_RPC_URL="http://localhost:8899"  # Your blockchain node RPC endpoint
+
+# 2. Blockchain Type (Required)
+BLOCKCHAIN_NODE="Solana"  # Supported: Solana, Ethereum, BSC, Base, Polygon, Scroll, Starknet, Sui
+
+# 3. EBS Device Configuration (Required)
+LEDGER_DEVICE="nvme1n1"              # DATA device name (check with 'lsblk')
+DATA_VOL_MAX_IOPS="30000"            # Your EBS volume's provisioned IOPS
+DATA_VOL_MAX_THROUGHPUT="4000"      # Your EBS volume's throughput (MiB/s)
+
+# 4. ACCOUNTS Device (Optional, but recommended for complete monitoring)
+ACCOUNTS_DEVICE="nvme2n1"            # ACCOUNTS device name
+ACCOUNTS_VOL_MAX_IOPS="30000"       # ACCOUNTS volume's provisioned IOPS
+ACCOUNTS_VOL_MAX_THROUGHPUT="4000"  # ACCOUNTS volume's throughput (MiB/s)
+
+# 5. Network Configuration (Required for AWS environments)
+NETWORK_MAX_BANDWIDTH_GBPS=25       # Your instance's network bandwidth (Gbps)
+```
+
+**Quick Configuration Check:**
+```bash
+# Verify your EBS devices
+lsblk
+
+# Check your EBS volume configuration in AWS Console:
+# EC2 → Volumes → Select your volume → Details tab
+# - IOPS: Provisioned IOPS value
+# - Throughput: Provisioned throughput value
+
+# Check your instance network bandwidth:
+# EC2 → Instance Types → Search your instance type → Networking
+```
+
+**Note**: If you don't configure these parameters correctly, the framework will use default values which may not match your actual hardware, leading to inaccurate performance analysis.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -341,6 +382,13 @@ Comprehensive documentation is available in the `docs/` directory:
 - 32 professional charts breakdown
 - System integration points
 
+#### [Data Architecture](./docs/data-architecture.md) | [数据架构](./docs/data-architecture-zh.md)
+- Complete data file structure and field definitions
+- 79-field performance data CSV format
+- 20-field monitoring overhead CSV format
+- Data flow architecture and file naming conventions
+- JSON format specifications for test results
+
 #### [Configuration Guide](./docs/configuration-guide.md)
 - 4-layer configuration system (User/System/Internal/Dynamic)
 - EBS volume configuration (gp3/io2/instance-store)
@@ -349,7 +397,7 @@ Comprehensive documentation is available in the `docs/` directory:
 
 #### [Monitoring Mechanism](./docs/monitoring-mechanism.md)
 - Dual-layer monitoring architecture
-- 73-79 performance metrics collection
+- 79 performance metrics collection (updated)
 - Self-monitoring and overhead analysis
 - AWS standard conversion formulas
 
