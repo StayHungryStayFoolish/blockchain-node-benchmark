@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-报告生成器 - 增强版 + 瓶颈模式支持
-集成监控开销分析、配置状态检查、特定分析等功能
-支持瓶颈检测结果展示和专项分析报告
+Report Generator - Enhanced Version with Bottleneck Mode Support
+Integrates monitoring overhead analysis, configuration status check, and specific analysis features
+Supports bottleneck detection results display and specialized analysis reports
 """
 
 import pandas as pd
@@ -29,19 +29,1209 @@ from visualization.device_manager import DeviceManager
 from visualization.performance_visualizer import format_time_axis
 from utils.ena_field_accessor import ENAFieldAccessor
 
+# Bilingual translation dictionary
+TRANSLATIONS = {
+    'en': {
+        # EBS Analysis Section
+        'ebs_performance_analysis': 'EBS Performance Analysis Results',
+        'performance_warnings': 'Performance Warnings',
+        'no_performance_anomaly': 'No performance anomaly detected',
+        'occurred_at': 'Occurred at',
+        'aws_ebs_baseline_stats': 'AWS EBS Baseline Performance Statistics',
+        'device': 'Device',
+        'metric': 'Metric',
+        'baseline_config': 'Baseline (Config)',
+        'min': 'Min',
+        'avg': 'Avg',
+        'max': 'Max',
+        'data_device': 'DATA Device',
+        'accounts_device': 'ACCOUNTS Device',
+        'iops': 'IOPS',
+        'throughput_mibs': 'Throughput (MiB/s)',
+        'iostat_sampling_stats': 'iostat Raw Sampling Data Statistics',
+        'utilization_pct': 'Utilization (%)',
+        'latency_ms': 'Latency (ms)',
+        'no_aws_ebs_data': 'No AWS EBS baseline data available',
+        'no_iostat_data': 'No iostat sampling data available',
+        # Configuration Section
+        'config_status_check': 'Configuration Status Check',
+        'config_item': 'Configuration Item',
+        'status': 'Status',
+        'value': 'Value',
+        'blockchain_node_type': 'Blockchain Node Type',
+        'configured': 'Configured',
+        'not_configured': 'Not Configured',
+        'data_volume_type': 'DATA Volume Type',
+        'accounts_volume_type': 'ACCOUNTS Volume Type',
+        'note': 'Note',
+        'accounts_not_configured_note': 'ACCOUNTS Device not configured, only monitoring DATA Device performance. Recommend configuring ACCOUNTS_DEVICE for complete storage performance analysis.',
+        # Monitoring Overhead Section
+        'monitoring_overhead_comprehensive_analysis': 'Monitoring Overhead Comprehensive Analysis',
+        'system_resource_overview': 'System Resource Overview',
+        'metric_label': 'Metric',
+        'value_label': 'Value',
+        'cpu_cores': 'CPU Cores',
+        'total_memory': 'Total Memory',
+        'avg_cpu_usage': 'Average CPU Usage',
+        'avg_memory_usage': 'Average Memory Usage',
+        'resource_usage_comparison': 'Resource Usage Comparison Analysis',
+        'resource_type': 'Resource Type',
+        'monitoring_system': 'Monitoring System',
+        'blockchain_node': 'Blockchain Node',
+        'other_processes': 'Other Processes',
+        'cpu_usage_rate': 'CPU Usage',
+        'memory_usage_rate': 'Memory Usage',
+        'memory_usage_amount': 'Memory Usage Amount',
+        'process_count': 'Process Count',
+        'percentage_note': 'Percentages in parentheses represent the proportion of total system resources',
+        'monitoring_io_overhead': 'Monitoring System I/O Overhead',
+        'average': 'Average',
+        'maximum': 'Maximum',
+        'monitoring_overhead_conclusion': 'Monitoring Overhead Conclusion',
+        'monitoring_resource_analysis': 'Monitoring system resource consumption analysis:',
+        'cpu_overhead': 'CPU overhead',
+        'memory_overhead': 'Memory overhead',
+        'io_overhead': 'I/O overhead',
+        'blockchain_resource_analysis': 'Blockchain node resource consumption analysis:',
+        'cpu_usage': 'CPU usage',
+        'memory_usage': 'Memory usage',
+        'monitoring_impact': 'Monitoring system impact on test results:',
+        'significant': 'Significant',
+        'minor': 'Minor',
+        'monitoring_cpu_exceeds_5': 'monitoring CPU overhead exceeds 5%',
+        'monitoring_cpu_below_5': 'monitoring CPU overhead below 5%',
+        'monitoring_data_unavailable': 'Monitoring Overhead Data Not Available',
+        'monitoring_data_not_found': 'Monitoring overhead data file not found or empty. Please ensure monitoring overhead statistics are enabled during performance testing.',
+        'expected_file': 'Expected file',
+        'how_to_enable': 'How to Enable Monitoring Overhead Statistics',
+        'monitoring_integrated': 'Monitoring overhead statistics feature is integrated into the unified monitoring system and enabled by default.',
+        'check_config': 'If monitoring overhead data is not generated, please check the following configuration:',
+        'ensure_variable_set': 'Ensure the MONITORING_OVERHEAD_LOG variable in config_loader.sh is correctly set',
+        'ensure_function_calls': 'Ensure log_performance_data function calls write_monitoring_overhead_log',
+        'check_permissions': 'Check if log directory permissions are correct',
+        'detailed_analysis': 'Monitoring Overhead Detailed Analysis',
+        'resource_usage_trends': 'Resource Usage Trends',
+        'resource_proportion_analysis': 'Resource Proportion Analysis',
+        'monitoring_performance_relationship': 'Monitoring Overhead and Performance Relationship',
+        'production_resource_planning': 'Production Environment Resource Planning Recommendations',
+        'test_env_usage': 'Test Environment Usage',
+        'production_recommendation': 'Production Environment Recommendation',
+        'at_least': 'At least',
+        'cores': 'cores',
+        'reserve': 'Reserve',
+        'margin': 'margin',
+        # Monitoring Overhead Charts Section
+        'resource_proportion_chart': 'Resource Proportion Analysis',
+        'resource_distribution_image': 'Resource Distribution Chart',
+        'chart_shows_component_resources': 'This chart shows the proportion of system resources occupied by different components:',
+        'all_monitoring_processes': 'All monitoring processes resource proportion',
+        'blockchain_related_processes': 'Blockchain-related processes resource proportion',
+        'other_system_processes': 'Other system processes resource proportion',
+        'monitoring_performance_chart': 'Monitoring Overhead and Performance Relationship',
+        'monitoring_impact_image': 'Monitoring Impact Analysis',
+        'chart_analyzes_correlation': 'This chart analyzes the correlation between monitoring overhead and system performance metrics:',
+        'monitoring_cpu_vs_qps': 'Monitoring CPU Overhead vs QPS',
+        'monitoring_io_vs_ebs': 'Monitoring I/O Overhead vs EBS Performance',
+        'monitoring_cpu_qps_relationship': 'Relationship between monitoring CPU usage and system throughput',
+        'monitoring_io_ebs_relationship': 'Relationship between monitoring I/O and storage performance',
+        'production_planning_recommendations': 'Production Environment Resource Planning Recommendations',
+        'planning_based_on_analysis': 'Resource planning recommendations for production environment based on monitoring overhead analysis:',
+        'monitoring_overhead_label': 'Monitoring Overhead',
+        'iops_margin': 'IOPS margin',
+        'monitoring_overhead_detailed': 'Monitoring Overhead Detailed Analysis',
+        'monitoring_detailed_unavailable': 'Monitoring Overhead Detailed Data Unavailable',
+        'monitoring_file_not_found': 'Monitoring overhead data file not found or chart generation failed. Please ensure:',
+        'overhead_csv_generated': 'Monitoring overhead CSV file has been correctly generated',
+        'chart_script_executed': 'Chart generation script has been correctly executed',
+        'output_dir_permissions': 'Output directory has correct write permissions',
+        'how_to_generate_charts': 'How to Generate Monitoring Overhead Charts',
+        'use_command_to_generate': 'You can use the following command to generate monitoring overhead analysis charts:',
+        'generate_resource_distribution': 'Generate resource distribution chart',
+        'resource_distribution_failed': 'Resource distribution chart generation failed',
+        'generate_monitoring_impact': 'Generate monitoring impact analysis chart',
+        'read_memory_data_failed': 'Failed to read memory data',
+        'read_network_data_failed': 'Failed to read network data',
+        # Monitoring Impact Chart Section
+        'get_io_data_from_perf': 'Get I/O data and basic memory data from performance CSV',
+        'use_basic_memory_data': 'Use basic memory data from performance CSV (unit: MB, needs conversion to GB)',
+        'convert_to_gb': 'Convert to GB',
+        'convert_to_cores_gb': 'Convert to cores and GB',
+        'calculate_proportions': 'Calculate proportions',
+        'create_3x2_layout': 'Create 3x2 layout',
+        'subplot_cpu_core_usage': 'Subplot 1: CPU Core Usage',
+        'subplot_memory_usage': 'Subplot 2: Memory Usage',
+        'subplot_monitoring_io': 'Subplot 3: Monitoring I/O Impact',
+        'calculate_io_overhead_pct': 'Calculate I/O overhead percentage',
+        'subplot_system_memory': 'Subplot 4: System Memory Overview',
+        'subplot_cpu_overhead_trend': 'Subplot 5: CPU Overhead Trend',
+        'subplot_monitoring_efficiency': 'Subplot 6: Monitoring Efficiency Summary',
+        'generation_complete_monitoring': 'Generation complete: monitoring_impact_chart.png',
+        'monitoring_impact_failed': 'Monitoring impact analysis chart generation failed',
+        # EBS Bottleneck Section
+        'generate_ebs_bottleneck_section': 'Generate EBS bottleneck analysis section',
+        'device_type_list': 'Device type list',
+        'device_bottleneck': 'Device Bottleneck',
+        'device_label': 'Device',
+        # EBS Bottleneck Analysis Section
+        'no_bottleneck_detected': 'No Bottleneck Detected',
+        'device_performance_good': 'Device performance is good, no bottleneck found.',
+        'ebs_bottleneck_analysis': 'EBS Bottleneck Analysis',
+        'ebs_analysis_based_on': 'EBS bottleneck analysis is based on AWS recommended performance metrics, including utilization, latency, AWS standard IOPS and throughput.',
+        'root_cause_based_on': 'Root cause analysis is based on correlation analysis between monitoring overhead and EBS performance metrics.',
+        'no_ebs_bottleneck_detected': 'No EBS Bottleneck Detected',
+        'no_ebs_bottleneck_found': 'No EBS performance bottleneck found during testing. Storage performance is good and will not limit overall system performance.',
+        'generate_root_cause_html': 'Generate bottleneck root cause analysis HTML',
+        'cannot_perform_root_cause': 'Cannot Perform Root Cause Analysis',
+        'missing_overhead_data': 'Missing monitoring overhead data, cannot determine if bottleneck is caused by monitoring system.',
+        'get_overhead_data': 'Get monitoring overhead data',
+        'estimate_monitoring_impact': 'Estimate monitoring overhead impact on EBS',
+        'root_cause_significant_impact': 'Root Cause Analysis: Significant Monitoring System Impact',
+        'monitoring_impact_level': 'Monitoring system impact on EBS performance',
+        'monitoring_avg_iops': 'Monitoring system average IOPS',
+        'monitoring_avg_throughput': 'Monitoring system average throughput',
+        'recommendation': 'Recommendation',
+        'reduce_monitoring_frequency': 'Consider reducing monitoring frequency or optimizing monitoring system I/O operations to reduce impact on',
+        'root_cause_moderate_impact': 'Root Cause Analysis: Moderate Monitoring System Impact',
+        'monitoring_has_some_impact': 'Monitoring system has some impact on device, but is not the main bottleneck source. Should optimize both business logic and monitoring system.',
+        'root_cause_minor_impact': 'Root Cause Analysis: Minor Monitoring System Impact',
+        'bottleneck_from_workload': 'Device bottleneck is mainly caused by business workload, monitoring system impact is negligible. Should optimize business logic or upgrade EBS configuration.',
+        'load_bottleneck_info': 'Load bottleneck detection information',
+        'bottleneck_info_load_failed': 'Bottleneck information load failed',
+        'generate_production_planning': 'Generate production environment resource planning recommendations section',
+        'determine_main_bottleneck': 'Determine main bottleneck',
+        'no_obvious_bottleneck': 'No obvious bottleneck found',
+        'cpu_insufficient': 'CPU resources insufficient',
+        'memory_insufficient': 'Memory resources insufficient',
+        'data_device_bottleneck': 'DATA device bottleneck',
+        'test_conclusion_summary': 'Test Conclusion Summary',
+        'based_on_test_results': 'Based on performance test results, we conclude:',
+        'main_bottleneck_label': 'Main bottleneck',
+        'monitoring_resource_usage': 'Monitoring system resource usage',
+        'significant_label': 'Significant',
+        'minor_label': 'Minor',
+        'blockchain_resource_demand': 'Blockchain node resource demand',
+        'high_label': 'High',
+        'medium_label': 'Medium',
+        'low_label': 'Low',
+        'performance_optimization_recommendations': 'Performance Optimization Recommendations',
+        'component_label': 'Component',
+        'optimization_recommendation': 'Optimization Recommendation',
+        'expected_effect': 'Expected Effect',
+        'monitoring_system_label': 'Monitoring System',
+        'reduce_frequency': 'Reduce monitoring frequency',
+        'keep_current_config': 'Keep current configuration',
+        'use_separate_overhead_log': 'Use separate monitoring overhead log',
+        'cleanup_historical_data': 'Regularly clean up historical monitoring data',
+        'significantly_reduce_overhead': 'Significantly reduce monitoring overhead',
+        'maintain_low_overhead': 'Maintain low monitoring overhead',
+        'ebs_storage_label': 'EBS Storage',
+        'increase_iops_config': 'Increase IOPS configuration',
+        'current_config_suitable': 'Current configuration suitable for workload',
+        'consider_io2_over_gp3': 'Consider using IO2 instead of GP3',
+        'keep_current_storage_type': 'Keep current storage type',
+        'separate_data_accounts': 'Separate DATA and ACCOUNTS devices',
+        'current_device_config_reasonable': 'Current device configuration is reasonable',
+        'eliminate_storage_bottleneck': 'Eliminate storage bottleneck, improve overall performance',
+        'maintain_good_storage_performance': 'Maintain good storage performance',
+        'blockchain_node_label': 'Blockchain Node',
+        'increase_cpu_cores': 'Increase CPU cores',
+        'current_cpu_suitable': 'Current CPU configuration suitable for workload',
+        'increase_memory_config': 'Increase memory configuration',
+        'current_memory_suitable': 'Current memory configuration suitable for workload',
+        'optimize_node_params': 'Optimize blockchain node configuration parameters',
+        'improve_node_capacity': 'Improve node processing capacity, eliminate performance bottleneck',
+        'maintain_stable_performance': 'Maintain stable node performance',
+        'generate_overhead_table': 'Generate complete monitoring overhead data table',
+        'overhead_data_not_available': 'Monitoring Overhead Data Not Available',
+        'overhead_file_not_found': 'Monitoring overhead data file not found or empty. Please ensure monitoring overhead statistics are enabled during performance testing.',
+        'expected_file_label': 'Expected file',
+        'description_label': 'Description',
+        'overhead_auto_generated': 'Monitoring overhead data is automatically generated by unified_monitor.sh, no need to manually run additional tools.',
+        'overhead_detailed_data': 'Monitoring Overhead Detailed Data',
+        'data_shows_component_consumption': 'The following data shows the resource consumption of each monitoring component during testing, helping to evaluate real resource requirements in production environment.',
+        'monitoring_component_label': 'Monitoring Component',
+        'avg_cpu_usage_label': 'Average CPU Usage',
+        'peak_cpu_usage_label': 'Peak CPU Usage',
+        'avg_memory_usage_label': 'Average Memory Usage',
+        'peak_memory_usage_label': 'Peak Memory Usage',
+        'avg_iops_label': 'Average IOPS',
+        'peak_iops_label': 'Peak IOPS',
+        'avg_throughput_label': 'Average Throughput',
+        'data_completeness_label': 'Data Completeness',
+        'iostat_monitoring': 'iostat Monitoring',
+        'sar_monitoring': 'sar Monitoring',
+        # Overhead Data Table Section
+        'none_label': 'None',
+        'storage_io_label': 'Storage I/O',
+        'vmstat_monitoring': 'vmstat Monitoring',
+        'data_collection_script': 'Data Collection Script',
+        'total_monitoring_overhead': 'Total Monitoring Overhead',
+        'overhead_analysis_notes': 'Monitoring Overhead Analysis Notes',
+        'memory_usage_label': 'Memory Usage',
+        'production_env_recommendation': 'Production Environment Recommendation',
+        'total_overhead_usually': 'Total monitoring overhead usually accounts for 1-3% of system resources and can be ignored.',
+        'iops_throughput_zero_reason': 'Reasons for IOPS/Throughput Being 0',
+        'monitoring_reads_proc': 'Monitoring system mainly reads <code>/proc</code> virtual filesystem, kernel does not count physical I/O statistics',
+        'actual_io_overhead': 'Actual I/O overhead < 0.00005 IOPS/s, even with 4 decimal precision (%.4f) still shows as 0.0000',
+        'proves_efficient_design': 'This proves the monitoring system is efficiently designed with almost no impact on production environment',
+        'to_view_tiny_values': 'To view tiny values, increase precision to %.6f or higher in source code',
+        'overhead_table_generation_failed': 'Monitoring overhead table generation failed',
+        'error_message_label': 'Error message',
+        'check_data_format': 'Please check the format and completeness of monitoring overhead data.',
+        'generate_independent_tools': 'Generate independent analysis tools results display',
+        'ebs_bottleneck_detection': 'EBS Bottleneck Detection Results',
+        'report_file_label': 'Report file',
+        'analyze_ebs_under_qps': 'Analyze EBS storage performance bottlenecks under different QPS loads',
+        'ebs_iops_conversion': 'EBS IOPS Conversion Analysis',
+        'convert_iostat_to_aws': 'Convert iostat metrics to AWS EBS standard IOPS and Throughput metrics',
+        'ebs_comprehensive_analysis': 'EBS Comprehensive Analysis',
+        'ebs_performance_report': 'EBS storage performance comprehensive analysis report',
+        'monitoring_overhead_calculation': 'Monitoring Overhead Calculation',
+        'data_file_label': 'Data file',
+        'detailed_overhead_data': 'Detailed monitoring system resource consumption data',
+        'about': 'about',
+        # EBS Baseline Analysis Section
+        'component_breakdown': 'Resource consumption breakdown of each system monitoring tool (estimated based on overall monitoring data)',
+        'cpu_percentage_used': 'CPU percentage used by monitoring tools',
+        'memory_size_used': 'Memory size used by monitoring tools (MB)',
+        'disk_io_operations': 'Disk I/O operations generated by monitoring tools (tiny values shown as < 0.0001)',
+        'disk_throughput_generated': 'Disk Throughput generated by monitoring tools (MiB/s)',
+        'data_completeness_percentage': 'Data completeness percentage of monitoring data',
+        'improved_ebs_baseline': 'Improved EBS baseline analysis section',
+        'safe_get_env_float': 'Safely get environment variable and convert to float',
+        'safe_utilization_calc': 'Safe utilization calculation function',
+        'baseline_not_configured': 'Baseline not configured',
+        'utilization_calc_failed': 'Utilization calculation failed',
+        'calculation_error': 'Calculation error',
+        'safe_field_search': 'Safe field search and data extraction',
+        'safe_get_metric_avg': 'Safely get metric average',
+        'field_not_found': 'Related field not found',
+        'data_empty': 'Data is empty',
+        'data_extraction_failed': 'Data extraction failed',
+        'calculate_data_device': 'Calculate DATA Device metrics',
+        'calculate_accounts_device': 'Calculate ACCOUNTS Device metrics',
+        'calculate_utilization': 'Calculate utilization',
+        'smart_warning_check': 'Smart warning check',
+        'check_utilization_warning': 'Check if utilization needs warning',
+        'device_iops_high': 'Device IOPS utilization too high',
+        'device_throughput_high': 'Device Throughput utilization too high',
+        'generate_html_report': 'Generate HTML report',
+        'high_utilization_warning': 'High Utilization Warning',
+        'recommendation_label': 'Recommendation',
+        'consider_upgrade_ebs': 'Consider upgrading EBS configuration or optimizing I/O patterns',
+        'preprocess_display_values': 'Preprocess display values to avoid formatting errors',
+        'data_not_available': 'Data Not Available',
+        'ebs_aws_baseline_analysis': 'EBS AWS Baseline Analysis',
+        'device_name': 'Device',
+        'metric_type': 'Metric Type',
+        'baseline_value': 'Baseline Value',
+        'actual_value': 'Actual Value',
+        'utilization_label': 'Utilization',
+        'status_label': 'Status',
+        'ledger_storage': 'LEDGER Storage',
+        'warning_label': 'Warning',
+        'normal_label': 'Normal',
+        'accounts_storage': 'Accounts Storage',
+        'ebs_baseline_notes': 'EBS Baseline Analysis Notes',
+        'baseline_configured_via_env': 'EBS performance baseline configured via environment variables',
+        'avg_performance_during_test': 'Average performance during testing',
+        'actual_vs_baseline_percentage': 'Percentage of actual performance vs baseline performance',
+        'warning_threshold_label': 'Warning threshold',
+        'utilization_exceeds_warning': 'Warning displayed when utilization exceeds',
+        'configuration_method': 'Configuration Method',
+        'set_env_variables': 'Set environment variables',
+        'ebs_baseline_generation_failed': 'EBS baseline analysis generation failed',
+        'baseline_analysis_failed': 'Baseline Analysis Failed',
+        'please_check_label': 'Please check:',
+        'env_config_correct': 'Environment variable configuration is correct',
+        'csv_contains_fields': 'CSV data contains necessary fields',
+        'data_format_correct': 'Data format is correct',
+        'generate_ena_warnings': 'Generate ENA network warning section',
+        'check_ena_availability': 'Check ENA data availability',
+        'analyze_ena_limitations': 'Analyze ENA limitation data',
+        'ena_network_normal': 'ENA Network Status Normal',
+        'no_ena_limitations': 'No ENA network limitations detected during monitoring. All network metrics are within normal range.',
+        'ena_limitation_detected': 'ENA Network Limitation Detection Results',
+        'detected_ena_limitations': 'Detected the following ENA network limitation situations, recommend focusing on network performance optimization:',
+        'duration_time': 'Duration',
+        'to': 'to',
+        # ENA Warnings Section
+        'occurrence_count': 'Occurrence count',
+        'times': 'times',
+        'max_value_label': 'Max value',
+        'cumulative_impact': 'Cumulative impact',
+        'consider_optimize_network': 'Consider optimizing network configuration, upgrading hardware resources, or adjusting application load patterns.',
+        'ena_warning_generation_failed': 'ENA warning generation failed',
+        'analyze_ena_limitations_func': 'Analyze ENA limitation occurrences',
+        'analyze_exceeded_fields': 'Analyze exceeded type fields',
+        'get_field_analysis': 'Get field analysis information',
+        'filter_limited_records': 'Filter records with limitations (value > 0)',
+        'special_handling_connection': 'Special handling: Connection capacity insufficient warning',
+        'find_available_fields': 'Find available type fields',
+        'use_dynamic_threshold': 'Use dynamic threshold',
+        'warning_when_below': 'Warning when available capacity is below',
+        'connection_capacity_warning': 'Connection Capacity Insufficient Warning',
+        'minimum_remaining': 'Minimum remaining',
+        'connections': 'connections',
+        'average_remaining': 'Average remaining',
+        'generate_ena_data_table': 'Generate ENA data statistics table',
+        'generate_statistics': 'Generate statistics',
+        'use_accessor_for_description': 'Use ENAFieldAccessor to get field descriptions',
+        'generate_html_table': 'Generate HTML table',
+        'set_format_for_field_types': 'Set different formats for different field types',
+        'status_indicator': 'Status indicator',
+        'use_threshold_for_connection': 'Use dynamic threshold to determine connection capacity status',
+        'ena_network_statistics': 'ENA Network Statistics',
+        'ena_metric': 'ENA Metric',
+        'current_value': 'Current Value',
+        'max_value': 'Max Value',
+        'avg_value': 'Average Value',
+        'note_label': 'Note',
+        'exceeded_fields_show_drops': 'Exceeded fields show cumulative packet drops, larger values indicate more severe network limitations',
+        'available_connections_show_capacity': 'Available connections show remaining connection capacity, smaller values indicate greater connection pressure',
+        'ena_table_generation_failed': 'ENA data table generation failed',
+        'improved_cpu_ebs_correlation': 'Improved CPU and EBS correlation analysis table generation',
+        'cpu_iowait_vs_util': 'CPU I/O Wait vs Device Utilization',
+        'cpu_iowait_vs_queue': 'CPU I/O Wait vs I/O Queue Length',
+        'cpu_iowait_vs_read_latency': 'CPU I/O Wait vs Read Latency',
+        'cpu_iowait_vs_write_latency': 'CPU I/O Wait vs Write Latency',
+        'user_cpu_vs_read_requests': 'User Mode CPU vs Read Requests',
+        'system_cpu_vs_write_requests': 'System Mode CPU vs Write Requests',
+        # CPU-EBS Correlation Section
+        'use_max_or_default': 'Use max value or default value',
+        'safe_correlation_func': 'Safe correlation analysis function',
+        'safe_correlation_analysis': 'Safe correlation analysis',
+        'missing_cpu_field': 'Missing CPU field',
+        'missing_ebs_field': 'Missing EBS field',
+        'data_validity_check': 'Data validity check',
+        'data_is_empty': 'Data is empty',
+        'insufficient_data_points': 'Insufficient valid data points',
+        'correlation_result_nan': 'Correlation calculation result is NaN',
+        'improved_correlation_strength': 'Improved correlation strength classification',
+        'very_strong_correlation': 'Very Strong Correlation',
+        'strong_correlation': 'Strong Correlation',
+        'moderate_correlation': 'Moderate Correlation',
+        'weak_correlation': 'Weak Correlation',
+        'very_weak_correlation': 'Very Weak Correlation',
+        'improved_significance': 'Improved statistical significance determination',
+        'highly_significant_3': 'Highly Significant (***)',
+        'highly_significant_2': 'Highly Significant (**)',
+        'significant_1': 'Significant (*)',
+        'not_significant': 'Not Significant',
+        'device_type': 'Device Type',
+        'analysis_item': 'Analysis Item',
+        'cpu_metric': 'CPU Metric',
+        'ebs_metric': 'EBS Metric',
+        'correlation_coefficient': 'Correlation Coefficient',
+        'p_value': 'P Value',
+        'statistical_significance': 'Statistical Significance',
+        'correlation_strength': 'Correlation Strength',
+        'valid_sample_count': 'Valid Sample Count',
+        'data_integrity': 'Data Integrity',
+        'analysis_failed': 'Analysis failed',
+        'precise_field_matching': 'Precise field matching',
+        'exact_match': 'Exact match',
+        'fuzzy_match_strict': 'Fuzzy match (stricter)',
+        'analyze_data_device': 'Analyze DATA Device',
+        'analyze_accounts_device': 'Analyze ACCOUNTS Device',
+        'correlation_data_unavailable': 'Correlation Analysis Data Not Available',
+        'possible_reasons': 'Possible reasons:',
+        'missing_cpu_ebs_fields': 'Missing necessary CPU or EBS performance fields',
+        'data_quality_issues': 'Data quality issues (too many NaN values)',
+        'insufficient_data_less_10': 'Insufficient valid data points (less than 10)',
+        'generate_improved_table': 'Generate improved HTML table',
+        'set_row_color_by_strength': 'Set row color based on correlation strength',
+        'correlation_analysis_notes': 'Correlation Analysis Notes',
+        'correlation_range': 'Correlation coefficient range',
+        'larger_abs_stronger': '-1.0 to 1.0, larger absolute value indicates stronger correlation',
+        'significance_levels': '*** p<0.001, ** p<0.01, * p<0.05',
+        'strength_classification': 'Correlation strength classification: |r|≥0.8 very strong, |r|≥0.6 strong, |r|≥0.4 moderate, |r|≥0.2 weak',
+        'data_integrity_percentage': 'Data integrity: Percentage of valid data points out of total data points',
+        'format_block_height_readable': 'Convert block_height related field values to human-readable format',
+        'enhanced_block_height_analysis': 'Enhanced block height performance analysis',
+        'use_comparison_table': 'Use comparison table display',
+        'block_height_monitoring': 'Block Height Monitoring',
+        'no_block_height_data': 'No block height data available',
+        'add_time_series_chart': 'Add time series chart display',
+        'add_data_loss_stats': 'Add data_loss_stats.json file display',
+        'collect_block_height_data': 'Collect block height data',
+        'only': 'only',
+        'items': 'items',
+        'high_latency': 'High Latency',
+        'no_aws_ebs_baseline': 'No AWS EBS baseline data available',
+        'iostat_raw_sampling_stats': 'iostat Raw Sampling Data Statistics',
+        'device_impact_suffix': 'device impact',
+        'block_height_data_comparison': 'Block Height Data Comparison',
+        'blockchain_node_sync_analysis': 'Blockchain Node Sync Analysis',
+        'block_height_analysis_failed': 'Block height analysis failed',
+        'block_height_sync_time_series': 'Block Height Sync Time Series',
+        'block_height_sync_status': 'Block Height Sync Status',
+        'chart_shows_block_height_diff': 'This chart shows the block height difference between local node and mainnet during testing',
+        'blue_curve': 'Blue Curve',
+        'block_height_diff_mainnet_minus_local': 'Block height difference (Mainnet - Local)',
+        'red_dashed_line': 'Red Dashed Line',
+        'anomaly_threshold_50_blocks': 'Anomaly threshold (±50 blocks)',
+        'red_area': 'Red Area',
+        'data_loss_detected_periods': 'Time periods with detected data loss',
+        'statistics_info': 'Statistics Info',
+        'sync_quality_stats_top_left': 'Sync quality statistics displayed in top left corner',
+        'block_height_chart_not_generated': 'Block height sync chart not generated',
+        'possible_reason_node_data_unavailable': 'Possible reason: Blockchain node data unavailable or monitoring not enabled',
+        'data_loss_stats_summary': 'Data Loss Statistics Summary',
+        'anomaly_sample_count': 'Anomaly Sample Count',
+        'anomaly_event_count': 'Anomaly Event Count',
+        'total_anomaly_duration': 'Total Anomaly Duration',
+        'avg_event_duration': 'Avg Event Duration',
+        'stats_file_location': 'Stats File Location',
+        'last_updated': 'Last Updated',
+        'data_loss_statistics': 'Data Loss Statistics',
+        'stats_file_read_failed': 'Stats file read failed',
+        'file_location': 'File Location',
+        'data_loss_stats_file_not_found': 'data_loss_stats.json file not found. Possible reasons',
+        'no_data_loss_detected_during_test': 'No data loss events detected during testing',
+        'stats_file_not_archived': 'Stats file not properly archived',
+        'block_height_monitor_not_running': 'block_height_monitor.sh not running properly',
+        'generated_time': 'Generated Time',
+        'unified_field_naming': 'Unified Field Naming',
+        'complete_device_support': 'Complete Device Support',
+        'monitoring_overhead_analysis': 'Monitoring Overhead Analysis',
+        'blockchain_node_specific_analysis': 'Blockchain Node Specific Analysis',
+        'bottleneck_detection_analysis': 'Bottleneck Detection Analysis',
+        'html_content_generation_failed': 'HTML content generation failed',
+        'performance_analysis_charts': 'Performance Analysis Charts',
+        'charts_provide_comprehensive_visualization': 'The following charts provide comprehensive visualization analysis of system performance, including performance trends, correlation analysis, bottleneck identification, etc.',
+        'chart_statistics': 'Chart Statistics',
+        'available_charts': 'Available Charts',
+        'pending_charts': 'Pending Charts',
+        'chart_coverage': 'Chart Coverage',
+        'chart_generation_notice': 'Chart Generation Notice',
+        'no_chart_files_found': 'No chart files found. Charts will be generated in the following cases',
+        'run_performance_visualizer': 'Run performance_visualizer.py to generate performance analysis charts',
+        'run_advanced_chart_generator': 'Run advanced_chart_generator.py to generate advanced analysis charts',
+        'run_comprehensive_analysis': 'Run comprehensive_analysis.py to generate comprehensive analysis charts',
+        'ensure_run_chart_scripts_before_report': 'Please ensure to run the corresponding chart generation scripts before generating the report',
+        'following_charts_not_generated': 'The following charts have not been generated yet and will be displayed automatically after running the corresponding scripts',
+        'and': 'and',
+        'more_charts': 'more charts',
+        'chart_display_error': 'Chart Display Error',
+        'chart_section_generation_failed': 'Chart section generation failed',
+        'unknown': 'Unknown',
+        'performance_bottleneck_detection_result': 'Performance Bottleneck Detection Result',
+        'max_successful_qps': 'Max Successful QPS',
+        'bottleneck_trigger_qps': 'Bottleneck Trigger QPS',
+        'performance_drop': 'Performance Drop',
+        'bottleneck_details': 'Bottleneck Details',
+        'detection_time': 'Detection Time',
+        'severity_level': 'Severity Level',
+        'bottleneck_reason': 'Bottleneck Reason',
+        'optimization_recommendations': 'Optimization Recommendations',
+        'suggested_next_actions': 'Suggested Next Actions',
+        'view_detailed_bottleneck_charts': 'View detailed bottleneck analysis charts to understand root causes',
+        'adjust_system_config_per_recommendations': 'Adjust system configuration according to optimization recommendations',
+        'consider_hardware_upgrade_or_app_optimization': 'Consider upgrading hardware resources or optimizing application',
+        'rerun_test_to_verify_improvements': 'Rerun test to verify improvement effects',
+        'bottleneck_info_display_error': 'Bottleneck Info Display Error',
+        'bottleneck_info_processing_failed': 'Bottleneck info processing failed',
+        'performance_summary': 'Performance Summary',
+        'peak_cpu_usage': 'Peak CPU Usage',
+        'data_device_avg_iops': 'DATA Device Avg IOPS',
+        'accounts_device_avg_iops': 'ACCOUNTS Device Avg IOPS',
+        'monitoring_data_points': 'Monitoring Data Points',
+        'performance_summary_generation_failed': 'Performance summary generation failed',
+        # Chart Titles and Descriptions
+        'chart_performance_overview': 'Performance Overview',
+        'chart_performance_overview_desc': 'System overall performance overview, including time series display of key metrics such as CPU, Memory, EBS',
+        'chart_cpu_ebs_correlation': 'CPU-EBS Correlation Visualization',
+        'chart_cpu_ebs_correlation_desc': 'Correlation analysis between CPU Usage and EBS performance metrics to help identify I/O bottlenecks',
+        'chart_cpu_ebs_correlation_visualization': 'CPU-EBS Correlation Visualization',
+        'chart_cpu_ebs_correlation_visualization_desc': 'Correlation analysis between CPU Usage and EBS performance metrics to help identify I/O bottlenecks',
+        'chart_device_performance_comparison': 'Device Performance Comparison',
+        'chart_device_performance_comparison_desc': 'Performance comparison analysis between DATA Device and ACCOUNTS Device',
+        'chart_await_threshold_analysis': 'Await Time Threshold Analysis',
+        'chart_await_threshold_analysis_desc': 'I/O wait time threshold analysis to identify storage performance bottlenecks',
+        'chart_util_threshold_analysis': 'Utilization Threshold Analysis',
+        'chart_util_threshold_analysis_desc': 'Device Utilization threshold analysis to evaluate resource usage efficiency',
+        'chart_monitoring_overhead_analysis': 'Monitoring Overhead Analysis',
+        'chart_monitoring_overhead_analysis_desc': 'Resource consumption analysis of the monitoring system itself to evaluate monitoring impact on system performance',
+        'chart_smoothed_trend_analysis': 'Smoothed Trend Analysis',
+        'chart_smoothed_trend_analysis_desc': 'Smoothed trend analysis of performance metrics showing performance change trends after noise elimination',
+        'chart_qps_trend_analysis': 'QPS Trend Analysis',
+        'chart_qps_trend_analysis_desc': 'Detailed QPS performance trend analysis showing QPS changes during testing',
+        'chart_resource_efficiency_analysis': 'Resource Efficiency Analysis',
+        'chart_resource_efficiency_analysis_desc': 'Efficiency analysis of QPS vs resource consumption to evaluate resource cost per QPS',
+        'chart_bottleneck_identification': 'Bottleneck Identification',
+        'chart_bottleneck_identification_desc': 'Automatic bottleneck identification results marking performance bottleneck points and influencing factors',
+        'chart_pearson_correlation_analysis': 'Pearson Correlation Analysis',
+        'chart_pearson_correlation_analysis_desc': 'Pearson correlation analysis between CPU and EBS metrics quantifying linear relationships between metrics',
+        'chart_linear_regression_analysis': 'Linear Regression Analysis',
+        'chart_linear_regression_analysis_desc': 'Linear regression analysis of key metrics to predict performance trends and relationships',
+        'chart_negative_correlation_analysis': 'Negative Correlation Analysis',
+        'chart_negative_correlation_analysis_desc': 'Negative correlation metric analysis to identify performance trade-off relationships',
+        'chart_comprehensive_correlation_matrix': 'Comprehensive Correlation Matrix',
+        'chart_comprehensive_correlation_matrix_desc': 'Comprehensive correlation matrix heatmap of all monitoring metrics',
+        'chart_performance_trend_analysis': 'Performance Trend Analysis',
+        'chart_performance_trend_analysis_desc': 'Long-term performance trend analysis to identify performance change patterns',
+        'chart_ena_limitation_trends': 'ENA Network Limitation Trends',
+        'chart_ena_limitation_trends_desc': 'AWS ENA network limitation trend analysis showing time changes of PPS, bandwidth, connection tracking limits',
+        'chart_ena_connection_capacity': 'ENA Connection Capacity Monitoring',
+        'chart_ena_connection_capacity_desc': 'ENA connection capacity real-time monitoring showing available connection changes and capacity warnings',
+        'chart_ena_comprehensive_status': 'ENA Comprehensive Status Analysis',
+        'chart_ena_comprehensive_status_desc': 'ENA network comprehensive status analysis including limitation distribution, capacity status and severity assessment',
+        'chart_performance_correlation_heatmap': 'Performance Correlation Heatmap',
+        'chart_performance_correlation_heatmap_desc': 'Heatmap display of performance metric correlations intuitively showing relationship strength between metrics',
+        'chart_performance_cliff_analysis': 'Performance Cliff Analysis',
+        'chart_performance_cliff_analysis_desc': 'Performance cliff detection and analysis identifying causes of sharp performance drops',
+        'chart_comprehensive_analysis_charts': 'Comprehensive Analysis Charts',
+        'chart_comprehensive_analysis_charts_desc': 'Comprehensive performance analysis chart collection fully displaying system performance status',
+        'chart_qps_performance_analysis': 'QPS Performance Analysis',
+        'chart_qps_performance_analysis_desc': 'Specialized QPS performance analysis charts deeply analyzing QPS performance characteristics',
+        'chart_ebs_aws_capacity_planning': 'EBS AWS Capacity Planning Analysis',
+        'chart_ebs_aws_capacity_planning_desc': 'AWS EBS capacity planning analysis including IOPS and throughput utilization prediction supporting capacity planning decisions',
+        'chart_ebs_iostat_performance': 'EBS iostat Performance Analysis',
+        'chart_ebs_iostat_performance_desc': 'EBS device iostat performance analysis including read/write separation, latency analysis and queue depth monitoring',
+        'chart_ebs_bottleneck_correlation': 'EBS Bottleneck Correlation Analysis',
+        'chart_ebs_bottleneck_correlation_desc': 'EBS bottleneck correlation analysis showing relationships between AWS standard perspective and iostat perspective',
+        'chart_ebs_performance_overview': 'EBS Performance Overview',
+        'chart_ebs_performance_overview_desc': 'EBS comprehensive performance overview including AWS standard IOPS, throughput vs baseline comparison',
+        'chart_ebs_bottleneck_analysis': 'EBS Bottleneck Detection Analysis',
+        'chart_ebs_bottleneck_analysis_desc': 'EBS bottleneck detection analysis automatically identifying IOPS, throughput and latency bottleneck points',
+        'chart_ebs_aws_standard_comparison': 'EBS AWS Standard Comparison',
+        'chart_ebs_aws_standard_comparison_desc': 'AWS standard values vs raw iostat data comparison analysis evaluating performance standardization level',
+        'chart_ebs_time_series_analysis': 'EBS Time Series Analysis',
+        'chart_ebs_time_series_analysis_desc': 'EBS performance time series analysis showing multi-metric time dimension change trends',
+        'chart_block_height_sync_chart': 'Blockchain Node Sync Status',
+        'chart_block_height_sync_chart_desc': 'Local node vs mainnet block height sync status time series showing sync difference changes and anomaly period annotations',
+        'chart_resource_distribution_chart': 'Resource Distribution Analysis',
+        'chart_resource_distribution_chart_desc': 'System resource distribution showing the proportion of resources occupied by monitoring system, blockchain node, and other processes',
+        'chart_monitoring_impact_chart': 'Monitoring Impact Analysis',
+        'chart_monitoring_impact_chart_desc': 'Correlation analysis between monitoring overhead and system performance metrics to evaluate monitoring system impact',
+        # Additional UI Text
+        'report_title': 'Blockchain Node QPS Benchmark Report: Performance Analysis and Bottlenecks',
+        'performance_charts': 'Performance Charts',
+        'no_charts_found': 'No charts found.',
+        'performance_chart_gallery': 'Performance Chart Gallery',
+        'total_charts_generated': 'Total Charts Generated',
+        'chart_shows_resource_usage_trend': 'This chart shows the trend of system resource usage during testing, including',
+        'monitoring_system_resource_usage': 'Monitoring system resource usage',
+        'blockchain_node_resource_usage': 'Blockchain node resource usage',
+        'total_system_resource_usage': 'Total system resource usage',
+        'cpu_memory_io_overhead_changes': 'CPU, memory, I/O overhead changes over time',
+        'cpu_memory_usage_trends': 'CPU and memory usage trends of blockchain process',
+        'cpu_memory_usage_entire_system': 'CPU and memory usage of the entire system',
+        'cpu': 'CPU',
+        'ebs_iops': 'EBS IOPS',
+        'local_block_height': 'Local Block Height',
+        'mainnet_block_height': 'Mainnet Block Height',
+        'block_height_diff': 'Block Height Diff',
+    },
+    'zh': {
+        # EBS Analysis Section
+        'ebs_performance_analysis': 'EBS性能分析结果',
+        'performance_warnings': '性能警告',
+        'no_performance_anomaly': '未发现性能异常',
+        'occurred_at': '发生时间',
+        'aws_ebs_baseline_stats': 'AWS EBS 基准性能统计',
+        'device': '设备',
+        'metric': '指标',
+        'baseline_config': '配置基准',
+        'min': '最小值',
+        'avg': '平均值',
+        'max': '最大值',
+        'data_device': 'DATA设备',
+        'accounts_device': 'ACCOUNTS设备',
+        'iops': 'IOPS',
+        'throughput_mibs': '吞吐量 (MiB/s)',
+        'iostat_sampling_stats': 'iostat 原生采样数据统计',
+        'utilization_pct': '利用率 (%)',
+        'latency_ms': '延迟 (ms)',
+        'no_aws_ebs_data': '暂无AWS EBS基准数据',
+        'no_iostat_data': '暂无iostat采样数据',
+        # Configuration Section
+        'config_status_check': '配置状态检查',
+        'config_item': '配置项',
+        'status': '状态',
+        'value': '值',
+        'blockchain_node_type': '区块链节点类型',
+        'configured': '已配置',
+        'not_configured': '未配置',
+        'data_volume_type': 'DATA卷类型',
+        'accounts_volume_type': 'ACCOUNTS卷类型',
+        'note': '提示',
+        'accounts_not_configured_note': 'ACCOUNTS Device未配置，仅监控DATA Device性能。建议配置ACCOUNTS_DEVICE以获得完整的存储性能分析。',
+        # Monitoring Overhead Section
+        'monitoring_overhead_comprehensive_analysis': '监控开销综合分析',
+        'system_resource_overview': '系统资源概览',
+        'metric_label': '指标',
+        'value_label': '值',
+        'cpu_cores': 'CPU核数',
+        'total_memory': '内存总量',
+        'resource_usage_comparison': '资源使用对比分析',
+        'resource_type': '资源类型',
+        'monitoring_system': '监控系统',
+        'blockchain_node': '区块链节点',
+        'other_processes': '其他进程',
+        'cpu_usage_rate': 'CPU使用率',
+        'memory_usage_rate': '内存使用率',
+        'memory_usage_amount': '内存使用量',
+        'process_count': '进程数量',
+        'percentage_note': '括号内百分比表示占系统总资源的比例',
+        'monitoring_io_overhead': '监控系统I/O开销',
+        'average': '平均值',
+        'maximum': '最大值',
+        'monitoring_overhead_conclusion': '监控开销结论',
+        'monitoring_resource_analysis': '监控系统资源消耗分析:',
+        'cpu_overhead': 'CPU开销',
+        'memory_overhead': '内存开销',
+        'io_overhead': 'I/O开销',
+        'blockchain_resource_analysis': '区块链节点资源消耗分析:',
+        'cpu_usage': 'CPU使用',
+        'memory_usage': '内存使用',
+        'monitoring_impact': '监控系统对测试结果的影响:',
+        'significant': '显著',
+        'minor': '较小',
+        'monitoring_cpu_exceeds_5': '监控CPU开销超过5%',
+        'monitoring_cpu_below_5': '监控CPU开销低于5%',
+        'monitoring_data_unavailable': '监控开销数据不可用',
+        'monitoring_data_not_found': '监控开销数据文件未找到或为空。请确保在性能测试期间启用了监控开销统计。',
+        'expected_file': '预期文件',
+        'how_to_enable': '如何启用监控开销统计',
+        'monitoring_integrated': '监控开销统计功能已集成到统一监控系统中，默认启用。',
+        'check_config': '如果未生成监控开销数据，请检查以下配置:',
+        'ensure_variable_set': '确保 config_loader.sh 中的 MONITORING_OVERHEAD_LOG 变量已正确设置',
+        'ensure_function_calls': '确保 log_performance_data 函数中调用了 write_monitoring_overhead_log',
+        'check_permissions': '检查日志目录权限是否正确',
+        'detailed_analysis': '监控开销详细分析',
+        'resource_usage_trends': '资源使用趋势',
+        'resource_proportion_analysis': '资源占比分析',
+        'monitoring_performance_relationship': '监控开销与性能关系',
+        'production_resource_planning': '生产环境资源规划建议',
+        'test_env_usage': '测试环境使用',
+        'production_recommendation': '生产环境建议',
+        'at_least': '至少',
+        'cores': '核心',
+        'reserve': '预留',
+        'margin': '余量',
+        # Monitoring Overhead Charts Section
+        'resource_proportion_chart': '资源占比分析',
+        'resource_distribution_image': '资源分布图',
+        'chart_shows_component_resources': '此图表展示了不同组件对系统资源的占用比例:',
+        'all_monitoring_processes': '所有监控进程的资源占比',
+        'blockchain_related_processes': '区块链相关进程的资源占比',
+        'other_system_processes': '系统中其他进程的资源占比',
+        'monitoring_performance_chart': '监控开销与性能关系',
+        'monitoring_impact_image': '监控影响分析',
+        'chart_analyzes_correlation': '此图表分析了监控开销与系统性能指标之间的相关性:',
+        'monitoring_cpu_vs_qps': '监控CPU开销 vs QPS',
+        'monitoring_io_vs_ebs': '监控I/O开销 vs EBS性能',
+        'monitoring_cpu_qps_relationship': '监控CPU使用与系统吞吐量的关系',
+        'monitoring_io_ebs_relationship': '监控I/O与存储性能的关系',
+        'production_planning_recommendations': '生产环境资源规划建议',
+        'planning_based_on_analysis': '基于监控开销分析，对生产环境的资源规划建议:',
+        'monitoring_overhead_label': '监控开销',
+        'iops_margin': 'IOPS 余量',
+        'monitoring_overhead_detailed': '监控开销详细分析',
+        'monitoring_detailed_unavailable': '监控开销详细数据不可用',
+        'monitoring_file_not_found': '监控开销数据文件未找到或图表生成失败。请确保:',
+        'overhead_csv_generated': '监控开销CSV文件已正确生成',
+        'chart_script_executed': '图表生成脚本已正确执行',
+        'output_dir_permissions': '输出目录有正确的写入权限',
+        'how_to_generate_charts': '如何生成监控开销图表',
+        'use_command_to_generate': '可以使用以下命令生成监控开销分析图表:',
+        'generate_resource_distribution': '生成资源分布图表',
+        'resource_distribution_failed': '资源分布图表生成失败',
+        'generate_monitoring_impact': '生成监控影响分析图',
+        'read_memory_data_failed': '读取内存数据失败',
+        'read_network_data_failed': '读取网络数据失败',
+        # Monitoring Impact Chart Section
+        'get_io_data_from_perf': '从 performance CSV 获取I/O数据和基础内存数据',
+        'use_basic_memory_data': '使用 performance CSV 中的基础内存数据（单位：MB，需转换为GB）',
+        'convert_to_gb': '转换为GB',
+        'convert_to_cores_gb': '转换为核心数和GB',
+        'calculate_proportions': '计算占比',
+        'create_3x2_layout': '创建3x2布局',
+        'subplot_cpu_core_usage': '子图1: CPU Core Usage',
+        'subplot_memory_usage': '子图2: Memory Usage',
+        'subplot_monitoring_io': '子图3: Monitoring I/O Impact',
+        'calculate_io_overhead_pct': '计算 I/O 开销百分比',
+        'subplot_system_memory': '子图4: System Memory Overview',
+        'subplot_cpu_overhead_trend': '子图5: CPU Overhead Trend',
+        'subplot_monitoring_efficiency': '子图6: Monitoring Efficiency Summary',
+        'generation_complete_monitoring': '生成完成: monitoring_impact_chart.png',
+        'monitoring_impact_failed': '监控影响分析图表生成失败',
+        # EBS Bottleneck Section
+        'generate_ebs_bottleneck_section': '生成EBS瓶颈分析部分',
+        'device_type_list': '设备类型列表',
+        'device_bottleneck': '设备瓶颈',
+        'device_label': '设备',
+        # EBS Bottleneck Analysis Section
+        'no_bottleneck_detected': '未检测到瓶颈',
+        'device_performance_good': '设备性能良好，未发现瓶颈。',
+        'ebs_bottleneck_analysis': 'EBS瓶颈分析',
+        'ebs_analysis_based_on': 'EBS瓶颈分析基于AWS推荐的性能指标，包括利用率、延迟、AWS标准IOPS和吞吐量。',
+        'root_cause_based_on': '根因分析基于监控开销与EBS性能指标的相关性分析。',
+        'no_ebs_bottleneck_detected': '未检测到EBS瓶颈',
+        'no_ebs_bottleneck_found': '在测试期间未发现EBS性能瓶颈。存储性能良好，不会限制系统整体性能。',
+        'generate_root_cause_html': '生成瓶颈根因分析HTML',
+        'cannot_perform_root_cause': '无法进行根因分析',
+        'missing_overhead_data': '缺少监控开销数据，无法确定瓶颈是否由监控系统引起。',
+        'get_overhead_data': '获取监控开销数据',
+        'estimate_monitoring_impact': '估算监控开销对EBS的影响',
+        'root_cause_significant_impact': '根因分析: 监控系统影响显著',
+        'monitoring_impact_level': '监控系统对EBS性能的影响程度',
+        'monitoring_avg_iops': '监控系统平均IOPS',
+        'monitoring_avg_throughput': '监控系统平均吞吐量',
+        'recommendation': '建议',
+        'reduce_monitoring_frequency': '考虑减少监控频率或优化监控系统I/O操作，以降低对',
+        'root_cause_moderate_impact': '根因分析: 监控系统有一定影响',
+        'monitoring_has_some_impact': '监控系统对设备有一定影响，但不是主要瓶颈来源。应同时优化业务逻辑和监控系统。',
+        'root_cause_minor_impact': '根因分析: 监控系统影响较小',
+        'bottleneck_from_workload': '设备瓶颈主要由业务负载引起，监控系统影响可忽略。应优化业务逻辑或提升EBS配置。',
+        'load_bottleneck_info': '加载瓶颈检测信息',
+        'bottleneck_info_load_failed': '瓶颈信息加载失败',
+        'generate_production_planning': '生成生产环境资源规划建议部分',
+        'determine_main_bottleneck': '确定主要瓶颈',
+        'no_obvious_bottleneck': '未发现明显瓶颈',
+        'cpu_insufficient': 'CPU资源不足',
+        'memory_insufficient': '内存资源不足',
+        'data_device_bottleneck': 'DATA设备瓶颈',
+        'test_conclusion_summary': '测试结论摘要',
+        'based_on_test_results': '基于性能测试结果，我们得出以下结论:',
+        'main_bottleneck_label': '主要瓶颈',
+        'monitoring_resource_usage': '监控系统资源占用',
+        'significant_label': '显著',
+        'minor_label': '较小',
+        'blockchain_resource_demand': '区块链节点资源需求',
+        'high_label': '高',
+        'medium_label': '中等',
+        'low_label': '低',
+        'performance_optimization_recommendations': '性能优化建议',
+        'component_label': '组件',
+        'optimization_recommendation': '优化建议',
+        'expected_effect': '预期效果',
+        'monitoring_system_label': '监控系统',
+        'reduce_frequency': '降低监控频率',
+        'keep_current_config': '保持当前配置',
+        'use_separate_overhead_log': '使用独立的监控开销日志',
+        'cleanup_historical_data': '定期清理历史监控数据',
+        'significantly_reduce_overhead': '显著降低监控开销',
+        'maintain_low_overhead': '维持低监控开销',
+        'ebs_storage_label': 'EBS存储',
+        'increase_iops_config': '提高IOPS配置',
+        'current_config_suitable': '当前配置适合负载',
+        'consider_io2_over_gp3': '考虑使用IO2而非GP3',
+        'keep_current_storage_type': '保持当前存储类型',
+        'separate_data_accounts': '分离DATA和ACCOUNTS设备',
+        'current_device_config_reasonable': '当前设备配置合理',
+        'eliminate_storage_bottleneck': '消除存储瓶颈，提升整体性能',
+        'maintain_good_storage_performance': '维持良好存储性能',
+        'blockchain_node_label': '区块链节点',
+        'increase_cpu_cores': '增加CPU核心数',
+        'current_cpu_suitable': '当前CPU配置适合负载',
+        'increase_memory_config': '增加内存配置',
+        'current_memory_suitable': '当前内存配置适合负载',
+        'optimize_node_params': '优化区块链节点配置参数',
+        'improve_node_capacity': '提升节点处理能力，消除性能瓶颈',
+        'maintain_stable_performance': '维持稳定节点性能',
+        'generate_overhead_table': '生成完整的监控开销数据表格',
+        'overhead_data_not_available': '监控开销Data Not Available',
+        'overhead_file_not_found': '监控开销数据文件未找到或为空。请确保在性能测试期间启用了监控开销统计。',
+        'expected_file_label': '预期文件',
+        'description_label': '说明',
+        'overhead_auto_generated': '监控开销数据由unified_monitor.sh自动生成，无需手动运行额外工具。',
+        'overhead_detailed_data': '监控开销详细数据',
+        'data_shows_component_consumption': '以下数据显示了测试期间各监控组件的资源消耗情况，帮助评估生产环境的真实资源需求。',
+        'monitoring_component_label': '监控组件',
+        'avg_cpu_usage_label': '平均CPU Usage',
+        'peak_cpu_usage_label': '峰值CPU Usage',
+        'avg_memory_usage_label': '平均内存使用',
+        'peak_memory_usage_label': '峰值内存使用',
+        'avg_iops_label': '平均IOPS',
+        'peak_iops_label': '峰值IOPS',
+        'avg_throughput_label': '平均Throughput',
+        'data_completeness_label': '数据完整性',
+        'iostat_monitoring': 'iostat监控',
+        'sar_monitoring': 'sar监控',
+        # Overhead Data Table Section
+        'none_label': '无',
+        'storage_io_label': '存储I/O',
+        'vmstat_monitoring': 'vmstat监控',
+        'data_collection_script': '数据收集脚本',
+        'total_monitoring_overhead': '总监控开销',
+        'overhead_analysis_notes': '监控开销分析说明',
+        'memory_usage_label': '内存使用',
+        'production_env_recommendation': '生产环境建议',
+        'total_overhead_usually': '总监控开销通常占系统资源的1-3%，可以忽略不计。',
+        'iops_throughput_zero_reason': 'IOPS/Throughput 为 0 的原因',
+        'monitoring_reads_proc': '监控系统主要读取 <code>/proc</code> 虚拟文件系统，内核不计入物理 I/O 统计',
+        'actual_io_overhead': '实际 I/O 开销 < 0.00005 IOPS/s，即使使用 4 位小数精度（%.4f）仍显示为 0.0000',
+        'proves_efficient_design': '这证明监控系统设计高效，对生产环境几乎无影响',
+        'to_view_tiny_values': '如需查看极小值，可在源码中将精度提升至 %.6f 或更高',
+        'overhead_table_generation_failed': '监控开销表格生成失败',
+        'error_message_label': '错误信息',
+        'check_data_format': '请检查监控开销数据的格式和完整性。',
+        'generate_independent_tools': '生成独立分析工具结果展示',
+        'ebs_bottleneck_detection': 'EBS瓶颈检测结果',
+        'report_file_label': '报告文件',
+        'analyze_ebs_under_qps': '分析EBS存储在不同QPS负载下的性能瓶颈情况',
+        'ebs_iops_conversion': 'EBS IOPS转换分析',
+        'convert_iostat_to_aws': '将iostat指标转换为AWS EBS标准IOPS和Throughput指标',
+        'ebs_comprehensive_analysis': 'EBS综合分析',
+        'ebs_performance_report': 'EBS存储性能的综合分析报告',
+        'monitoring_overhead_calculation': '监控开销计算',
+        'data_file_label': '数据文件',
+        'detailed_overhead_data': '详细的监控系统资源消耗数据',
+        'about': '约',
+        # EBS Baseline Analysis Section
+        'component_breakdown': '各个系统监控工具的资源消耗分解（基于总体监控数据估算）',
+        'cpu_percentage_used': '监控工具占用的CPU百分比',
+        'memory_size_used': '监控工具占用的内存大小(MB)',
+        'disk_io_operations': '监控工具产生的磁盘I/O操作数（极小值显示为 < 0.0001）',
+        'disk_throughput_generated': '监控工具产生的磁盘Throughput(MiB/s)',
+        'data_completeness_percentage': '监控数据的完整性百分比',
+        'improved_ebs_baseline': '改进的EBS基准分析部分',
+        'safe_get_env_float': '安全获取环境变量并转换为浮点数',
+        'safe_utilization_calc': '安全的利用率计算函数',
+        'baseline_not_configured': '基准未配置',
+        'utilization_calc_failed': '利用率计算失败',
+        'calculation_error': '计算错误',
+        'safe_field_search': '安全的字段查找和数据提取',
+        'safe_get_metric_avg': '安全获取指标平均值',
+        'field_not_found': '未找到相关字段',
+        'data_empty': '数据为空',
+        'data_extraction_failed': '数据提取失败',
+        'calculate_data_device': '计算DATA Device指标',
+        'calculate_accounts_device': '计算ACCOUNTS Device指标',
+        'calculate_utilization': '计算利用率',
+        'smart_warning_check': '智能警告判断',
+        'check_utilization_warning': '检查利用率是否需要警告',
+        'device_iops_high': 'DeviceIOPS利用率过高',
+        'device_throughput_high': 'DeviceThroughput利用率过高',
+        'generate_html_report': '生成HTML报告',
+        'high_utilization_warning': '高利用率警告',
+        'recommendation_label': '建议',
+        'consider_upgrade_ebs': '考虑升级EBS配置或优化I/O模式',
+        'preprocess_display_values': '预处理显示值以避免格式化错误',
+        'data_not_available': 'Data Not Available',
+        'ebs_aws_baseline_analysis': 'EBS AWS基准分析',
+        'device_name': '设备',
+        'metric_type': '指标类型',
+        'baseline_value': '基准值',
+        'actual_value': '实际值',
+        'utilization_label': '利用率',
+        'status_label': '状态',
+        'ledger_storage': 'LEDGER存储',
+        'warning_label': '警告',
+        'normal_label': '正常',
+        'accounts_storage': '账户存储',
+        'ebs_baseline_notes': 'EBS基准分析说明',
+        'baseline_configured_via_env': '通过环境变量配置的EBS性能基准',
+        'avg_performance_during_test': '测试期间的平均性能表现',
+        'actual_vs_baseline_percentage': '实际性能占基准性能的百分比',
+        'warning_threshold_label': '警告阈值',
+        'utilization_exceeds_warning': '利用率超过时显示警告',
+        'configuration_method': '配置方法',
+        'set_env_variables': '设置环境变量',
+        'ebs_baseline_generation_failed': 'EBS基准分析生成失败',
+        'baseline_analysis_failed': '基准分析失败',
+        'please_check_label': '请检查：',
+        'env_config_correct': '环境变量配置是否正确',
+        'csv_contains_fields': 'CSV数据是否包含必要字段',
+        'data_format_correct': '数据格式是否正确',
+        'generate_ena_warnings': '生成ENA网络警告section',
+        'check_ena_availability': '检查ENA数据可用性',
+        'analyze_ena_limitations': '分析ENA限制数据',
+        'ena_network_normal': 'ENA网络状态正常',
+        'no_ena_limitations': '监控期间未检测到任何ENA网络限制。所有网络指标均在正常范围内。',
+        'ena_limitation_detected': 'ENA网络限制检测结果',
+        'detected_ena_limitations': '检测到以下ENA网络限制情况，建议关注网络性能优化：',
+        'duration_time': '持续Time',
+        'to': '至',
+        # ENA Warnings Section
+        'occurrence_count': '发生次数',
+        'times': '次',
+        'max_value_label': '最大值',
+        'cumulative_impact': '累计影响',
+        'consider_optimize_network': '考虑优化网络配置、升级硬件资源或调整应用负载模式。',
+        'ena_warning_generation_failed': 'ENA警告生成失败',
+        'analyze_ena_limitations_func': '分析ENA限制发生情况',
+        'analyze_exceeded_fields': '分析 exceeded 类型字段',
+        'get_field_analysis': '获取字段分析信息',
+        'filter_limited_records': '筛选限制发生的记录 (值 > 0)',
+        'special_handling_connection': '特殊处理: 连接容量不足预警',
+        'find_available_fields': '查找 available 类型字段',
+        'use_dynamic_threshold': '使用动态阈值',
+        'warning_when_below': '当可用量低于最大值的时预警',
+        'connection_capacity_warning': '连接容量不足预警',
+        'minimum_remaining': '最少剩余',
+        'connections': '个连接',
+        'average_remaining': '平均剩余',
+        'generate_ena_data_table': '生成ENA数据统计表格',
+        'generate_statistics': '生成统计数据',
+        'use_accessor_for_description': '使用 ENAFieldAccessor 获取字段描述',
+        'generate_html_table': '生成HTML表格',
+        'set_format_for_field_types': '为不同类型的字段设置不同的格式',
+        'status_indicator': '状态指示',
+        'use_threshold_for_connection': '使用动态阈值判断连接容量状态',
+        'ena_network_statistics': 'ENA网络统计',
+        'ena_metric': 'ENA指标',
+        'current_value': '当前值',
+        'max_value': '最大值',
+        'avg_value': '平均值',
+        'note_label': '说明',
+        'exceeded_fields_show_drops': '超限字段显示累计丢包数量，值越大表示网络限制越严重',
+        'available_connections_show_capacity': '可用连接数显示剩余连接容量，值越小表示连接压力越大',
+        'ena_table_generation_failed': 'ENA数据表格生成失败',
+        'improved_cpu_ebs_correlation': '改进的CPU与EBS关联分析表格生成',
+        'cpu_iowait_vs_util': 'CPU I/O Wait vs Device Utilization',
+        'cpu_iowait_vs_queue': 'CPU I/O Wait vs I/O队列长度',
+        'cpu_iowait_vs_read_latency': 'CPU I/O Wait vs 读Latency',
+        'cpu_iowait_vs_write_latency': 'CPU I/O Wait vs 写Latency',
+        'user_cpu_vs_read_requests': '用户态CPU vs 读请求数',
+        'system_cpu_vs_write_requests': '系统态CPU vs 写请求数',
+        # CPU-EBS Correlation Section
+        'use_max_or_default': '使用最大值或默认值',
+        'safe_correlation_func': '安全的相关性分析函数',
+        'safe_correlation_analysis': '安全的相关性分析',
+        'missing_cpu_field': '缺少CPU字段',
+        'missing_ebs_field': '缺少EBS字段',
+        'data_validity_check': '数据有效性检查',
+        'data_is_empty': '数据为空',
+        'insufficient_data_points': '有效数据点不足',
+        'correlation_result_nan': '相关性计算结果为NaN',
+        'improved_correlation_strength': '改进的相关性强度分类',
+        'very_strong_correlation': '极强相关',
+        'strong_correlation': '强相关',
+        'moderate_correlation': '中等相关',
+        'weak_correlation': '弱相关',
+        'very_weak_correlation': '极弱相关',
+        'improved_significance': '改进的统计显著性判断',
+        'highly_significant_3': '极显著 (***)',
+        'highly_significant_2': '高度显著 (**)',
+        'significant_1': '显著 (*)',
+        'not_significant': '不显著',
+        'device_type': 'Device类型',
+        'analysis_item': '分析项目',
+        'cpu_metric': 'CPU指标',
+        'ebs_metric': 'EBS指标',
+        'correlation_coefficient': '相关系数',
+        'p_value': 'P值',
+        'statistical_significance': '统计显著性',
+        'correlation_strength': '相关强度',
+        'valid_sample_count': '有效样本数',
+        'data_integrity': '数据完整性',
+        'analysis_failed': '分析失败',
+        'precise_field_matching': '精确的字段匹配',
+        'exact_match': '精确匹配',
+        'fuzzy_match_strict': '模糊匹配（更严格）',
+        'analyze_data_device': '分析DATA Device',
+        'analyze_accounts_device': '分析ACCOUNTS Device',
+        'correlation_data_unavailable': '相关性分析Data Not Available',
+        'possible_reasons': '可能的原因：',
+        'missing_cpu_ebs_fields': '缺少必要的CPU或EBS性能字段',
+        'data_quality_issues': '数据质量问题（过多NaN值）',
+        'insufficient_data_less_10': '有效数据点不足（少于10个）',
+        'generate_improved_table': '生成改进的HTML表格',
+        'set_row_color_by_strength': '根据相关性强度设置行颜色',
+        'correlation_analysis_notes': '相关性分析说明',
+        'correlation_range': '相关系数范围',
+        'larger_abs_stronger': '-1.0 到 1.0，绝对值越大相关性越强',
+        'significance_levels': '*** p<0.001, ** p<0.01, * p<0.05',
+        'strength_classification': '相关强度分类: |r|≥0.8极强, |r|≥0.6强, |r|≥0.4中等, |r|≥0.2弱',
+        'data_integrity_percentage': '数据完整性: 有效数据点占总数据点的百分比',
+        'format_block_height_readable': '将block_height相关字段的数值转换为人类可读格式',
+        'enhanced_block_height_analysis': '增强的区块高度性能分析',
+        'use_comparison_table': '使用对比表格展示',
+        'block_height_monitoring': '区块高度监控',
+        'no_block_height_data': '暂无区块高度数据',
+        'add_time_series_chart': '添加时序图表展示',
+        'add_data_loss_stats': '添加data_loss_stats.json文件展示',
+        'collect_block_height_data': '收集区块高度数据',
+        'only': '仅',
+        'items': '个',
+        'high_latency': '高延迟',
+        'no_aws_ebs_baseline': '暂无AWS EBS基准数据',
+        'iostat_raw_sampling_stats': 'iostat 原生采样数据统计',
+        'device_impact_suffix': '设备的影响',
+        'block_height_data_comparison': '区块高度数据对比',
+        'blockchain_node_sync_analysis': '区块链节点同步分析',
+        'block_height_analysis_failed': '区块高度分析失败',
+        'block_height_sync_time_series': '区块高度同步时序图',
+        'block_height_sync_status': '区块高度同步状态',
+        'chart_shows_block_height_diff': '此图表展示了测试期间本地节点与主网的区块高度差值变化',
+        'blue_curve': '蓝色曲线',
+        'block_height_diff_mainnet_minus_local': '区块高度差值 (主网 - 本地)',
+        'red_dashed_line': '红色虚线',
+        'anomaly_threshold_50_blocks': '异常阈值 (±50个区块)',
+        'red_area': '红色区域',
+        'data_loss_detected_periods': '检测到数据丢失的时间段',
+        'statistics_info': '统计信息',
+        'sync_quality_stats_top_left': '左上角显示同步质量统计',
+        'block_height_chart_not_generated': '区块高度同步图表未生成',
+        'possible_reason_node_data_unavailable': '可能原因：区块链节点数据不可用或监控未启用',
+        'data_loss_stats_summary': '数据丢失统计摘要',
+        'anomaly_sample_count': '异常采样数',
+        'anomaly_event_count': '异常事件数',
+        'total_anomaly_duration': '总异常时长',
+        'avg_event_duration': '平均事件时长',
+        'stats_file_location': '统计文件位置',
+        'last_updated': '最后更新',
+        'data_loss_statistics': '数据丢失统计',
+        'stats_file_read_failed': '统计文件读取失败',
+        'file_location': '文件位置',
+        'data_loss_stats_file_not_found': '未找到data_loss_stats.json文件。可能的原因',
+        'no_data_loss_detected_during_test': '测试期间未检测到数据丢失事件',
+        'stats_file_not_archived': '统计文件未正确归档',
+        'block_height_monitor_not_running': 'block_height_monitor.sh未正常运行',
+        'generated_time': '生成时间',
+        'unified_field_naming': '统一字段命名',
+        'complete_device_support': '完整Device支持',
+        'monitoring_overhead_analysis': '监控开销分析',
+        'blockchain_node_specific_analysis': 'Blockchain Node 特定分析',
+        'bottleneck_detection_analysis': '瓶颈检测分析',
+        'html_content_generation_failed': 'HTML内容生成失败',
+        'performance_analysis_charts': '性能分析图表',
+        'charts_provide_comprehensive_visualization': '以下图表提供了系统性能的全方位可视化分析，包括性能趋势、关联性分析、瓶颈识别等',
+        'chart_statistics': '图表统计',
+        'available_charts': '可用图表',
+        'pending_charts': '待生成图表',
+        'chart_coverage': '图表覆盖率',
+        'chart_generation_notice': '图表生成提示',
+        'no_chart_files_found': '当前没有找到生成的图表文件。图表将在以下情况下生成',
+        'run_performance_visualizer': '运行 performance_visualizer.py 生成性能分析图表',
+        'run_advanced_chart_generator': '运行 advanced_chart_generator.py 生成高级分析图表',
+        'run_comprehensive_analysis': '运行 comprehensive_analysis.py 生成综合分析图表',
+        'ensure_run_chart_scripts_before_report': '请确保在生成报告前先运行相应的图表生成脚本',
+        'following_charts_not_generated': '以下图表尚未生成，运行相应脚本后将自动显示',
+        'and': '还有',
+        'more_charts': '个图表',
+        'chart_display_error': '图表展示错误',
+        'chart_section_generation_failed': '图表部分生成失败',
+        'unknown': '未知',
+        'performance_bottleneck_detection_result': '性能瓶颈检测结果',
+        'max_successful_qps': '最大成功QPS',
+        'bottleneck_trigger_qps': '瓶颈触发QPS',
+        'performance_drop': '性能下降',
+        'bottleneck_details': '瓶颈详情',
+        'detection_time': '检测时间',
+        'severity_level': '严重程度',
+        'bottleneck_reason': '瓶颈原因',
+        'optimization_recommendations': '优化建议',
+        'suggested_next_actions': '建议的下一步行动',
+        'view_detailed_bottleneck_charts': '查看详细的瓶颈分析图表了解根本原因',
+        'adjust_system_config_per_recommendations': '根据优化建议调整系统配置',
+        'consider_hardware_upgrade_or_app_optimization': '考虑升级硬件资源或优化应用程序',
+        'rerun_test_to_verify_improvements': '重新运行测试验证改进效果',
+        'bottleneck_info_display_error': '瓶颈信息显示错误',
+        'bottleneck_info_processing_failed': '瓶颈信息处理失败',
+        'performance_summary': '性能摘要',
+        'avg_cpu_usage': '平均CPU使用率',
+        'peak_cpu_usage': '峰值CPU使用率',
+        'avg_memory_usage': '平均内存使用率',
+        'data_device_avg_iops': 'DATA Device平均IOPS',
+        'accounts_device_avg_iops': 'ACCOUNTS Device平均IOPS',
+        'monitoring_data_points': '监控数据点',
+        'performance_summary_generation_failed': '性能摘要生成失败',
+        # Chart Titles and Descriptions
+        'chart_performance_overview': '性能概览图表',
+        'chart_performance_overview_desc': '系统整体性能概览，包括CPU、内存、EBS等关键指标的时间序列展示',
+        'chart_cpu_ebs_correlation': 'CPU-EBS关联可视化',
+        'chart_cpu_ebs_correlation_desc': 'CPU使用率与EBS性能指标的关联性分析，帮助识别I/O瓶颈',
+        'chart_cpu_ebs_correlation_visualization': 'CPU-EBS关联可视化',
+        'chart_cpu_ebs_correlation_visualization_desc': 'CPU使用率与EBS性能指标的关联性分析，帮助识别I/O瓶颈',
+        'chart_device_performance_comparison': 'Device性能对比',
+        'chart_device_performance_comparison_desc': 'DATA Device和ACCOUNTS Device的性能对比分析',
+        'chart_await_threshold_analysis': '等待时间阈值分析',
+        'chart_await_threshold_analysis_desc': 'I/O等待时间的阈值分析，识别存储性能瓶颈',
+        'chart_util_threshold_analysis': '利用率阈值分析',
+        'chart_util_threshold_analysis_desc': 'Device利用率的阈值分析，评估资源使用效率',
+        'chart_monitoring_overhead_analysis': '监控开销分析',
+        'chart_monitoring_overhead_analysis_desc': '监控系统本身的资源消耗分析，评估监控对系统性能的影响',
+        'chart_smoothed_trend_analysis': '平滑趋势分析',
+        'chart_smoothed_trend_analysis_desc': '性能指标的平滑趋势分析，消除噪声后的性能变化趋势',
+        'chart_qps_trend_analysis': 'QPS趋势分析',
+        'chart_qps_trend_analysis_desc': 'QPS性能的详细趋势分析，展示测试过程中的QPS变化',
+        'chart_resource_efficiency_analysis': '资源效率分析',
+        'chart_resource_efficiency_analysis_desc': 'QPS与资源消耗的效率分析，评估每QPS的资源成本',
+        'chart_bottleneck_identification': '瓶颈识别图',
+        'chart_bottleneck_identification_desc': '自动瓶颈识别结果，标注性能瓶颈点和影响因素',
+        'chart_pearson_correlation_analysis': 'Pearson相关性分析',
+        'chart_pearson_correlation_analysis_desc': 'CPU与EBS指标的Pearson相关性分析，量化指标间的线性关系',
+        'chart_linear_regression_analysis': '线性回归分析',
+        'chart_linear_regression_analysis_desc': '关键指标的线性回归分析，预测性能趋势和关系',
+        'chart_negative_correlation_analysis': '负相关分析',
+        'chart_negative_correlation_analysis_desc': '负相关指标分析，识别性能权衡关系',
+        'chart_comprehensive_correlation_matrix': '综合相关性矩阵',
+        'chart_comprehensive_correlation_matrix_desc': '所有监控指标的综合相关性矩阵热力图',
+        'chart_performance_trend_analysis': '性能趋势分析',
+        'chart_performance_trend_analysis_desc': '长期性能趋势分析，识别性能变化模式',
+        'chart_ena_limitation_trends': 'ENA网络限制趋势',
+        'chart_ena_limitation_trends_desc': 'AWS ENA网络限制趋势分析，显示PPS、带宽、连接跟踪等限制的时间变化',
+        'chart_ena_connection_capacity': 'ENA连接容量监控',
+        'chart_ena_connection_capacity_desc': 'ENA连接容量实时监控，显示可用连接数变化和容量预警',
+        'chart_ena_comprehensive_status': 'ENA综合状态分析',
+        'chart_ena_comprehensive_status_desc': 'ENA网络综合状态分析，包括限制分布、容量状态和严重程度评估',
+        'chart_performance_correlation_heatmap': '性能相关性热力图',
+        'chart_performance_correlation_heatmap_desc': '性能指标相关性的热力图展示，直观显示指标间关系强度',
+        'chart_performance_cliff_analysis': '性能悬崖分析',
+        'chart_performance_cliff_analysis_desc': '性能悬崖检测和分析，识别性能急剧下降的原因',
+        'chart_comprehensive_analysis_charts': '综合分析图表',
+        'chart_comprehensive_analysis_charts_desc': '综合性能分析图表集合，全面展示系统性能状况',
+        'chart_qps_performance_analysis': 'QPS性能分析',
+        'chart_qps_performance_analysis_desc': 'QPS性能的专项分析图表，深入分析QPS性能特征',
+        'chart_ebs_aws_capacity_planning': 'EBS AWS容量规划分析',
+        'chart_ebs_aws_capacity_planning_desc': 'AWS EBS容量规划分析，包括IOPS和吞吐量利用率预测，支持容量规划决策',
+        'chart_ebs_iostat_performance': 'EBS iostat性能分析',
+        'chart_ebs_iostat_performance_desc': 'EBS设备的iostat性能分析，包括读写分离、延迟分析和队列深度监控',
+        'chart_ebs_bottleneck_correlation': 'EBS瓶颈关联分析',
+        'chart_ebs_bottleneck_correlation_desc': 'EBS瓶颈关联分析，展示AWS标准视角与iostat视角的关联关系',
+        'chart_ebs_performance_overview': 'EBS性能概览',
+        'chart_ebs_performance_overview_desc': 'EBS综合性能概览，包括AWS标准IOPS、吞吐量与基准线对比',
+        'chart_ebs_bottleneck_analysis': 'EBS瓶颈检测分析',
+        'chart_ebs_bottleneck_analysis_desc': 'EBS瓶颈检测分析，自动识别IOPS、吞吐量和延迟瓶颈点',
+        'chart_ebs_aws_standard_comparison': 'EBS AWS标准对比',
+        'chart_ebs_aws_standard_comparison_desc': 'AWS标准值与原始iostat数据对比分析，评估性能标准化程度',
+        'chart_ebs_time_series_analysis': 'EBS时间序列分析',
+        'chart_ebs_time_series_analysis_desc': 'EBS性能时间序列分析，展示多指标时间维度变化趋势',
+        'chart_block_height_sync_chart': '区块链节点同步状态',
+        'chart_block_height_sync_chart_desc': '本地节点与主网区块高度同步状态时序图，展示同步差值变化和异常时间段标注',
+        'chart_resource_distribution_chart': '资源分布分析',
+        'chart_resource_distribution_chart_desc': '系统资源分布情况，展示监控系统、区块链节点和其他进程占用的资源比例',
+        'chart_monitoring_impact_chart': '监控影响分析',
+        'chart_monitoring_impact_chart_desc': '监控开销与系统性能指标的关联性分析，评估监控系统的影响程度',
+        # Additional UI Text
+        'report_title': '区块链节点QPS基准测试报告：性能分析与瓶颈',
+        'performance_charts': '性能图表',
+        'no_charts_found': '未找到图表。',
+        'performance_chart_gallery': '性能图表画廊',
+        'total_charts_generated': '生成的图表总数',
+        'chart_shows_resource_usage_trend': '此图表展示了测试期间系统资源使用趋势，包括',
+        'monitoring_system_resource_usage': '监控系统资源使用',
+        'blockchain_node_resource_usage': '区块链节点资源使用',
+        'total_system_resource_usage': '系统总资源使用',
+        'cpu_memory_io_overhead_changes': 'CPU、内存、I/O开销随时间的变化',
+        'cpu_memory_usage_trends': '区块链进程的CPU和内存使用趋势',
+        'cpu_memory_usage_entire_system': '整个系统的CPU和内存使用情况',
+        'cpu': 'CPU',
+        'ebs_iops': 'EBS IOPS',
+        'local_block_height': '本地区块高度',
+        'mainnet_block_height': '主网区块高度',
+        'block_height_diff': '区块高度差值',
+    }
+}
+
 def safe_get_env_int(env_name, default_value=0):
-    """安全获取环境变量并转换为整数"""
+    """Safely get environment variable and convert to integer"""
     try:
         value = os.getenv(env_name)
         if value and value != 'N/A' and value.strip():
             return int(value)
         return default_value
     except (ValueError, TypeError):
-        print(f"⚠️ 环境变量 {env_name} 格式错误")
+        print(f"⚠️ Environment variable {env_name} format error")
         return default_value
 
 def get_visualization_thresholds():
-    """获取可视化阈值配置 - 使用安全的环境变量访问"""
+    """Get visualization threshold configuration - using safe environment variable access"""
     return {
         'warning': safe_get_env_int('BOTTLENECK_CPU_THRESHOLD', 85),
         'critical': safe_get_env_int('SUCCESS_RATE_THRESHOLD', 95),
@@ -50,23 +1240,25 @@ def get_visualization_thresholds():
     }
 
 class ReportGenerator:
-    def __init__(self, performance_csv, config_file='config_loader.sh', overhead_csv=None, bottleneck_info=None):
+    def __init__(self, performance_csv, config_file='config_loader.sh', overhead_csv=None, bottleneck_info=None, language='en'):
         self.performance_csv = performance_csv
         self.config_file = config_file
         self.overhead_csv = overhead_csv
         self.bottleneck_info = bottleneck_info
+        self.language = language
+        self.t = TRANSLATIONS.get(language, TRANSLATIONS['en'])
         self.output_dir = os.getenv('REPORTS_DIR', os.path.dirname(performance_csv))
         self.ebs_log_path = os.path.join(os.getenv('LOGS_DIR', '/tmp/blockchain-node-benchmark/logs'), 'ebs_analyzer.log')
         self.config = self._load_config()
         self.overhead_data = self._load_overhead_data()
         self.bottleneck_data = self._load_bottleneck_data()
         
-        # 执行数据完整性验证
+        # Execute data integrity validation
         self.validation_results = self.validate_data_integrity()
         
     def _load_config(self):
         config = {}
-        # 从环境变量读取配置
+        # Read configuration from environment variables
         config_keys = [
             'BLOCKCHAIN_NODE', 'DATA_VOL_TYPE', 'ACCOUNTS_VOL_TYPE',
             'NETWORK_MAX_BANDWIDTH_GBPS', 'ENA_MONITOR_ENABLED',
@@ -81,8 +1273,8 @@ class ReportGenerator:
         return config
     
     def _load_bottleneck_data(self):
-        """加载瓶颈检测数据 - 增强容错处理"""
-        # 默认瓶颈数据结构
+        """Load bottleneck detection data - enhanced fault tolerance"""
+        # Default bottleneck data structure
         default_data = {
             "timestamp": datetime.now().isoformat(),
             "status": "no_bottleneck_detected",
@@ -90,19 +1282,19 @@ class ReportGenerator:
             "bottlenecks": [],
             "bottleneck_types": [],
             "bottleneck_values": [],
-            "bottleneck_summary": "未检测到瓶颈",
+            "bottleneck_summary": "No bottleneck detected",
             "detection_time": "",
             "current_qps": 0,
             "last_check": datetime.now().isoformat(),
             "version": "1.0"
         }
         
-        # 尝试从多个可能的位置加载瓶颈数据
+        # Try loading bottleneck data from multiple possible locations
         bottleneck_files = []
         if self.bottleneck_info:
             bottleneck_files.append(self.bottleneck_info)
         
-        # 添加默认位置
+        # Add default locations
         memory_share_dir = os.getenv('MEMORY_SHARE_DIR', '/tmp/blockchain_monitoring')
         bottleneck_files.extend([
             os.path.join(memory_share_dir, "bottleneck_status.json"),
@@ -115,70 +1307,71 @@ class ReportGenerator:
                 if os.path.exists(bottleneck_file):
                     with open(bottleneck_file, 'r') as f:
                         data = json.load(f)
-                        # 验证数据结构
+                        # Validate data structure
                         if isinstance(data, dict) and 'bottlenecks' in data:
-                            print(f"✅ 成功加载瓶颈数据: {bottleneck_file}")
+                            print(f"✅ Successfully loaded bottleneck data: {bottleneck_file}")
                             return data
                         else:
-                            print(f"⚠️ 瓶颈数据格式无效: {bottleneck_file}")
+                            print(f"⚠️ Invalid bottleneck data format: {bottleneck_file}")
                             
             except (json.JSONDecodeError, IOError) as e:
-                print(f"⚠️ 加载瓶颈数据失败 {bottleneck_file}: {e}")
+                print(f"⚠️ Failed to load bottleneck data {bottleneck_file}: {e}")
                 continue
         
-        print(f"ℹ️ 未找到有效的瓶颈数据文件，使用默认数据")
+        print(f"ℹ️ No valid bottleneck data file found, using default data")
         return default_data
 
     def _load_overhead_data(self):
-        """加载监控开销数据 - 支持自动发现"""
+        """Load monitoring overhead data - supports auto-discovery"""
         try:
-            # 方案1：自动发现监控开销文件
+            # Method 1: Auto-discover monitoring overhead file
             auto_discovered_file = self._find_latest_monitoring_overhead_file()
             if auto_discovered_file:
                 self.overhead_csv = auto_discovered_file
                 print(f"✅ Auto-discovered monitoring overhead file: {os.path.basename(auto_discovered_file)}")
                 return self._load_from_overhead_csv()
             
-            # 方案2：备用方案，从performance_csv提取IOPS数据
+            # Method 2: Fallback, extract IOPS data from performance_csv
             if hasattr(self, 'performance_csv') and os.path.exists(self.performance_csv):
                 return self._extract_iops_from_performance_csv()
             
-            # 方案3：兜底，返回空数据
+            # Method 3: Last resort, return empty data
             return None
         except Exception as e:
             print(f"Error loading overhead data: {e}")
             return None
 
     def _load_from_overhead_csv(self):
-        """从专用的overhead CSV加载数据"""
+        """Load data from dedicated overhead CSV"""
         try:
             df = pd.read_csv(self.overhead_csv)
             if df.empty:
                 return None
             
-            # 记录样本数量
+            # Record sample count
             sample_count = len(df)
                 
-            # 定义需要的字段和它们的可能变体
+            # Define required fields and their possible variants
             field_mappings = {
-                # 监控进程资源
+                # Monitoring process resources
                 'monitoring_cpu_percent': ['monitoring_cpu_percent', 'monitoring_cpu', 'monitor_cpu', 'overhead_cpu'],
                 'monitoring_memory_percent': ['monitoring_memory_percent', 'monitor_memory_percent'],
                 'monitoring_memory_mb': ['monitoring_memory_mb', 'monitor_memory', 'overhead_memory'],
                 'monitoring_process_count': ['monitoring_process_count', 'process_count', 'monitor_processes'],
                 
-                # 区块链节点资源
-                'blockchain_cpu_percent': ['blockchain_cpu_percent', 'blockchain_cpu'],
+                # Blockchain node resources
+                'blockchain_cpu_sum': ['blockchain_cpu'],  # Multi-process CPU sum (can be >100%)
+                'blockchain_cpu_percent': ['blockchain_cpu_percent'],  # System-wide CPU percentage
                 'blockchain_memory_percent': ['blockchain_memory_percent'],
                 'blockchain_memory_mb': ['blockchain_memory_mb', 'blockchain_memory'],
                 'blockchain_process_count': ['blockchain_process_count'],
                 
-                # 系统静态资源
+                # System static resources
                 'system_cpu_cores': ['system_cpu_cores', 'cpu_cores'],
                 'system_memory_gb': ['system_memory_gb', 'memory_gb'],
                 'system_disk_gb': ['system_disk_gb', 'disk_gb'],
                 
-                # 系统动态资源
+                # System dynamic resources
                 'system_cpu_usage': ['system_cpu_usage', 'cpu_usage'],
                 'system_memory_usage': ['system_memory_usage', 'memory_usage'],
                 'system_disk_usage': ['system_disk_usage', 'disk_usage'],
@@ -187,27 +1380,34 @@ class ReportGenerator:
                 'monitoring_throughput_mibs': ['monitoring_throughput_mibs', 'monitor_throughput', 'overhead_throughput']
             }
             
-            # 尝试找到匹配的字段
+            # Try to find matching fields
             data: Dict[str, Union[int, float]] = {'sample_count': sample_count}
             for target_field, possible_fields in field_mappings.items():
                 for field in possible_fields:
                     if field in df.columns:
-                        # 计算平均值和最大值
+                        # Calculate average and max values
                         data[f'{target_field}_avg'] = df[field].mean()
                         data[f'{target_field}_max'] = df[field].max()
-                        # 对于百分比字段，计算占比
+                        # For percentage fields, calculate ratio
                         if 'percent' in target_field or 'usage' in target_field:
                             data[f'{target_field}_p90'] = df[field].quantile(0.9)
                         break
             
-            # 计算监控开销占比
+            # Convert blockchain_cpu_sum to system-wide percentage if needed
+            if 'blockchain_cpu_sum_avg' in data and 'system_cpu_cores_avg' in data and data['system_cpu_cores_avg'] > 0:
+                # blockchain_cpu_sum is multi-process CPU sum (can be >100%)
+                # Convert to system-wide percentage: (sum / cores) = percentage
+                data['blockchain_cpu_percent_avg'] = data['blockchain_cpu_sum_avg'] / data['system_cpu_cores_avg']
+                data['blockchain_cpu_percent_max'] = data.get('blockchain_cpu_sum_max', 0) / data['system_cpu_cores_avg']
+            
+            # Calculate monitoring overhead ratio
             if 'monitoring_cpu_percent_avg' in data and 'system_cpu_usage_avg' in data and data['system_cpu_usage_avg'] > 0:
                 data['monitoring_cpu_ratio'] = data['monitoring_cpu_percent_avg'] / data['system_cpu_usage_avg']
             
             if 'monitoring_memory_percent_avg' in data and 'system_memory_usage_avg' in data and data['system_memory_usage_avg'] > 0:
                 data['monitoring_memory_ratio'] = data['monitoring_memory_percent_avg'] / data['system_memory_usage_avg']
             
-            # 计算区块链节点占比
+            # Calculate blockchain node ratio
             if 'blockchain_cpu_percent_avg' in data and 'system_cpu_usage_avg' in data and data['system_cpu_usage_avg'] > 0:
                 data['blockchain_cpu_ratio'] = data['blockchain_cpu_percent_avg'] / data['system_cpu_usage_avg']
             
@@ -220,20 +1420,20 @@ class ReportGenerator:
             return None
 
     def _find_latest_monitoring_overhead_file(self):
-        """自动发现最新的监控开销文件"""
+        """Auto-discover the latest monitoring overhead file"""
         try:
             
-            # 获取logs目录路径 - 使用环境变量或current/logs结构
+            # Get logs directory path - use environment variable or current/logs structure
             logs_dir = os.getenv('LOGS_DIR', os.path.join(self.output_dir, 'current', 'logs'))
             
-            # 搜索监控开销文件
+            # Search for monitoring overhead files
             pattern = os.path.join(logs_dir, 'monitoring_overhead_*.csv')
             files = glob.glob(pattern)
             
             if not files:
                 return None
             
-            # 返回最新的文件（按创建时间排序，与comprehensive_analysis.py保持一致）
+            # Return the latest file (sorted by creation time, consistent with comprehensive_analysis.py)
             latest_file = max(files, key=os.path.getctime)
             return latest_file
             
@@ -242,19 +1442,19 @@ class ReportGenerator:
             return None
 
     def _extract_iops_from_performance_csv(self):
-        """从performance CSV提取IOPS和吞吐量数据"""
+        """Extract IOPS and throughput data from performance CSV"""
         try:
             df = pd.read_csv(self.performance_csv)
             data = {}
             
-            # 提取IOPS数据
+            # Extract IOPS data
             if 'monitoring_iops_per_sec' in df.columns:
                 iops_data = pd.to_numeric(df['monitoring_iops_per_sec'], errors='coerce').dropna()
                 if not iops_data.empty:
                     data['monitoring_iops_avg'] = iops_data.mean()
                     data['monitoring_iops_max'] = iops_data.max()
             
-            # 提取吞吐量数据
+            # Extract throughput data
             if 'monitoring_throughput_mibs_per_sec' in df.columns:
                 throughput_data = pd.to_numeric(df['monitoring_throughput_mibs_per_sec'], errors='coerce').dropna()
                 if not throughput_data.empty:
@@ -264,51 +1464,51 @@ class ReportGenerator:
             return data if data else None
             
         except Exception as e:
-            # 记录错误但不影响主要功能
+            # Log error but don't affect main functionality
             print(f"Warning: Failed to extract IOPS data from performance CSV: {e}")
             return None
     
     def _validate_overhead_csv_format(self):
-        """验证监控开销CSV格式"""
+        """Validate monitoring overhead CSV format"""
         if not self.overhead_csv:
-            print("⚠️ 未指定监控开销CSV文件")
+            print("⚠️ Monitoring overhead CSV file not specified")
             return False
             
         if not os.path.exists(self.overhead_csv):
-            print(f"⚠️ 监控开销CSV文件不存在: {self.overhead_csv}")
+            print(f"⚠️ Monitoring overhead CSV file does not exist: {self.overhead_csv}")
             return False
         
         try:
             with open(self.overhead_csv, 'r') as f:
                 header = f.readline().strip()
                 if not header:
-                    print("⚠️ 监控开销CSV文件缺少头部")
+                    print("⚠️ Monitoring overhead CSV file missing header")
                     return False
                 
                 field_count = len(header.split(','))
-                expected_fields = 20  # 根据配置的字段数量
+                expected_fields = 20  # Based on configured field count
                 
-                if field_count < 10:  # 最少应该有10个基本字段
-                    print(f"⚠️ 监控开销CSV字段数量过少，期望至少10个，实际{field_count}个")
+                if field_count < 10:  # Should have at least 10 basic fields
+                    print(f"⚠️ Monitoring overhead CSV has too few fields, expected at least 10, got {field_count}")
                     return False
                 elif field_count != expected_fields:
-                    print(f"ℹ️ 监控开销CSV字段数量: {field_count}个 (期望{expected_fields}个)")
+                    print(f"ℹ️ Monitoring overhead CSV field count: {field_count} (expected {expected_fields})")
                 
-                # 检查是否有数据行
+                # Check if there are data rows
                 data_line = f.readline().strip()
                 if not data_line:
-                    print("⚠️ 监控开销CSV文件没有数据行")
+                    print("⚠️ Monitoring overhead CSV file has no data rows")
                     return False
                     
-                print(f"✅ 监控开销CSV格式验证通过: {field_count}个字段")
+                print(f"✅ Monitoring overhead CSV format validation passed: {field_count} fields")
                 return True
                 
         except Exception as e:
-            print(f"❌ CSV格式验证失败: {e}")
+            print(f"❌ CSV format validation failed: {e}")
             return False
     
     def validate_data_integrity(self):
-        """验证数据完整性"""
+        """Validate data integrity"""
         validation_results = {
             'performance_csv': False,
             'overhead_csv': False,
@@ -316,51 +1516,51 @@ class ReportGenerator:
             'config': False
         }
         
-        # 验证性能CSV
+        # Validate performance CSV
         if os.path.exists(self.performance_csv):
             try:
                 df = pd.read_csv(self.performance_csv)
                 if not df.empty:
                     validation_results['performance_csv'] = True
-                    print(f"✅ 性能CSV验证通过: {len(df)}行数据")
+                    print(f"✅ Performance CSV validation passed: {len(df)} rows of data")
                 else:
-                    print("⚠️ 性能CSV文件为空")
+                    print("⚠️ Performance CSV file is empty")
             except Exception as e:
-                print(f"❌ 性能CSV验证失败: {e}")
+                print(f"❌ Performance CSV validation failed: {e}")
         else:
-            print(f"❌ 性能CSV文件不存在: {self.performance_csv}")
+            print(f"❌ Performance CSV file does not exist: {self.performance_csv}")
         
-        # 验证开销CSV
+        # Validate overhead CSV
         validation_results['overhead_csv'] = self._validate_overhead_csv_format()
         
-        # 验证瓶颈数据
+        # Validate bottleneck data
         if self.bottleneck_data and isinstance(self.bottleneck_data, dict):
             if 'bottlenecks' in self.bottleneck_data:
                 validation_results['bottleneck_data'] = True
-                print("✅ 瓶颈数据验证通过")
+                print("✅ Bottleneck data validation passed")
             else:
-                print("⚠️ 瓶颈数据格式不完整")
+                print("⚠️ Bottleneck data format incomplete")
         else:
-            print("ℹ️ 瓶颈数据使用默认值")
-            validation_results['bottleneck_data'] = True  # 默认数据也算通过
+            print("ℹ️ Using default bottleneck data")
+            validation_results['bottleneck_data'] = True  # Default data also counts as passed
         
-        # 验证配置
+        # Validate configuration
         if self.config and isinstance(self.config, dict) and len(self.config) > 0:
             validation_results['config'] = True
-            print("✅ 配置数据验证通过")
+            print("✅ Configuration data validation passed")
         else:
             validation_results['config'] = False
-            print("ℹ️ 配置数据不完整（不影响核心功能）")
+            print("ℹ️ Configuration data incomplete (does not affect core functionality)")
         
-        # 输出验证摘要
+        # Output validation summary
         passed = sum(validation_results.values())
         total = len(validation_results)
-        print(f"\n📊 数据完整性验证结果: {passed}/{total} 项通过")
+        print(f"\n📊 Data integrity validation results: {passed}/{total} items passed")
         
         return validation_results
     
     def parse_ebs_analyzer_log(self):
-        """解析EBS分析器日志文件"""
+        """Parse EBS analyzer log file"""
         warnings = []
         performance_metrics = {}
         
@@ -372,52 +1572,68 @@ class ReportGenerator:
                 for line in f:
                     line = line.strip()
                     
-                    # 解析警告信息
-                    if '[WARN]' in line and ('高利用率警告' in line or '高延迟警告' in line):
+                    # Parse warning information
+                    if '[WARN]' in line and ('High Utilization Warning' in line or 'High Latency Warning' in line or '高利用率警告' in line or '高延迟警告' in line):
                         timestamp = line.split(']')[0].replace('[', '') if ']' in line else ''
                         
-                        if '高利用率警告:' in line:
-                            parts = line.split(']')[-1].split('高利用率警告:')
+                        if 'High Utilization Warning:' in line or '高利用率警告:' in line:
+                            # Support both English and Chinese log formats
+                            if 'High Utilization Warning:' in line:
+                                parts = line.split(']')[-1].split('High Utilization Warning:')
+                            else:
+                                parts = line.split(']')[-1].split('高利用率警告:')
                             device = parts[0].strip()
                             value_part = parts[1].strip() if len(parts) > 1 else '0%'
                             
-                            # 提取数值和数据时间
-                            if '(数据时间:' in value_part:
-                                value = value_part.split('(数据时间:')[0].strip().replace('%', '')
-                                data_time = value_part.split('(数据时间:')[1].replace(')', '').strip()
+                            # Extract value and data time
+                            if '(Data Time:' in value_part or '(数据时间:' in value_part:
+                                if '(Data Time:' in value_part:
+                                    value = value_part.split('(Data Time:')[0].strip().replace('%', '')
+                                    data_time = value_part.split('(Data Time:')[1].replace(')', '').strip()
+                                else:
+                                    value = value_part.split('(数据时间:')[0].strip().replace('%', '')
+                                    data_time = value_part.split('(数据时间:')[1].replace(')', '').strip()
                             else:
                                 value = value_part.replace('%', '')
                                 data_time = timestamp
                             
                             warnings.append({
-                                'type': '高利用率',
+                                'type': 'High Utilization',
                                 'device': device,
                                 'value': value,
                                 'timestamp': timestamp,
                                 'data_time': data_time
                             })
-                        elif '高延迟警告:' in line:
-                            parts = line.split(']')[-1].split('高延迟警告:')
+                        elif 'High Latency Warning:' in line or '高延迟警告:' in line:
+                            # Support both English and Chinese log formats
+                            if 'High Latency Warning:' in line:
+                                parts = line.split(']')[-1].split('High Latency Warning:')
+                            else:
+                                parts = line.split(']')[-1].split('高延迟警告:')
                             device = parts[0].strip()
                             value_part = parts[1].strip() if len(parts) > 1 else '0ms'
                             
-                            # 提取数值和数据时间
-                            if '(数据时间:' in value_part:
-                                value = value_part.split('(数据时间:')[0].strip().replace('ms', '')
-                                data_time = value_part.split('(数据时间:')[1].replace(')', '').strip()
+                            # Extract value and data time
+                            if '(Data Time:' in value_part or '(数据时间:' in value_part:
+                                if '(Data Time:' in value_part:
+                                    value = value_part.split('(Data Time:')[0].strip().replace('ms', '')
+                                    data_time = value_part.split('(Data Time:')[1].replace(')', '').strip()
+                                else:
+                                    value = value_part.split('(数据时间:')[0].strip().replace('ms', '')
+                                    data_time = value_part.split('(数据时间:')[1].replace(')', '').strip()
                             else:
                                 value = value_part.replace('ms', '')
                                 data_time = timestamp
                             
                             warnings.append({
-                                'type': '高延迟',
+                                'type': 'High Latency',
                                 'device': device,
                                 'value': value,
                                 'timestamp': timestamp,
                                 'data_time': data_time
                             })
                     
-                    # 解析性能指标
+                    # Parse performance metrics
                     elif '[INFO]' in line and 'PERF:' in line:
                         try:
                             perf_part = line.split('PERF:')[1].strip()
@@ -429,40 +1645,40 @@ class ReportGenerator:
                             continue
         
         except Exception as e:
-            print(f"⚠️ 解析EBS日志时出错: {e}")
+            print(f"⚠️ Error parsing EBS log: {e}")
         
         return warnings, performance_metrics
     
     def _calculate_data_completeness(self):
-        """计算监控数据完整性 - 文件存在、有数据、字段完整即为100%"""
+        """Calculate monitoring data completeness - file exists, has data, fields complete = 100%"""
         try:
-            # 检查 performance CSV 文件
+            # Check performance CSV file
             if not os.path.exists(self.performance_csv):
                 return 0.0
             
             perf_df = pd.read_csv(self.performance_csv)
             
-            # 检查是否有数据行
+            # Check if there are data rows
             if len(perf_df) == 0:
                 return 0.0
             
-            # 检查关键字段是否存在（字段完整性）
+            # Check if key fields exist (field completeness)
             required_fields = ['timestamp', 'cpu_usage', 'mem_usage']
             missing_fields = [f for f in required_fields if f not in perf_df.columns]
             
             if missing_fields:
-                # 有缺失字段，计算部分完整性
+                # Has missing fields, calculate partial completeness
                 return (len(required_fields) - len(missing_fields)) / len(required_fields) * 100
             
-            # 文件存在 + 有数据 + 字段完整 = 100%
+            # File exists + has data + fields complete = 100%
             return 100.0
             
         except Exception as e:
-            print(f"⚠️ 计算数据完整性时出错: {e}")
+            print(f"⚠️ Error calculating data completeness: {e}")
             return 0.0
     
     def _format_monitoring_io(self, value, metric_type='iops'):
-        """格式化监控IO值，显示极小值"""
+        """Format monitoring IO value, display tiny values"""
         if value == 0:
             return "< 0.0001"
         elif value < 0.01:
@@ -473,7 +1689,7 @@ class ReportGenerator:
             return f"{value:.4f}"
     
     def _format_stat_value(self, value, decimal=0):
-        """格式化统计值"""
+        """Format statistical value"""
         if isinstance(value, (int, float)):
             if decimal == 0:
                 return f"{value:.0f}"
@@ -482,58 +1698,58 @@ class ReportGenerator:
         return 'N/A'
     
     def generate_ebs_analysis_section(self, warnings, performance_metrics):
-        """生成EBS分析报告HTML片段 - 增强版双层统计"""
+        """Generate EBS analysis report HTML section - enhanced version with dual-layer statistics"""
         if not warnings and not performance_metrics:
             return ""
         
-        # 读取CSV数据计算统计信息
+        # Read CSV data to calculate statistics
         try:
             df = pd.read_csv(self.performance_csv)
         except:
             df = None
         
-        html = """
+        html = f"""
         <div class="section">
-            <h2>&#128202; EBS性能分析结果</h2>
+            <h2>&#128202; {self.t['ebs_performance_analysis']}</h2>
             
             <div class="subsection">
-                <h3>&#9888; 性能警告</h3>
+                <h3>&#9888; {self.t['performance_warnings']}</h3>
         """
         
         if warnings:
             html += '<div class="warning-list" style="margin: 15px 0;">'
             for warning in warnings:
-                color = "#dc3545" if warning['type'] == '高利用率' else "#fd7e14"
-                unit = "%" if warning['type'] == '高利用率' else "ms"
+                color = "#dc3545" if warning['type'] == 'High Utilization' else "#fd7e14"
+                unit = "%" if warning['type'] == 'High Utilization' else "ms"
                 html += f'''
                 <div style="border-left: 4px solid {color}; padding: 12px; margin: 8px 0; background: #f8f9fa; border-radius: 4px;">
                     <strong style="color: {color};">{warning['device']}</strong> - {warning['type']}: <strong>{warning['value']}{unit}</strong>
-                    <small style="color: #6c757d; display: block; margin-top: 4px;">发生时间: {warning.get('data_time', warning['timestamp'])}</small>
+                    <small style="color: #6c757d; display: block; margin-top: 4px;">{self.t['occurred_at']}: {warning.get('data_time', warning['timestamp'])}</small>
                 </div>
                 '''
             html += '</div>'
         else:
-            html += '<p style="color: #28a745; font-weight: bold;">&#9989; 未发现性能异常</p>'
+            html += f'<p style="color: #28a745; font-weight: bold;">&#9989; {self.t["no_performance_anomaly"]}</p>'
         
         html += '</div>'
         
-        # 第一层：AWS EBS 基准数据统计
-        html += '''
+        # Layer 1: AWS EBS baseline data statistics
+        html += f'''
             <div class="subsection">
-                <h3>&#128200; AWS EBS 基准性能统计</h3>
+                <h3>&#128200; {self.t['aws_ebs_baseline_stats']}</h3>
         '''
         
         if df is not None and not df.empty:
-            # 获取配置的基准值
+            # Get configured baseline values
             data_max_iops = self.config.get('DATA_VOL_MAX_IOPS', 'N/A')
             data_max_throughput = self.config.get('DATA_VOL_MAX_THROUGHPUT', 'N/A')
             accounts_max_iops = self.config.get('ACCOUNTS_VOL_MAX_IOPS', 'N/A')
             accounts_max_throughput = self.config.get('ACCOUNTS_VOL_MAX_THROUGHPUT', 'N/A')
             
-            # 计算实际使用的统计数据
+            # Calculate actual usage statistics
             stats_data = {}
             
-            # DATA Device AWS标准字段
+            # DATA Device AWS standard fields
             data_iops_col = [col for col in df.columns if col.startswith('data_') and col.endswith('_aws_standard_iops')]
             data_throughput_col = [col for col in df.columns if col.startswith('data_') and col.endswith('_aws_standard_throughput_mibs')]
             
@@ -547,7 +1763,7 @@ class ReportGenerator:
                 stats_data['DATA_Throughput_Max'] = df[data_throughput_col[0]].max()
                 stats_data['DATA_Throughput_Avg'] = df[data_throughput_col[0]].mean()
             
-            # ACCOUNTS Device AWS标准字段
+            # ACCOUNTS Device AWS standard fields
             accounts_iops_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith('_aws_standard_iops')]
             accounts_throughput_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith('_aws_standard_throughput_mibs')]
             
@@ -561,7 +1777,7 @@ class ReportGenerator:
                 stats_data['ACCOUNTS_Throughput_Max'] = df[accounts_throughput_col[0]].max()
                 stats_data['ACCOUNTS_Throughput_Avg'] = df[accounts_throughput_col[0]].mean()
             
-            # 格式化数值
+            # Format values
             data_iops_min = self._format_stat_value(stats_data.get('DATA_IOPS_Min'), 0)
             data_iops_avg = self._format_stat_value(stats_data.get('DATA_IOPS_Avg'), 0)
             data_iops_max = self._format_stat_value(stats_data.get('DATA_IOPS_Max'), 0)
@@ -573,25 +1789,25 @@ class ReportGenerator:
                 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                     <thead>
                         <tr>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">设备</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">指标</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">配置基准</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">最小值</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">平均值</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">最大值</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['device']}</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['baseline_config']}</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['min']}</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['avg']}</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['max']}</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td rowspan="2" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">DATA Device</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">IOPS</td>
+                            <td rowspan="2" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{self.t['data_device']}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['iops']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{data_max_iops}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{data_iops_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{data_iops_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{data_iops_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Throughput (MiB/s)</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['throughput_mibs']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{data_max_throughput}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{data_tp_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{data_tp_avg}</td>
@@ -599,7 +1815,7 @@ class ReportGenerator:
                         </tr>
             '''
             
-            # 如果有ACCOUNTS设备数据，添加ACCOUNTS行
+            # If ACCOUNTS device data exists, add ACCOUNTS rows
             if accounts_iops_col or accounts_throughput_col:
                 acc_iops_min = self._format_stat_value(stats_data.get('ACCOUNTS_IOPS_Min'), 0)
                 acc_iops_avg = self._format_stat_value(stats_data.get('ACCOUNTS_IOPS_Avg'), 0)
@@ -610,15 +1826,15 @@ class ReportGenerator:
                 
                 html += f'''
                         <tr>
-                            <td rowspan="2" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">ACCOUNTS Device</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">IOPS</td>
+                            <td rowspan="2" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{self.t['accounts_device']}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['iops']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{accounts_max_iops}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{acc_iops_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{acc_iops_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{acc_iops_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Throughput (MiB/s)</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['throughput_mibs']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{accounts_max_throughput}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{acc_tp_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{acc_tp_avg}</td>
@@ -631,20 +1847,20 @@ class ReportGenerator:
                 </table>
             '''
         else:
-            html += '<p style="color: #6c757d;">暂无AWS EBS基准数据</p>'
+            html += f'<p style="color: #6c757d;">{self.t["no_aws_ebs_baseline"]}</p>'
         
         html += '</div>'
         
-        # 第二层：iostat 原生采样数据统计
-        html += '''
+        # Second layer: iostat raw sampling data statistics
+        html += f'''
             <div class="subsection">
-                <h3>&#128200; iostat 原生采样数据统计</h3>
+                <h3>&#128200; {self.t["iostat_raw_sampling_stats"]}</h3>
         '''
         
         if df is not None and not df.empty:
             iostat_stats = {}
             
-            # DATA Device iostat字段
+            # DATA Device iostat fields
             for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
                 data_col = [col for col in df.columns if col.startswith('data_') and col.endswith(f'_{metric}')]
                 if data_col:
@@ -652,7 +1868,7 @@ class ReportGenerator:
                     iostat_stats[f'DATA_{metric}_Max'] = df[data_col[0]].max()
                     iostat_stats[f'DATA_{metric}_Avg'] = df[data_col[0]].mean()
             
-            # ACCOUNTS Device iostat字段
+            # ACCOUNTS Device iostat fields
             for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
                 accounts_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith(f'_{metric}')]
                 if accounts_col:
@@ -660,21 +1876,21 @@ class ReportGenerator:
                     iostat_stats[f'ACCOUNTS_{metric}_Max'] = df[accounts_col[0]].max()
                     iostat_stats[f'ACCOUNTS_{metric}_Avg'] = df[accounts_col[0]].mean()
             
-            html += '''
+            html += f'''
                 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                     <thead>
                         <tr>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">设备</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">指标</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">最小值</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">平均值</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">最大值</th>
+                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['device']}</th>
+                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
+                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['min']}</th>
+                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['avg']}</th>
+                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['max']}</th>
                         </tr>
                     </thead>
                     <tbody>
             '''
             
-            # DATA Device 数据
+            # DATA Device data
             if any(k.startswith('DATA_') for k in iostat_stats.keys()):
                 d_iops_min = self._format_stat_value(iostat_stats.get('DATA_total_iops_Min'), 0)
                 d_iops_avg = self._format_stat_value(iostat_stats.get('DATA_total_iops_Avg'), 0)
@@ -691,33 +1907,33 @@ class ReportGenerator:
                 
                 html += f'''
                         <tr>
-                            <td rowspan="4" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">DATA Device</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">IOPS</td>
+                            <td rowspan="4" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{self.t['data_device']}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['iops']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_iops_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_iops_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_iops_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Throughput (MiB/s)</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['throughput_mibs']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_tp_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_tp_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_tp_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Utilization (%)</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['utilization_pct']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_util_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_util_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_util_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Latency (ms)</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['latency_ms']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_lat_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_lat_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{d_lat_max}</td>
                         </tr>
                 '''
             
-            # ACCOUNTS Device 数据
+            # ACCOUNTS Device data
             if any(k.startswith('ACCOUNTS_') for k in iostat_stats.keys()):
                 a_iops_min = self._format_stat_value(iostat_stats.get('ACCOUNTS_total_iops_Min'), 0)
                 a_iops_avg = self._format_stat_value(iostat_stats.get('ACCOUNTS_total_iops_Avg'), 0)
@@ -734,26 +1950,26 @@ class ReportGenerator:
                 
                 html += f'''
                         <tr>
-                            <td rowspan="4" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">ACCOUNTS Device</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">IOPS</td>
+                            <td rowspan="4" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{self.t['accounts_device']}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['iops']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_iops_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_iops_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_iops_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Throughput (MiB/s)</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['throughput_mibs']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_tp_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_tp_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_tp_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Utilization (%)</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['utilization_pct']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_util_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_util_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_util_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">Latency (ms)</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['latency_ms']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_lat_min}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_lat_avg}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{a_lat_max}</td>
@@ -765,7 +1981,7 @@ class ReportGenerator:
                 </table>
             '''
         else:
-            html += '<p style="color: #6c757d;">暂无iostat采样数据</p>'
+            html += f'<p style="color: #6c757d;">{self.t["no_iostat_data"]}</p>'
         
         html += '''
             </div>
@@ -774,50 +1990,50 @@ class ReportGenerator:
         
         return html
     def generate_html_report(self):
-        """生成HTML报告 - 使用安全的字段访问"""
+        """Generate HTML report - using safe field access"""
         try:
             df = pd.read_csv(self.performance_csv)
             
             html_content = self._generate_html_content(df)
             
-            output_file = os.path.join(self.output_dir, f'performance_report_{os.environ.get("SESSION_TIMESTAMP")}.html')
+            output_file = os.path.join(self.output_dir, f'performance_report_{self.language}_{os.environ.get("SESSION_TIMESTAMP")}.html')
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(html_content)
             
-            print(f"✅ 增强版HTML报告已生成: {output_file}")
+            print(f"✅ Enhanced HTML report generated: {output_file}")
             return output_file
             
         except Exception as e:
-            print(f"❌ HTML报告生成失败: {e}")
+            print(f"❌ HTML report generation failed: {e}")
             return None
 
     def _generate_config_status_section(self):
-        """生成配置状态检查部分"""
-        ledger_status = "✅ 已配置" if self.config.get('LEDGER_DEVICE') else "❌ 未配置"
-        accounts_status = "✅ 已配置" if DeviceManager.is_accounts_configured() else "⚠️ 未配置"
-        blockchain_node = self.config.get('BLOCKCHAIN_NODE', '通用')
+        """Generate configuration status check section"""
+        ledger_status = f"✅ {self.t['configured']}" if self.config.get('LEDGER_DEVICE') else f"❌ {self.t['not_configured']}"
+        accounts_status = f"✅ {self.t['configured']}" if DeviceManager.is_accounts_configured() else f"⚠️ {self.t['not_configured']}"
+        blockchain_node = self.config.get('BLOCKCHAIN_NODE', 'General')
         
         accounts_note = ""
         if not DeviceManager.is_accounts_configured():
-            accounts_note = '<div class="warning"><strong>提示:</strong> ACCOUNTS Device未配置，仅监控DATA Device性能。建议配置ACCOUNTS_DEVICE以获得完整的存储性能分析。</div>'
+            accounts_note = f'<div class="warning"><strong>{self.t["note"]}:</strong> {self.t["accounts_not_configured_note"]}</div>'
         
         return f"""
         <div class="section">
-            <h2>&#9881; 配置状态检查</h2>
+            <h2>&#9881; {self.t['config_status_check']}</h2>
             <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                 <thead>
                     <tr>
-                        <th style="background: #007bff; color: white; padding: 12px;">配置项</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">状态</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">值</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['config_item']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['status']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['value']}</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">区块链节点类型</td><td style="padding: 10px; border: 1px solid #ddd;">&#9989; 已配置</td><td style="padding: 10px; border: 1px solid #ddd;">{blockchain_node}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">DATA Device</td><td style="padding: 10px; border: 1px solid #ddd;">{ledger_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('LEDGER_DEVICE', 'N/A')}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">ACCOUNTS Device</td><td style="padding: 10px; border: 1px solid #ddd;">{accounts_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('ACCOUNTS_DEVICE', 'N/A')}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">DATA卷类型</td><td style="padding: 10px; border: 1px solid #ddd;">{'&#9989; 已配置' if self.config.get('DATA_VOL_TYPE') else '&#9888; 未配置'}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('DATA_VOL_TYPE', 'N/A')}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">ACCOUNTS卷类型</td><td style="padding: 10px; border: 1px solid #ddd;">{'&#9989; 已配置' if self.config.get('ACCOUNTS_VOL_TYPE') else '&#9888; 未配置'}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('ACCOUNTS_VOL_TYPE', 'N/A')}</td></tr>
+                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['blockchain_node_type']}</td><td style="padding: 10px; border: 1px solid #ddd;">&#9989; {self.t['configured']}</td><td style="padding: 10px; border: 1px solid #ddd;">{blockchain_node}</td></tr>
+                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['data_device']}</td><td style="padding: 10px; border: 1px solid #ddd;">{ledger_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('LEDGER_DEVICE', 'N/A')}</td></tr>
+                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['accounts_device']}</td><td style="padding: 10px; border: 1px solid #ddd;">{accounts_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('ACCOUNTS_DEVICE', 'N/A')}</td></tr>
+                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['data_volume_type']}</td><td style="padding: 10px; border: 1px solid #ddd;">{'&#9989; ' + self.t['configured'] if self.config.get('DATA_VOL_TYPE') else '&#9888; ' + self.t['not_configured']}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('DATA_VOL_TYPE', 'N/A')}</td></tr>
+                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['accounts_volume_type']}</td><td style="padding: 10px; border: 1px solid #ddd;">{'&#9989; ' + self.t['configured'] if self.config.get('ACCOUNTS_VOL_TYPE') else '&#9888; ' + self.t['not_configured']}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('ACCOUNTS_VOL_TYPE', 'N/A')}</td></tr>
                 </tbody>
             </table>
             {accounts_note}
@@ -825,125 +2041,125 @@ class ReportGenerator:
         """
     
     def _generate_monitoring_overhead_section(self):
-        """生成监控开销部分 - 增强版支持完整资源分析"""
-        overhead_data = self.overhead_data  # 使用缓存的数据而不是重新加载
+        """Generate monitoring overhead section - enhanced with full resource analysis"""
+        overhead_data = self.overhead_data  # Use cached data instead of reloading
         
         if overhead_data:
-            # 监控进程资源
+            # Monitoring process resources
             monitoring_cpu_avg = overhead_data.get('monitoring_cpu_percent_avg', 0)
             monitoring_memory_percent_avg = overhead_data.get('monitoring_memory_percent_avg', 0)
             monitoring_memory_mb_avg = overhead_data.get('monitoring_memory_mb_avg', 0)
             monitoring_process_count = overhead_data.get('monitoring_process_count_avg', 0)
             
-            # 区块链节点资源
+            # Blockchain node resources
             blockchain_cpu_avg = overhead_data.get('blockchain_cpu_percent_avg', 0)
             blockchain_memory_percent_avg = overhead_data.get('blockchain_memory_percent_avg', 0)
             blockchain_memory_mb_avg = overhead_data.get('blockchain_memory_mb_avg', 0)
             blockchain_process_count = overhead_data.get('blockchain_process_count_avg', 0)
             
-            # 系统资源
+            # System resources
             system_cpu_cores = overhead_data.get('system_cpu_cores_avg', 0)
             system_memory_gb = overhead_data.get('system_memory_gb_avg', 0)
             system_cpu_usage_avg = overhead_data.get('system_cpu_usage_avg', 0)
             system_memory_usage_avg = overhead_data.get('system_memory_usage_avg', 0)
             
-            # 资源占比
+            # Resource ratio
             monitoring_cpu_ratio = overhead_data.get('monitoring_cpu_ratio', 0) * 100
             monitoring_memory_ratio = overhead_data.get('monitoring_memory_ratio', 0) * 100
             blockchain_cpu_ratio = overhead_data.get('blockchain_cpu_ratio', 0) * 100
             blockchain_memory_ratio = overhead_data.get('blockchain_memory_ratio', 0) * 100
             
-            # 当前正在使用的I/O监控字段
+            # Currently used I/O monitoring fields
             monitoring_iops_avg = overhead_data.get('monitoring_iops_avg', 0)
             monitoring_iops_max = overhead_data.get('monitoring_iops_max', 0)
             monitoring_throughput_avg = overhead_data.get('monitoring_throughput_mibs_avg', 0)
             monitoring_throughput_max = overhead_data.get('monitoring_throughput_mibs_max', 0)
             
-            # 格式化为两位小数
+            # Format to two decimal places
             format_num = lambda x: f"{x:.2f}"
             
             section_html = f"""
             <div class="section">
-                <h2>&#128202; 监控开销综合分析</h2>
+                <h2>&#128202; {self.t['monitoring_overhead_comprehensive_analysis']}</h2>
                 
                 <div class="info-card">
-                    <h3>系统资源概览</h3>
+                    <h3>{self.t['system_resource_overview']}</h3>
                     <table class="data-table">
                         <tr>
-                            <th>指标</th>
-                            <th>值</th>
+                            <th>{self.t['metric_label']}</th>
+                            <th>{self.t['value_label']}</th>
                         </tr>
                         <tr>
-                            <td>CPU核数</td>
+                            <td>{self.t['cpu_cores']}</td>
                             <td>{int(system_cpu_cores)}</td>
                         </tr>
                         <tr>
-                            <td>内存总量</td>
+                            <td>{self.t['total_memory']}</td>
                             <td>{format_num(system_memory_gb)} GB</td>
                         </tr>
                         <tr>
-                            <td>CPU平均使用率</td>
+                            <td>{self.t['avg_cpu_usage']}</td>
                             <td>{format_num(system_cpu_usage_avg)}%</td>
                         </tr>
                         <tr>
-                            <td>内存平均使用率</td>
+                            <td>{self.t['avg_memory_usage']}</td>
                             <td>{format_num(system_memory_usage_avg)}%</td>
                         </tr>
                     </table>
                 </div>
                 
                 <div class="info-card">
-                    <h3>资源使用对比分析</h3>
+                    <h3>{self.t['resource_usage_comparison']}</h3>
                     <table class="data-table">
                         <tr>
-                            <th>资源类型</th>
-                            <th>监控系统</th>
-                            <th>区块链节点</th>
-                            <th>其他进程</th>
+                            <th>{self.t['resource_type']}</th>
+                            <th>{self.t['monitoring_system']}</th>
+                            <th>{self.t['blockchain_node']}</th>
+                            <th>{self.t['other_processes']}</th>
                         </tr>
                         <tr>
-                            <td>CPU使用率</td>
+                            <td>{self.t['cpu_usage_rate']}</td>
                             <td>{format_num(monitoring_cpu_avg)}% ({format_num(monitoring_cpu_ratio)}%)</td>
                             <td>{format_num(blockchain_cpu_avg)}% ({format_num(blockchain_cpu_ratio)}%)</td>
-                            <td>{format_num(system_cpu_usage_avg - monitoring_cpu_avg - blockchain_cpu_avg)}%</td>
+                            <td>{format_num(max(0, system_cpu_usage_avg - monitoring_cpu_avg - blockchain_cpu_avg))}%</td>
                         </tr>
                         <tr>
-                            <td>内存使用率</td>
+                            <td>{self.t['memory_usage_rate']}</td>
                             <td>{format_num(monitoring_memory_percent_avg)}% ({format_num(monitoring_memory_ratio)}%)</td>
                             <td>{format_num(blockchain_memory_percent_avg)}% ({format_num(blockchain_memory_ratio)}%)</td>
-                            <td>{format_num(system_memory_usage_avg - monitoring_memory_percent_avg - blockchain_memory_percent_avg)}%</td>
+                            <td>{format_num(max(0, system_memory_usage_avg - monitoring_memory_percent_avg - blockchain_memory_percent_avg))}%</td>
                         </tr>
                         <tr>
-                            <td>内存使用量</td>
+                            <td>{self.t['memory_usage_amount']}</td>
                             <td>{format_num(monitoring_memory_mb_avg)} MB</td>
                             <td>{format_num(blockchain_memory_mb_avg)} MB</td>
                             <td>{format_num(system_memory_gb*1024 - monitoring_memory_mb_avg - blockchain_memory_mb_avg)} MB</td>
                         </tr>
                         <tr>
-                            <td>进程数量</td>
+                            <td>{self.t['process_count']}</td>
                             <td>{int(monitoring_process_count)}</td>
                             <td>{int(blockchain_process_count)}</td>
                             <td>N/A</td>
                         </tr>
                     </table>
-                    <p class="note">括号内百分比表示占系统总资源的比例</p>
+                    <p class="note">{self.t['percentage_note']}</p>
                 </div>
                 
                 <div class="info-card">
-                    <h3>监控系统I/O开销</h3>
+                    <h3>{self.t['monitoring_io_overhead']}</h3>
                     <table class="data-table">
                         <tr>
-                            <th>指标</th>
-                            <th>平均值</th>
-                            <th>最大值</th>
+                            <th>{self.t['metric_label']}</th>
+                            <th>{self.t['average']}</th>
+                            <th>{self.t['maximum']}</th>
                         </tr>
                         <tr>
-                            <td>IOPS</td>
+                            <td>{self.t['iops']}</td>
                             <td>{format_num(monitoring_iops_avg)}</td>
                             <td>{format_num(monitoring_iops_max)}</td>
                         </tr>
                         <tr>
-                            <td>吞吐量 (MiB/s)</td>
+                            <td>{self.t['throughput_mibs']}</td>
                             <td>{format_num(monitoring_throughput_avg)}</td>
                             <td>{format_num(monitoring_throughput_max)}</td>
                         </tr>
@@ -951,23 +2167,23 @@ class ReportGenerator:
                 </div>
                 
                 <div class="conclusion">
-                    <h3>&#128221; 监控开销结论</h3>
-                    <p>监控系统资源消耗分析:</p>
+                    <h3>&#128221; {self.t['monitoring_overhead_conclusion']}</h3>
+                    <p>{self.t['monitoring_resource_analysis']}</p>
                     <ul>
-                        <li>CPU开销: 系统总CPU的 <strong>{format_num(monitoring_cpu_ratio)}%</strong></li>
-                        <li>内存开销: 系统总内存的 <strong>{format_num(monitoring_memory_ratio)}%</strong></li>
-                        <li>I/O开销: 平均 <strong>{format_num(monitoring_iops_avg)}</strong> IOPS</li>
+                        <li>{self.t['cpu_overhead']}: {format_num(monitoring_cpu_ratio)}%</li>
+                        <li>{self.t['memory_overhead']}: {format_num(monitoring_memory_ratio)}%</li>
+                        <li>{self.t['io_overhead']}: {format_num(monitoring_iops_avg)} {self.t['iops']}</li>
                     </ul>
                     
-                    <p>区块链节点资源消耗分析:</p>
+                    <p>{self.t['blockchain_resource_analysis']}</p>
                     <ul>
-                        <li>CPU使用: 系统总CPU的 <strong>{format_num(blockchain_cpu_ratio)}%</strong></li>
-                        <li>内存使用: 系统总内存的 <strong>{format_num(blockchain_memory_ratio)}%</strong></li>
+                        <li>{self.t['cpu_usage']}: {format_num(blockchain_cpu_ratio)}%</li>
+                        <li>{self.t['memory_usage']}: {format_num(blockchain_memory_ratio)}%</li>
                     </ul>
                     
-                    <p class="{'warning' if monitoring_cpu_ratio > 5 else 'success'}">
-                        监控系统对测试结果的影响: 
-                        {'<strong>显著</strong> (监控CPU开销超过5%)' if monitoring_cpu_ratio > 5 else '<strong>较小</strong> (监控CPU开销低于5%)'}
+                    <p class="{'warning' if monitoring_cpu_avg > 5 else 'success'}">
+                        {self.t['monitoring_impact']} 
+                        {'<strong>' + self.t['significant'] + '</strong> (' + self.t['monitoring_cpu_exceeds_5'] + ')' if monitoring_cpu_avg > 5 else '<strong>' + self.t['minor'] + '</strong> (' + self.t['monitoring_cpu_below_5'] + ')'}
                     </p>
                 </div>
             </div>
@@ -975,20 +2191,20 @@ class ReportGenerator:
         else:
             section_html = f"""
             <div class="section">
-                <h2>&#128202; 监控开销分析</h2>
+                <h2>&#128202; {self.t['monitoring_overhead_comprehensive_analysis']}</h2>
                 <div class="warning">
-                    <h4>&#9888;  监控开销数据不可用</h4>
-                    <p>监控开销数据文件未找到或为空。请确保在性能测试期间启用了监控开销统计。</p>
-                    <p><strong>预期文件</strong>: <code>logs/monitoring_overhead_YYYYMMDD_HHMMSS.csv</code></p>
+                    <h4>&#9888; {self.t['monitoring_data_unavailable']}</h4>
+                    <p>{self.t['monitoring_data_not_found']}</p>
+                    <p><strong>{self.t['expected_file']}</strong>: <code>logs/monitoring_overhead_YYYYMMDD_HHMMSS.csv</code></p>
                 </div>
                 <div class="info">
-                    <h4>&#128161; 如何启用监控开销统计</h4>
-                    <p>监控开销统计功能已集成到统一监控系统中，默认启用。</p>
-                    <p>如果未生成监控开销数据，请检查以下配置:</p>
+                    <h4>&#128161; {self.t['how_to_enable']}</h4>
+                    <p>{self.t['monitoring_integrated']}</p>
+                    <p>{self.t['check_config']}</p>
                     <ul>
-                        <li>确保 <code>config_loader.sh</code> 中的 <code>MONITORING_OVERHEAD_LOG</code> 变量已正确设置</li>
-                        <li>确保 <code>log_performance_data</code> 函数中调用了 <code>write_monitoring_overhead_log</code></li>
-                        <li>检查日志目录权限是否正确</li>
+                        <li>{self.t['ensure_variable_set']}</li>
+                        <li>{self.t['ensure_function_calls']}</li>
+                        <li>{self.t['check_permissions']}</li>
                     </ul>
                 </div>
             </div>
@@ -997,88 +2213,88 @@ class ReportGenerator:
         return section_html
 
     def _generate_monitoring_overhead_detailed_section(self):
-        """生成详细的监控开销分析部分"""
-        overhead_data = self.overhead_data  # 使用缓存的数据而不是重新加载
+        """Generate detailed monitoring overhead analysis section"""
+        overhead_data = self.overhead_data  # Use cached data instead of reloading
         
         if overhead_data and os.path.exists(os.path.join(self.output_dir, "monitoring_overhead_analysis.png")):
-            # 生成资源使用趋势图表
+            # Generate resource usage trend charts
             self._generate_resource_usage_charts()
             
             section_html = f"""
             <div class="section">
-                <h2>&#128200; 监控开销详细分析</h2>
+                <h2>&#128200; {self.t['monitoring_overhead_detailed']}</h2>
                 
                 <div class="info-card">
-                    <h3>&#128202; 资源使用趋势</h3>
+                    <h3>&#128202; {self.t['resource_usage_trends']}</h3>
                     <div class="chart-container">
-                        <img src="monitoring_overhead_analysis.png" alt="监控开销分析" class="chart">
+                        <img src="monitoring_overhead_analysis.png" alt="{self.t['monitoring_overhead_analysis']}" class="chart">
                     </div>
                     <div class="chart-info">
-                        <p>此图表展示了测试过程中系统资源使用的趋势变化，包括:</p>
+                        <p>{self.t['chart_shows_resource_usage_trend']}:</p>
                         <ul>
-                            <li><strong>监控系统资源使用</strong>: CPU、内存、I/O开销随时间的变化</li>
-                            <li><strong>区块链节点资源使用</strong>: 区块链进程的CPU和内存使用趋势</li>
-                            <li><strong>系统总资源使用</strong>: 整个系统的CPU和内存使用率</li>
+                            <li><strong>{self.t['monitoring_system_resource_usage']}</strong>: {self.t['cpu_memory_io_overhead_changes']}</li>
+                            <li><strong>{self.t['blockchain_node_resource_usage']}</strong>: {self.t['cpu_memory_usage_trends']}</li>
+                            <li><strong>{self.t['total_system_resource_usage']}</strong>: {self.t['cpu_memory_usage_entire_system']}</li>
                         </ul>
                     </div>
                 </div>
                 
                 <div class="info-card">
-                    <h3>&#128202; 资源占比分析</h3>
+                    <h3>&#128202; {self.t['resource_proportion_chart']}</h3>
                     <div class="chart-container">
-                        <img src="resource_distribution_chart.png" alt="资源分布图" class="chart">
+                        <img src="resource_distribution_chart.png" alt="{self.t['resource_distribution_image']}" class="chart">
                     </div>
                     <div class="chart-info">
-                        <p>此图表展示了不同组件对系统资源的占用比例:</p>
+                        <p>{self.t['chart_shows_component_resources']}</p>
                         <ul>
-                            <li><strong>监控系统</strong>: 所有监控进程的资源占比</li>
-                            <li><strong>区块链节点</strong>: 区块链相关进程的资源占比</li>
-                            <li><strong>其他进程</strong>: 系统中其他进程的资源占比</li>
+                            <li><strong>{self.t['monitoring_system']}</strong>: {self.t['all_monitoring_processes']}</li>
+                            <li><strong>{self.t['blockchain_node']}</strong>: {self.t['blockchain_related_processes']}</li>
+                            <li><strong>{self.t['other_processes']}</strong>: {self.t['other_system_processes']}</li>
                         </ul>
                     </div>
                 </div>
                 
                 <div class="info-card">
-                    <h3>&#128202; 监控开销与性能关系</h3>
+                    <h3>&#128202; {self.t['monitoring_performance_chart']}</h3>
                     <div class="chart-container">
-                        <img src="monitoring_impact_chart.png" alt="监控影响分析" class="chart">
+                        <img src="monitoring_impact_chart.png" alt="{self.t['monitoring_impact_image']}" class="chart">
                     </div>
                     <div class="chart-info">
-                        <p>此图表分析了监控开销与系统性能指标之间的相关性:</p>
+                        <p>{self.t['chart_analyzes_correlation']}</p>
                         <ul>
-                            <li><strong>监控CPU开销 vs QPS</strong>: 监控CPU使用与系统吞吐量的关系</li>
-                            <li><strong>监控I/O开销 vs EBS性能</strong>: 监控I/O与存储性能的关系</li>
+                            <li><strong>{self.t['monitoring_cpu_vs_qps']}</strong>: {self.t['monitoring_cpu_qps_relationship']}</li>
+                            <li><strong>{self.t['monitoring_io_vs_ebs']}</strong>: {self.t['monitoring_io_ebs_relationship']}</li>
                         </ul>
                     </div>
                 </div>
                 
                 <div class="info-card">
-                    <h3>&#128221; 生产环境资源规划建议</h3>
-                    <p>基于监控开销分析，对生产环境的资源规划建议:</p>
+                    <h3>&#128221; {self.t['production_planning_recommendations']}</h3>
+                    <p>{self.t['planning_based_on_analysis']}</p>
                     <table class="data-table">
                         <tr>
-                            <th>资源类型</th>
-                            <th>测试环境使用</th>
-                            <th>监控开销</th>
-                            <th>生产环境建议</th>
+                            <th>{self.t['resource_type']}</th>
+                            <th>{self.t['test_env_usage']}</th>
+                            <th>{self.t['monitoring_overhead_label']}</th>
+                            <th>{self.t['production_recommendation']}</th>
                         </tr>
                         <tr>
-                            <td>CPU</td>
+                            <td>{self.t['cpu']}</td>
                             <td>{overhead_data.get('system_cpu_usage_avg', 0):.2f}%</td>
                             <td>{overhead_data.get('monitoring_cpu_percent_avg', 0):.2f}%</td>
-                            <td>至少 {int(overhead_data.get('system_cpu_cores_avg', 1))} 核心</td>
+                            <td>{self.t['at_least']} {int(overhead_data.get('system_cpu_cores_avg', 1))} {self.t['cores']}</td>
                         </tr>
                         <tr>
-                            <td>内存</td>
+                            <td>{self.t['memory_usage']}</td>
                             <td>{overhead_data.get('system_memory_usage_avg', 0):.2f}%</td>
                             <td>{overhead_data.get('monitoring_memory_mb_avg', 0):.2f} MB</td>
-                            <td>至少 {max(4, int(overhead_data.get('system_memory_gb_avg', 4)))} GB</td>
+                            <td>{self.t['at_least']} {max(4, int(overhead_data.get('system_memory_gb_avg', 4)))} GB</td>
                         </tr>
                         <tr>
-                            <td>EBS IOPS</td>
+                            <td>{self.t['ebs_iops']}</td>
                             <td>N/A</td>
                             <td>{overhead_data.get('monitoring_iops_avg', 0):.2f}</td>
-                            <td>预留 {int(overhead_data.get('monitoring_iops_max', 0) * 1.5)} IOPS 余量</td>
+                            <td>{self.t['reserve']} {int(overhead_data.get('monitoring_iops_max', 0) * 1.5)} {self.t['iops_margin']}</td>
                         </tr>
                     </table>
                 </div>
@@ -1087,19 +2303,19 @@ class ReportGenerator:
         else:
             section_html = f"""
             <div class="section">
-                <h2>&#128200; 监控开销详细分析</h2>
+                <h2>&#128200; {self.t['monitoring_overhead_detailed']}</h2>
                 <div class="warning">
-                    <h4>&#9888;  监控开销详细数据不可用</h4>
-                    <p>监控开销数据文件未找到或图表生成失败。请确保:</p>
+                    <h4>&#9888; {self.t['monitoring_detailed_unavailable']}</h4>
+                    <p>{self.t['monitoring_file_not_found']}</p>
                     <ul>
-                        <li>监控开销CSV文件已正确生成</li>
-                        <li>图表生成脚本已正确执行</li>
-                        <li>输出目录有正确的写入权限</li>
+                        <li>{self.t['overhead_csv_generated']}</li>
+                        <li>{self.t['chart_script_executed']}</li>
+                        <li>{self.t['output_dir_permissions']}</li>
                     </ul>
                 </div>
                 <div class="info">
-                    <h4>&#128161; 如何生成监控开销图表</h4>
-                    <p>可以使用以下命令生成监控开销分析图表:</p>
+                    <h4>&#128161; {self.t['how_to_generate_charts']}</h4>
+                    <p>{self.t['use_command_to_generate']}</p>
                     <pre><code>python3 visualization/performance_visualizer.py --performance-csv logs/performance_data.csv --overhead-csv logs/monitoring_overhead.csv --output-dir reports</code></pre>
                 </div>
             </div>
@@ -1108,7 +2324,7 @@ class ReportGenerator:
         return section_html
         
     def _generate_resource_usage_charts(self):
-        """生成资源使用趋势图表"""
+        """Generate resource usage trend charts"""
         try:
             if not self.overhead_csv or not os.path.exists(self.overhead_csv):
                 return
@@ -1117,10 +2333,10 @@ class ReportGenerator:
             if df.empty:
                 return
                 
-            # 资源分布饼图
+            # Resource distribution pie chart
             self._generate_resource_distribution_chart(df)
             
-            # 监控影响分析图
+            # Monitoring impact analysis chart
             if self.performance_csv and os.path.exists(self.performance_csv):
                 self._generate_monitoring_impact_chart(df)
                 
@@ -1128,22 +2344,22 @@ class ReportGenerator:
             print(f"Error generating resource usage charts: {e}")
             
     def _generate_resource_distribution_chart(self, df):
-        """生成资源分布图表 - 3x2布局（使用实际可用数据）"""
+        """Generate resource distribution chart - 3x2 layout (using actual available data)"""
         try:
             
             UnifiedChartStyle.setup_matplotlib()
             
-            # 读取CPU数据
+            # Read CPU data
             blockchain_cpu = df['blockchain_cpu'].mean() if 'blockchain_cpu' in df.columns else 0
             monitoring_cpu = df['monitoring_cpu'].mean() if 'monitoring_cpu' in df.columns else 0
             system_cpu_cores = df['system_cpu_cores'].mean() if 'system_cpu_cores' in df.columns else 96
             
-            # 读取Memory数据 - 使用基础字段
+            # Read Memory data - using basic fields
             blockchain_memory_mb = df['blockchain_memory_mb'].mean() if 'blockchain_memory_mb' in df.columns else 0
             monitoring_memory_mb = df['monitoring_memory_mb'].mean() if 'monitoring_memory_mb' in df.columns else 0
             system_memory_gb = df['system_memory_gb'].mean() if 'system_memory_gb' in df.columns else 739.70
             
-            # 从 performance CSV 读取基础内存数据（单位：MB，需转换为GB）
+            # Read basic memory data from performance CSV (unit: MB, needs conversion to GB)
             mem_used_mb = 0
             mem_total_mb = system_memory_gb * 1024
             if self.performance_csv and os.path.exists(self.performance_csv):
@@ -1152,13 +2368,13 @@ class ReportGenerator:
                     mem_used_mb = perf_df['mem_used'].mean() if 'mem_used' in perf_df.columns else 0
                     mem_total_mb = perf_df['mem_total'].mean() if 'mem_total' in perf_df.columns else system_memory_gb * 1024
                 except Exception as e:
-                    print(f"⚠️ 读取内存数据失败: {e}")
+                    print(f"⚠️ {self.t['read_memory_data_failed']}: {e}")
             
-            # 转换为GB
+            # Convert to GB
             mem_used_gb = mem_used_mb / 1024
             mem_total_gb = mem_total_mb / 1024
             
-            # 读取Network数据
+            # Read Network data
             net_total_gbps = 0
             network_max_gbps = 25
             if self.performance_csv and os.path.exists(self.performance_csv):
@@ -1167,9 +2383,9 @@ class ReportGenerator:
                     net_total_gbps = perf_df['net_total_gbps'].mean() if 'net_total_gbps' in perf_df.columns else 0
                     network_max_gbps = float(os.getenv('NETWORK_MAX_BANDWIDTH_GBPS', '25'))
                 except Exception as e:
-                    print(f"⚠️ 读取网络数据失败: {e}")
+                    print(f"⚠️ {self.t['read_network_data_failed']}: {e}")
             
-            # 计算派生指标
+            # Calculate derived metrics
             blockchain_cores = blockchain_cpu / 100 if blockchain_cpu > 0 else 0
             monitoring_cores = monitoring_cpu / 100 if monitoring_cpu > 0 else 0
             idle_cores = max(0, system_cpu_cores - blockchain_cores - monitoring_cores)
@@ -1182,12 +2398,12 @@ class ReportGenerator:
             network_available_gbps = max(0, network_max_gbps - net_total_gbps)
             network_utilization = (net_total_gbps / network_max_gbps * 100) if network_max_gbps > 0 else 0
             
-            # 创建3x2布局
+            # Create 3x2 layout
             fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
             fig.suptitle('System Resource Distribution Analysis', 
                         fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold', y=0.995)
             
-            # 子图1: CPU Core Usage
+            # Subplot 1: CPU Core Usage
             cpu_sizes = [blockchain_cores, monitoring_cores, idle_cores]
             cpu_labels = [f'Blockchain\n{blockchain_cores:.2f} cores',
                          f'Monitoring\n{monitoring_cores:.2f} cores',
@@ -1204,7 +2420,7 @@ class ReportGenerator:
                 autotext.set_color('white')
                 autotext.set_weight('bold')
             
-            # 子图2: Memory Usage Distribution
+            # Subplot 2: Memory Usage Distribution
             mem_sizes = [blockchain_memory_gb, monitoring_memory_gb, mem_free_gb]
             mem_labels = [f'Blockchain\n{blockchain_memory_gb:.2f} GB',
                          f'Monitoring\n{monitoring_memory_gb:.2f} GB',
@@ -1221,7 +2437,7 @@ class ReportGenerator:
                 autotext.set_color('white')
                 autotext.set_weight('bold')
             
-            # 子图3: Memory Usage Comparison
+            # Subplot 3: Memory Usage Comparison
             mem_categories = ['Blockchain', 'Monitoring', 'Free']
             mem_values = [blockchain_memory_gb, monitoring_memory_gb, mem_free_gb]
             mem_bar_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning'],
@@ -1235,7 +2451,7 @@ class ReportGenerator:
                 ax3.text(bar.get_x() + bar.get_width()/2, val + max(mem_values)*0.02, 
                         f'{val:.1f} GB\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             
-            # 子图4: CPU Usage Comparison
+            # Subplot 4: CPU Usage Comparison
             cpu_categories = ['Blockchain', 'Monitoring']
             cpu_values = [blockchain_cpu, monitoring_cpu]
             cpu_bar_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning']]
@@ -1247,7 +2463,7 @@ class ReportGenerator:
                 ax4.text(bar.get_x() + bar.get_width()/2, val + max(cpu_values)*0.02, 
                         f'{val:.2f}%', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             
-            # 子图5: Network Bandwidth
+            # Subplot 5: Network Bandwidth
             if net_total_gbps > 0:
                 net_sizes = [network_used_gbps, network_available_gbps]
                 net_labels = [f'Used\n{network_used_gbps:.2f} Gbps',
@@ -1269,7 +2485,7 @@ class ReportGenerator:
                 ax5.set_title('Network Bandwidth', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
                 ax5.axis('off')
             
-            # 子图6: Resource Overhead Summary
+            # Subplot 6: Resource Overhead Summary
             overhead_categories = ['CPU\nOverhead', 'Memory\nOverhead']
             total_cpu = blockchain_cpu + monitoring_cpu
             total_mem = blockchain_memory_gb + monitoring_memory_gb
@@ -1290,23 +2506,23 @@ class ReportGenerator:
             plt.savefig(os.path.join(reports_dir, 'resource_distribution_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"✅ 生成完成: resource_distribution_chart.png")
+            print(f"✅ Generation complete: resource_distribution_chart.png")
             
         except Exception as e:
-            print(f"❌ 资源分布图表生成失败: {e}")
+            print(f"❌ {self.t['resource_distribution_failed']}: {e}")
             import traceback
             traceback.print_exc()
     
     def _generate_monitoring_impact_chart(self, overhead_df):
-        """生成监控影响分析图 - 3x2布局（使用实际可用数据）"""
+        """Generate monitoring impact analysis chart - 3x2 layout (using actual available data)"""
         try:
             
             UnifiedChartStyle.setup_matplotlib()
             
-            # 读取性能数据
+            # Read performance data
             perf_df = pd.read_csv(self.performance_csv) if self.performance_csv and os.path.exists(self.performance_csv) else pd.DataFrame()
             
-            # 计算平均值 - 从 overhead CSV
+            # Calculate averages - from overhead CSV
             blockchain_cpu = overhead_df['blockchain_cpu'].mean() if 'blockchain_cpu' in overhead_df.columns else 0
             monitoring_cpu = overhead_df['monitoring_cpu'].mean() if 'monitoring_cpu' in overhead_df.columns else 0
             blockchain_memory_mb = overhead_df['blockchain_memory_mb'].mean() if 'blockchain_memory_mb' in overhead_df.columns else 0
@@ -1314,37 +2530,37 @@ class ReportGenerator:
             system_cpu_cores = overhead_df['system_cpu_cores'].mean() if 'system_cpu_cores' in overhead_df.columns else 96
             system_memory_gb = overhead_df['system_memory_gb'].mean() if 'system_memory_gb' in overhead_df.columns else 739.70
             
-            # 从 performance CSV 获取I/O数据和基础内存数据
+            # Get I/O data and basic memory data from performance CSV
             monitoring_iops = perf_df['monitoring_iops_per_sec'].mean() if not perf_df.empty and 'monitoring_iops_per_sec' in perf_df.columns else 0
             monitoring_throughput = perf_df['monitoring_throughput_mibs_per_sec'].mean() if not perf_df.empty and 'monitoring_throughput_mibs_per_sec' in perf_df.columns else 0
             
-            # 使用 performance CSV 中的基础内存数据（单位：MB，需转换为GB）
+            # Use basic memory data from performance CSV (unit: MB, needs conversion to GB)
             mem_used_mb = perf_df['mem_used'].mean() if not perf_df.empty and 'mem_used' in perf_df.columns else 0
             mem_total_mb = perf_df['mem_total'].mean() if not perf_df.empty and 'mem_total' in perf_df.columns else system_memory_gb * 1024
             mem_usage_pct = perf_df['mem_usage'].mean() if not perf_df.empty and 'mem_usage' in perf_df.columns else 0
             
-            # 转换为GB
+            # Convert to GB
             mem_used = mem_used_mb / 1024
             mem_total = mem_total_mb / 1024
             
-            # 转换为核心数和GB
+            # Convert to cores and GB
             blockchain_cores = blockchain_cpu / 100
             monitoring_cores = monitoring_cpu / 100
             blockchain_memory_gb = blockchain_memory_mb / 1024
             monitoring_memory_gb = monitoring_memory_mb / 1024
             
-            # 计算占比
+            # Calculate proportions
             total_cpu = blockchain_cpu + monitoring_cpu
             cpu_overhead_pct = (monitoring_cpu / total_cpu * 100) if total_cpu > 0 else 0
             total_memory = blockchain_memory_gb + monitoring_memory_gb
             memory_overhead_pct = (monitoring_memory_gb / total_memory * 100) if total_memory > 0 else 0
             
-            # 创建3x2布局
+            # Create 3x2 layout
             fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
             fig.suptitle('Monitoring Overhead Impact Analysis', 
                         fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold', y=0.995)
             
-            # 子图1: CPU Core Usage
+            # Subplot 1: CPU Core Usage
             cpu_categories = ['Blockchain', 'Monitoring']
             cpu_values = [blockchain_cores, monitoring_cores]
             cpu_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning']]
@@ -1358,7 +2574,7 @@ class ReportGenerator:
                 ax1.text(bar.get_x() + bar.get_width()/2, val + max(cpu_values)*0.02, 
                         f'{val:.2f}\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             
-            # 子图2: Memory Usage
+            # Subplot 2: Memory Usage
             mem_categories = ['Blockchain', 'Monitoring']
             mem_values = [blockchain_memory_gb, monitoring_memory_gb]
             mem_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning']]
@@ -1372,8 +2588,8 @@ class ReportGenerator:
                 ax2.text(bar.get_x() + bar.get_width()/2, val + max(mem_values)*0.02, 
                         f'{val:.2f}\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             
-            # 子图3: Monitoring I/O Impact
-            # 计算 I/O 开销百分比 - 使用 DeviceManager 动态获取字段
+            # Subplot 3: Monitoring I/O Impact
+            # Calculate I/O overhead percentage - use DeviceManager to dynamically get fields
             device_manager = DeviceManager(perf_df) if not perf_df.empty else None
             data_total_iops = 0
             accounts_total_iops = 0
@@ -1411,7 +2627,7 @@ class ReportGenerator:
                 ax3.set_title('Monitoring I/O Operations', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
                 ax3.axis('off')
             
-            # 子图4: System Memory Overview (使用基础内存数据)
+            # Subplot 4: System Memory Overview (using basic memory data)
             if mem_used > 0 and mem_total > 0:
                 mem_free = mem_total - mem_used
                 mem_overview_labels = ['Used', 'Free']
@@ -1432,7 +2648,7 @@ class ReportGenerator:
                 ax4.set_title('System Memory Overview', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
                 ax4.axis('off')
             
-            # 子图5: CPU Overhead Trend
+            # Subplot 5: CPU Overhead Trend
             if 'timestamp' in overhead_df.columns and 'monitoring_cpu' in overhead_df.columns and 'blockchain_cpu' in overhead_df.columns:
                 if not pd.api.types.is_datetime64_any_dtype(overhead_df['timestamp']):
                     overhead_df['timestamp'] = pd.to_datetime(overhead_df['timestamp'])
@@ -1453,7 +2669,7 @@ class ReportGenerator:
                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax5.axis('off')
             
-            # 子图6: Monitoring Efficiency Summary
+            # Subplot 6: Monitoring Efficiency Summary
             summary_lines = [
                 "Monitoring Overhead Summary:",
                 "",
@@ -1477,26 +2693,26 @@ class ReportGenerator:
             plt.savefig(os.path.join(reports_dir, 'monitoring_impact_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"✅ 生成完成: monitoring_impact_chart.png")
+            print(f"✅ {self.t['generation_complete_monitoring']}")
             
         except Exception as e:
-            print(f"❌ 监控影响分析图表生成失败: {e}")
+            print(f"❌ {self.t['monitoring_impact_failed']}: {e}")
             import traceback
             traceback.print_exc()
     
     def _generate_ebs_bottleneck_section(self):
-        """生成EBS瓶颈分析部分 - 增强版支持多设备和根因分析"""
+        """Generate EBS bottleneck analysis section - enhanced version with multi-device and root cause analysis"""
         bottleneck_info = self._load_bottleneck_info()
-        overhead_data = self.overhead_data  # 使用缓存的数据而不是重新加载
+        overhead_data = self.overhead_data  # Use cached data instead of reloading
         
-        # 设备类型列表
+        # Device type list
         device_types = ['data', 'accounts']
         device_labels = {'data': 'DATA', 'accounts': 'ACCOUNTS'}
         
         if bottleneck_info and 'ebs_bottlenecks' in bottleneck_info:
             ebs_bottlenecks = bottleneck_info['ebs_bottlenecks']
             
-            # 按设备类型分组瓶颈
+            # Group bottlenecks by device type
             device_bottlenecks = {}
             for bottleneck in ebs_bottlenecks:
                 device_type = bottleneck.get('device_type', 'data').lower()
@@ -1504,21 +2720,21 @@ class ReportGenerator:
                     device_bottlenecks[device_type] = []
                 device_bottlenecks[device_type].append(bottleneck)
             
-            # 生成设备瓶颈HTML
+            # Generate device bottleneck HTML
             devices_html = ""
             for device_type in device_types:
                 if device_type in device_bottlenecks and device_bottlenecks[device_type]:
-                    # 该设备有瓶颈
+                    # This device has bottlenecks
                     bottlenecks = device_bottlenecks[device_type]
                     
-                    # 格式化瓶颈信息
+                    # Format bottleneck information
                     bottleneck_html = ""
                     for bottleneck in bottlenecks:
                         bottleneck_type = bottleneck.get('type', 'Unknown')
                         severity = bottleneck.get('severity', 'Medium')
                         details = bottleneck.get('details', {})
                         
-                        # 格式化详情
+                        # Format details
                         details_html = ""
                         for key, value in details.items():
                             details_html += f"<li><strong>{key}:</strong> {value}</li>"
@@ -1532,12 +2748,12 @@ class ReportGenerator:
                         </div>
                         """
                     
-                    # 获取监控开销数据进行根因分析
+                    # Get monitoring overhead data for root cause analysis
                     root_cause_html = self._generate_bottleneck_root_cause_analysis(device_type, overhead_data)
                     
                     devices_html += f"""
                     <div class="device-bottleneck">
-                        <h3>&#128192; {device_labels[device_type]}设备瓶颈</h3>
+                        <h3>&#128192; {device_labels[device_type]}{self.t['device_bottleneck']}</h3>
                         <div class="bottleneck-container">
                             {bottleneck_html}
                         </div>
@@ -1545,34 +2761,34 @@ class ReportGenerator:
                     </div>
                     """
                 elif device_type == 'data':
-                    # DATA设备必须显示，即使没有瓶颈
+                    # DATA device must be displayed even if no bottleneck
                     devices_html += f"""
                     <div class="device-bottleneck">
-                        <h3>&#128192; {device_labels[device_type]}设备</h3>
+                        <h3>&#128192; {device_labels[device_type]}{self.t['device_label']}</h3>
                         <div class="success">
-                            <h4>&#9989; 未检测到瓶颈</h4>
-                            <p>{device_labels[device_type]}设备性能良好，未发现瓶颈。</p>
+                            <h4>&#9989; {self.t['no_bottleneck_detected']}</h4>
+                            <p>{device_labels[device_type]}{self.t['device_performance_good']}</p>
                         </div>
                     </div>
                     """
             
             section_html = f"""
             <div class="section">
-                <h2>&#128192; EBS瓶颈分析</h2>
+                <h2>&#128192; {self.t['ebs_bottleneck_analysis']}</h2>
                 {devices_html}
                 <div class="note">
-                    <p>EBS瓶颈分析基于AWS推荐的性能指标，包括利用率、延迟、AWS标准IOPS和吞吐量。</p>
-                    <p>根因分析基于监控开销与EBS性能指标的相关性分析。</p>
+                    <p>{self.t['ebs_analysis_based_on']}</p>
+                    <p>{self.t['root_cause_based_on']}</p>
                 </div>
             </div>
             """
         else:
             section_html = f"""
             <div class="section">
-                <h2>&#128192; EBS瓶颈分析</h2>
+                <h2>&#128192; {self.t['ebs_bottleneck_analysis']}</h2>
                 <div class="success">
-                    <h4>&#9989; 未检测到EBS瓶颈</h4>
-                    <p>在测试期间未发现EBS性能瓶颈。存储性能良好，不会限制系统整体性能。</p>
+                    <h4>&#9989; {self.t['no_ebs_bottleneck_detected']}</h4>
+                    <p>{self.t['no_ebs_bottleneck_found']}</p>
                 </div>
             </div>
             """
@@ -1580,158 +2796,158 @@ class ReportGenerator:
         return section_html
         
     def _generate_bottleneck_root_cause_analysis(self, device_type, overhead_data):
-        """生成瓶颈根因分析HTML"""
+        """Generate bottleneck root cause analysis HTML"""
         if not overhead_data:
-            return """
+            return f"""
             <div class="warning">
-                <h4>&#9888; 无法进行根因分析</h4>
-                <p>缺少监控开销数据，无法确定瓶颈是否由监控系统引起。</p>
+                <h4>&#9888; {self.t['cannot_perform_root_cause']}</h4>
+                <p>{self.t['missing_overhead_data']}</p>
             </div>
             """
         
-        # 获取监控开销数据
+        # Get monitoring overhead data
         monitoring_iops_avg = overhead_data.get('monitoring_iops_avg', 0)
         monitoring_throughput_avg = overhead_data.get('monitoring_throughput_mibs_avg', 0)
         
-        # 估算监控开销对EBS的影响
-        # 注意：监控系统读取 /proc 虚拟文件系统，IOPS 通常 < 0.01
-        if monitoring_iops_avg > 1.0:  # 极高（异常情况）
-            impact_level = "高"
+        # Estimate monitoring overhead impact on EBS
+        # Note: Monitoring system reads /proc virtual filesystem, IOPS usually < 0.01
+        if monitoring_iops_avg > 1.0:  # Very high (abnormal)
+            impact_level = self.t['high_label']
             impact_percent = min(90, monitoring_iops_avg * 50)  # 1 IOPS = 50%
-        elif monitoring_iops_avg > 0.1:  # 较高
-            impact_level = "中"
+        elif monitoring_iops_avg > 0.1:  # High
+            impact_level = self.t['medium_label']
             impact_percent = min(50, monitoring_iops_avg * 100)  # 0.1 IOPS = 10%
-        else:  # 正常（< 0.1 IOPS）
-            impact_level = "低"
+        else:  # Normal (< 0.1 IOPS)
+            impact_level = self.t['low_label']
             impact_percent = min(20, monitoring_iops_avg * 200)  # 0.01 IOPS = 2%
         
-        # 根据影响程度生成不同的HTML
-        if impact_level == "高":
+        # Generate different HTML based on impact level
+        if impact_level == self.t['high_label']:
             return f"""
             <div class="root-cause-analysis warning">
-                <h4>&#128269; 根因分析: 监控系统影响显著</h4>
-                <p>监控系统对EBS性能的影响程度: <strong>{impact_level} (约{impact_percent:.1f}%)</strong></p>
+                <h4>&#128269; {self.t['root_cause_significant_impact']}</h4>
+                <p>{self.t['monitoring_impact_level']}: <strong>{impact_level} ({self.t['about']}{impact_percent:.1f}%)</strong></p>
                 <ul>
-                    <li>监控系统平均IOPS: <strong>{monitoring_iops_avg:.2f}</strong></li>
-                    <li>监控系统平均吞吐量: <strong>{monitoring_throughput_avg:.2f} MiB/s</strong></li>
+                    <li>{self.t['monitoring_avg_iops']}: <strong>{monitoring_iops_avg:.2f}</strong></li>
+                    <li>{self.t['monitoring_avg_throughput']}: <strong>{monitoring_throughput_avg:.2f} MiB/s</strong></li>
                 </ul>
-                <p class="recommendation">建议: 考虑减少监控频率或优化监控系统I/O操作，以降低对{device_type.upper()}设备的影响。</p>
+                <p class="recommendation">{self.t['recommendation']}: {self.t['reduce_monitoring_frequency']}{device_type.upper()}{self.t['device_impact_suffix']}</p>
             </div>
             """
-        elif impact_level == "中":
+        elif impact_level == self.t['medium_label']:
             return f"""
             <div class="root-cause-analysis info">
-                <h4>&#128269; 根因分析: 监控系统有一定影响</h4>
-                <p>监控系统对EBS性能的影响程度: <strong>{impact_level} (约{impact_percent:.1f}%)</strong></p>
+                <h4>&#128269; {self.t['root_cause_moderate_impact']}</h4>
+                <p>{self.t['monitoring_impact_level']}: <strong>{impact_level} ({self.t['about']}{impact_percent:.1f}%)</strong></p>
                 <ul>
-                    <li>监控系统平均IOPS: <strong>{monitoring_iops_avg:.2f}</strong></li>
-                    <li>监控系统平均吞吐量: <strong>{monitoring_throughput_avg:.2f} MiB/s</strong></li>
+                    <li>{self.t['monitoring_avg_iops']}: <strong>{monitoring_iops_avg:.2f}</strong></li>
+                    <li>{self.t['monitoring_avg_throughput']}: <strong>{monitoring_throughput_avg:.2f} MiB/s</strong></li>
                 </ul>
-                <p class="recommendation">建议: 监控系统对{device_type.upper()}设备有一定影响，但不是主要瓶颈来源。应同时优化业务逻辑和监控系统。</p>
+                <p class="recommendation">{self.t['recommendation']}: {self.t['monitoring_has_some_impact']}</p>
             </div>
             """
         else:
             return f"""
             <div class="root-cause-analysis success">
-                <h4>&#128269; 根因分析: 监控系统影响较小</h4>
-                <p>监控系统对EBS性能的影响程度: <strong>{impact_level} (约{impact_percent:.1f}%)</strong></p>
+                <h4>&#128269; {self.t['root_cause_minor_impact']}</h4>
+                <p>{self.t['monitoring_impact_level']}: <strong>{impact_level} ({self.t['about']}{impact_percent:.1f}%)</strong></p>
                 <ul>
-                    <li>监控系统平均IOPS: <strong>{monitoring_iops_avg:.2f}</strong></li>
-                    <li>监控系统平均吞吐量: <strong>{monitoring_throughput_avg:.2f} MiB/s</strong></li>
+                    <li>{self.t['monitoring_avg_iops']}: <strong>{monitoring_iops_avg:.2f}</strong></li>
+                    <li>{self.t['monitoring_avg_throughput']}: <strong>{monitoring_throughput_avg:.2f} MiB/s</strong></li>
                 </ul>
-                <p class="recommendation">建议: {device_type.upper()}设备瓶颈主要由业务负载引起，监控系统影响可忽略。应优化业务逻辑或提升EBS配置。</p>
+                <p class="recommendation">{self.t['recommendation']}: {device_type.upper()}{self.t['bottleneck_from_workload']}</p>
             </div>
             """
     
     def _load_bottleneck_info(self):
-        """加载瓶颈检测信息"""
+        """Load bottleneck detection information"""
         if self.bottleneck_info and os.path.exists(self.bottleneck_info):
             try:
                 with open(self.bottleneck_info, 'r') as f:
                     return json.load(f)
             except Exception as e:
-                print(f"⚠️ 瓶颈信息加载失败: {e}")
+                print(f"⚠️ {self.t['bottleneck_info_load_failed']}: {e}")
         return None
     
     def _generate_production_resource_planning_section(self):
-        """生成生产环境资源规划建议部分"""
-        overhead_data = self.overhead_data  # 使用缓存的数据而不是重新加载
+        """Generate production environment resource planning recommendations section"""
+        overhead_data = self.overhead_data  # Use cached data instead of reloading
         bottleneck_info = self._load_bottleneck_info()
         
-        # 确定主要瓶颈
-        main_bottleneck = "未发现明显瓶颈"
-        bottleneck_component = "无"
+        # Determine main bottleneck
+        main_bottleneck = self.t['no_obvious_bottleneck']
+        bottleneck_component = self.t['none_label']
         if bottleneck_info:
             if bottleneck_info.get('cpu_bottleneck', False):
-                main_bottleneck = "CPU资源不足"
+                main_bottleneck = self.t['cpu_insufficient']
                 bottleneck_component = "CPU"
             elif bottleneck_info.get('memory_bottleneck', False):
-                main_bottleneck = "内存资源不足"
-                bottleneck_component = "内存"
+                main_bottleneck = self.t['memory_insufficient']
+                bottleneck_component = self.t['memory_usage']
             elif bottleneck_info.get('ebs_bottlenecks', []):
                 for bottleneck in bottleneck_info.get('ebs_bottlenecks', []):
                     if bottleneck.get('device_type') == 'data':
-                        main_bottleneck = f"DATA设备{bottleneck.get('type', 'EBS')}瓶颈"
-                        bottleneck_component = "存储I/O"
+                        main_bottleneck = f"DATA{self.t['device_label']}{bottleneck.get('type', 'EBS')}{self.t['device_bottleneck']}"
+                        bottleneck_component = self.t['storage_io_label']
                         break
         
 
         
         section_html = f"""
         <div class="section">
-            <h2>&#127919; 生产环境资源规划建议</h2>
+            <h2>&#127919; {self.t['production_resource_planning']}</h2>
             
             <div class="conclusion">
-                <h3>&#128221; 测试结论摘要</h3>
-                <p>基于性能测试结果，我们得出以下结论:</p>
+                <h3>&#128221; {self.t['test_conclusion_summary']}</h3>
+                <p>{self.t['based_on_test_results']}</p>
                 <ul>
-                    <li>主要瓶颈: <strong>{main_bottleneck}</strong></li>
-                    <li>监控系统资源占用: {'显著' if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else '较小'}</li>
-                    <li>区块链节点资源需求: {'高' if overhead_data and overhead_data.get('blockchain_cpu_percent_avg', 0) > 50 else '中等' if overhead_data and overhead_data.get('blockchain_cpu_percent_avg', 0) > 20 else '低'}</li>
+                    <li>{self.t['main_bottleneck_label']}: <strong>{main_bottleneck}</strong></li>
+                    <li>{self.t['monitoring_resource_usage']}: {self.t['significant_label'] if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else self.t['minor_label']}</li>
+                    <li>{self.t['blockchain_resource_demand']}: {self.t['high_label'] if overhead_data and overhead_data.get('blockchain_cpu_percent_avg', 0) > 50 else self.t['medium_label'] if overhead_data and overhead_data.get('blockchain_cpu_percent_avg', 0) > 20 else self.t['low_label']}</li>
                 </ul>
             </div>
             
 
             <div class="info-card">
-                <h3>&#128161; 性能优化建议</h3>
+                <h3>&#128161; {self.t['performance_optimization_recommendations']}</h3>
                 <table class="data-table">
                     <tr>
-                        <th>组件</th>
-                        <th>优化建议</th>
-                        <th>预期效果</th>
+                        <th>{self.t['component_label']}</th>
+                        <th>{self.t['optimization_recommendation']}</th>
+                        <th>{self.t['expected_effect']}</th>
                     </tr>
                     <tr>
-                        <td>监控系统</td>
+                        <td>{self.t['monitoring_system_label']}</td>
                         <td>
                             <ul>
-                                <li>{'降低监控频率' if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else '保持当前配置'}</li>
-                                <li>使用独立的监控开销日志</li>
-                                <li>定期清理历史监控数据</li>
+                                <li>{self.t['reduce_frequency'] if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else self.t['keep_current_config']}</li>
+                                <li>{self.t['use_separate_overhead_log']}</li>
+                                <li>{self.t['cleanup_historical_data']}</li>
                             </ul>
                         </td>
-                        <td>{'显著降低监控开销' if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else '维持低监控开销'}</td>
+                        <td>{self.t['significantly_reduce_overhead'] if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else self.t['maintain_low_overhead']}</td>
                     </tr>
                     <tr>
-                        <td>EBS存储</td>
+                        <td>{self.t['ebs_storage_label']}</td>
                         <td>
                             <ul>
-                                <li>{'提高IOPS配置' if bottleneck_component == '存储I/O' else '当前配置适合负载'}</li>
-                                <li>{'考虑使用IO2而非GP3' if bottleneck_component == '存储I/O' else '保持当前存储类型'}</li>
-                                <li>{'分离DATA和ACCOUNTS设备' if bottleneck_component == '存储I/O' else '当前设备配置合理'}</li>
+                                <li>{self.t['increase_iops_config'] if bottleneck_component == self.t['storage_io_label'] else self.t['current_config_suitable']}</li>
+                                <li>{self.t['consider_io2_over_gp3'] if bottleneck_component == self.t['storage_io_label'] else self.t['keep_current_storage_type']}</li>
+                                <li>{self.t['separate_data_accounts'] if bottleneck_component == self.t['storage_io_label'] else self.t['current_device_config_reasonable']}</li>
                             </ul>
                         </td>
-                        <td>{'消除存储瓶颈，提升整体性能' if bottleneck_component == '存储I/O' else '维持良好存储性能'}</td>
+                        <td>{self.t['eliminate_storage_bottleneck'] if bottleneck_component == self.t['storage_io_label'] else self.t['maintain_good_storage_performance']}</td>
                     </tr>
                     <tr>
-                        <td>区块链节点</td>
+                        <td>{self.t['blockchain_node_label']}</td>
                         <td>
                             <ul>
-                                <li>{'增加CPU核心数' if bottleneck_component == 'CPU' else '当前CPU配置适合负载'}</li>
-                                <li>{'增加内存配置' if bottleneck_component == '内存' else '当前内存配置适合负载'}</li>
-                                <li>优化区块链节点配置参数</li>
+                                <li>{self.t['increase_cpu_cores'] if bottleneck_component == 'CPU' else self.t['current_cpu_suitable']}</li>
+                                <li>{self.t['increase_memory_config'] if bottleneck_component == self.t['memory_usage'] else self.t['current_memory_suitable']}</li>
+                                <li>{self.t['optimize_node_params']}</li>
                             </ul>
                         </td>
-                        <td>{'提升节点处理能力，消除性能瓶颈' if bottleneck_component in ['CPU', '内存'] else '维持稳定节点性能'}</td>
+                        <td>{self.t['improve_node_capacity'] if bottleneck_component in ['CPU', self.t['memory_usage']] else self.t['maintain_stable_performance']}</td>
                     </tr>
                 </table>
             </div>
@@ -1745,49 +2961,49 @@ class ReportGenerator:
 
     
     def _generate_overhead_data_table(self):
-        """✅ 生成完整的监控开销数据表格"""
+        """Generate complete monitoring overhead data table"""
         if not self.overhead_data:
-            return """
+            return f"""
             <div class="warning">
-                <h4>&#9888;  监控开销Data Not Available</h4>
-                <p>监控开销数据文件未找到或为空。请确保在性能测试期间启用了监控开销统计。</p>
-                <p><strong>预期文件</strong>: <code>logs/monitoring_overhead_YYYYMMDD_HHMMSS.csv</code></p>
-                <p><strong>说明</strong>: 监控开销数据由unified_monitor.sh自动生成，无需手动运行额外工具。</p>
+                <h4>&#9888; {self.t['overhead_data_not_available']}</h4>
+                <p>{self.t['overhead_file_not_found']}</p>
+                <p><strong>{self.t['expected_file_label']}</strong>: <code>logs/monitoring_overhead_YYYYMMDD_HHMMSS.csv</code></p>
+                <p><strong>{self.t['description_label']}</strong>: {self.t['overhead_auto_generated']}</p>
             </div>
             """
         
         try:
-            # &#9989; 生成详细的监控开销表格
-            table_html = """
+            # Generate detailed monitoring overhead table
+            table_html = f"""
             <div class="info">
-                <h4>&#128202; 监控开销详细数据</h4>
-                <p>以下数据显示了测试期间各监控组件的资源消耗情况，帮助评估生产环境的真实资源需求。</p>
+                <h4>&#128202; {self.t['overhead_detailed_data']}</h4>
+                <p>{self.t['data_shows_component_consumption']}</p>
             </div>
             
             <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                 <thead>
                     <tr>
-                        <th style="background: #007bff; color: white; padding: 12px;">监控组件</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">平均CPU Usage</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">峰值CPU Usage</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">平均内存使用</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">峰值内存使用</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">平均IOPS</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">峰值IOPS</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">平均Throughput</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">数据完整性</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['monitoring_component_label']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['avg_cpu_usage_label']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['peak_cpu_usage_label']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['avg_memory_usage_label']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['peak_memory_usage_label']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['avg_iops_label']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['peak_iops_label']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['avg_throughput_label']}</th>
+                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['data_completeness_label']}</th>
                     </tr>
                 </thead>
                 <tbody>
             """
             
-            # ✅ 监控组件数据（基于总体监控数据估算）
-            # 计算统一的完整性
+            # Monitoring component data (estimated based on overall monitoring data)
+            # Calculate unified completeness
             data_completeness = self._calculate_data_completeness()
             
             monitoring_components = [
                 {
-                    'name': 'iostat监控',
+                    'name': self.t['iostat_monitoring'],
                     'cpu_avg': self.overhead_data.get('monitoring_cpu_percent_avg', 0) * 0.3,
                     'cpu_max': self.overhead_data.get('monitoring_cpu_percent_max', 0) * 0.4,
                     'mem_avg': self.overhead_data.get('monitoring_memory_mb_avg', 0) * 0.2,
@@ -1798,7 +3014,7 @@ class ReportGenerator:
                     'completeness': data_completeness
                 },
                 {
-                    'name': 'sar监控',
+                    'name': self.t['sar_monitoring'],
                     'cpu_avg': self.overhead_data.get('monitoring_cpu_percent_avg', 0) * 0.2,
                     'cpu_max': self.overhead_data.get('monitoring_cpu_percent_max', 0) * 0.3,
                     'mem_avg': self.overhead_data.get('monitoring_memory_mb_avg', 0) * 0.15,
@@ -1809,7 +3025,7 @@ class ReportGenerator:
                     'completeness': data_completeness
                 },
                 {
-                    'name': 'vmstat监控',
+                    'name': self.t['vmstat_monitoring'],
                     'cpu_avg': self.overhead_data.get('monitoring_cpu_percent_avg', 0) * 0.1,
                     'cpu_max': self.overhead_data.get('monitoring_cpu_percent_max', 0) * 0.15,
                     'mem_avg': self.overhead_data.get('monitoring_memory_mb_avg', 0) * 0.1,
@@ -1820,7 +3036,7 @@ class ReportGenerator:
                     'completeness': data_completeness
                 },
                 {
-                    'name': '数据收集脚本',
+                    'name': self.t['data_collection_script'],
                     'cpu_avg': self.overhead_data.get('monitoring_cpu_percent_avg', 0) * 0.3,
                     'cpu_max': self.overhead_data.get('monitoring_cpu_percent_max', 0) * 0.4,
                     'mem_avg': self.overhead_data.get('monitoring_memory_mb_avg', 0) * 0.4,
@@ -1831,7 +3047,7 @@ class ReportGenerator:
                     'completeness': data_completeness
                 },
                 {
-                    'name': '总监控开销',
+                    'name': self.t['total_monitoring_overhead'],
                     'cpu_avg': self.overhead_data.get('monitoring_cpu_percent_avg', 0),
                     'cpu_max': self.overhead_data.get('monitoring_cpu_percent_max', 0),
                     'mem_avg': self.overhead_data.get('monitoring_memory_mb_avg', 0),
@@ -1844,13 +3060,13 @@ class ReportGenerator:
             ]
             
             for i, component in enumerate(monitoring_components):
-                # 根据是否是总计行设置样式
-                if component['name'] == '总监控开销':
+                # Set style based on whether it's a total row
+                if component['name'] == self.t['total_monitoring_overhead']:
                     row_style = 'background: #f0f8ff; font-weight: bold; border-top: 2px solid #007bff;'
                 else:
                     row_style = 'background: white;' if i % 2 == 0 else 'background: #f8f9fa;'
                 
-                # 数据完整性颜色
+                # Data completeness color
                 completeness_color = 'green' if component['completeness'] > 95 else 'orange' if component['completeness'] > 90 else 'red'
                 
                 table_html += f"""
@@ -1867,27 +3083,27 @@ class ReportGenerator:
                 </tr>
                 """
             
-            table_html += """
+            table_html += f"""
                 </tbody>
             </table>
             
             <div class="info" style="margin-top: 15px;">
-                <h4>&#128202; 监控开销分析说明</h4>
+                <h4>&#128202; {self.t['overhead_analysis_notes']}</h4>
                 <ul>
-                    <li><strong>监控组件</strong>: 各个系统监控工具的资源消耗分解（基于总体监控数据估算）</li>
-                    <li><strong>CPU Usage</strong>: 监控工具占用的CPU百分比</li>
-                    <li><strong>内存使用</strong>: 监控工具占用的内存大小(MB)</li>
-                    <li><strong>IOPS</strong>: 监控工具产生的磁盘I/O操作数（极小值显示为 &lt; 0.0001）</li>
-                    <li><strong>Throughput</strong>: 监控工具产生的磁盘Throughput(MiB/s)</li>
-                    <li><strong>数据完整性</strong>: 监控数据的完整性百分比</li>
+                    <li><strong>{self.t['monitoring_component_label']}</strong>: {self.t['component_breakdown']}</li>
+                    <li><strong>CPU Usage</strong>: {self.t['cpu_percentage_used']}</li>
+                    <li><strong>{self.t['memory_usage_label']}</strong>: {self.t['memory_size_used']}</li>
+                    <li><strong>IOPS</strong>: {self.t['disk_io_operations']}</li>
+                    <li><strong>Throughput</strong>: {self.t['disk_throughput_generated']}</li>
+                    <li><strong>{self.t['data_completeness_label']}</strong>: {self.t['data_completeness_percentage']}</li>
                 </ul>
-                <p><strong>生产环境建议</strong>: 总监控开销通常占系统资源的1-3%，可以忽略不计。</p>
-                <p><strong>IOPS/Throughput 为 0 的原因</strong>:</p>
+                <p><strong>{self.t['production_env_recommendation']}</strong>: {self.t['total_overhead_usually']}</p>
+                <p><strong>{self.t['iops_throughput_zero_reason']}</strong>:</p>
                 <ul style="margin-top: 5px;">
-                    <li>监控系统主要读取 <code>/proc</code> 虚拟文件系统，内核不计入物理 I/O 统计</li>
-                    <li>实际 I/O 开销 &lt; 0.00005 IOPS/s，即使使用 4 位小数精度（%.4f）仍显示为 0.0000</li>
-                    <li>这证明监控系统设计高效，对生产环境几乎无影响</li>
-                    <li>如需查看极小值，可在源码中将精度提升至 %.6f 或更高</li>
+                    <li>{self.t['monitoring_reads_proc']}</li>
+                    <li>{self.t['actual_io_overhead']}</li>
+                    <li>{self.t['proves_efficient_design']}</li>
+                    <li>{self.t['to_view_tiny_values']}</li>
                 </ul>
             </div>
             """
@@ -1895,50 +3111,50 @@ class ReportGenerator:
             return table_html
             
         except Exception as e:
-            print(f"❌ 监控开销表格生成失败: {e}")
+            print(f"❌ {self.t['overhead_table_generation_failed']}: {e}")
             return f"""
             <div class="warning">
-                <h4>❌ 监控开销表格生成失败</h4>
-                <p>错误信息: {str(e)[:100]}</p>
-                <p>请检查监控开销数据的格式和完整性。</p>
+                <h4>❌ {self.t['overhead_table_generation_failed']}</h4>
+                <p>{self.t['error_message_label']}: {str(e)[:100]}</p>
+                <p>{self.t['check_data_format']}</p>
             </div>
             """
     
 
     
     def _generate_independent_tools_results(self):
-        """生成独立分析工具结果展示"""
-        return """
+        """Generate independent analysis tools results display"""
+        return f"""
         <div class="info-grid">
             <div class="info-card">
-                <h4>&#128269; EBS瓶颈检测结果</h4>
-                <p><strong>报告文件</strong>: ebs_bottleneck_analysis.txt</p>
-                <p>分析EBS存储在不同QPS负载下的性能瓶颈情况</p>
+                <h4>&#128269; {self.t['ebs_bottleneck_detection']}</h4>
+                <p><strong>{self.t['report_file_label']}</strong>: ebs_bottleneck_analysis.txt</p>
+                <p>{self.t['analyze_ebs_under_qps']}</p>
             </div>
             <div class="info-card">
-                <h4>&#128260; EBS IOPS转换分析</h4>
-                <p><strong>报告文件</strong>: ebs_iops_conversion.json</p>
-                <p>将iostat指标转换为AWS EBS标准IOPS和Throughput指标</p>
+                <h4>&#128260; {self.t['ebs_iops_conversion']}</h4>
+                <p><strong>{self.t['report_file_label']}</strong>: ebs_iops_conversion.json</p>
+                <p>{self.t['convert_iostat_to_aws']}</p>
             </div>
             <div class="info-card">
-                <h4>&#128202; EBS综合分析</h4>
-                <p><strong>报告文件</strong>: ebs_analysis.txt</p>
-                <p>EBS存储性能的综合分析报告</p>
+                <h4>&#128202; {self.t['ebs_comprehensive_analysis']}</h4>
+                <p><strong>{self.t['report_file_label']}</strong>: ebs_analysis.txt</p>
+                <p>{self.t['ebs_performance_report']}</p>
             </div>
             <div class="info-card">
-                <h4>&#128187; 监控开销计算</h4>
-                <p><strong>数据文件</strong>: monitoring_overhead_YYYYMMDD_HHMMSS.csv</p>
-                <p>详细的监控系统资源消耗数据</p>
+                <h4>&#128187; {self.t['monitoring_overhead_calculation']}</h4>
+                <p><strong>{self.t['data_file_label']}</strong>: monitoring_overhead_YYYYMMDD_HHMMSS.csv</p>
+                <p>{self.t['detailed_overhead_data']}</p>
             </div>
         </div>
         """
     
     def _generate_ebs_baseline_analysis_section(self, df):
-        """✅ 改进的EBS基准分析部分"""
+        """Improved EBS baseline analysis section"""
         try:
-            # ✅ 安全的环境变量获取
+            # Safely get environment variables
             def safe_get_env_float(env_name, default_value=0.0):
-                """安全获取环境变量并转换为浮点数"""
+                """Safely get environment variable and convert to float"""
                 try:
                     value = os.getenv(env_name)
                     if value and value != 'N/A' and value.strip():
@@ -1947,18 +3163,18 @@ class ReportGenerator:
                 except (ValueError, TypeError):
                     return default_value
             
-            # 获取EBS基准配置
+            # Get EBS baseline configuration
             data_baseline_iops = safe_get_env_float('DATA_VOL_MAX_IOPS')
             data_baseline_throughput = safe_get_env_float('DATA_VOL_MAX_THROUGHPUT')
             accounts_baseline_iops = safe_get_env_float('ACCOUNTS_VOL_MAX_IOPS')
             accounts_baseline_throughput = safe_get_env_float('ACCOUNTS_VOL_MAX_THROUGHPUT')
             
-            # ✅ 安全的利用率计算函数
+            # Safe utilization calculation function
             def safe_calculate_utilization(actual_value, baseline_value, metric_name):
-                """安全计算利用率"""
+                """Safe utilization calculation"""
                 try:
                     if baseline_value is None or baseline_value == 0:
-                        return "基准未配置"
+                        return self.t['baseline_not_configured']
                     
                     if pd.isna(actual_value) or actual_value == 0:
                         return "0.0%"
@@ -1967,54 +3183,54 @@ class ReportGenerator:
                     return f"{utilization:.1f}%"
                     
                 except Exception as e:
-                    print(f"⚠️  {metric_name} 利用率计算失败: {e}")
-                    return "计算错误"
+                    print(f"⚠️ {metric_name} {self.t['utilization_calc_failed']}: {e}")
+                    return self.t['calculation_error']
             
-            # ✅ 安全的字段查找和数据提取
+            # Safe field search and data extraction
             def safe_get_metric_average(df, field_patterns, metric_name):
-                """安全获取指标平均值"""
+                """Safely get metric average"""
                 try:
                     matching_cols = []
                     for pattern in field_patterns:
                         matching_cols.extend([col for col in df.columns if pattern in col])
                     
                     if not matching_cols:
-                        print(f"⚠️  未找到 {metric_name} 相关字段")
+                        print(f"⚠️ {self.t['field_not_found']} {metric_name}")
                         return None
                     
-                    # 使用第一个匹配的字段
+                    # Use first matching field
                     col = matching_cols[0]
                     data = df[col].dropna()
                     
                     if len(data) == 0:
-                        print(f"⚠️  {metric_name} 数据为空")
+                        print(f"⚠️ {metric_name} {self.t['data_empty']}")
                         return None
                     
                     return data.mean()
                     
                 except Exception as e:
-                    print(f"⚠️  {metric_name} 数据提取失败: {e}")
+                    print(f"⚠️ {metric_name} {self.t['data_extraction_failed']}: {e}")
                     return None
             
-            # 计算DATA Device指标
-            data_actual_iops = safe_get_metric_average(df, ['data_', 'aws_standard_iops'], 'DATA AWS标准IOPS')
-            data_actual_throughput = safe_get_metric_average(df, ['data_', 'total_throughput_mibs'], 'DATAThroughput')
+            # Calculate DATA Device metrics
+            data_actual_iops = safe_get_metric_average(df, ['data_', 'aws_standard_iops'], 'DATA AWS Standard IOPS')
+            data_actual_throughput = safe_get_metric_average(df, ['data_', 'total_throughput_mibs'], 'DATA Throughput')
             
-            # 计算ACCOUNTS Device指标
-            accounts_actual_iops = safe_get_metric_average(df, ['accounts_', 'aws_standard_iops'], 'ACCOUNTS AWS标准IOPS')
-            accounts_actual_throughput = safe_get_metric_average(df, ['accounts_', 'total_throughput_mibs'], 'ACCOUNTSThroughput')
+            # Calculate ACCOUNTS Device metrics
+            accounts_actual_iops = safe_get_metric_average(df, ['accounts_', 'aws_standard_iops'], 'ACCOUNTS AWS Standard IOPS')
+            accounts_actual_throughput = safe_get_metric_average(df, ['accounts_', 'total_throughput_mibs'], 'ACCOUNTS Throughput')
             
-            # 计算利用率
+            # Calculate utilization
             data_iops_utilization = safe_calculate_utilization(data_actual_iops, data_baseline_iops, 'DATA IOPS')
             data_throughput_utilization = safe_calculate_utilization(data_actual_throughput, data_baseline_throughput, 'DATAThroughput')
             accounts_iops_utilization = safe_calculate_utilization(accounts_actual_iops, accounts_baseline_iops, 'ACCOUNTS IOPS')
             accounts_throughput_utilization = safe_calculate_utilization(accounts_actual_throughput, accounts_baseline_throughput, 'ACCOUNTSThroughput')
             
-            # ✅ 智能警告判断
+            # Smart warning check
             def check_utilization_warning(utilization_str):
-                """检查利用率是否需要警告"""
+                """Check if utilization needs warning"""
                 try:
-                    if utilization_str in ['基准未配置', '计算错误', '0.0%']:
+                    if utilization_str in [self.t['baseline_not_configured'], self.t['calculation_error'], '0.0%']:
                         return False
                     
                     value = float(utilization_str.rstrip('%'))
@@ -2025,29 +3241,30 @@ class ReportGenerator:
             
             warnings = []
             if check_utilization_warning(data_iops_utilization):
-                warnings.append(f"DATA DeviceIOPS利用率过高: {data_iops_utilization}")
+                warnings.append(f"DATA {self.t['device_iops_high']}: {data_iops_utilization}")
             if check_utilization_warning(data_throughput_utilization):
-                warnings.append(f"DATA DeviceThroughput利用率过高: {data_throughput_utilization}")
+                warnings.append(f"DATA {self.t['device_throughput_high']}: {data_throughput_utilization}")
             if check_utilization_warning(accounts_iops_utilization):
-                warnings.append(f"ACCOUNTS DeviceIOPS利用率过高: {accounts_iops_utilization}")
+                warnings.append(f"ACCOUNTS {self.t['device_iops_high']}: {accounts_iops_utilization}")
             if check_utilization_warning(accounts_throughput_utilization):
-                warnings.append(f"ACCOUNTS DeviceThroughput利用率过高: {accounts_throughput_utilization}")
+                warnings.append(f"ACCOUNTS {self.t['device_throughput_high']}: {accounts_throughput_utilization}")
             
-            # 生成HTML报告
+            # Generate HTML report
             warning_section = ""
             if warnings:
+                warning_items = ''.join([f'<li>{warning}</li>' for warning in warnings])
                 warning_section = f"""
                 <div class="warning">
-                    <h4>&#9888;  高利用率警告</h4>
+                    <h4>&#9888; {self.t['high_utilization_warning']}</h4>
                     <ul>
-                        {''.join([f'<li>{warning}</li>' for warning in warnings])}
+                        {warning_items}
                     </ul>
-                    <p><strong>建议</strong>: 考虑升级EBS配置或优化I/O模式</p>
+                    <p><strong>{self.t['recommendation_label']}</strong>: {self.t['consider_upgrade_ebs']}</p>
                 </div>
                 """
             
             
-            # 预处理显示值以避免格式化错误
+            # Preprocess display values to avoid formatting errors
             data_actual_iops_display = f"{data_actual_iops:.0f}" if data_actual_iops is not None and data_actual_iops > 0 else "Data Not Available"
             data_actual_throughput_display = f"{data_actual_throughput:.1f}" if data_actual_throughput is not None and data_actual_throughput > 0 else "Data Not Available"
             accounts_actual_iops_display = f"{accounts_actual_iops:.0f}" if accounts_actual_iops is not None and accounts_actual_iops > 0 else "Data Not Available"
@@ -2055,7 +3272,7 @@ class ReportGenerator:
             
             return f"""
             <div class="section">
-                <h2>&#128202; EBS AWS基准分析</h2>
+                <h2>&#128202; {self.t['ebs_aws_baseline_analysis']}</h2>
                 
                 {warning_section}
                 
@@ -2063,146 +3280,146 @@ class ReportGenerator:
                     <table class="performance-table">
                         <thead>
                             <tr>
-                                <th>设备</th>
-                                <th>指标类型</th>
-                                <th>基准值</th>
-                                <th>实际值</th>
-                                <th>利用率</th>
-                                <th>状态</th>
+                                <th>{self.t['device_name']}</th>
+                                <th>{self.t['metric_type']}</th>
+                                <th>{self.t['baseline_value']}</th>
+                                <th>{self.t['actual_value']}</th>
+                                <th>{self.t['utilization_label']}</th>
+                                <th>{self.t['status_label']}</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td rowspan="2"><strong>DATA Device</strong><br><small>(LEDGER存储)</small></td>
-                                <td>IOPS</td>
-                                <td>{data_baseline_iops or '未配置'}</td>
+                                <td rowspan="2"><strong>DATA Device</strong><br><small>({self.t['ledger_storage']})</small></td>
+                                <td>{self.t['iops']}</td>
+                                <td>{data_baseline_iops or self.t['not_configured']}</td>
                                 <td>{data_actual_iops_display}</td>
                                 <td style="color: {'red' if check_utilization_warning(data_iops_utilization) else 'green'}; font-weight: bold;">{data_iops_utilization}</td>
-                                <td>{'⚠️ 警告' if check_utilization_warning(data_iops_utilization) else '✅ 正常'}</td>
+                                <td>{"⚠️ " + self.t['warning_label'] if check_utilization_warning(data_iops_utilization) else "✅ " + self.t['normal_label']}</td>
                             </tr>
                             <tr>
-                                <td>Throughput (MiB/s)</td>
-                                <td>{data_baseline_throughput or '未配置'}</td>
+                                <td>{self.t['throughput_mibs']}</td>
+                                <td>{data_baseline_throughput or self.t['not_configured']}</td>
                                 <td>{data_actual_throughput_display}</td>
                                 <td style="color: {'red' if check_utilization_warning(data_throughput_utilization) else 'green'}; font-weight: bold;">{data_throughput_utilization}</td>
-                                <td>{'⚠️ 警告' if check_utilization_warning(data_throughput_utilization) else '✅ 正常'}</td>
+                                <td>{"⚠️ " + self.t['warning_label'] if check_utilization_warning(data_throughput_utilization) else "✅ " + self.t['normal_label']}</td>
                             </tr>
                             <tr>
-                                <td rowspan="2"><strong>ACCOUNTS Device</strong><br><small>(账户存储)</small></td>
-                                <td>IOPS</td>
-                                <td>{accounts_baseline_iops or '未配置'}</td>
+                                <td rowspan="2"><strong>ACCOUNTS Device</strong><br><small>({self.t['accounts_storage']})</small></td>
+                                <td>{self.t['iops']}</td>
+                                <td>{accounts_baseline_iops or self.t['not_configured']}</td>
                                 <td>{accounts_actual_iops_display}</td>
                                 <td style="color: {'red' if check_utilization_warning(accounts_iops_utilization) else 'green'}; font-weight: bold;">{accounts_iops_utilization}</td>
-                                <td>{'⚠️ 警告' if check_utilization_warning(accounts_iops_utilization) else '✅ 正常'}</td>
+                                <td>{"⚠️ " + self.t['warning_label'] if check_utilization_warning(accounts_iops_utilization) else "✅ " + self.t['normal_label']}</td>
                             </tr>
                             <tr>
-                                <td>Throughput (MiB/s)</td>
-                                <td>{accounts_baseline_throughput or '未配置'}</td>
+                                <td>{self.t['throughput_mibs']}</td>
+                                <td>{accounts_baseline_throughput or self.t['not_configured']}</td>
                                 <td>{accounts_actual_throughput_display}</td>
                                 <td style="color: {'red' if check_utilization_warning(accounts_throughput_utilization) else 'green'}; font-weight: bold;">{accounts_throughput_utilization}</td>
-                                <td>{'⚠️ 警告' if check_utilization_warning(accounts_throughput_utilization) else '✅ 正常'}</td>
+                                <td>{"⚠️ " + self.t['warning_label'] if check_utilization_warning(accounts_throughput_utilization) else "✅ " + self.t['normal_label']}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
                 
                 <div class="info">
-                    <h4>&#128202; EBS基准分析说明</h4>
+                    <h4>&#128202; {self.t['ebs_baseline_notes']}</h4>
                     <ul>
-                        <li><strong>基准值</strong>: 通过环境变量配置的EBS性能基准</li>
-                        <li><strong>实际值</strong>: 测试期间的平均性能表现</li>
-                        <li><strong>利用率</strong>: 实际性能占基准性能的百分比</li>
-                        <li><strong>警告阈值</strong>: 利用率超过{get_visualization_thresholds()['warning']}%时显示警告</li>
+                        <li><strong>{self.t['baseline_value']}</strong>: {self.t['baseline_configured_via_env']}</li>
+                        <li><strong>{self.t['actual_value']}</strong>: {self.t['avg_performance_during_test']}</li>
+                        <li><strong>{self.t['utilization_label']}</strong>: {self.t['actual_vs_baseline_percentage']}</li>
+                        <li><strong>{self.t['warning_threshold_label']}</strong>: {self.t['utilization_exceeds_warning']}{get_visualization_thresholds()['warning']}%</li>
                     </ul>
-                    <p><strong>配置方法</strong>: 设置环境变量 DATA_VOL_MAX_IOPS, DATA_VOL_MAX_THROUGHPUT, ACCOUNTS_VOL_MAX_IOPS, ACCOUNTS_VOL_MAX_THROUGHPUT</p>
+                    <p><strong>{self.t['configuration_method']}</strong>: {self.t['set_env_variables']} DATA_VOL_MAX_IOPS, DATA_VOL_MAX_THROUGHPUT, ACCOUNTS_VOL_MAX_IOPS, ACCOUNTS_VOL_MAX_THROUGHPUT</p>
                 </div>
             </div>
             """
             
         except Exception as e:
-            print(f"❌ EBS基准分析生成失败: {e}")
+            print(f"❌ {self.t['ebs_baseline_generation_failed']}: {e}")
             return f"""
             <div class="section">
-                <h2>&#128202; EBS AWS基准分析</h2>
+                <h2>&#128202; {self.t['ebs_aws_baseline_analysis']}</h2>
                 <div class="warning">
-                    <h4>&#10060; 基准分析失败</h4>
-                    <p>错误信息: {str(e)[:100]}</p>
-                    <p>请检查：</p>
+                    <h4>&#10060; {self.t['baseline_analysis_failed']}</h4>
+                    <p>{self.t['error_message_label']}: {str(e)[:100]}</p>
+                    <p>{self.t['please_check_label']}</p>
                     <ul>
-                        <li>环境变量配置是否正确</li>
-                        <li>CSV数据是否包含必要字段</li>
-                        <li>数据格式是否正确</li>
+                        <li>{self.t['env_config_correct']}</li>
+                        <li>{self.t['csv_contains_fields']}</li>
+                        <li>{self.t['data_format_correct']}</li>
                     </ul>
                 </div>
             </div>
             """
     
     def _generate_ena_warnings_section(self, df):
-        """生成ENA网络警告section - 使用 ENAFieldAccessor"""
+        """Generate ENA network warning section - using ENAFieldAccessor"""
         try:
-            # 检查ENA数据可用性 - 使用配置驱动
+            # Check ENA data availability - using configuration-driven approach
             ena_columns = ENAFieldAccessor.get_available_ena_fields(df)
             if not ena_columns:
                 return ""
             
-            # 分析ENA限制数据
+            # Analyze ENA limitation data
             limitations = self._analyze_ena_limitations(df)
             
             if not limitations:
-                return """
+                return f"""
                 <div class="info" style="background-color: #d4edda; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #28a745;">
-                    <h4>&#9989; ENA网络状态正常</h4>
-                    <p>监控期间未检测到任何ENA网络限制。所有网络指标均在正常范围内。</p>
+                    <h4>&#9989; {self.t['ena_network_normal']}</h4>
+                    <p>{self.t['no_ena_limitations']}</p>
                 </div>
                 """
             
-            # 生成警告HTML
-            html = """
+            # Generate warning HTML
+            html = f"""
             <div class="warning">
-                <h4>&#128680; ENA网络限制检测结果</h4>
-                <p>检测到以下ENA网络限制情况，建议关注网络性能优化：</p>
+                <h4>&#128680; {self.t['ena_limitation_detected']}</h4>
+                <p>{self.t['detected_ena_limitations']}</p>
                 <ul>
             """
             
             for limit in limitations:
                 duration = ""
                 if limit['first_time'] != limit['last_time']:
-                    duration = f" (持续Time: {limit['first_time']} 至 {limit['last_time']})"
+                    duration = f" ({self.t['duration_time']}: {limit['first_time']} {self.t['to']} {limit['last_time']})"
                 
                 html += f"""
                 <li>
                     <strong>{limit['type']}</strong>{duration}
                     <ul>
-                        <li>发生次数: {limit['occurrences']}次</li>
-                        <li>最大值: {limit['max_value']}</li>
-                        <li>累计影响: {limit['total_affected']}</li>
+                        <li>{self.t['occurrence_count']}: {limit['occurrences']}{self.t['times']}</li>
+                        <li>{self.t['max_value_label']}: {limit['max_value']}</li>
+                        <li>{self.t['cumulative_impact']}: {limit['total_affected']}</li>
                     </ul>
                 </li>
                 """
             
-            html += """
+            html += f"""
                 </ul>
-                <p><strong>建议</strong>: 考虑优化网络配置、升级硬件资源或调整应用负载模式。</p>
+                <p><strong>{self.t['recommendation_label']}</strong>: {self.t['consider_optimize_network']}</p>
             </div>
             """
             
             return html
             
         except Exception as e:
-            return f'<div class="error">ENA警告生成失败: {str(e)}</div>'
+            return f'<div class="error">{self.t["ena_warning_generation_failed"]}: {str(e)}</div>'
 
     def _analyze_ena_limitations(self, df):
-        """分析ENA限制发生情况 - 使用 ENAFieldAccessor"""
+        """Analyze ENA limitation occurrences - using ENAFieldAccessor"""
         limitations = []
         available_fields = ENAFieldAccessor.get_available_ena_fields(df)
         
-        # 分析 exceeded 类型字段
+        # Analyze exceeded type fields
         for field in available_fields:
             if 'exceeded' in field and field in df.columns:
-                # 获取字段分析信息
+                # Get field analysis information
                 field_analysis = ENAFieldAccessor.analyze_ena_field(df, field)
                 if field_analysis:
-                    # 筛选限制发生的记录 (值 > 0)
+                    # Filter records with limitations (value > 0)
                     limited_records = df[df[field] > 0]
                     
                     if not limited_records.empty:
@@ -2216,7 +3433,7 @@ class ReportGenerator:
                             'total_affected': limited_records[field].sum()
                         })
         
-        # 特殊处理: 连接容量不足预警 - 查找 available 类型字段
+        # Special handling: Connection capacity insufficient warning - find available type fields
         available_field = None
         for field in available_fields:
             if 'available' in field and 'conntrack' in field:
@@ -2224,68 +3441,70 @@ class ReportGenerator:
                 break
         
         if available_field and available_field in df.columns:
-            # 使用动态阈值：基于网络阈值和数据最大值计算
+            # Use dynamic threshold: calculate based on network threshold and data max value
             thresholds = get_visualization_thresholds()
             max_available = df[available_field].max() if not df[available_field].empty else 50000
-            # 当可用量低于最大值的(100-网络阈值)%时预警
+            # Warning when available capacity is below (100-network threshold)% of max value
             low_connection_threshold = int(max_available * (100 - thresholds['io_warning']) / 100)
             low_connection_records = df[df[available_field] < low_connection_threshold]
             if not low_connection_records.empty:
                 limitations.append({
-                    'type': '连接容量不足预警',
+                    'type': self.t['connection_capacity_warning'],
                     'field': available_field,
                     'first_time': low_connection_records['timestamp'].min(),
                     'last_time': low_connection_records['timestamp'].max(),
                     'occurrences': len(low_connection_records),
-                    'max_value': f"最少剩余 {low_connection_records[available_field].min()} 个连接",
-                    'total_affected': f"平均剩余 {low_connection_records[available_field].mean():.0f} 个连接" if available_field in low_connection_records.columns else "Data Not Available"
+                    'max_value': f"{self.t['minimum_remaining']} {low_connection_records[available_field].min()} {self.t['connections']}",
+                    'total_affected': f"{self.t['average_remaining']} {low_connection_records[available_field].mean():.0f} {self.t['connections']}" if available_field in low_connection_records.columns else self.t['data_not_available']
                 })
         
         return limitations
 
     def _generate_ena_data_table(self, df):
-        """生成ENA数据统计表格 - 使用 ENAFieldAccessor"""
+        """Generate ENA data statistics table - using ENAFieldAccessor"""
         try:
             ena_columns = ENAFieldAccessor.get_available_ena_fields(df)
             if not ena_columns:
                 return ""
             
-            # 生成统计数据 - 使用 ENAFieldAccessor 获取字段描述
+            # Generate statistics - use ENAFieldAccessor to get field descriptions
             ena_stats = {}
             
             for col in ena_columns:
                 field_analysis = ENAFieldAccessor.analyze_ena_field(df, col)
                 if field_analysis:
+                    # Select description based on language
+                    description = field_analysis.get('aws_description', field_analysis['description']) if self.language == 'en' else field_analysis['description']
                     ena_stats[col] = {
-                        'description': field_analysis['description'],
+                        'description': description,
                         'max': df[col].max(),
                         'mean': df[col].mean(),
                         'current': df[col].iloc[-1] if len(df) > 0 else 0
                     }
             
-            # 生成HTML表格
+            # Generate HTML table
             table_rows = ""
             for field, stats in ena_stats.items():
                 field_analysis = ENAFieldAccessor.analyze_ena_field(df, field)
                 
-                # 为不同类型的字段设置不同的格式
-                if field_analysis and field_analysis['type'] == 'gauge':  # available 类型字段
+                # Set different formats for different field types
+                if field_analysis and field_analysis['type'] == 'gauge':  # available type fields
                     current_val = f"{stats['current']:,.0f}"
                     max_val = f"{stats['max']:,.0f}"
                     mean_val = f"{stats['mean']:,.0f}"
-                else:  # counter 类型字段 (exceeded)
+                else:  # counter type fields (exceeded)
                     current_val = f"{stats['current']}"
                     max_val = f"{stats['max']}"
                     mean_val = f"{stats['mean']:.1f}"
                 
-                # 状态指示
+                # Status indicator
                 status_class = "normal"
                 if field_analysis and field_analysis['type'] == 'counter' and stats['current'] > 0:
                     status_class = "warning"
                 elif field_analysis and field_analysis['type'] == 'gauge':
-                    # 使用动态阈值判断连接容量状态
+                    # Use dynamic threshold to determine connection capacity status
                     thresholds = get_visualization_thresholds()
-                    max_available = max(stats['max'], 50000)  # 使用最大值或默认值
+                    max_available = max(stats['max'], 50000)  # Use max value or default value
                     warning_threshold = int(max_available * (100 - thresholds['io_warning']) / 100)
                     if stats['current'] < warning_threshold:
                         status_class = "warning"
@@ -2301,14 +3520,14 @@ class ReportGenerator:
             
             return f"""
             <div class="section">
-                <h3>&#127760; ENA网络统计</h3>
+                <h3>&#127760; {self.t['ena_network_statistics']}</h3>
                 <table class="performance-table">
                     <thead>
                         <tr>
-                            <th>ENA指标</th>
-                            <th>当前值</th>
-                            <th>最大值</th>
-                            <th>平均值</th>
+                            <th>{self.t['ena_metric']}</th>
+                            <th>{self.t['current_value']}</th>
+                            <th>{self.t['max_value']}</th>
+                            <th>{self.t['avg_value']}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2316,117 +3535,117 @@ class ReportGenerator:
                     </tbody>
                 </table>
                 <p class="table-note">
-                    <strong>说明</strong>: 
-                    • 超限字段显示累计丢包数量，值越大表示网络限制越严重
-                    • 可用连接数显示剩余连接容量，值越小表示连接压力越大
+                    <strong>{self.t['note_label']}</strong>: 
+                    • {self.t['exceeded_fields_show_drops']}
+                    • {self.t['available_connections_show_capacity']}
                 </p>
             </div>
             """
             
         except Exception as e:
-            return f'<div class="error">ENA数据表格生成失败: {str(e)}</div>'
+            return f'<div class="error">{self.t["ena_table_generation_failed"]}: {str(e)}</div>'
 
     def _generate_cpu_ebs_correlation_table(self, df):
-        """✅ 改进的CPU与EBS关联分析表格生成"""
+        """Improved CPU and EBS correlation analysis table generation"""
         key_correlations = [
-            ('cpu_iowait', 'util', 'CPU I/O Wait vs Device Utilization'),
-            ('cpu_iowait', 'aqu_sz', 'CPU I/O Wait vs I/O队列长度'),
-            ('cpu_iowait', 'r_await', 'CPU I/O Wait vs 读Latency'),
-            ('cpu_iowait', 'w_await', 'CPU I/O Wait vs 写Latency'),
-            ('cpu_usr', 'r_s', '用户态CPU vs 读请求数'),
-            ('cpu_sys', 'w_s', '系统态CPU vs 写请求数'),
+            ('cpu_iowait', 'util', self.t['cpu_iowait_vs_util']),
+            ('cpu_iowait', 'aqu_sz', self.t['cpu_iowait_vs_queue']),
+            ('cpu_iowait', 'r_await', self.t['cpu_iowait_vs_read_latency']),
+            ('cpu_iowait', 'w_await', self.t['cpu_iowait_vs_write_latency']),
+            ('cpu_usr', 'r_s', self.t['user_cpu_vs_read_requests']),
+            ('cpu_sys', 'w_s', self.t['system_cpu_vs_write_requests']),
         ]
         
         correlation_data = []
         data_cols = [col for col in df.columns if col.startswith('data_')]
         accounts_cols = [col for col in df.columns if col.startswith('accounts_')]
         
-        # ✅ 安全的相关性分析函数
+        # Safe correlation analysis function
         def safe_correlation_analysis(cpu_col, iostat_col, description, device_type):
-            """安全的相关性分析"""
+            """Safe correlation analysis"""
             try:
                 if cpu_col not in df.columns:
-                    return None, f"缺少CPU字段: {cpu_col}"
+                    return None, f"{self.t['missing_cpu_field']}: {cpu_col}"
                 
                 if iostat_col not in df.columns:
-                    return None, f"缺少EBS字段: {iostat_col}"
+                    return None, f"{self.t['missing_ebs_field']}: {iostat_col}"
                 
-                # 数据有效性检查
+                # Data validity check
                 cpu_data = df[cpu_col].dropna()
                 ebs_data = df[iostat_col].dropna()
                 
                 if len(cpu_data) == 0 or len(ebs_data) == 0:
-                    return None, "数据为空"
+                    return None, self.t['data_is_empty']
                 
-                # 对齐数据并移除NaN
+                # Align data and remove NaN
                 combined_data = pd.concat([df[cpu_col], df[iostat_col]], axis=1).dropna()
                 if len(combined_data) < 10:
-                    return None, f"有效数据点不足 (仅{len(combined_data)}个)"
+                    return None, f"{self.t['insufficient_data_points']} ({self.t['only']}{len(combined_data)}{self.t['items']})"
                 
                 x_clean = combined_data.iloc[:, 0]
                 y_clean = combined_data.iloc[:, 1]
                 
-                # 计算相关性
+                # Calculate correlation
                 corr, p_value = pearsonr(x_clean, y_clean)
                 
-                # 检查结果有效性
+                # Check result validity
                 if np.isnan(corr) or np.isnan(p_value):
-                    return None, "相关性计算结果为NaN"
+                    return None, self.t['correlation_result_nan']
                 
-                # ✅ 改进的相关性强度分类
+                # Improved correlation strength classification
                 abs_corr = abs(corr)
                 if abs_corr >= 0.8:
-                    strength = "极强相关"
+                    strength = self.t['very_strong_correlation']
                 elif abs_corr >= 0.6:
-                    strength = "强相关"
+                    strength = self.t['strong_correlation']
                 elif abs_corr >= 0.4:
-                    strength = "中等相关"
+                    strength = self.t['moderate_correlation']
                 elif abs_corr >= 0.2:
-                    strength = "弱相关"
+                    strength = self.t['weak_correlation']
                 else:
-                    strength = "极弱相关"
+                    strength = self.t['very_weak_correlation']
                 
-                # ✅ 改进的统计显著性判断
+                # Improved statistical significance determination
                 if p_value < 0.001:
-                    significant = "极显著 (***)"
+                    significant = self.t['highly_significant_3']
                 elif p_value < 0.01:
-                    significant = "高度显著 (**)"
+                    significant = self.t['highly_significant_2']
                 elif p_value < 0.05:
-                    significant = "显著 (*)"
+                    significant = self.t['significant_1']
                 else:
-                    significant = "不显著"
+                    significant = self.t['not_significant']
                 
                 return {
-                    'Device类型': device_type,
-                    '分析项目': description,
-                    'CPU指标': cpu_col,
-                    'EBS指标': iostat_col,
-                    '相关系数': f"{corr:.4f}",
-                    'P值': f"{p_value:.4f}",
-                    '统计显著性': significant,
-                    '相关强度': strength,
-                    '有效样本数': len(combined_data),
-                    '数据完整性': f"{len(combined_data)/len(df)*100:.1f}%"
+                    self.t['device_type']: device_type,
+                    self.t['analysis_item']: description,
+                    self.t['cpu_metric']: cpu_col,
+                    self.t['ebs_metric']: iostat_col,
+                    self.t['correlation_coefficient']: f"{corr:.4f}",
+                    self.t['p_value']: f"{p_value:.4f}",
+                    self.t['statistical_significance']: significant,
+                    self.t['correlation_strength']: strength,
+                    self.t['valid_sample_count']: len(combined_data),
+                    self.t['data_integrity']: f"{len(combined_data)/len(df)*100:.1f}%"
                 }, None
                 
             except Exception as e:
-                return None, f"分析失败: {str(e)[:50]}"
+                return None, f"{self.t['analysis_failed']}: {str(e)[:50]}"
         
         def find_matching_column(target_field, column_list):
-            """精确的字段匹配"""
-            # 精确匹配
+            """Precise field matching"""
+            # Exact match
             exact_matches = [col for col in column_list if col.endswith(f'_{target_field}')]
             if exact_matches:
                 return exact_matches[0]
             
-            # 模糊匹配（更严格）
+            # Fuzzy matching (stricter)
             fuzzy_matches = [col for col in column_list if target_field in col and not any(x in col for x in ['avg', 'max', 'min', 'sum'])]
             if fuzzy_matches:
                 return fuzzy_matches[0]
             
             return None
         
-        # 分析DATA Device
+        # Analyze DATA Device
         for cpu_field, iostat_field, description in key_correlations:
             iostat_col = find_matching_column(iostat_field, data_cols)
             
@@ -2435,9 +3654,9 @@ class ReportGenerator:
                 if result:
                     correlation_data.append(result)
                 else:
-                    print(f"⚠️  DATA Device {description}: {error}")
+                    print(f"⚠️ DATA Device {description}: {error}")
         
-        # 分析ACCOUNTS Device
+        # Analyze ACCOUNTS Device
         if accounts_cols:
             for cpu_field, iostat_field, description in key_correlations:
                 iostat_col = find_matching_column(iostat_field, accounts_cols)
@@ -2447,73 +3666,74 @@ class ReportGenerator:
                     if result:
                         correlation_data.append(result)
                     else:
-                        print(f"⚠️  ACCOUNTS Device {description}: {error}")
+                        print(f"⚠️ ACCOUNTS Device {description}: {error}")
         
         if not correlation_data:
-            return """
+            return f"""
             <div class="warning">
-                <h4>&#9888;  相关性分析Data Not Available</h4>
-                <p>可能的原因：</p>
+                <h4>&#9888; {self.t['correlation_data_unavailable']}</h4>
+                <p>{self.t['possible_reasons']}</p>
                 <ul>
-                    <li>缺少必要的CPU或EBS性能字段</li>
-                    <li>数据质量问题（过多NaN值）</li>
-                    <li>有效数据点不足（少于10个）</li>
+                    <li>{self.t['missing_cpu_ebs_fields']}</li>
+                    <li>{self.t['data_quality_issues']}</li>
+                    <li>{self.t['insufficient_data_less_10']}</li>
                 </ul>
             </div>
             """
         
-        # ✅ 生成改进的HTML表格
-        table_html = """
+        # Generate improved HTML table
+        table_html = f"""
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
             <thead>
                 <tr>
-                    <th style="background: #007bff; color: white; padding: 12px;">Device类型</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">分析项目</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">相关系数</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">P值</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">统计显著性</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">相关强度</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">有效样本数</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">数据完整性</th>
+                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['device_type']}</th>
+                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['analysis_item']}</th>
+                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['correlation_coefficient']}</th>
+                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['p_value']}</th>
+                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['statistical_significance']}</th>
+                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['correlation_strength']}</th>
+                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['valid_sample_count']}</th>
+                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['data_integrity']}</th>
                 </tr>
             </thead>
             <tbody>
         """
         
         for i, data in enumerate(correlation_data):
-            # 根据相关性强度设置行颜色
-            if "极强相关" in data['相关强度']:
+            # Set row color based on correlation strength
+            strength_val = data[self.t['correlation_strength']]
+            if self.t['very_strong_correlation'] in strength_val:
                 row_color = "#e8f5e8"
-            elif "强相关" in data['相关强度']:
+            elif self.t['strong_correlation'] in strength_val:
                 row_color = "#f0f8f0"
-            elif "中等相关" in data['相关强度']:
+            elif self.t['moderate_correlation'] in strength_val:
                 row_color = "#fff8e1"
             else:
                 row_color = "#f8f9fa"
             
             table_html += f"""
                 <tr style="background: {row_color};">
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data['Device类型']}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data['分析项目']}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{data['相关系数']}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data['P值']}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data['统计显著性']}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{data['相关强度']}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data['有效样本数']}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data['数据完整性']}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['device_type']]}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['analysis_item']]}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{data[self.t['correlation_coefficient']]}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['p_value']]}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['statistical_significance']]}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{data[self.t['correlation_strength']]}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['valid_sample_count']]}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['data_integrity']]}</td>
                 </tr>
             """
         
-        table_html += """
+        table_html += f"""
             </tbody>
         </table>
         <div class="info" style="margin-top: 15px;">
-            <h4>&#128202; 相关性分析说明</h4>
+            <h4>&#128202; {self.t['correlation_analysis_notes']}</h4>
             <ul>
-                <li><strong>相关系数范围</strong>: -1.0 到 1.0，绝对值越大相关性越强</li>
-                <li><strong>统计显著性</strong>: *** p&lt;0.001, ** p&lt;0.01, * p&lt;0.05</li>
-                <li><strong>相关强度分类</strong>: |r|≥0.8极强, |r|≥0.6强, |r|≥0.4中等, |r|≥0.2弱</li>
-                <li><strong>数据完整性</strong>: 有效数据点占总数据点的百分比</li>
+                <li><strong>{self.t['correlation_range']}</strong>: {self.t['larger_abs_stronger']}</li>
+                <li><strong>{self.t['statistical_significance']}</strong>: {self.t['significance_levels']}</li>
+                <li><strong>{self.t['strength_classification']}</strong></li>
+                <li><strong>{self.t['data_integrity']}</strong>: {self.t['data_integrity_percentage']}</li>
             </ul>
         </div>
         """
@@ -2521,28 +3741,28 @@ class ReportGenerator:
         return table_html
 
     def _format_block_height_value(self, field_name, value):
-        """将block_height相关字段的数值转换为人类可读格式"""
+        """Convert block_height related field values to human-readable format"""
         if 'health' in field_name.lower():
             return 'Healthy' if value == 1 else 'Unhealthy'
         elif 'data_loss' in field_name.lower():
             return 'No Data Loss' if value == 0 else 'Data Loss Detected'
         else:
-            # 对于数值字段（如block_height, block_height_diff），保持原样
+            # For numeric fields (like block_height, block_height_diff), keep as is
             return f"{value:.0f}" if isinstance(value, (int, float)) else str(value)
 
     def _analyze_block_height_performance(self, df, block_height_fields):
-        """增强的区块高度性能分析 - 使用对比表格展示"""
+        """Enhanced block height performance analysis - using comparison table display"""
         if not block_height_fields or df.empty:
-            return "<div class='info-card'><h4>区块高度监控</h4><p>暂无区块高度数据</p></div>"
+            return f"<div class='info-card'><h4>{self.t['block_height_monitoring']}</h4><p>{self.t['no_block_height_data']}</p></div>"
         
         try:
-            # 添加时序图表展示
+            # Add time series chart display
             sync_chart_html = self._generate_block_height_chart_section()
             
-            # 添加data_loss_stats.json文件展示
+            # Add data_loss_stats.json file display
             stats_file_html = self._generate_data_loss_stats_section()
             
-            # 收集区块高度数据
+            # Collect block height data
             block_height_data = {}
             for field in block_height_fields:
                 if field in df.columns:
@@ -2556,23 +3776,23 @@ class ReportGenerator:
                             'data': numeric_data
                         }
             
-            # 生成对比表格
-            comparison_table = """
+            # Generate comparison table
+            comparison_table = f"""
             <div style="margin: 20px 0;">
-                <h3>📊 区块高度数据对比</h3>
+                <h3>📊 {self.t['block_height_data_comparison']}</h3>
                 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                     <thead>
                         <tr>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">指标</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">Local Block Height</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">Mainnet Block Height</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">Block Height Diff</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['local_block_height']}</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['mainnet_block_height']}</th>
+                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['block_height_diff']}</th>
                         </tr>
                     </thead>
                     <tbody>
             """
             
-            # 添加数据行
+            # Add data rows
             metrics = [
                 ('Current', 'current'),
                 ('Average', 'average'),
@@ -2585,7 +3805,7 @@ class ReportGenerator:
                 mainnet_val = block_height_data.get('mainnet_block_height', {}).get(metric_key, 'N/A')
                 diff_val = block_height_data.get('block_height_diff', {}).get(metric_key, 'N/A')
                 
-                # 格式化数值
+                # Format numeric values
                 local_str = f"{local_val:.0f}" if isinstance(local_val, (int, float)) else str(local_val)
                 mainnet_str = f"{mainnet_val:.0f}" if isinstance(mainnet_val, (int, float)) else str(mainnet_val)
                 diff_str = f"{diff_val:.0f}" if isinstance(diff_val, (int, float)) else str(diff_val)
@@ -2605,10 +3825,10 @@ class ReportGenerator:
             </div>
             """
             
-            # 组合所有部分
+            # Combine all parts
             complete_html = f"""
             <div class="section">
-                <h2>🔗 区块链节点同步分析</h2>
+                <h2>🔗 {self.t['blockchain_node_sync_analysis']}</h2>
                 {sync_chart_html}
                 {comparison_table}
                 {stats_file_html}
@@ -2618,11 +3838,11 @@ class ReportGenerator:
             return complete_html
                 
         except Exception as e:
-            return f"<div class='error'>区块高度分析失败: {str(e)}</div>"
+            return f"<div class='error'>{self.t['block_height_analysis_failed']}: {str(e)}</div>"
 
     def _generate_block_height_chart_section(self):
-        """生成区块高度图表展示部分"""
-        # 检查多个可能的图表位置
+        """Generate block height chart display section"""
+        # Check multiple possible chart locations
         possible_paths = [
             os.path.join(self.output_dir, 'block_height_sync_chart.png'),
             os.path.join(os.path.dirname(self.output_dir), 'reports', 'block_height_sync_chart.png'),
@@ -2632,43 +3852,43 @@ class ReportGenerator:
         chart_src = None
         for path in possible_paths:
             if os.path.exists(path):
-                # 计算相对路径
+                # Calculate relative path
                 chart_src = os.path.relpath(path, self.output_dir)
                 break
         
         if chart_src:
             return f"""
             <div class="info-card">
-                <h3>📊 区块高度同步时序图</h3>
+                <h3>📊 {self.t['block_height_sync_time_series']}</h3>
                 <div class="chart-container">
-                    <img src="{chart_src}" alt="区块高度同步状态" class="chart-image">
+                    <img src="{chart_src}" alt="{self.t['block_height_sync_status']}" class="chart-image">
                 </div>
                 <div class="chart-info">
-                    <p>此图表展示了测试期间本地节点与主网的区块高度差值变化：</p>
+                    <p>{self.t['chart_shows_block_height_diff']}:</p>
                     <ul>
-                        <li><strong>蓝色曲线</strong>: 区块高度差值 (主网 - 本地)</li>
-                        <li><strong>红色虚线</strong>: 异常阈值 (±50个区块)</li>
-                        <li><strong>红色区域</strong>: 检测到数据丢失的时间段</li>
-                        <li><strong>统计信息</strong>: 左上角显示同步质量统计</li>
+                        <li><strong>{self.t['blue_curve']}</strong>: {self.t['block_height_diff_mainnet_minus_local']}</li>
+                        <li><strong>{self.t['red_dashed_line']}</strong>: {self.t['anomaly_threshold_50_blocks']}</li>
+                        <li><strong>{self.t['red_area']}</strong>: {self.t['data_loss_detected_periods']}</li>
+                        <li><strong>{self.t['statistics_info']}</strong>: {self.t['sync_quality_stats_top_left']}</li>
                     </ul>
                 </div>
             </div>
             """
         else:
-            return """
+            return f"""
             <div class="info-card">
-                <h3>📊 区块高度同步时序图</h3>
+                <h3>📊 {self.t['block_height_sync_time_series']}</h3>
                 <div class="warning">
-                    <p>⚠️ 区块高度同步图表未生成</p>
-                    <p>可能原因：区块链节点数据不可用或监控未启用</p>
+                    <p>⚠️ {self.t['block_height_chart_not_generated']}</p>
+                    <p>{self.t['possible_reason_node_data_unavailable']}</p>
                 </div>
             </div>
             """
 
     def _generate_data_loss_stats_section(self):
-        """生成data_loss_stats.json文件展示部分"""
+        """Generate data_loss_stats.json file display section"""
         
-        # 检查归档中的stats文件
+        # Check stats file in archive
         stats_file = None
         possible_paths = [
             os.path.join(self.output_dir, 'stats', 'data_loss_stats.json'),
@@ -2686,80 +3906,80 @@ class ReportGenerator:
                 with open(stats_file, 'r') as f:
                     stats_data = json.load(f)
                 
-                # 计算衍生指标
+                # Calculate derived metrics
                 avg_duration = (stats_data['total_duration'] / stats_data['data_loss_periods']) if stats_data['data_loss_periods'] > 0 else 0
                 
                 return f"""
                 <div class="info-card">
-                    <h3>📋 数据丢失统计摘要</h3>
+                    <h3>📋 {self.t['data_loss_stats_summary']}</h3>
                     <div class="stats-grid">
                         <div class="stat-item">
                             <div class="stat-value">{stats_data['data_loss_count']}</div>
-                            <div class="stat-label">异常采样数</div>
+                            <div class="stat-label">{self.t['anomaly_sample_count']}</div>
                         </div>
                         <div class="stat-item">
                             <div class="stat-value">{stats_data['data_loss_periods']}</div>
-                            <div class="stat-label">异常事件数</div>
+                            <div class="stat-label">{self.t['anomaly_event_count']}</div>
                         </div>
                         <div class="stat-item">
                             <div class="stat-value">{stats_data['total_duration']}s</div>
-                            <div class="stat-label">总异常时长</div>
+                            <div class="stat-label">{self.t['total_anomaly_duration']}</div>
                         </div>
                         <div class="stat-item">
                             <div class="stat-value">{avg_duration:.1f}s</div>
-                            <div class="stat-label">平均事件时长</div>
+                            <div class="stat-label">{self.t['avg_event_duration']}</div>
                         </div>
                     </div>
                     <div class="file-info">
-                        <p><strong>📁 统计文件位置:</strong> <code>{os.path.relpath(stats_file, self.output_dir)}</code></p>
-                        <p><strong>🕐 最后更新:</strong> {stats_data.get('last_updated', 'Unknown')}</p>
+                        <p><strong>📁 {self.t['stats_file_location']}:</strong> <code>{os.path.relpath(stats_file, self.output_dir)}</code></p>
+                        <p><strong>🕐 {self.t['last_updated']}:</strong> {stats_data.get('last_updated', 'Unknown')}</p>
                     </div>
                 </div>
                 """
             except Exception as e:
                 return f"""
                 <div class="warning">
-                    <h3>⚠️ 数据丢失统计</h3>
-                    <p>统计文件读取失败: {str(e)}</p>
-                    <p><strong>文件位置:</strong> <code>{os.path.relpath(stats_file, self.output_dir)}</code></p>
+                    <h3>⚠️ {self.t['data_loss_statistics']}</h3>
+                    <p>{self.t['stats_file_read_failed']}: {str(e)}</p>
+                    <p><strong>{self.t['file_location']}:</strong> <code>{os.path.relpath(stats_file, self.output_dir)}</code></p>
                 </div>
                 """
         else:
-            return """
+            return f"""
             <div class="warning">
-                <h3>⚠️ 数据丢失统计</h3>
-                <p>未找到data_loss_stats.json文件。可能的原因：</p>
+                <h3>⚠️ {self.t['data_loss_statistics']}</h3>
+                <p>{self.t['data_loss_stats_file_not_found']}:</p>
                 <ul>
-                    <li>测试期间未检测到数据丢失事件</li>
-                    <li>统计文件未正确归档</li>
-                    <li>block_height_monitor.sh未正常运行</li>
+                    <li>{self.t['no_data_loss_detected_during_test']}</li>
+                    <li>{self.t['stats_file_not_archived']}</li>
+                    <li>{self.t['block_height_monitor_not_running']}</li>
                 </ul>
             </div>
             """
 
     def _discover_chart_files(self):
-        """动态发现所有生成的图表文件 - 扫描多个目录，支持归档路径"""
+        """Dynamically discover all generated chart files - scan multiple directories, support archive paths"""
         chart_patterns = ["*.png", "*.jpg", "*.svg"]
         chart_files = []
         
-        # 扫描目录列表 - 支持归档后的路径结构
+        # Scan directory list - support archived path structure
         scan_dirs = [
-            self.output_dir,  # 主输出目录 (可能是归档目录)
-            os.path.join(self.output_dir, 'current', 'reports'),  # Advanced charts目录
-            os.path.join(self.output_dir, 'reports'),  # 备用reports目录
-            os.path.join(self.output_dir, 'logs'),  # 归档后的logs目录
+            self.output_dir,  # Main output directory (may be archive directory)
+            os.path.join(self.output_dir, 'current', 'reports'),  # Advanced charts directory
+            os.path.join(self.output_dir, 'reports'),  # Backup reports directory
+            os.path.join(self.output_dir, 'logs'),  # Archived logs directory
         ]
         
-        # 如果output_dir看起来像归档目录，添加特殊扫描路径
+        # If output_dir looks like archive directory, add special scan paths
         if 'archives' in self.output_dir or 'run_' in os.path.basename(self.output_dir):
-            # 这是归档目录，直接扫描其子目录
+            # This is archive directory, scan its subdirectories directly
             scan_dirs.extend([
                 os.path.join(self.output_dir, 'logs'),
                 os.path.join(self.output_dir, 'reports'),
                 os.path.join(self.output_dir, 'current', 'reports'),
             ])
         
-        # 添加同级reports目录扫描 (关键修复)
+        # Add sibling reports directory scan (critical fix)
         parent_dir = os.path.dirname(self.output_dir)
         sibling_reports = os.path.join(parent_dir, 'reports')
         if os.path.exists(sibling_reports):
@@ -2770,16 +3990,42 @@ class ReportGenerator:
                 for pattern in chart_patterns:
                     chart_files.extend(glob.glob(os.path.join(scan_dir, pattern)))
         
-        # 去重并排序
+        # Deduplicate and sort
         unique_charts = list(set(chart_files))
-        return sorted([f for f in unique_charts if os.path.exists(f)])
+        
+        # Filter out timestamped duplicates (e.g., keep xxx.png, remove xxx_20251024_104814.png)
+        import re
+        timestamp_pattern = re.compile(r'_\d{8}_\d{6}\.png$')
+        filtered_charts = []
+        base_names = {}
+        
+        for chart in unique_charts:
+            basename = os.path.basename(chart)
+            # Check if this is a timestamped version
+            if timestamp_pattern.search(basename):
+                # Extract base name without timestamp
+                base_name = re.sub(r'_\d{8}_\d{6}', '', basename)
+                base_names[base_name] = base_names.get(base_name, []) + [chart]
+            else:
+                # Non-timestamped version, always keep
+                filtered_charts.append(chart)
+        
+        # For timestamped files, only add if no non-timestamped version exists
+        for base_name, charts in base_names.items():
+            if base_name not in [os.path.basename(f) for f in filtered_charts]:
+                # No non-timestamped version, keep the timestamped one
+                filtered_charts.extend(charts)
+        
+        return sorted([f for f in filtered_charts if os.path.exists(f)])
 
     def _categorize_charts(self, chart_files):
-        """按类别组织图表 - 基于文件名模式，排除重复显示的图表"""
-        # 排除已在固定section显示的图表
+        """Organize charts by category - based on filename patterns, exclude duplicate displayed charts"""
+        # Exclude charts already displayed in fixed sections
         excluded_charts = {
-            'block_height_sync_chart.png',  # 已在区块高度分析section显示
-            'monitoring_overhead_analysis.png'  # 已在监控开销详细分析section显示
+            'block_height_sync_chart.png',  # Already displayed in block height analysis section
+            'monitoring_overhead_analysis.png',  # Already displayed in monitoring overhead detailed analysis section
+            'monitoring_impact_chart.png',  # Already displayed in monitoring overhead and performance relationship section
+            'resource_distribution_chart.png'  # Already displayed in resource proportion analysis section
         }
         
         categories = {
@@ -2795,7 +4041,7 @@ class ReportGenerator:
             filename = os.path.basename(chart_file)
             filename_lower = filename.lower()
             
-            # 跳过排除的图表
+            # Skip excluded charts
             if filename in excluded_charts:
                 continue
             
@@ -2808,7 +4054,7 @@ class ReportGenerator:
             # Network/ENA charts
             elif any(keyword in filename_lower for keyword in ['ena', 'network', 'allowance']):
                 categories['network']['charts'].append(chart_file)
-            # Monitoring charts (排除已显示的)
+            # Monitoring charts (exclude already displayed)
             elif any(keyword in filename_lower for keyword in ['monitoring', 'overhead']) and filename not in excluded_charts:
                 categories['monitoring']['charts'].append(chart_file)
             # Performance charts
@@ -2820,20 +4066,21 @@ class ReportGenerator:
         return categories
 
     def _generate_chart_gallery_section(self):
-        """生成动态图表展示区域"""
+        """Generate dynamic chart display area"""
         chart_files = self._discover_chart_files()
         if not chart_files:
-            return '<div class="section"><h2>📊 Performance Charts</h2><p>No charts found.</p></div>'
+            return f'<div class="section"><h2>📊 {self.t["performance_charts"]}</h2><p>{self.t["no_charts_found"]}</p></div>'
         
         categories = self._categorize_charts(chart_files)
+        total_charts = len(chart_files)
         
-        html = '''
+        html = f'''
         <div class="section">
-            <h2>📊 Performance Chart Gallery</h2>
+            <h2>📊 {self.t["performance_chart_gallery"]}</h2>
             <div class="chart-summary">
-                <p><strong>Total Charts Generated:</strong> {total_charts}</p>
+                <p><strong>{self.t["total_charts_generated"]}:</strong> {total_charts}</p>
             </div>
-        '''.format(total_charts=len(chart_files))
+        '''
         
         for category_key, category_data in categories.items():
             if category_data['charts']:
@@ -2845,17 +4092,25 @@ class ReportGenerator:
                 
                 for chart_file in category_data['charts']:
                     chart_name = os.path.basename(chart_file)
-                    chart_title = chart_name.replace('_', ' ').replace('.png', '').title()
+                    chart_key = chart_name.replace('.png', '')
                     
-                    # 修正特定缩写词的大小写
-                    chart_title = chart_title.replace('Cpu', 'CPU').replace('Ebs', 'EBS').replace('Aws', 'AWS').replace('Qps', 'QPS').replace('Ena', 'ENA')
+                    # Get localized title and description
+                    title_key = f'chart_{chart_key}'
+                    desc_key = f'chart_{chart_key}_desc'
+                    chart_title = self.t.get(title_key, chart_name.replace('_', ' ').replace('.png', '').title())
+                    chart_desc = self.t.get(desc_key, '')
                     
-                    # 计算相对路径
+                    # Fix capitalization if using fallback title
+                    if title_key not in self.t:
+                        chart_title = chart_title.replace('Cpu', 'CPU').replace('Ebs', 'EBS').replace('Aws', 'AWS').replace('Qps', 'QPS').replace('Ena', 'ENA')
+                    
+                    # Calculate relative path
                     rel_path = os.path.relpath(chart_file, self.output_dir)
                     
                     html += f'''
                     <div class="chart-item">
                         <h4>{chart_title}</h4>
+                        {f'<p style="color: #666; font-size: 0.9em; margin: 8px 0;">{chart_desc}</p>' if chart_desc else ''}
                         <div class="chart-container">
                             <img src="{rel_path}" alt="{chart_title}" class="chart">
                         </div>
@@ -2871,12 +4126,12 @@ class ReportGenerator:
         return html
 
     def _generate_html_content(self, df):
-        """生成HTML内容 + 瓶颈信息展示 + 图片引用"""
+        """Generate HTML content + bottleneck information display + image references"""
         try:
-            # 识别block_height相关字段
+            # Identify block_height related fields
             block_height_fields = [col for col in df.columns if 'block_height' in col.lower() or 'height' in col.lower()]
             
-            # 生成各个部分 - 使用实际存在的方法
+            # Generate each section - using actually existing methods
             ebs_analysis = self._generate_ebs_baseline_analysis_section(df)
             ebs_bottleneck_analysis = self._generate_ebs_bottleneck_section()
             monitoring_overhead_analysis = self._generate_monitoring_overhead_section()
@@ -2891,16 +4146,16 @@ class ReportGenerator:
             correlation_table = self._generate_cpu_ebs_correlation_table(df)
             overhead_table = self._generate_overhead_data_table()
             
-            # 生成性能摘要
+            # Generate performance summary
             performance_summary = self._generate_performance_summary(df)
             
-            # 生成瓶颈信息展示（如果有）
+            # Generate bottleneck information display (if available)
             bottleneck_section = self._generate_bottleneck_section()
             
-            # 生成动态图表展示部分
+            # Generate dynamic chart display section
             charts_section = self._generate_chart_gallery_section()
             
-            # 生成EBS分析结果
+            # Generate EBS analysis results
             ebs_warnings, ebs_metrics = self.parse_ebs_analyzer_log()
             ebs_analysis_section = self.generate_ebs_analysis_section(ebs_warnings, ebs_metrics)
             
@@ -2908,7 +4163,7 @@ class ReportGenerator:
             <!DOCTYPE html>
             <html>
             <head>
-                <title>&#128640; Blockchain Node QPS Benchmark Report: Performance Analysis and Bottlenecks</title>
+                <title>&#128640; {self.t['report_title']}</title>
                 <meta charset="utf-8">
                 <style>
                     {self._get_css_styles()}
@@ -2916,9 +4171,9 @@ class ReportGenerator:
             </head>
             <body>
                 <div class="container">
-                    <h1>&#128640; Blockchain Node QPS Benchmark Report: Performance Analysis and Bottlenecks</h1>
-                    <p>生成Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    <p>&#9989; 统一字段命名 | 完整Device支持 | 监控开销分析 | Blockchain Node 特定分析 | 瓶颈检测分析</p>
+                    <h1>&#128640; {self.t['report_title']}</h1>
+                    <p>{self.t['generated_time']}: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                    <p>&#9989; {self.t['unified_field_naming']} | {self.t['complete_device_support']} | {self.t['monitoring_overhead_analysis']} | {self.t['blockchain_node_specific_analysis']} | {self.t['bottleneck_detection_analysis']}</p>
                     
                     {bottleneck_section}
                     {performance_summary}
@@ -2941,181 +4196,181 @@ class ReportGenerator:
             </html>
             """
         except Exception as e:
-            return f"<div class='error'>HTML内容生成失败: {str(e)}</div>"
+            return f"<div class='error'>{self.t['html_content_generation_failed']}: {str(e)}</div>"
 
     def _generate_charts_section(self):
-        """生成图表展示部分"""
+        """Generate chart display section"""
         try:
-            # 定义所有可能生成的图片及其描述
+            # Define all possible generated charts and their descriptions
             chart_definitions = [
-                # performance_visualizer.py 生成的图片
+                # Charts generated by performance_visualizer.py
                 {
                     'filename': 'performance_overview.png',
-                    'title': '&#128200; 性能概览图表',
-                    'description': '系统整体性能概览，包括CPU、内存、EBS等关键指标的Time序列展示'
+                    'title': f'&#128200; {self.t["chart_performance_overview"]}',
+                    'description': self.t['chart_performance_overview_desc']
                 },
                 {
                     'filename': 'cpu_ebs_correlation_visualization.png',
-                    'title': '&#128279; CPU-EBS关联可视化',
-                    'description': 'CPU Usage与EBS性能指标的关联性分析，帮助识别I/O瓶颈'
+                    'title': f'&#128279; {self.t["chart_cpu_ebs_correlation"]}',
+                    'description': self.t['chart_cpu_ebs_correlation_desc']
                 },
                 {
                     'filename': 'device_performance_comparison.png',
-                    'title': '&#128190; Device性能对比',
-                    'description': 'DATA Device和ACCOUNTS Device的性能对比分析'
+                    'title': f'&#128190; {self.t["chart_device_performance_comparison"]}',
+                    'description': self.t['chart_device_performance_comparison_desc']
                 },
                 {
                     'filename': 'await_threshold_analysis.png',
-                    'title': '&#9202; 等待Time阈值分析',
-                    'description': 'I/O等待Time的阈值分析，识别存储性能瓶颈'
+                    'title': f'&#9202; {self.t["chart_await_threshold_analysis"]}',
+                    'description': self.t['chart_await_threshold_analysis_desc']
                 },
                 {
                     'filename': 'util_threshold_analysis.png',
-                    'title': '&#128202; 利用率阈值分析',
-                    'description': 'Device Utilization的阈值分析，评估资源使用效率'
+                    'title': f'&#128202; {self.t["chart_util_threshold_analysis"]}',
+                    'description': self.t['chart_util_threshold_analysis_desc']
                 },
                 {
                     'filename': 'monitoring_overhead_analysis.png',
-                    'title': '&#128203; 监控开销分析',
-                    'description': '监控系统本身的资源消耗分析，评估监控对系统性能的影响'
+                    'title': f'&#128203; {self.t["chart_monitoring_overhead_analysis"]}',
+                    'description': self.t['chart_monitoring_overhead_analysis_desc']
                 },
                 {
                     'filename': 'smoothed_trend_analysis.png',
-                    'title': '&#128200; 平滑趋势分析',
-                    'description': '性能指标的平滑趋势分析，消除噪声后的性能变化趋势'
+                    'title': f'&#128200; {self.t["chart_smoothed_trend_analysis"]}',
+                    'description': self.t['chart_smoothed_trend_analysis_desc']
                 },
                 {
                     'filename': 'qps_trend_analysis.png',
-                    'title': '&#128640; QPS趋势分析',
-                    'description': 'QPS性能的详细趋势分析，展示测试过程中的QPS变化'
+                    'title': f'&#128640; {self.t["chart_qps_trend_analysis"]}',
+                    'description': self.t['chart_qps_trend_analysis_desc']
                 },
                 {
                     'filename': 'resource_efficiency_analysis.png',
-                    'title': '&#9889; 资源效率分析',
-                    'description': 'QPS与资源消耗的效率分析，评估每QPS的资源成本'
+                    'title': f'&#9889; {self.t["chart_resource_efficiency_analysis"]}',
+                    'description': self.t['chart_resource_efficiency_analysis_desc']
                 },
                 {
                     'filename': 'bottleneck_identification.png',
-                    'title': '&#128680; 瓶颈识别图',
-                    'description': '自动瓶颈识别结果，标注性能瓶颈点和影响因素'
+                    'title': f'&#128680; {self.t["chart_bottleneck_identification"]}',
+                    'description': self.t['chart_bottleneck_identification_desc']
                 },
                 
-                # advanced_chart_generator.py 生成的图片
+                # Charts generated by advanced_chart_generator.py
                 {
                     'filename': 'pearson_correlation_analysis.png',
-                    'title': '&#128202; Pearson相关性分析',
-                    'description': 'CPU与EBS指标的Pearson相关性分析，量化指标间的线性关系'
+                    'title': f'&#128202; {self.t["chart_pearson_correlation_analysis"]}',
+                    'description': self.t['chart_pearson_correlation_analysis_desc']
                 },
                 {
                     'filename': 'linear_regression_analysis.png',
-                    'title': '&#128200; 线性回归分析',
-                    'description': '关键指标的线性回归分析，预测性能趋势和关系'
+                    'title': f'&#128200; {self.t["chart_linear_regression_analysis"]}',
+                    'description': self.t['chart_linear_regression_analysis_desc']
                 },
                 {
                     'filename': 'negative_correlation_analysis.png',
-                    'title': '&#128201; 负相关分析',
-                    'description': '负相关指标分析，识别性能权衡关系'
+                    'title': f'&#128201; {self.t["chart_negative_correlation_analysis"]}',
+                    'description': self.t['chart_negative_correlation_analysis_desc']
                 },
                 {
                     'filename': 'comprehensive_correlation_matrix.png',
-                    'title': '&#128269; 综合相关性矩阵',
-                    'description': '所有监控指标的综合相关性矩阵热力图'
+                    'title': f'&#128269; {self.t["chart_comprehensive_correlation_matrix"]}',
+                    'description': self.t['chart_comprehensive_correlation_matrix_desc']
                 },
                 {
                     'filename': 'performance_trend_analysis.png',
-                    'title': '&#128202; 性能趋势分析',
-                    'description': '长期性能趋势分析，识别性能变化模式'
+                    'title': f'&#128202; {self.t["chart_performance_trend_analysis"]}',
+                    'description': self.t['chart_performance_trend_analysis_desc']
                 },
                 {
                     'filename': 'ena_limitation_trends.png',
-                    'title': '&#128680; ENA网络限制趋势',
-                    'description': 'AWS ENA网络限制趋势分析，显示PPS、带宽、连接跟踪等限制的Time变化'
+                    'title': f'&#128680; {self.t["chart_ena_limitation_trends"]}',
+                    'description': self.t['chart_ena_limitation_trends_desc']
                 },
                 {
                     'filename': 'ena_connection_capacity.png',
-                    'title': '&#128279; ENA连接容量监控',
-                    'description': 'ENA连接容量实时监控，显示可用连接数变化和容量预警'
+                    'title': f'&#128279; {self.t["chart_ena_connection_capacity"]}',
+                    'description': self.t['chart_ena_connection_capacity_desc']
                 },
                 {
                     'filename': 'ena_comprehensive_status.png',
-                    'title': '&#127760; ENA综合状态分析',
-                    'description': 'ENA网络综合状态分析，包括限制分布、容量状态和严重程度评估'
+                    'title': f'&#127760; {self.t["chart_ena_comprehensive_status"]}',
+                    'description': self.t['chart_ena_comprehensive_status_desc']
                 },
                 {
                     'filename': 'performance_correlation_heatmap.png',
-                    'title': '&#128293; 性能相关性热力图',
-                    'description': '性能指标相关性的热力图展示，直观显示指标间关系强度'
+                    'title': f'&#128293; {self.t["chart_performance_correlation_heatmap"]}',
+                    'description': self.t['chart_performance_correlation_heatmap_desc']
                 },
                 
                 {
                     'filename': 'performance_cliff_analysis.png',
-                    'title': '&#128201; 性能悬崖分析',
-                    'description': '性能悬崖检测和分析，识别性能急剧下降的原因'
+                    'title': f'&#128201; {self.t["chart_performance_cliff_analysis"]}',
+                    'description': self.t['chart_performance_cliff_analysis_desc']
                 },
                 {
                     'filename': 'comprehensive_analysis_charts.png',
-                    'title': '&#128202; 综合分析图表',
-                    'description': '综合性能分析图表集合，全面展示系统性能状况'
+                    'title': f'&#128202; {self.t["chart_comprehensive_analysis_charts"]}',
+                    'description': self.t['chart_comprehensive_analysis_charts_desc']
                 },
                 {
                     'filename': 'qps_performance_analysis.png',
-                    'title': '&#127919; QPS性能分析',
-                    'description': 'QPS性能的专项分析图表，深入分析QPS性能特征'
+                    'title': f'&#127919; {self.t["chart_qps_performance_analysis"]}',
+                    'description': self.t['chart_qps_performance_analysis_desc']
                 },
                 
-                # EBS专业分析图表组
+                # EBS professional analysis chart group
                 {
                     'filename': 'ebs_aws_capacity_planning.png',
-                    'title': '&#128202; EBS AWS容量规划分析',
-                    'description': 'AWS EBS容量规划分析，包括IOPS和吞吐量利用率预测，支持容量规划决策'
+                    'title': f'&#128202; {self.t["chart_ebs_aws_capacity_planning"]}',
+                    'description': self.t['chart_ebs_aws_capacity_planning_desc']
                 },
                 {
                     'filename': 'ebs_iostat_performance.png',
-                    'title': '&#128190; EBS iostat性能分析',
-                    'description': 'EBS设备的iostat性能分析，包括读写分离、延迟分析和队列深度监控'
+                    'title': f'&#128190; {self.t["chart_ebs_iostat_performance"]}',
+                    'description': self.t['chart_ebs_iostat_performance_desc']
                 },
                 {
                     'filename': 'ebs_bottleneck_correlation.png',
-                    'title': '&#128279; EBS瓶颈关联分析',
-                    'description': 'EBS瓶颈关联分析，展示AWS标准视角与iostat视角的关联关系'
+                    'title': f'&#128279; {self.t["chart_ebs_bottleneck_correlation"]}',
+                    'description': self.t['chart_ebs_bottleneck_correlation_desc']
                 },
                 {
                     'filename': 'ebs_performance_overview.png',
-                    'title': '&#128200; EBS性能概览',
-                    'description': 'EBS综合性能概览，包括AWS标准IOPS、吞吐量与基准线对比'
+                    'title': f'&#128200; {self.t["chart_ebs_performance_overview"]}',
+                    'description': self.t['chart_ebs_performance_overview_desc']
                 },
                 {
                     'filename': 'ebs_bottleneck_analysis.png',
-                    'title': '&#128680; EBS瓶颈检测分析',
-                    'description': 'EBS瓶颈检测分析，自动识别IOPS、吞吐量和延迟瓶颈点'
+                    'title': f'&#128680; {self.t["chart_ebs_bottleneck_analysis"]}',
+                    'description': self.t['chart_ebs_bottleneck_analysis_desc']
                 },
                 {
                     'filename': 'ebs_aws_standard_comparison.png',
-                    'title': '&#9878;️ EBS AWS标准对比',
-                    'description': 'AWS标准值与原始iostat数据对比分析，评估性能标准化程度'
+                    'title': f'&#9878;️ {self.t["chart_ebs_aws_standard_comparison"]}',
+                    'description': self.t['chart_ebs_aws_standard_comparison_desc']
                 },
                 {
                     'filename': 'ebs_time_series_analysis.png',
-                    'title': '&#128202; EBS时间序列分析',
-                    'description': 'EBS性能时间序列分析，展示多指标时间维度变化趋势'
+                    'title': f'&#128202; {self.t["chart_ebs_time_series_analysis"]}',
+                    'description': self.t['chart_ebs_time_series_analysis_desc']
                 },
                 {
                     'filename': 'block_height_sync_chart.png',
-                    'title': '🔗 区块链节点同步状态',
-                    'description': '本地节点与主网区块高度同步状态时序图，展示同步差值变化和异常时间段标注'
+                    'title': f'🔗 {self.t["chart_block_height_sync_chart"]}',
+                    'description': self.t['chart_block_height_sync_chart_desc']
                 }
             ]
             
-            # 检查图片文件存在性并生成HTML
-            charts_html = """
+            # Check chart file existence and generate HTML
+            charts_html = f"""
             <div class="section">
-                <h2>&#128202; 性能分析图表</h2>
+                <h2>&#128202; {self.t['performance_analysis_charts']}</h2>
                 <div class="info">
-                    <p>以下图表提供了系统性能的全方位可视化分析，包括性能趋势、关联性分析、瓶颈识别等。</p>
+                    <p>{self.t['charts_provide_comprehensive_visualization']}</p>
                 </div>
             """
             
-            # 获取报告输出目录 - 使用环境变量或current/reports结构
+            # Get report output directory - use environment variable or current/reports structure
             reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
             if not os.path.exists(reports_dir):
                 reports_dir = self.output_dir
@@ -3125,7 +4380,7 @@ class ReportGenerator:
             
             for chart in chart_definitions:
                 chart_path = os.path.join(reports_dir, chart['filename'])
-                # 也检查直接在output_dir中的图片
+                # Also check charts directly in output_dir
                 alt_chart_path = os.path.join(self.output_dir, os.path.basename(chart['filename']))
                 
                 if os.path.exists(chart_path):
@@ -3135,7 +4390,7 @@ class ReportGenerator:
                 else:
                     missing_charts.append(chart)
             
-            # 生成可用图表的HTML
+            # Generate HTML for available charts
             if available_charts:
                 charts_html += """
                 <div class="charts-grid">
@@ -3158,44 +4413,44 @@ class ReportGenerator:
                 </div>
                 """
                 
-                # 添加图表统计信息
+                # Add chart statistics
                 charts_html += f"""
                 <div class="charts-summary">
-                    <h3>&#128200; 图表统计</h3>
+                    <h3>&#128200; {self.t['chart_statistics']}</h3>
                     <ul>
-                        <li>&#9989; 可用图表: {len(available_charts)} 个</li>
-                        <li>&#8987; 待生成图表: {len(missing_charts)} 个</li>
-                        <li>&#128202; 图表覆盖率: {len(available_charts)/(len(available_charts)+len(missing_charts))*100:.1f}%</li>
+                        <li>&#9989; {self.t['available_charts']}: {len(available_charts)} {self.t['items']}</li>
+                        <li>&#8987; {self.t['pending_charts']}: {len(missing_charts)} {self.t['items']}</li>
+                        <li>&#128202; {self.t['chart_coverage']}: {len(available_charts)/(len(available_charts)+len(missing_charts))*100:.1f}%</li>
                     </ul>
                 </div>
                 """
             else:
-                charts_html += """
+                charts_html += f"""
                 <div class="warning">
-                    <h3>&#9888; 图表生成提示</h3>
-                    <p>当前没有找到生成的图表文件。图表将在以下情况下生成：</p>
+                    <h3>&#9888; {self.t['chart_generation_notice']}</h3>
+                    <p>{self.t['no_chart_files_found']}:</p>
                     <ul>
-                        <li>运行 performance_visualizer.py 生成性能分析图表</li>
-                        <li>运行 advanced_chart_generator.py 生成高级分析图表</li>
-                        <li>运行 comprehensive_analysis.py 生成综合分析图表</li>
+                        <li>{self.t['run_performance_visualizer']}</li>
+                        <li>{self.t['run_advanced_chart_generator']}</li>
+                        <li>{self.t['run_comprehensive_analysis']}</li>
                     </ul>
-                    <p>请确保在生成报告前先运行相应的图表生成脚本。</p>
+                    <p>{self.t['ensure_run_chart_scripts_before_report']}</p>
                 </div>
                 """
             
-            # 如果有缺失的图表，显示提示
+            # If there are missing charts, show notice
             if missing_charts:
-                charts_html += """
+                charts_html += f"""
                 <div class="missing-charts">
-                    <h3>&#128203; 待生成图表</h3>
-                    <p>以下图表尚未生成，运行相应脚本后将自动显示：</p>
+                    <h3>&#128203; {self.t['pending_charts']}</h3>
+                    <p>{self.t['following_charts_not_generated']}:</p>
                     <ul>
                 """
-                for chart in missing_charts[:5]:  # 只显示前5个
+                for chart in missing_charts[:5]:  # Show only first 5
                     charts_html += f"<li>{chart['title']} - {chart['description']}</li>"
                 
                 if len(missing_charts) > 5:
-                    charts_html += f"<li>... 还有 {len(missing_charts) - 5} 个图表</li>"
+                    charts_html += f"<li>... {self.t['and']} {len(missing_charts) - 5} {self.t['more_charts']}</li>"
                 
                 charts_html += """
                     </ul>
@@ -3211,13 +4466,13 @@ class ReportGenerator:
         except Exception as e:
             return f"""
             <div class="section error">
-                <h2>&#9888; 图表展示错误</h2>
-                <p>图表部分生成失败: {str(e)}</p>
+                <h2>&#9888; {self.t['chart_display_error']}</h2>
+                <p>{self.t['chart_section_generation_failed']}: {str(e)}</p>
             </div>
             """
 
     def _generate_bottleneck_section(self):
-        """生成瓶颈信息展示部分"""
+        """Generate bottleneck information display section"""
         if not self.bottleneck_data:
             return ""
         
@@ -3228,24 +4483,24 @@ class ReportGenerator:
             
             max_qps = self.bottleneck_data.get('max_successful_qps', 0)
             bottleneck_qps = self.bottleneck_data.get('bottleneck_qps', 0)
-            reasons = self.bottleneck_data.get('bottleneck_reasons', '未知')
+            reasons = self.bottleneck_data.get('bottleneck_reasons', self.t['unknown'])
             severity = self.bottleneck_data.get('severity', 'medium')
-            detection_time = self.bottleneck_data.get('detection_time', '未知')
+            detection_time = self.bottleneck_data.get('detection_time', self.t['unknown'])
             recommendations = self.bottleneck_data.get('recommendations', [])
             
-            # 计算性能下降
-            performance_drop = 0.0  # 使用float类型保持一致性
+            # Calculate performance drop
+            performance_drop = 0.0
             if max_qps > 0:
                 performance_drop = ((bottleneck_qps - max_qps) / max_qps) * 100
             
-            # 严重程度颜色
+            # Severity color
             severity_color = {
                 'low': '#28a745',
                 'medium': '#ffc107', 
                 'high': '#dc3545'
-            }.get(severity, '#ffc107')
+            }.get(severity.lower(), '#ffc107')
             
-            # 生成建议列表
+            # Generate recommendations list
             recommendations_html = ""
             if recommendations:
                 rec_items = [f"<li>{rec}</li>" for rec in recommendations[:5]]
@@ -3253,37 +4508,37 @@ class ReportGenerator:
             
             return f"""
             <div class="section bottleneck-alert" style="border-left: 5px solid {severity_color}; background-color: #fff3cd;">
-                <h2 style="color: {severity_color};">&#128680; 性能瓶颈检测结果</h2>
+                <h2 style="color: {severity_color};">&#128680; {self.t['performance_bottleneck_detection_result']}</h2>
                 
                 <div class="bottleneck-summary">
                     <div class="bottleneck-stats">
                         <div class="stat-item">
-                            <h4>&#127942; 最大成功QPS</h4>
+                            <h4>&#127942; {self.t['max_successful_qps']}</h4>
                             <div class="stat-value" style="color: #28a745; font-size: 2em; font-weight: bold;">{max_qps}</div>
                         </div>
                         <div class="stat-item">
-                            <h4>&#128680; 瓶颈触发QPS</h4>
+                            <h4>&#128680; {self.t['bottleneck_trigger_qps']}</h4>
                             <div class="stat-value" style="color: #dc3545; font-size: 2em; font-weight: bold;">{bottleneck_qps}</div>
                         </div>
                         <div class="stat-item">
-                            <h4>&#128201; 性能下降</h4>
+                            <h4>&#128201; {self.t['performance_drop']}</h4>
                             <div class="stat-value" style="color: #dc3545; font-size: 1.5em; font-weight: bold;">{performance_drop:.1f}%</div>
                         </div>
                     </div>
                 </div>
                 
                 <div class="bottleneck-details">
-                    <h3>&#128269; 瓶颈详情</h3>
+                    <h3>&#128269; {self.t['bottleneck_details']}</h3>
                     <div class="info">
-                        <p><strong>检测Time:</strong> {detection_time}</p>
-                        <p><strong>严重程度:</strong> <span style="color: {severity_color}; font-weight: bold;">{severity.upper()}</span></p>
-                        <p><strong>瓶颈原因:</strong> {reasons}</p>
+                        <p><strong>{self.t['detection_time']}:</strong> {detection_time}</p>
+                        <p><strong>{self.t['severity_level']}:</strong> <span style="color: {severity_color}; font-weight: bold;">{severity.upper()}</span></p>
+                        <p><strong>{self.t['bottleneck_reason']}:</strong> {reasons}</p>
                     </div>
                 </div>
                 
                 {f'''
                 <div class="bottleneck-recommendations">
-                    <h3>&#128161; 优化建议</h3>
+                    <h3>&#128161; {self.t['optimization_recommendations']}</h3>
                     <div class="info">
                         {recommendations_html}
                     </div>
@@ -3291,13 +4546,13 @@ class ReportGenerator:
                 ''' if recommendations else ''}
                 
                 <div class="bottleneck-actions">
-                    <h3>&#127919; 建议的下一步行动</h3>
+                    <h3>&#127919; {self.t['suggested_next_actions']}</h3>
                     <div class="info">
                         <ul>
-                            <li>查看详细的瓶颈分析图表了解根本原因</li>
-                            <li>根据优化建议调整系统配置</li>
-                            <li>考虑升级硬件资源或优化应用程序</li>
-                            <li>重新运行测试验证改进效果</li>
+                            <li>{self.t['view_detailed_bottleneck_charts']}</li>
+                            <li>{self.t['adjust_system_config_per_recommendations']}</li>
+                            <li>{self.t['consider_hardware_upgrade_or_app_optimization']}</li>
+                            <li>{self.t['rerun_test_to_verify_improvements']}</li>
                         </ul>
                     </div>
                 </div>
@@ -3307,13 +4562,13 @@ class ReportGenerator:
         except Exception as e:
             return f"""
             <div class="section error">
-                <h2>&#9888; 瓶颈信息显示错误</h2>
-                <p>瓶颈信息处理失败: {str(e)}</p>
+                <h2>&#9888; {self.t['bottleneck_info_display_error']}</h2>
+                <p>{self.t['bottleneck_info_processing_failed']}: {str(e)}</p>
             </div>
             """
 
     def _get_css_styles(self):
-        """获取CSS样式 - 增强版支持图表展示"""
+        """Get CSS styles - enhanced version with chart display support"""
         return """
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -3404,7 +4659,7 @@ class ReportGenerator:
             margin: 25px 0; 
         }
         
-        /* 图表展示样式 */
+        /* Chart display styles */
         .charts-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
@@ -3496,7 +4751,7 @@ class ReportGenerator:
             color: #856404;
         }
         
-        /* 区块高度统计样式 */
+        /* Block height statistics styles */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -3536,7 +4791,7 @@ class ReportGenerator:
             font-family: 'Courier New', monospace;
         }
         
-        /* 表格样式 */
+        /* Table styles */
         table { 
             width: 100%; 
             border-collapse: collapse; 
@@ -3563,7 +4818,7 @@ class ReportGenerator:
             background-color: #e9ecef;
         }
         
-        /* 标题样式 */
+        /* Heading styles */
         h1 { 
             color: #2c3e50; 
             text-align: center; 
@@ -3581,7 +4836,7 @@ class ReportGenerator:
             margin-top: 20px;
         }
         
-        /* 响应式设计 */
+        /* Responsive design */
         @media (max-width: 768px) {
             .container {
                 padding: 15px;
@@ -3599,7 +4854,7 @@ class ReportGenerator:
             }
         }
         
-        /* 打印样式 */
+        /* Print styles */
         @media print {
             .container {
                 box-shadow: none;
@@ -3676,90 +4931,82 @@ class ReportGenerator:
         """
 
     def _generate_performance_summary(self, df):
-        """生成性能摘要部分"""
+        """Generate performance summary section"""
         try:
-            # 计算基本统计
+            # Calculate basic statistics
             cpu_avg = df['cpu_usage'].mean() if 'cpu_usage' in df.columns and len(df) > 0 else 0
             cpu_max = df['cpu_usage'].max() if 'cpu_usage' in df.columns and len(df) > 0 else 0
             mem_avg = df['mem_usage'].mean() if 'mem_usage' in df.columns and len(df) > 0 else 0
             
-            # DATA Device统计 - 使用统一的字段格式匹配
+            # DATA Device statistics - using unified field format matching
             data_iops_cols = [col for col in df.columns if col.startswith('data_') and col.endswith('_total_iops')]
             data_iops_avg = df[data_iops_cols[0]].mean() if data_iops_cols and len(df) > 0 else 0
             
-            # ACCOUNTS Device统计 - 使用统一的字段格式匹配
+            # ACCOUNTS Device statistics - using unified field format matching
             accounts_iops_cols = [col for col in df.columns if col.startswith('accounts_') and col.endswith('_total_iops')]
             accounts_iops_avg = df[accounts_iops_cols[0]].mean() if accounts_iops_cols and len(df) > 0 else 0
             
             return f"""
             <div class="section">
-                <h2>&#128202; 性能摘要</h2>
-                <div class="info-grid">
-                    <div class="info-card">
-                        <h4>平均CPU Usage</h4>
-                        <div style="font-size: 1.2em; font-weight: bold;">{cpu_avg:.1f}%</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>峰值CPU Usage</h4>
-                        <div style="font-size: 1.2em; font-weight: bold;">{cpu_max:.1f}%</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>平均Memory Usage</h4>
-                        <div style="font-size: 1.2em; font-weight: bold;">{mem_avg:.1f}%</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>DATA Device平均IOPS</h4>
-                        <div style="font-size: 1.2em; font-weight: bold;">{data_iops_avg:.0f}</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>ACCOUNTS Device平均IOPS</h4>
-                        <div style="font-size: 1.2em; font-weight: bold;">{accounts_iops_avg:.0f}</div>
-                    </div>
-                    <div class="info-card">
-                        <h4>监控数据点</h4>
-                        <div style="font-size: 1.2em; font-weight: bold;">{len(df):,}</div>
-                    </div>
-                </div>
+                <h2>&#128202; {self.t['performance_summary']}</h2>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
+                    <thead>
+                        <tr>
+                            <th style="background: #007bff; color: white; padding: 12px; text-align: left;">{self.t['metric']}</th>
+                            <th style="background: #007bff; color: white; padding: 12px; text-align: right;">{self.t['value']}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['avg_cpu_usage']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{cpu_avg:.1f}%</td></tr>
+                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['peak_cpu_usage']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{cpu_max:.1f}%</td></tr>
+                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['avg_memory_usage']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{mem_avg:.1f}%</td></tr>
+                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['data_device_avg_iops']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{data_iops_avg:.0f}</td></tr>
+                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['accounts_device_avg_iops']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{accounts_iops_avg:.0f}</td></tr>
+                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['monitoring_data_points']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{len(df):,}</td></tr>
+                    </tbody>
+                </table>
             </div>
             """
         except Exception as e:
-            return f"<div class='error'>性能摘要生成失败: {str(e)}</div>"
+            return f"<div class='error'>{self.t['performance_summary_generation_failed']}: {str(e)}</div>"
 
 def main():
-    parser = argparse.ArgumentParser(description='报告生成器 - 增强版 + 瓶颈模式支持')
-    parser.add_argument('performance_csv', help='系统性能监控CSV文件')
-    parser.add_argument('-c', '--config', help='配置文件', default='config_loader.sh')
-    parser.add_argument('-o', '--overhead-csv', help='监控开销CSV文件')
-    parser.add_argument('--bottleneck-mode', action='store_true', help='启用瓶颈分析模式')
-    parser.add_argument('--bottleneck-info', help='瓶颈信息JSON文件路径')
+    parser = argparse.ArgumentParser(description='Report Generator - Enhanced version + bottleneck mode support')
+    parser.add_argument('performance_csv', help='System performance monitoring CSV file')
+    parser.add_argument('-c', '--config', help='Configuration file', default='config_loader.sh')
+    parser.add_argument('-o', '--overhead-csv', help='Monitoring overhead CSV file')
+    parser.add_argument('--bottleneck-mode', action='store_true', help='Enable bottleneck analysis mode')
+    parser.add_argument('--bottleneck-info', help='Bottleneck information JSON file path')
+    parser.add_argument('--language', choices=['en', 'zh'], default='en', help='Report language (en or zh)')
     
     args = parser.parse_args()
     
     if not os.path.exists(args.performance_csv):
-        print(f"❌ 文件不存在: {args.performance_csv}")
+        print(f"❌ File does not exist: {args.performance_csv}")
         return 1
     
-    # 检查瓶颈信息文件
+    # Check bottleneck information file
     bottleneck_info_file = None
     if args.bottleneck_mode or args.bottleneck_info:
         if args.bottleneck_info and os.path.exists(args.bottleneck_info):
             bottleneck_info_file = args.bottleneck_info
-            print(f"📊 使用瓶颈信息文件: {bottleneck_info_file}")
+            print(f"📊 Using bottleneck information file: {bottleneck_info_file}")
         else:
-            print("⚠️ 瓶颈模式启用但未找到瓶颈信息文件，将生成标准报告")
+            print("⚠️ Bottleneck mode enabled but bottleneck information file not found, will generate standard report")
     
-    generator = ReportGenerator(args.performance_csv, args.config, args.overhead_csv, bottleneck_info_file)
+    # Create generator with specified language
+    generator = ReportGenerator(args.performance_csv, args.config, args.overhead_csv, bottleneck_info_file, args.language)
     
     result = generator.generate_html_report()
     
     if result:
         if bottleneck_info_file:
-            print("🎉 瓶颈模式HTML报告生成成功!")
+            print("🎉 Bottleneck mode HTML report generated successfully!")
         else:
-            print("🎉 增强版HTML报告生成成功!")
+            print("🎉 Enhanced HTML report generated successfully!")
         return 0
     else:
-        print("❌ HTML报告生成失败")
+        print("❌ HTML report generation failed")
         return 1
 
 if __name__ == "__main__":

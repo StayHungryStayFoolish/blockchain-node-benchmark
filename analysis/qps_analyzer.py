@@ -409,10 +409,10 @@ class NodeQPSAnalyzer:
                     axes[1, 1].text(0.05, 0.85 - i*0.15, f"• {rec}", 
                                    transform=axes[1, 1].transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"],
                                    verticalalignment='top', wrap=True)
-                
-                axes[1, 1].set_xlim(0, 1)
-                axes[1, 1].set_ylim(0, 1)
-                axes[1, 1].axis('off')
+            
+            axes[1, 1].set_xlim(0, 1)
+            axes[1, 1].set_ylim(0, 1)
+            axes[1, 1].axis('off')
             
             plt.tight_layout()
             

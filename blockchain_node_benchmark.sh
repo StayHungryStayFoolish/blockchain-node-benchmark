@@ -667,14 +667,27 @@ generate_final_reports() {
         echo "🚨 瓶颈模式报告生成"
     fi
     
-    # 生成HTML报告
+    # 生成HTML报告（双语：英文和中文）
     if [[ -f "${SCRIPT_DIR}/visualization/report_generator.py" ]]; then
-        echo "📄 生成HTML报告..."
-        if ! python3 "${SCRIPT_DIR}/visualization/report_generator.py" "${report_params[@]}"; then
-            echo "❌ HTML报告生成失败"
+        echo "📄 生成HTML报告（双语）..."
+        
+        # 生成英文报告
+        echo "  📝 生成英文报告..."
+        if ! python3 "${SCRIPT_DIR}/visualization/report_generator.py" "${report_params[@]}" --language en; then
+            echo "  ❌ 英文报告生成失败"
             return 1
         fi
-        echo "✅ HTML报告已生成"
+        echo "  ✅ 英文报告已生成"
+        
+        # 生成中文报告
+        echo "  📝 生成中文报告..."
+        if ! python3 "${SCRIPT_DIR}/visualization/report_generator.py" "${report_params[@]}" --language zh; then
+            echo "  ❌ 中文报告生成失败"
+            return 1
+        fi
+        echo "  ✅ 中文报告已生成"
+        
+        echo "✅ 双语HTML报告已生成"
     else
         echo "⚠️ HTML报告生成器不存在"
     fi
