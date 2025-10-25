@@ -1789,12 +1789,12 @@ class ReportGenerator:
                 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                     <thead>
                         <tr>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['device']}</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['baseline_config']}</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['min']}</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['avg']}</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['max']}</th>
+                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['device']}</th>
+                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
+                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['baseline_config']}</th>
+                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['min']}</th>
+                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['avg']}</th>
+                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['max']}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1880,11 +1880,11 @@ class ReportGenerator:
                 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                     <thead>
                         <tr>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['device']}</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['min']}</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['avg']}</th>
-                            <th style="background: #28a745; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['max']}</th>
+                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['device']}</th>
+                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
+                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['min']}</th>
+                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['avg']}</th>
+                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['max']}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2023,9 +2023,9 @@ class ReportGenerator:
             <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                 <thead>
                     <tr>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['config_item']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['status']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['value']}</th>
+                        <th style="background: #34495E; color: white; padding: 12px;">{self.t['config_item']}</th>
+                        <th style="background: #34495E; color: white; padding: 12px;">{self.t['status']}</th>
+                        <th style="background: #34495E; color: white; padding: 12px;">{self.t['value']}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -2983,15 +2983,15 @@ class ReportGenerator:
             <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                 <thead>
                     <tr>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['monitoring_component_label']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['avg_cpu_usage_label']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['peak_cpu_usage_label']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['avg_memory_usage_label']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['peak_memory_usage_label']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['avg_iops_label']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['peak_iops_label']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['avg_throughput_label']}</th>
-                        <th style="background: #007bff; color: white; padding: 12px;">{self.t['data_completeness_label']}</th>
+                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['monitoring_component_label']}</th>
+                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['avg_cpu_usage_label']}</th>
+                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['peak_cpu_usage_label']}</th>
+                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['avg_memory_usage_label']}</th>
+                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['peak_memory_usage_label']}</th>
+                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['avg_iops_label']}</th>
+                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['peak_iops_label']}</th>
+                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['avg_throughput_label']}</th>
+                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['data_completeness_label']}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -3367,7 +3367,7 @@ class ReportGenerator:
             
             if not limitations:
                 return f"""
-                <div class="info" style="background-color: #d4edda; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #28a745;">
+                <div class="info" style="background-color: #E8F8F5; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #27AE60;">
                     <h4>&#9989; {self.t['ena_network_normal']}</h4>
                     <p>{self.t['no_ena_limitations']}</p>
                 </div>
@@ -3686,14 +3686,14 @@ class ReportGenerator:
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
             <thead>
                 <tr>
-                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['device_type']}</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['analysis_item']}</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['correlation_coefficient']}</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['p_value']}</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['statistical_significance']}</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['correlation_strength']}</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['valid_sample_count']}</th>
-                    <th style="background: #007bff; color: white; padding: 12px;">{self.t['data_integrity']}</th>
+                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['device_type']}</th>
+                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['analysis_item']}</th>
+                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['correlation_coefficient']}</th>
+                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['p_value']}</th>
+                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['statistical_significance']}</th>
+                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['correlation_strength']}</th>
+                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['valid_sample_count']}</th>
+                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['data_integrity']}</th>
                 </tr>
             </thead>
             <tbody>
@@ -3783,10 +3783,10 @@ class ReportGenerator:
                 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                     <thead>
                         <tr>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['local_block_height']}</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['mainnet_block_height']}</th>
-                            <th style="background: #007bff; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['block_height_diff']}</th>
+                            <th style="background: #16A085; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
+                            <th style="background: #16A085; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['local_block_height']}</th>
+                            <th style="background: #16A085; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['mainnet_block_height']}</th>
+                            <th style="background: #16A085; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['block_height_diff']}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -4086,7 +4086,7 @@ class ReportGenerator:
             if category_data['charts']:
                 html += f'''
                 <div class="chart-category">
-                    <h3>📈 {category_data['title']} ({len(category_data['charts'])} charts)</h3>
+                    <h3 style="color: #2C3E50;">📈 {category_data['title']} ({len(category_data['charts'])} charts)</h3>
                     <div class="chart-grid">
                 '''
                 
@@ -4165,15 +4165,16 @@ class ReportGenerator:
             <head>
                 <title>&#128640; {self.t['report_title']}</title>
                 <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     {self._get_css_styles()}
                 </style>
             </head>
             <body>
                 <div class="container">
-                    <h1>&#128640; {self.t['report_title']}</h1>
+                    <h1>{self.t['report_title']}</h1>
                     <p>{self.t['generated_time']}: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    <p>&#9989; {self.t['unified_field_naming']} | {self.t['complete_device_support']} | {self.t['monitoring_overhead_analysis']} | {self.t['blockchain_node_specific_analysis']} | {self.t['bottleneck_detection_analysis']}</p>
+                    <p>{self.t['unified_field_naming']} | {self.t['complete_device_support']} | {self.t['monitoring_overhead_analysis']} | {self.t['blockchain_node_specific_analysis']} | {self.t['bottleneck_detection_analysis']}</p>
                     
                     {bottleneck_section}
                     {performance_summary}
@@ -4507,7 +4508,7 @@ class ReportGenerator:
                 recommendations_html = f"<ul>{''.join(rec_items)}</ul>"
             
             return f"""
-            <div class="section bottleneck-alert" style="border-left: 5px solid {severity_color}; background-color: #fff3cd;">
+            <div class="section bottleneck-alert" style="border-left: 5px solid {severity_color}; background-color: #FEF5E7;">
                 <h2 style="color: {severity_color};">&#128680; {self.t['performance_bottleneck_detection_result']}</h2>
                 
                 <div class="bottleneck-summary">
@@ -4578,7 +4579,7 @@ class ReportGenerator:
             line-height: 1.6;
         }
         .container { 
-            max-width: 1400px; 
+            width: 95%;
             margin: 0 auto; 
             background-color: white; 
             padding: 30px; 
@@ -4593,28 +4594,28 @@ class ReportGenerator:
             background-color: #fafbfc;
         }
         .info { 
-            background-color: #e7f3ff; 
+            background-color: #EBF5FB; 
             padding: 15px; 
             border-radius: 6px; 
             margin: 15px 0; 
-            border-left: 4px solid #1da1f2;
+            border-left: 4px solid #3498DB;
         }
-        .warning { 
-            background-color: #fff3cd; 
-            padding: 15px; 
-            border-radius: 6px; 
-            margin: 15px 0; 
-            border-left: 4px solid #ffc107; 
-        }
-        .warning tr.warning {
-            background-color: #fff3cd !important;
-        }
-        .info {
-            background-color: #d4edda;
+        .success {
+            background-color: #E8F8F5;
             padding: 15px;
             border-radius: 6px;
             margin: 15px 0;
-            border-left: 4px solid #28a745;
+            border-left: 4px solid #27AE60;
+        }
+        .warning { 
+            background-color: #FEF5E7; 
+            padding: 15px; 
+            border-radius: 6px; 
+            margin: 15px 0; 
+            border-left: 4px solid #F39C12; 
+        }
+        .warning tr.warning {
+            background-color: #FEF5E7 !important;
         }
         .table-note {
             font-size: 0.9em;
@@ -4623,15 +4624,15 @@ class ReportGenerator:
             font-style: italic;
         }
         .error { 
-            background-color: #f8d7da; 
+            background-color: #FADBD8; 
             padding: 15px; 
             border-radius: 6px; 
             margin: 15px 0; 
-            border-left: 4px solid #dc3545; 
+            border-left: 4px solid #E74C3C; 
         }
         .bottleneck-alert { 
-            background-color: #fff3cd !important; 
-            border-left: 5px solid #dc3545 !important; 
+            background-color: #FEF5E7 !important; 
+            border-left: 5px solid #E74C3C !important; 
         }
         .bottleneck-summary { 
             margin: 20px 0; 
@@ -4662,7 +4663,7 @@ class ReportGenerator:
         /* Chart display styles */
         .charts-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 30px;
             margin: 25px 0;
         }
@@ -4717,7 +4718,7 @@ class ReportGenerator:
             padding: 20px;
             border-radius: 8px;
             margin: 25px 0;
-            border-left: 4px solid #28a745;
+            border-left: 4px solid #27AE60;
         }
         .charts-summary h3 {
             color: #155724;
@@ -4732,7 +4733,7 @@ class ReportGenerator:
             color: #155724;
         }
         .missing-charts {
-            background-color: #fff3cd;
+            background-color: #FEF5E7;
             padding: 20px;
             border-radius: 8px;
             margin: 25px 0;
@@ -4827,7 +4828,7 @@ class ReportGenerator:
         }
         h2 { 
             color: #34495e; 
-            border-bottom: 3px solid #3498db; 
+            border-bottom: 3px solid #2C3E50; 
             padding-bottom: 8px; 
             margin-top: 30px;
         }
@@ -4837,12 +4838,26 @@ class ReportGenerator:
         }
         
         /* Responsive design */
+        @media (max-width: 1200px) {
+            .container {
+                width: 98%;
+                padding: 20px;
+            }
+            table {
+                font-size: 0.9em;
+            }
+        }
+        
         @media (max-width: 768px) {
             .container {
                 padding: 15px;
                 margin: 10px;
+                width: 98%;
             }
             .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            .chart-grid {
                 grid-template-columns: 1fr;
             }
             .bottleneck-stats {
@@ -4851,6 +4866,18 @@ class ReportGenerator:
             }
             .stat-item {
                 min-width: 250px;
+            }
+            table {
+                font-size: 0.85em;
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+            h1 {
+                font-size: 1.5em;
+            }
+            h2 {
+                font-size: 1.3em;
             }
         }
         
@@ -4892,7 +4919,7 @@ class ReportGenerator:
         }
         .chart-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 20px;
             margin-top: 15px;
         }
@@ -4952,8 +4979,8 @@ class ReportGenerator:
                 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
                     <thead>
                         <tr>
-                            <th style="background: #007bff; color: white; padding: 12px; text-align: left;">{self.t['metric']}</th>
-                            <th style="background: #007bff; color: white; padding: 12px; text-align: right;">{self.t['value']}</th>
+                            <th style="background: #2C3E50; color: white; padding: 12px; text-align: left;">{self.t['metric']}</th>
+                            <th style="background: #2C3E50; color: white; padding: 12px; text-align: right;">{self.t['value']}</th>
                         </tr>
                     </thead>
                     <tbody>
