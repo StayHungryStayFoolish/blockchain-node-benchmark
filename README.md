@@ -18,7 +18,8 @@ A professional multi blockchain node performance benchmarking framework with com
 - **Blockchain Node Specialization**: Block height monitoring, validator log analysis, RPC performance analysis
 
 
-## ⚙️ Required Configuration
+
+## ⚡ Quick Configuration
 
 **Before running the framework**, you must configure the following parameters in `config/config_loader.sh`:
 
@@ -58,6 +59,7 @@ lsblk
 ```
 
 **Note**: If you don't configure these parameters correctly, the framework will use default values which may not match your actual hardware, leading to inaccurate performance analysis.
+
 
 
 ## 🚀 Quick Start
@@ -104,6 +106,7 @@ which sar       # Network monitoring tool
 ```
 
 
+
 ## 📦 System Architecture
 
 ```
@@ -132,6 +135,7 @@ blockchain-node-benchmark/
     ├── ebs_bottleneck_detector.sh      # EBS bottleneck detector
     └── target_generator.sh             # Test target generator
 ```
+
 
 
 ## 📚 Documentation
@@ -171,14 +175,6 @@ Comprehensive documentation is available in the `docs/` directory:
 - RPC method configuration
 - Real transaction data testing
 
-
-## 📊 Testing Modes
-
-| Mode | Duration      | QPS Range | Step Size | Use Case |
-|------|---------------|-----------|-----------|----------|
-| **Quick** | 15+ minutes   | 1000-3000 | 500 QPS | Basic performance verification |
-| **Standard** | 90+ minutes   | 1000-5000 | 500 QPS | Comprehensive performance evaluation |
-| **Intensive** | Up to 8 hours | 1000-unlimited | 250 QPS | Intelligent bottleneck detection |
 
 
 ## ⚙️ Configuration
@@ -227,6 +223,17 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # Ultra-high-frequency monitoring interval
 ```
 
 
+
+## 📊 Testing Modes
+
+| Mode | Duration      | QPS Range | Step Size | Use Case |
+|------|---------------|-----------|-----------|----------|
+| **Quick** | 15+ minutes   | 1000-3000 | 500 QPS | Basic performance verification |
+| **Standard** | 90+ minutes   | 1000-5000 | 500 QPS | Comprehensive performance evaluation |
+| **Intensive** | Up to 8 hours | 1000-unlimited | 250 QPS | Intelligent bottleneck detection |
+
+
+
 ## 🔍 Monitoring Metrics
 
 ### System Metrics (73-79 total)
@@ -246,6 +253,7 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # Ultra-high-frequency monitoring interval
 4. **Network Bottleneck**: Bandwidth/PPS utilization, Weight 15%
 5. **ENA Bottleneck**: Allowance limits, Weight 5%
 6. **RPC Bottleneck**: Latency/Error rate, Weight 5%
+
 
 
 ## 📈 Generated Reports
@@ -302,6 +310,7 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # Ultra-high-frequency monitoring interval
 - **Blockchain Node Analysis**: Blockchain-specific metrics analysis
 
 
+
 ## 📋 Usage Examples
 
 ### Example 1: Standard Performance Test
@@ -338,6 +347,7 @@ ls reports/
 # View test history
 ./tools/benchmark_archiver.sh --list
 ```
+
 
 
 ## 🚨 Troubleshooting
@@ -387,6 +397,7 @@ chmod +x monitoring/monitoring_coordinator.sh
 - **Bottleneck Events**: `logs/bottleneck_events.jsonl`
 
 
+
 ## 🔧 Advanced Features
 
 ### Test Result Archiving
@@ -421,6 +432,7 @@ done
 ```
 
 
+
 ## 🤝 Contributing
 
 ### Development Environment Setup
@@ -441,6 +453,7 @@ python3 -m pytest tests/
 2. Update `generate_csv_header()` function to add new fields
 3. Add corresponding analysis logic in Python analysis scripts
 4. Update visualization components to generate related charts
+
 
 
 ## 📄 License
