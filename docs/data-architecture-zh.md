@@ -160,7 +160,7 @@ graph TB
     
     subgraph "数据整合阶段"
         B1[unified_monitor.sh<br/>数据汇聚和格式化]
-        B2[CSV表头生成<br/>generate_csv_header()]
+        B2[CSV表头生成<br/>generate csv header]
         B3[符号链接创建<br/>performance_latest.csv]
         B4[实时数据流<br/>tail -F 监听]
     end
@@ -219,19 +219,19 @@ graph LR
         A1[unified_monitor.sh启动]
         A2[生成时间戳文件名<br/>performance_YYYYMMDD_HHMMSS.csv]
         A3[创建符号链接<br/>performance_latest.csv]
-        A4[写入CSV表头<br/>generate_csv_header()]
+        A4[写入CSV表头<br/>generate csv header]
     end
     
     subgraph "实时数据流"
-        B1[数据收集循环<br/>log_performance_data()]
-        B2[写入时间戳文件<br/>safe_write_csv()]
+        B1[数据收集循环<br/>log performance data]
+        B2[写入时间戳文件<br/>safe write csv]
         B3[EBS检测器监听<br/>tail -F performance_latest.csv]
         B4[动态字段映射<br/>CSV_FIELD_MAP]
     end
     
     subgraph "文件轮转支持"
         C1[检测CSV格式变化<br/>timestamp格式验证]
-        C2[重新初始化映射<br/>init_csv_field_mapping()]
+        C2[重新初始化映射<br/>init csv field mapping]
         C3[符号链接自动跟随<br/>ln -sf 新文件]
         C4[无缝数据流切换<br/>tail -F 继续工作]
     end
