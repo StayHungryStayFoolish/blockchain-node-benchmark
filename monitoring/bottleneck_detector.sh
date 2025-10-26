@@ -28,6 +28,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
 # 初始化统一日志管理器
 init_logger "bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/bottleneck_detector.log"
 
+# 定义瓶颈检测日志文件变量（用于 tee 输出）
+BOTTLENECK_LOG="${LOGS_DIR}/bottleneck_detector.log"
 # 动态构建设备字段匹配模式 - 修复硬编码设备名问题
 build_device_field_patterns() {
     local field_type="$1"  # util, r_await, avg_await, aws_standard_iops, throughput_mibs

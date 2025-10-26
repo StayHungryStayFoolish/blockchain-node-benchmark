@@ -472,9 +472,6 @@ trigger_immediate_bottleneck_analysis() {
             
             # 等待瓶颈检测完成后再继续
             sleep 1
-            
-            local analysis_pid=$!
-            echo "📊 瓶颈分析进程启动 (PID: $analysis_pid)"
         else
             echo "⚠️  性能数据文件不存在，跳过瓶颈分析: $performance_csv"
         fi
