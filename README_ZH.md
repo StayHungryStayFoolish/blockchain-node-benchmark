@@ -68,6 +68,15 @@ lsblk
 ### 前置条件
 
 ```bash
+# 安装 Python 和虚拟环境支持
+sudo apt-get install python3 python3-venv
+
+# 创建虚拟环境
+python3 -m venv node-env
+
+# 激活虚拟环境
+source node-env/bin/activate
+
 # 检查 Python 版本（需要 Python 3.8+）
 python3 --version
 

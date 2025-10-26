@@ -68,6 +68,15 @@ lsblk
 ### Prerequisites
 
 ```bash
+# Install Python and virtual environment support
+sudo apt-get install python3 python3-venv
+
+# Create virtual environment
+python3 -m venv node-env
+
+# Activate virtual environment
+source node-env/bin/activate
+
 # Check Python version (requires Python 3.8+)
 python3 --version
 
