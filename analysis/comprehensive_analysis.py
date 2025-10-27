@@ -225,9 +225,18 @@ class ComprehensiveAnalyzer:
                 return df
             
             # 转换时间戳
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            if not pd.api.types.is_datetime64_any_dtype(df['timestamp']):
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
             start_dt = pd.to_datetime(start_time)
             end_dt = pd.to_datetime(end_time)
+            
+            # 处理时区：如果参数有时区但DataFrame没有，移除参数的时区
+            if start_dt.tz is not None and df['timestamp'].dt.tz is None:
+                start_dt = start_dt.tz_localize(None)
+                end_dt = end_dt.tz_localize(None)
+            # 如果DataFrame有时区但参数没有，添加UTC时区到DataFrame
+            elif start_dt.tz is None and df['timestamp'].dt.tz is not None:
+                df['timestamp'] = df['timestamp'].dt.tz_localize(None)
             
             # 过滤数据
             filtered_df = df[(df['timestamp'] >= start_dt) & (df['timestamp'] <= end_dt)]

@@ -171,7 +171,7 @@ generate_bottleneck_status_json() {
 EOF
 }
 
-# 瓶颈检测计数器 (动态初始化)
+# 瓶颈检测计数器 - 必须在使用前声明
 declare -A BOTTLENECK_COUNTERS
 
 # 初始化瓶颈检测计数器
@@ -256,10 +256,10 @@ check_cpu_bottleneck() {
     local cpu_usage="$1"
     
     if (( $(awk "BEGIN {print ($cpu_usage > $BOTTLENECK_CPU_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
-        BOTTLENECK_COUNTERS["cpu"]=$((${BOTTLENECK_COUNTERS["cpu"]} + 1))
-        echo "⚠️  CPU瓶颈检测: ${cpu_usage}% > ${BOTTLENECK_CPU_THRESHOLD}% (${BOTTLENECK_COUNTERS["cpu"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        BOTTLENECK_COUNTERS["cpu"]=$((${BOTTLENECK_COUNTERS["cpu"]:-0} + 1))
+        echo "⚠️  CPU瓶颈检测: ${cpu_usage}% > ${BOTTLENECK_CPU_THRESHOLD}% (${BOTTLENECK_COUNTERS["cpu"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
-        if [[ ${BOTTLENECK_COUNTERS["cpu"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        if [[ ${BOTTLENECK_COUNTERS["cpu"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             return 0  # 检测到瓶颈
         fi
     else
@@ -274,10 +274,10 @@ check_memory_bottleneck() {
     local memory_usage="$1"
     
     if (( $(awk "BEGIN {print ($memory_usage > $BOTTLENECK_MEMORY_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
-        BOTTLENECK_COUNTERS["memory"]=$((${BOTTLENECK_COUNTERS["memory"]} + 1))
-        echo "⚠️  内存瓶颈检测: ${memory_usage}% > ${BOTTLENECK_MEMORY_THRESHOLD}% (${BOTTLENECK_COUNTERS["memory"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        BOTTLENECK_COUNTERS["memory"]=$((${BOTTLENECK_COUNTERS["memory"]:-0} + 1))
+        echo "⚠️  内存瓶颈检测: ${memory_usage}% > ${BOTTLENECK_MEMORY_THRESHOLD}% (${BOTTLENECK_COUNTERS["memory"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
-        if [[ ${BOTTLENECK_COUNTERS["memory"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        if [[ ${BOTTLENECK_COUNTERS["memory"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             return 0  # 检测到瓶颈
         fi
     else
@@ -325,7 +325,7 @@ check_ebs_bottleneck() {
     # 检测EBS利用率瓶颈
     if (( $(awk "BEGIN {print ($ebs_util > $BOTTLENECK_EBS_UTIL_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["${counter_prefix}_util"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_util"]:-0} + 1))
-        echo "⚠️  EBS利用率瓶颈检测 (${device_type}): ${ebs_util}% > ${BOTTLENECK_EBS_UTIL_THRESHOLD}% (${BOTTLENECK_COUNTERS["${counter_prefix}_util"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  EBS利用率瓶颈检测 (${device_type}): ${ebs_util}% > ${BOTTLENECK_EBS_UTIL_THRESHOLD}% (${BOTTLENECK_COUNTERS["${counter_prefix}_util"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_util"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             bottleneck_detected=true
@@ -337,7 +337,7 @@ check_ebs_bottleneck() {
     # 检测EBS延迟瓶颈
     if (( $(awk "BEGIN {print ($ebs_latency > $BOTTLENECK_EBS_LATENCY_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["${counter_prefix}_latency"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_latency"]:-0} + 1))
-        echo "⚠️  EBS延迟瓶颈检测 (${device_type}): ${ebs_latency}ms > ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms (${BOTTLENECK_COUNTERS["${counter_prefix}_latency"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  EBS延迟瓶颈检测 (${device_type}): ${ebs_latency}ms > ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms (${BOTTLENECK_COUNTERS["${counter_prefix}_latency"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_latency"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             bottleneck_detected=true
@@ -354,7 +354,7 @@ check_ebs_bottleneck() {
         
         if (( $(awk "BEGIN {print ($aws_iops_utilization > $aws_iops_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
             BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0} + 1))
-            echo "⚠️  EBS AWS基准IOPS瓶颈 (${device_type}): ${ebs_aws_iops}/${baseline_iops} (${aws_iops_utilization%.*}%) > ${aws_iops_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+            echo "⚠️  EBS AWS基准IOPS瓶颈 (${device_type}): ${ebs_aws_iops}/${baseline_iops} (${aws_iops_utilization%.*}%) > ${aws_iops_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
             
             if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_detected=true
@@ -372,7 +372,7 @@ check_ebs_bottleneck() {
         
         if (( $(awk "BEGIN {print ($aws_throughput_utilization > $aws_throughput_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
             BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0} + 1))
-            echo "⚠️  EBS AWS基准吞吐量瓶颈 (${device_type}): ${ebs_throughput}/${baseline_throughput} MiB/s (${aws_throughput_utilization%.*}%) > ${aws_throughput_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+            echo "⚠️  EBS AWS基准吞吐量瓶颈 (${device_type}): ${ebs_throughput}/${baseline_throughput} MiB/s (${aws_throughput_utilization%.*}%) > ${aws_throughput_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
             
             if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_detected=true
@@ -464,10 +464,10 @@ check_ena_network_bottleneck() {
     done
     
     if [[ "$exceeded_detected" == "true" ]]; then
-        BOTTLENECK_COUNTERS["ena_limit"]=$((${BOTTLENECK_COUNTERS["ena_limit"]} + 1))
-        echo "⚠️  ENA网络限制检测: $exceeded_summary (${BOTTLENECK_COUNTERS["ena_limit"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        BOTTLENECK_COUNTERS["ena_limit"]=$((${BOTTLENECK_COUNTERS["ena_limit"]:-0} + 1))
+        echo "⚠️  ENA网络限制检测: $exceeded_summary (${BOTTLENECK_COUNTERS["ena_limit"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
-        if [[ ${BOTTLENECK_COUNTERS["ena_limit"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        if [[ ${BOTTLENECK_COUNTERS["ena_limit"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             return 0  # 检测到ENA瓶颈
         fi
     else
@@ -483,10 +483,10 @@ check_network_bottleneck() {
     local network_util="$1"
     
     if (( $(awk "BEGIN {print ($network_util > $BOTTLENECK_NETWORK_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
-        BOTTLENECK_COUNTERS["network"]=$((${BOTTLENECK_COUNTERS["network"]} + 1))
-        echo "⚠️  网络瓶颈检测: ${network_util}% > ${BOTTLENECK_NETWORK_THRESHOLD}% (${BOTTLENECK_COUNTERS["network"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        BOTTLENECK_COUNTERS["network"]=$((${BOTTLENECK_COUNTERS["network"]:-0} + 1))
+        echo "⚠️  网络瓶颈检测: ${network_util}% > ${BOTTLENECK_NETWORK_THRESHOLD}% (${BOTTLENECK_COUNTERS["network"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
-        if [[ ${BOTTLENECK_COUNTERS["network"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        if [[ ${BOTTLENECK_COUNTERS["network"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             return 0  # 检测到瓶颈
         fi
     else
@@ -535,10 +535,10 @@ check_qps_bottleneck() {
     
     # 检测错误率瓶颈
     if (( $(awk "BEGIN {print ($error_rate > $BOTTLENECK_ERROR_RATE_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
-        BOTTLENECK_COUNTERS["error_rate"]=$((${BOTTLENECK_COUNTERS["error_rate"]} + 1))
-        echo "⚠️  QPS错误率瓶颈检测: ${error_rate}% > ${BOTTLENECK_ERROR_RATE_THRESHOLD}% (${BOTTLENECK_COUNTERS["error_rate"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        BOTTLENECK_COUNTERS["error_rate"]=$((${BOTTLENECK_COUNTERS["error_rate"]:-0} + 1))
+        echo "⚠️  QPS错误率瓶颈检测: ${error_rate}% > ${BOTTLENECK_ERROR_RATE_THRESHOLD}% (${BOTTLENECK_COUNTERS["error_rate"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
-        if [[ ${BOTTLENECK_COUNTERS["error_rate"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        if [[ ${BOTTLENECK_COUNTERS["error_rate"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             qps_bottleneck_detected=true
         fi
     else
@@ -548,10 +548,10 @@ check_qps_bottleneck() {
     # 检测RPC延迟瓶颈 (P99延迟超过1000ms视为瓶颈)
     local rpc_latency_threshold=1000
     if (( $(awk "BEGIN {print ($rpc_latency > $rpc_latency_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
-        BOTTLENECK_COUNTERS["rpc_latency"]=$((${BOTTLENECK_COUNTERS["rpc_latency"]} + 1))
-        echo "⚠️  RPC延迟瓶颈检测: ${rpc_latency}ms > ${rpc_latency_threshold}ms (${BOTTLENECK_COUNTERS["rpc_latency"]}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        BOTTLENECK_COUNTERS["rpc_latency"]=$((${BOTTLENECK_COUNTERS["rpc_latency"]:-0} + 1))
+        echo "⚠️  RPC延迟瓶颈检测: ${rpc_latency}ms > ${rpc_latency_threshold}ms (${BOTTLENECK_COUNTERS["rpc_latency"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
-        if [[ ${BOTTLENECK_COUNTERS["rpc_latency"]} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        if [[ ${BOTTLENECK_COUNTERS["rpc_latency"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             qps_bottleneck_detected=true
         fi
     else
@@ -743,6 +743,11 @@ detect_all_ebs_bottlenecks() {
 detect_bottleneck() {
     local current_qps="$1"
     local performance_csv="$2"
+    
+    # 确保计数器已初始化（detect命令不会调用init）
+    if [[ ${#BOTTLENECK_COUNTERS[@]} -eq 0 ]]; then
+        initialize_bottleneck_counters
+    fi
     
     # 提取性能指标
     local metrics=$(extract_performance_metrics "$performance_csv")

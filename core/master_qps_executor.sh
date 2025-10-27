@@ -305,11 +305,47 @@ check_bottleneck_during_test() {
         bottleneck_reasons+=("内存使用率: ${mem_usage}% > ${BOTTLENECK_MEMORY_THRESHOLD}% ($severity)")
     fi
     
-    # 检查EBS利用率瓶颈
-    local ebs_util=$(echo "$latest_data" | jq -r '.ebs_util // 0' 2>/dev/null || echo "0")
-    if (( $(awk "BEGIN {print ($ebs_util > $BOTTLENECK_EBS_UTIL_THRESHOLD) ? 1 : 0}") )); then
+    # 检查 DATA 设备 AWS Standard IOPS 瓶颈
+    local data_aws_iops=$(echo "$latest_data" | jq -r ".data_${LEDGER_DEVICE}_aws_standard_iops // 0" 2>/dev/null || echo "0")
+    local data_baseline_iops=${DATA_VOL_MAX_IOPS:-30000}
+    local data_iops_util=$(awk "BEGIN {printf \"%.2f\", ($data_aws_iops / $data_baseline_iops) * 100}")
+    
+    if (( $(awk "BEGIN {print ($data_iops_util > $BOTTLENECK_EBS_IOPS_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
-        bottleneck_reasons+=("EBS利用率: ${ebs_util}% > ${BOTTLENECK_EBS_UTIL_THRESHOLD}%")
+        bottleneck_reasons+=("DATA AWS IOPS: ${data_aws_iops}/${data_baseline_iops} (${data_iops_util}%)")
+    fi
+    
+    # 检查 DATA 设备 AWS Standard Throughput 瓶颈
+    local data_aws_throughput=$(echo "$latest_data" | jq -r ".data_${LEDGER_DEVICE}_aws_standard_throughput_mibs // 0" 2>/dev/null || echo "0")
+    local data_baseline_throughput=${DATA_VOL_MAX_THROUGHPUT:-4000}
+    local data_throughput_util=$(awk "BEGIN {printf \"%.2f\", ($data_aws_throughput / $data_baseline_throughput) * 100}")
+    
+    if (( $(awk "BEGIN {print ($data_throughput_util > $BOTTLENECK_EBS_THROUGHPUT_THRESHOLD) ? 1 : 0}") )); then
+        bottleneck_found=true
+        bottleneck_reasons+=("DATA AWS Throughput: ${data_aws_throughput}/${data_baseline_throughput} MiB/s (${data_throughput_util}%)")
+    fi
+    
+    # 检查 ACCOUNTS 设备 (如果配置了)
+    if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" && -n "${ACCOUNTS_VOL_MAX_IOPS:-}" ]]; then
+        # ACCOUNTS 设备 AWS Standard IOPS 瓶颈
+        local accounts_aws_iops=$(echo "$latest_data" | jq -r ".accounts_${ACCOUNTS_DEVICE}_aws_standard_iops // 0" 2>/dev/null || echo "0")
+        local accounts_baseline_iops=${ACCOUNTS_VOL_MAX_IOPS:-30000}
+        local accounts_iops_util=$(awk "BEGIN {printf \"%.2f\", ($accounts_aws_iops / $accounts_baseline_iops) * 100}")
+        
+        if (( $(awk "BEGIN {print ($accounts_iops_util > $BOTTLENECK_EBS_IOPS_THRESHOLD) ? 1 : 0}") )); then
+            bottleneck_found=true
+            bottleneck_reasons+=("ACCOUNTS AWS IOPS: ${accounts_aws_iops}/${accounts_baseline_iops} (${accounts_iops_util}%)")
+        fi
+        
+        # ACCOUNTS 设备 AWS Standard Throughput 瓶颈
+        local accounts_aws_throughput=$(echo "$latest_data" | jq -r ".accounts_${ACCOUNTS_DEVICE}_aws_standard_throughput_mibs // 0" 2>/dev/null || echo "0")
+        local accounts_baseline_throughput=${ACCOUNTS_VOL_MAX_THROUGHPUT:-4000}
+        local accounts_throughput_util=$(awk "BEGIN {printf \"%.2f\", ($accounts_aws_throughput / $accounts_baseline_throughput) * 100}")
+        
+        if (( $(awk "BEGIN {print ($accounts_throughput_util > $BOTTLENECK_EBS_THROUGHPUT_THRESHOLD) ? 1 : 0}") )); then
+            bottleneck_found=true
+            bottleneck_reasons+=("ACCOUNTS AWS Throughput: ${accounts_aws_throughput}/${accounts_baseline_throughput} MiB/s (${accounts_throughput_util}%)")
+        fi
     fi
     
     # 检查EBS延迟瓶颈
@@ -343,9 +379,22 @@ check_bottleneck_during_test() {
         trigger_immediate_bottleneck_analysis "$current_qps" "$bottleneck_severity" "${bottleneck_reasons[*]}"
         
         if [[ $BOTTLENECK_COUNT -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            BOTTLENECK_DETECTED=true
-            save_bottleneck_context "$current_qps" "${bottleneck_reasons[*]}" "$bottleneck_severity"
-            return 1  # 触发停止
+            # 读取 Block Height 数据进行健康检查
+            local block_height_diff=$(echo "$latest_data" | jq -r '.block_height_diff // 0' 2>/dev/null || echo "0")
+            local data_loss=$(echo "$latest_data" | jq -r '.data_loss // 0' 2>/dev/null || echo "0")
+            
+            # 判断节点是否健康 (data_loss: 0=正常, 1=数据丢失)
+            if (( $(awk "BEGIN {print ($block_height_diff > $BLOCK_HEIGHT_DIFF_THRESHOLD) ? 1 : 0}") )) || [[ "$data_loss" == "1" ]]; then
+                # 节点不健康，确认为真正的瓶颈
+                echo "🚨 节点健康检查: 区块高度差异=${block_height_diff} (阈值=${BLOCK_HEIGHT_DIFF_THRESHOLD}), 数据丢失=${data_loss}"
+                BOTTLENECK_DETECTED=true
+                save_bottleneck_context "$current_qps" "${bottleneck_reasons[*]}" "$bottleneck_severity"
+                return 1  # 触发停止
+            else
+                # 节点健康，可能是误判，重置计数器继续测试
+                echo "✅ 节点健康检查通过: 区块高度差异=${block_height_diff}, 数据丢失=${data_loss}, 重置瓶颈计数器"
+                BOTTLENECK_COUNT=0
+            fi
         fi
     else
         BOTTLENECK_COUNT=0  # 重置计数器

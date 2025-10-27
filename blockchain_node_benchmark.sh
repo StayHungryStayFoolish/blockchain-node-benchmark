@@ -457,15 +457,6 @@ execute_data_analysis() {
             echo "📊 瓶颈详情: QPS=$bottleneck_qps, 最大成功QPS=$max_qps, 严重程度=$severity"
         fi
         
-        # 瓶颈检测器深度分析
-        if [[ -f "${SCRIPT_DIR}/monitoring/bottleneck_detector.sh" ]]; then
-            echo "🔍 执行瓶颈检测器深度分析..."
-            "${SCRIPT_DIR}/monitoring/bottleneck_detector.sh" \
-                --analyze \
-                --csv-file "$latest_csv" \
-                --bottleneck-info "$bottleneck_details"
-        fi
-        
         # EBS瓶颈专项分析已通过实时监控完成
         # ebs_bottleneck_detector.sh在测试期间通过monitoring_coordinator.sh实时运行
         # 瓶颈检测结果已记录在ebs_analyzer.log中，无需重复调用
@@ -498,17 +489,33 @@ execute_data_analysis() {
     
     for script in "${analysis_scripts[@]}"; do
         if [[ -f "${SCRIPT_DIR}/$script" ]]; then
-            echo "🔍 执行分析: $(basename "$script")"
+            local script_name=$(basename "$script")
+            
+            # 如果检测到瓶颈，某些脚本已由专项分析处理，跳过避免重复
+            if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
+                case "$script_name" in
+                    "comprehensive_analysis.py")
+                        echo "⏭️  跳过 $script_name (已由瓶颈时间窗口分析处理)"
+                        continue
+                        ;;
+                    "qps_analyzer.py")
+                        echo "⏭️  跳过 $script_name (已由性能悬崖分析处理)"
+                        continue
+                        ;;
+                esac
+            fi
+            
+            echo "🔍 执行分析: $script_name"
             
             # 如果检测到瓶颈，传递瓶颈模式参数
             if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
                 if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --benchmark-mode "$benchmark_mode" --bottleneck-mode --output-dir "$BASE_DATA_DIR"; then
-                    echo "⚠️ 分析脚本执行失败: $(basename "$script")"
+                    echo "⚠️ 分析脚本执行失败: $script_name"
                 fi
             else
                 # 即使没有瓶颈也执行基础分析，确保图表生成
                 if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --benchmark-mode "$benchmark_mode" --output-dir "$BASE_DATA_DIR"; then
-                    echo "⚠️ 分析脚本执行失败: $(basename "$script")"
+                    echo "⚠️ 分析脚本执行失败: $script_name"
                 fi
             fi
         else

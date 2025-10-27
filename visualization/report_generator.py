@@ -513,6 +513,21 @@ TRANSLATIONS = {
         'following_charts_not_generated': 'The following charts have not been generated yet and will be displayed automatically after running the corresponding scripts',
         'and': 'and',
         'more_charts': 'more charts',
+        'warning_statistics': 'Warning Statistics',
+        'type': 'Type',
+        'count': 'Count',
+        'max_value': 'Max Value',
+        'time_range': 'Time Range',
+        'detailed_warnings': 'Detailed Warnings',
+        'time': 'Time',
+        'more_warnings': 'more warnings',
+        'check_full_log': 'Check full log for details',
+        'advanced_analysis_charts': 'Advanced Analysis Charts',
+        'ebs_professional_charts': 'EBS Professional Charts',
+        'core_performance_charts': 'Core Performance Charts',
+        'monitoring_overhead_charts': 'Monitoring & Overhead Charts',
+        'network_ena_charts': 'Network & ENA Charts',
+        'additional_charts': 'Additional Charts',
         'chart_display_error': 'Chart Display Error',
         'chart_section_generation_failed': 'Chart section generation failed',
         'unknown': 'Unknown',
@@ -1104,6 +1119,21 @@ TRANSLATIONS = {
         'following_charts_not_generated': '以下图表尚未生成，运行相应脚本后将自动显示',
         'and': '还有',
         'more_charts': '个图表',
+        'warning_statistics': '警告统计',
+        'type': '类型',
+        'count': '数量',
+        'max_value': '最大值',
+        'time_range': '时间范围',
+        'detailed_warnings': '详细警告',
+        'time': '时间',
+        'more_warnings': '条警告',
+        'check_full_log': '查看完整日志以获取详细信息',
+        'advanced_analysis_charts': '高级分析图表',
+        'ebs_professional_charts': 'EBS 专业图表',
+        'core_performance_charts': '核心性能图表',
+        'monitoring_overhead_charts': '监控与开销图表',
+        'network_ena_charts': '网络与 ENA 图表',
+        'additional_charts': '附加图表',
         'chart_display_error': '图表展示错误',
         'chart_section_generation_failed': '图表部分生成失败',
         'unknown': '未知',
@@ -1248,7 +1278,7 @@ class ReportGenerator:
         self.language = language
         self.t = TRANSLATIONS.get(language, TRANSLATIONS['en'])
         self.output_dir = os.getenv('REPORTS_DIR', os.path.dirname(performance_csv))
-        self.ebs_log_path = os.path.join(os.getenv('LOGS_DIR', '/tmp/blockchain-node-benchmark/logs'), 'ebs_analyzer.log')
+        self.ebs_log_path = os.path.join(os.getenv('LOGS_DIR', '/tmp/blockchain-node-benchmark/logs'), 'ebs_bottleneck_detector.log')
         self.config = self._load_config()
         self.overhead_data = self._load_overhead_data()
         self.bottleneck_data = self._load_bottleneck_data()
@@ -1560,7 +1590,7 @@ class ReportGenerator:
         return validation_results
     
     def parse_ebs_analyzer_log(self):
-        """Parse EBS analyzer log file"""
+        """Parse EBS bottleneck detector log file"""
         warnings = []
         performance_metrics = {}
         
@@ -1569,80 +1599,65 @@ class ReportGenerator:
         
         try:
             with open(self.ebs_log_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
+                lines = f.readlines()
+                i = 0
+                while i < len(lines):
+                    line = lines[i].strip()
                     
-                    # Parse warning information
-                    if '[WARN]' in line and ('High Utilization Warning' in line or 'High Latency Warning' in line or '高利用率警告' in line or '高延迟警告' in line):
-                        timestamp = line.split(']')[0].replace('[', '') if ']' in line else ''
-                        
-                        if 'High Utilization Warning:' in line or '高利用率警告:' in line:
-                            # Support both English and Chinese log formats
-                            if 'High Utilization Warning:' in line:
-                                parts = line.split(']')[-1].split('High Utilization Warning:')
-                            else:
-                                parts = line.split(']')[-1].split('高利用率警告:')
-                            device = parts[0].strip()
-                            value_part = parts[1].strip() if len(parts) > 1 else '0%'
-                            
-                            # Extract value and data time
-                            if '(Data Time:' in value_part or '(数据时间:' in value_part:
-                                if '(Data Time:' in value_part:
-                                    value = value_part.split('(Data Time:')[0].strip().replace('%', '')
-                                    data_time = value_part.split('(Data Time:')[1].replace(')', '').strip()
-                                else:
-                                    value = value_part.split('(数据时间:')[0].strip().replace('%', '')
-                                    data_time = value_part.split('(数据时间:')[1].replace(')', '').strip()
-                            else:
-                                value = value_part.replace('%', '')
-                                data_time = timestamp
-                            
-                            warnings.append({
-                                'type': 'High Utilization',
-                                'device': device,
-                                'value': value,
-                                'timestamp': timestamp,
-                                'data_time': data_time
-                            })
-                        elif 'High Latency Warning:' in line or '高延迟警告:' in line:
-                            # Support both English and Chinese log formats
-                            if 'High Latency Warning:' in line:
-                                parts = line.split(']')[-1].split('High Latency Warning:')
-                            else:
-                                parts = line.split(']')[-1].split('高延迟警告:')
-                            device = parts[0].strip()
-                            value_part = parts[1].strip() if len(parts) > 1 else '0ms'
-                            
-                            # Extract value and data time
-                            if '(Data Time:' in value_part or '(数据时间:' in value_part:
-                                if '(Data Time:' in value_part:
-                                    value = value_part.split('(Data Time:')[0].strip().replace('ms', '')
-                                    data_time = value_part.split('(Data Time:')[1].replace(')', '').strip()
-                                else:
-                                    value = value_part.split('(数据时间:')[0].strip().replace('ms', '')
-                                    data_time = value_part.split('(数据时间:')[1].replace(')', '').strip()
-                            else:
-                                value = value_part.replace('ms', '')
-                                data_time = timestamp
-                            
-                            warnings.append({
-                                'type': 'High Latency',
-                                'device': device,
-                                'value': value,
-                                'timestamp': timestamp,
-                                'data_time': data_time
-                            })
-                    
-                    # Parse performance metrics
-                    elif '[INFO]' in line and 'PERF:' in line:
+                    # Parse bottleneck warning: ⚠️  [时间] EBS BOTTLENECK DETECTED: 设备 - 类型, (Severity: 级别)
+                    if '⚠️' in line and 'EBS BOTTLENECK DETECTED' in line:
                         try:
-                            perf_part = line.split('PERF:')[1].strip()
-                            if '=' in perf_part:
-                                metric_name = perf_part.split('=')[0].strip()
-                                metric_value = perf_part.split('=')[1].strip().split()[0]
-                                performance_metrics[metric_name] = metric_value
-                        except (IndexError, ValueError):
-                            continue
+                            # Extract timestamp
+                            timestamp = line.split('[')[1].split(']')[0] if '[' in line and ']' in line else ''
+                            
+                            # Extract device and type: "nvme2n1 - IOPS"
+                            main_part = line.split('EBS BOTTLENECK DETECTED:')[1].split('(Severity:')[0].strip()
+                            device = main_part.split('-')[0].strip()
+                            bottleneck_type = main_part.split('-')[1].strip().rstrip(',')
+                            
+                            # Extract severity
+                            severity = line.split('Severity:')[1].split(')')[0].strip()
+                            
+                            # Read next line for detailed metrics
+                            if i + 1 < len(lines):
+                                detail_line = lines[i + 1].strip()
+                                iops_value = ''
+                                throughput_value = ''
+                                
+                                # Extract IOPS: "IOPS: 29788.00/30000 (99%)"
+                                if 'IOPS:' in detail_line:
+                                    iops_part = detail_line.split('IOPS:')[1].split(',')[0].strip()
+                                    iops_value = iops_part.split('/')[0].strip()
+                                
+                                # Extract Throughput: "Throughput: 2779.61/4000.00 MiB/s (69%)"
+                                if 'Throughput:' in detail_line:
+                                    throughput_part = detail_line.split('Throughput:')[1].strip()
+                                    throughput_value = throughput_part.split('/')[0].strip()
+                                
+                                # Determine value based on bottleneck type
+                                if bottleneck_type == 'IOPS':
+                                    value = iops_value
+                                    type_label = 'High IOPS'
+                                elif bottleneck_type == 'THROUGHPUT':
+                                    value = throughput_value
+                                    type_label = 'High Throughput'
+                                else:
+                                    value = iops_value
+                                    type_label = 'High Utilization'
+                                
+                                warnings.append({
+                                    'type': type_label,
+                                    'device': device,
+                                    'value': value,
+                                    'timestamp': timestamp,
+                                    'data_time': timestamp,
+                                    'severity': severity,
+                                    'bottleneck_type': bottleneck_type
+                                })
+                        except (IndexError, ValueError) as e:
+                            pass
+                    
+                    i += 1
         
         except Exception as e:
             print(f"⚠️ Error parsing EBS log: {e}")
@@ -1717,17 +1732,102 @@ class ReportGenerator:
         """
         
         if warnings:
-            html += '<div class="warning-list" style="margin: 15px 0;">'
-            for warning in warnings:
-                color = "#dc3545" if warning['type'] == 'High Utilization' else "#fd7e14"
-                unit = "%" if warning['type'] == 'High Utilization' else "ms"
+            # Generate statistics summary
+            summary = {}
+            for w in warnings:
+                key = (w['device'], w['type'])
+                if key not in summary:
+                    summary[key] = {
+                        'count': 0,
+                        'max_value': 0,
+                        'first_time': w['timestamp'],
+                        'last_time': w['timestamp']
+                    }
+                summary[key]['count'] += 1
+                try:
+                    summary[key]['max_value'] = max(summary[key]['max_value'], float(w['value']))
+                except:
+                    pass
+                summary[key]['last_time'] = w['timestamp']
+            
+            # Display summary table
+            html += f'''
+            <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 15px; margin: 15px 0;">
+                <h4 style="margin-top: 0; color: #856404;">&#128202; {self.t.get('warning_statistics', 'Warning Statistics')}</h4>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #ffc107;">
+                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('device', 'Device')}</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('type', 'Type')}</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('count', 'Count')}</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('max_value', 'Max Value')}</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('time_range', 'Time Range')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            
+            for (device, type_label), stats in summary.items():
                 html += f'''
-                <div style="border-left: 4px solid {color}; padding: 12px; margin: 8px 0; background: #f8f9fa; border-radius: 4px;">
-                    <strong style="color: {color};">{warning['device']}</strong> - {warning['type']}: <strong>{warning['value']}{unit}</strong>
-                    <small style="color: #6c757d; display: block; margin-top: 4px;">{self.t['occurred_at']}: {warning.get('data_time', warning['timestamp'])}</small>
-                </div>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #ddd;"><strong>{device}</strong></td>
+                            <td style="padding: 8px; border: 1px solid #ddd;">{type_label}</td>
+                            <td style="padding: 8px; border: 1px solid #ddd; text-align: center;"><strong style="color: #dc3545;">{stats['count']}</strong></td>
+                            <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">{stats['max_value']:.2f}</td>
+                            <td style="padding: 8px; border: 1px solid #ddd; font-size: 0.9em;">{stats['first_time']} - {stats['last_time']}</td>
+                        </tr>
                 '''
-            html += '</div>'
+            
+            html += '''
+                    </tbody>
+                </table>
+                <p style="margin: 10px 0 0 0; font-size: 0.9em; color: #856404;">
+                    &#128202; {tip_text}
+                </p>
+            </div>
+            '''.format(tip_text=self.t.get('refer_to_ebs_charts_hint', 
+                '💡 提示：警告的时间分布可在下方"EBS 专业图表"部分查看 → 点击"EBS 瓶颈分析"和"EBS 时间序列分析"图表' if self.language == 'zh' 
+                else '💡 Tip: View warning time distribution in "EBS Professional Charts" section below → Click "EBS Bottleneck Analysis" and "EBS Time Series Analysis" charts'))
+            
+            # Display detailed list (Top 20) as table
+            display_warnings = warnings[:20]
+            html += f'<h4>{self.t.get("detailed_warnings", "Detailed Warnings")} ({"Top 20" if len(warnings) > 20 else "All"} / {len(warnings)})</h4>'
+            html += '''
+            <table style="width: 100%; border-collapse: collapse; margin: 15px 0; background: white;">
+                <thead>
+                    <tr style="background: #f8f9fa;">
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">#</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">{device}</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">{type}</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">{value}</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">{time}</th>
+                    </tr>
+                </thead>
+                <tbody>
+            '''.format(
+                device=self.t.get('device', 'Device'),
+                type=self.t.get('type', 'Type'),
+                value=self.t.get('value', 'Value'),
+                time=self.t.get('time', 'Time')
+            )
+            
+            for idx, warning in enumerate(display_warnings, 1):
+                color = "#dc3545" if warning['type'] == 'High Utilization' else "#fd7e14"
+                unit = "%" if warning['type'] == 'High Utilization' else ""
+                html += f'''
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 8px; border: 1px solid #ddd; color: #999;">{idx}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd;"><strong>{warning['device']}</strong></td>
+                    <td style="padding: 8px; border: 1px solid #ddd; color: {color};">{warning['type']}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align: right;"><strong>{warning['value']}{unit}</strong></td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 0.9em;">{warning.get('data_time', warning['timestamp'])}</td>
+                </tr>
+                '''
+            
+            html += '</tbody></table>'
+            
+            if len(warnings) > 20:
+                html += f'<p style="color: #6c757d; font-style: italic; margin-top: 10px;">... {self.t.get("and", "and")} {len(warnings) - 20} {self.t.get("more_warnings", "more warnings")}. {self.t.get("check_full_log", "Check full log for details")}: <code>{self.ebs_log_path}</code></p>'
         else:
             html += f'<p style="color: #28a745; font-weight: bold;">&#9989; {self.t["no_performance_anomaly"]}</p>'
         
@@ -1864,7 +1964,9 @@ class ReportGenerator:
             for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
                 data_col = [col for col in df.columns if col.startswith('data_') and col.endswith(f'_{metric}')]
                 if data_col:
-                    iostat_stats[f'DATA_{metric}_Min'] = df[data_col[0]].min()
+                    # Filter out 0 values for Min calculation
+                    non_zero_data = df[df[data_col[0]] > 0][data_col[0]]
+                    iostat_stats[f'DATA_{metric}_Min'] = non_zero_data.min() if len(non_zero_data) > 0 else 0
                     iostat_stats[f'DATA_{metric}_Max'] = df[data_col[0]].max()
                     iostat_stats[f'DATA_{metric}_Avg'] = df[data_col[0]].mean()
             
@@ -1872,7 +1974,9 @@ class ReportGenerator:
             for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
                 accounts_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith(f'_{metric}')]
                 if accounts_col:
-                    iostat_stats[f'ACCOUNTS_{metric}_Min'] = df[accounts_col[0]].min()
+                    # Filter out 0 values for Min calculation
+                    non_zero_data = df[df[accounts_col[0]] > 0][accounts_col[0]]
+                    iostat_stats[f'ACCOUNTS_{metric}_Min'] = non_zero_data.min() if len(non_zero_data) > 0 else 0
                     iostat_stats[f'ACCOUNTS_{metric}_Max'] = df[accounts_col[0]].max()
                     iostat_stats[f'ACCOUNTS_{metric}_Avg'] = df[accounts_col[0]].mean()
             
@@ -3840,12 +3944,12 @@ class ReportGenerator:
         }
         
         categories = {
-            'advanced': {'title': 'Advanced Analysis Charts', 'charts': []},
-            'ebs': {'title': 'EBS Professional Charts', 'charts': []},
-            'performance': {'title': 'Core Performance Charts', 'charts': []},
-            'monitoring': {'title': 'Monitoring & Overhead Charts', 'charts': []},
-            'network': {'title': 'Network & ENA Charts', 'charts': []},
-            'other': {'title': 'Additional Charts', 'charts': []}
+            'advanced': {'title': self.t.get('advanced_analysis_charts', 'Advanced Analysis Charts'), 'charts': []},
+            'ebs': {'title': self.t.get('ebs_professional_charts', 'EBS Professional Charts'), 'charts': []},
+            'performance': {'title': self.t.get('core_performance_charts', 'Core Performance Charts'), 'charts': []},
+            'monitoring': {'title': self.t.get('monitoring_overhead_charts', 'Monitoring & Overhead Charts'), 'charts': []},
+            'network': {'title': self.t.get('network_ena_charts', 'Network & ENA Charts'), 'charts': []},
+            'other': {'title': self.t.get('additional_charts', 'Additional Charts'), 'charts': []}
         }
         
         for chart_file in chart_files:
