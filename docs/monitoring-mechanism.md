@@ -512,6 +512,182 @@ system_cached_gb,system_buffers_gb,system_anon_pages_gb,system_mapped_gb,system_
 
 **Purpose:** Real-time bottleneck detection
 
+## Bottleneck Detection Mechanism
+
+The framework implements a **dual bottleneck monitoring mechanism**, combining real-time detection and offline analysis to accurately identify performance bottlenecks while avoiding false positives.
+
+### Dual Monitoring Architecture
+
+```mermaid
+graph TB
+    subgraph "Real-time Detection"
+        A[QPS Test Execution] --> B[Check After Each Round]
+        B --> C{Bottleneck<br/>Detected?}
+        C -->|Yes| D[BOTTLENECK_COUNT++]
+        C -->|No| E[BOTTLENECK_COUNT=0]
+        D --> F{3 Consecutive<br/>Times?}
+        F -->|Yes| G[Check Node Health]
+        F -->|No| H[Continue Testing]
+        G --> I{Node<br/>Unhealthy?}
+        I -->|Yes| J[Stop Testing<br/>Save Context]
+        I -->|No| K[Reset Counter<br/>Continue Testing]
+    end
+    
+    subgraph "Offline Analysis"
+        J --> L[Read Bottleneck Context]
+        L --> M[Time Window Analysis<br/>±30 seconds]
+        L --> N[Performance Cliff Analysis]
+        M --> O[Generate 28 Charts]
+        N --> P[Generate Cliff Charts]
+    end
+    
+    style A fill:#27AE60,color:#fff
+    style J fill:#E74C3C,color:#fff
+    style M fill:#3498DB,color:#fff
+    style O fill:#F39C12,color:#fff
+```
+
+### Real-time Detection Mechanism
+
+**Purpose**: Detect bottlenecks during testing and decide whether to stop
+
+**Detection Frequency**: After each QPS test round (~11 minute intervals)
+
+**Detection Dimensions**:
+1. **CPU**: Usage > 85%
+2. **Memory**: Usage > 90%
+3. **EBS**: AWS Standard IOPS/Throughput > 90% baseline
+4. **Network**: Utilization > 80%
+5. **Error Rate**: > 5%
+
+**Stop Rules** (Dual Verification):
+
+```bash
+# Condition 1: Resource Bottleneck (3 consecutive detections)
+if Resource Bottleneck Detected:
+    BOTTLENECK_COUNT++
+    
+    if BOTTLENECK_COUNT >= 3:
+        # Condition 2: Node Health Check
+        if (block_height_diff > 50) OR (block_height_time_diff > 300):
+            # Node unhealthy → Real performance bottleneck
+            Stop testing
+            Save bottleneck context (including analysis_window)
+        else:
+            # Node healthy → Possible false positive
+            Reset BOTTLENECK_COUNT = 0
+            Continue testing
+```
+
+**Key Configuration**:
+```bash
+BOTTLENECK_CONSECUTIVE_COUNT=3          # Consecutive detection count
+BOTTLENECK_ANALYSIS_WINDOW=30           # Time window (seconds)
+BLOCK_HEIGHT_DIFF_THRESHOLD=50          # Block height difference threshold
+BLOCK_HEIGHT_TIME_THRESHOLD=300         # Block time difference threshold (seconds)
+```
+
+**Why Node Health Check?**
+
+Avoid false positive scenarios:
+- iostat shows 100% utilization
+- But AWS EBS actual utilization is only 18.8%
+- Node sync is normal, block height has no delay
+- **Conclusion**: Not a real bottleneck, continue testing
+
+### Offline Analysis Mechanism
+
+**Purpose**: Deep analysis based on saved bottleneck context after testing
+
+**Trigger Condition**: `BOTTLENECK_DETECTED == true`
+
+**Analysis Flow**:
+
+```mermaid
+graph LR
+    A[Read Bottleneck Context] --> B[Extract Time Window]
+    B --> C[Time Window Analysis]
+    B --> D[Performance Cliff Analysis]
+    C --> E[comprehensive_analysis.py<br/>--time-window]
+    D --> F[qps_analyzer.py<br/>--cliff-analysis]
+    E --> G[Filter to ±30 seconds]
+    G --> H[Generate 28 Charts]
+    F --> I[Generate Cliff Charts]
+    
+    style A fill:#3498DB,color:#fff
+    style E fill:#27AE60,color:#fff
+    style F fill:#27AE60,color:#fff
+    style H fill:#F39C12,color:#fff
+```
+
+**Time Window Focus**:
+
+Using `BOTTLENECK_ANALYSIS_WINDOW=30` seconds:
+- **Bottleneck Time**: 2025-10-26 13:50:36
+- **Analysis Window**: 13:50:06 - 13:50:36 (±30 seconds)
+- **Data Filtering**: Extract these 60 seconds from all data
+- **Deep Analysis**: Focus on detailed metrics at bottleneck occurrence
+
+**Generated Analysis**:
+1. **Bottleneck Correlation Analysis**: Identify root cause
+2. **Performance Trend Analysis**: Performance changes before/after bottleneck
+3. **Resource Utilization Analysis**: Resource usage across dimensions
+4. **Optimization Recommendations**: Specific suggestions based on bottleneck type
+
+### Bottleneck Context Data
+
+**Save Location**: `qps_status.json`
+
+**Data Structure**:
+```json
+{
+  "bottleneck_detected": true,
+  "detection_time": "2025-10-26T13:50:36+08:00",
+  "max_successful_qps": 6000,
+  "bottleneck_qps": 6250,
+  "bottleneck_reasons": "DATA AWS IOPS: 27000/30000 (90%)",
+  "severity": "medium",
+  "analysis_window": {
+    "start_time": "2025-10-26T13:50:06+08:00",
+    "end_time": "2025-10-26T13:50:36+08:00",
+    "window_seconds": 30
+  },
+  "recommendations": [...]
+}
+```
+
+### Data Flow Integrity
+
+**Real-time Detection → Offline Analysis**:
+
+```
+1. Bottleneck Detection (master_qps_executor.sh)
+   └─ save_bottleneck_context()
+       └─ Save to qps_status.json
+           ├─ detection_time
+           ├─ analysis_window (using BOTTLENECK_ANALYSIS_WINDOW)
+           ├─ max_successful_qps
+           └─ bottleneck_qps
+
+2. Offline Analysis (blockchain_node_benchmark.sh)
+   └─ Read qps_status.json
+       ├─ execute_bottleneck_window_analysis()
+       │   └─ comprehensive_analysis.py --time-window
+       │       └─ filter_data_by_time_window()
+       │           └─ Filter to ±30 seconds around bottleneck
+       │
+       └─ execute_performance_cliff_analysis()
+           └─ qps_analyzer.py --cliff-analysis
+```
+
+### Monitoring Mechanism Advantages
+
+1. **Avoid False Positives**: Dual verification (resource + node health)
+2. **Precise Location**: Time window focuses on bottleneck moment
+3. **Deep Analysis**: Offline analysis provides detailed root cause
+4. **Complete Data**: Save complete bottleneck context
+5. **Traceable**: All bottleneck events logged to JSONL
+
 ## Monitoring Coordinator
 
 ### Architecture

@@ -327,6 +327,182 @@ system_cached_gb,system_buffers_gb,system_anon_pages_gb,system_mapped_gb,system_
 
 **总字段数：** 20
 
+## 瓶颈检测机制
+
+框架实现了**双重瓶颈监测机制**，结合即时检测和离线分析，确保准确识别性能瓶颈并避免误判。
+
+### 双重监测架构
+
+```mermaid
+graph TB
+    subgraph "即时监测 (Real-time Detection)"
+        A[QPS 测试执行] --> B[每轮测试后检查]
+        B --> C{检测到瓶颈?}
+        C -->|是| D[BOTTLENECK_COUNT++]
+        C -->|否| E[BOTTLENECK_COUNT=0]
+        D --> F{连续3次?}
+        F -->|是| G[检查节点健康]
+        F -->|否| H[继续测试]
+        G --> I{节点不健康?}
+        I -->|是| J[停止测试<br/>保存瓶颈上下文]
+        I -->|否| K[重置计数器<br/>继续测试]
+    end
+    
+    subgraph "离线监测 (Offline Analysis)"
+        J --> L[读取瓶颈上下文]
+        L --> M[时间窗口分析<br/>瓶颈前后30秒]
+        L --> N[性能悬崖分析]
+        M --> O[生成28张图表]
+        N --> P[生成悬崖图表]
+    end
+    
+    style A fill:#27AE60,color:#fff
+    style J fill:#E74C3C,color:#fff
+    style M fill:#3498DB,color:#fff
+    style O fill:#F39C12,color:#fff
+```
+
+### 即时监测机制
+
+**目的**: 在测试过程中实时检测瓶颈，决定是否停止测试
+
+**检测频率**: 每轮 QPS 测试后（约11分钟间隔）
+
+**检测维度**:
+1. **CPU**: 使用率 > 85%
+2. **内存**: 使用率 > 90%
+3. **EBS**: AWS Standard IOPS/Throughput > 90% baseline
+4. **网络**: 利用率 > 80%
+5. **错误率**: > 5%
+
+**停止规则** (双重验证):
+
+```bash
+# 条件1: 资源瓶颈（连续3次检测）
+if 检测到资源瓶颈:
+    BOTTLENECK_COUNT++
+    
+    if BOTTLENECK_COUNT >= 3:
+        # 条件2: 节点健康检查
+        if (block_height_diff > 50) OR (block_height_time_diff > 300):
+            # 节点不健康 → 真正的性能瓶颈
+            停止测试
+            保存瓶颈上下文 (包含 analysis_window)
+        else:
+            # 节点健康 → 可能是误判
+            重置 BOTTLENECK_COUNT = 0
+            继续测试
+```
+
+**关键配置**:
+```bash
+BOTTLENECK_CONSECUTIVE_COUNT=3          # 连续检测次数
+BOTTLENECK_ANALYSIS_WINDOW=30           # 时间窗口（秒）
+BLOCK_HEIGHT_DIFF_THRESHOLD=50          # 区块高度差异阈值
+BLOCK_HEIGHT_TIME_THRESHOLD=300         # 区块时间差异阈值（秒）
+```
+
+**为什么需要节点健康检查？**
+
+避免误判场景：
+- iostat 显示 100% 利用率
+- 但 AWS EBS 实际利用率只有 18.8%
+- 节点同步正常，区块高度无延迟
+- **结论**: 不是真正的瓶颈，继续测试
+
+### 离线监测机制
+
+**目的**: 测试结束后，基于保存的瓶颈上下文进行深度分析
+
+**触发条件**: `BOTTLENECK_DETECTED == true`
+
+**分析流程**:
+
+```mermaid
+graph LR
+    A[读取瓶颈上下文] --> B[提取时间窗口]
+    B --> C[时间窗口分析]
+    B --> D[性能悬崖分析]
+    C --> E[comprehensive_analysis.py<br/>--time-window]
+    D --> F[qps_analyzer.py<br/>--cliff-analysis]
+    E --> G[过滤到瓶颈前后30秒]
+    G --> H[生成28张图表]
+    F --> I[生成性能悬崖图表]
+    
+    style A fill:#3498DB,color:#fff
+    style E fill:#27AE60,color:#fff
+    style F fill:#27AE60,color:#fff
+    style H fill:#F39C12,color:#fff
+```
+
+**时间窗口聚焦**:
+
+使用 `BOTTLENECK_ANALYSIS_WINDOW=30` 秒：
+- **瓶颈时间**: 2025-10-26 13:50:36
+- **分析窗口**: 13:50:06 - 13:50:36 (前后30秒)
+- **数据过滤**: 从全部数据中提取这60秒
+- **深度分析**: 聚焦瓶颈发生时的详细指标
+
+**生成的分析**:
+1. **瓶颈相关性分析**: 识别瓶颈根因
+2. **性能趋势分析**: 瓶颈前后的性能变化
+3. **资源利用率分析**: 各维度资源使用情况
+4. **优化建议**: 基于瓶颈类型的具体建议
+
+### 瓶颈上下文数据
+
+**保存位置**: `qps_status.json`
+
+**数据结构**:
+```json
+{
+  "bottleneck_detected": true,
+  "detection_time": "2025-10-26T13:50:36+08:00",
+  "max_successful_qps": 6000,
+  "bottleneck_qps": 6250,
+  "bottleneck_reasons": "DATA AWS IOPS: 27000/30000 (90%)",
+  "severity": "medium",
+  "analysis_window": {
+    "start_time": "2025-10-26T13:50:06+08:00",
+    "end_time": "2025-10-26T13:50:36+08:00",
+    "window_seconds": 30
+  },
+  "recommendations": [...]
+}
+```
+
+### 数据流完整性
+
+**即时监测 → 离线分析**:
+
+```
+1. 瓶颈检测 (master_qps_executor.sh)
+   └─ save_bottleneck_context()
+       └─ 保存到 qps_status.json
+           ├─ detection_time
+           ├─ analysis_window (使用 BOTTLENECK_ANALYSIS_WINDOW)
+           ├─ max_successful_qps
+           └─ bottleneck_qps
+
+2. 离线分析 (blockchain_node_benchmark.sh)
+   └─ 读取 qps_status.json
+       ├─ execute_bottleneck_window_analysis()
+       │   └─ comprehensive_analysis.py --time-window
+       │       └─ filter_data_by_time_window()
+       │           └─ 过滤到瓶颈前后30秒
+       │
+       └─ execute_performance_cliff_analysis()
+           └─ qps_analyzer.py --cliff-analysis
+```
+
+### 监测机制优势
+
+1. **避免误判**: 双重验证（资源 + 节点健康）
+2. **精确定位**: 时间窗口聚焦瓶颈时刻
+3. **深度分析**: 离线分析提供详细根因
+4. **数据完整**: 保存完整的瓶颈上下文
+5. **可追溯**: 所有瓶颈事件记录到 JSONL
+
 ## 监控协调器
 
 ### 协调器职责

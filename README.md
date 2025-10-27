@@ -13,6 +13,9 @@ A professional multi blockchain node performance benchmarking framework with com
 
 - **Multi-Mode QPS Testing**: Quick (15+min), Standard (90+min), and Intensive (8+hr) testing modes
 - **Real-Time Performance Monitoring**: 73-79 performance metrics including CPU, Memory, EBS, Network, ENA
+- **Dual Bottleneck Monitoring Mechanism**:
+  - **Real-time Detection**: Detect bottlenecks during testing with dual verification (resource + node health) to avoid false positives
+  - **Offline Analysis**: Time window focus (±30 seconds around bottleneck) for deep root cause analysis
 - **Intelligent Bottleneck Detection**: 6-dimensional bottleneck detection with scientific evaluation algorithms
 - **Professional Visualization**: 32 professional charts and comprehensive HTML reports
 - **AWS Deep Integration**: EBS performance baselines, ENA network monitoring, EC2 instance optimization
