@@ -383,16 +383,35 @@ check_bottleneck_during_test() {
             local block_height_diff=$(echo "$latest_data" | jq -r '.block_height_diff // 0' 2>/dev/null || echo "0")
             local data_loss=$(echo "$latest_data" | jq -r '.data_loss // 0' 2>/dev/null || echo "0")
             
-            # 判断节点是否健康 (data_loss: 0=正常, 1=数据丢失)
-            if (( $(awk "BEGIN {print ($block_height_diff > $BLOCK_HEIGHT_DIFF_THRESHOLD) ? 1 : 0}") )) || [[ "$data_loss" == "1" ]]; then
+            # 检查区块高度差异是否持续超限
+            local block_height_time_exceeded=0
+            if [[ -f "${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag" ]]; then
+                block_height_time_exceeded=1
+            fi
+            
+            # 判断节点是否健康（需要同时满足当前状态和持续时间）
+            # 条件1: 当前区块高度差异超限 AND 已持续超过300秒
+            # 条件2: RPC调用失败
+            local node_unhealthy=false
+            local unhealthy_reason=""
+            
+            if (( $(awk "BEGIN {print ($block_height_diff > $BLOCK_HEIGHT_DIFF_THRESHOLD) ? 1 : 0}") )) && [[ "$block_height_time_exceeded" == "1" ]]; then
+                node_unhealthy=true
+                unhealthy_reason="区块高度差异=${block_height_diff} (阈值=${BLOCK_HEIGHT_DIFF_THRESHOLD}) 且已持续超过 ${BLOCK_HEIGHT_TIME_THRESHOLD}秒"
+            elif [[ "$data_loss" == "1" ]]; then
+                node_unhealthy=true
+                unhealthy_reason="RPC调用失败，无法获取区块高度数据"
+            fi
+            
+            if [[ "$node_unhealthy" == "true" ]]; then
                 # 节点不健康，确认为真正的瓶颈
-                echo "🚨 节点健康检查: 区块高度差异=${block_height_diff} (阈值=${BLOCK_HEIGHT_DIFF_THRESHOLD}), 数据丢失=${data_loss}"
+                echo "🚨 节点健康检查失败: ${unhealthy_reason}"
                 BOTTLENECK_DETECTED=true
                 save_bottleneck_context "$current_qps" "${bottleneck_reasons[*]}" "$bottleneck_severity"
                 return 1  # 触发停止
             else
                 # 节点健康，可能是误判，重置计数器继续测试
-                echo "✅ 节点健康检查通过: 区块高度差异=${block_height_diff}, 数据丢失=${data_loss}, 重置瓶颈计数器"
+                echo "✅ 节点健康检查通过: 区块高度差异=${block_height_diff}, 持续超限标志=${block_height_time_exceeded}, 数据丢失=${data_loss}, 重置瓶颈计数器"
                 BOTTLENECK_COUNT=0
             fi
         fi
@@ -599,8 +618,7 @@ save_bottleneck_context() {
         "start_time": "$(date -d "-${BOTTLENECK_ANALYSIS_WINDOW} seconds" -Iseconds)",
         "end_time": "$(date -Iseconds)",
         "window_seconds": $BOTTLENECK_ANALYSIS_WINDOW
-    },
-    "recommendations": $(generate_bottleneck_recommendations "$severity" "$reasons")
+    }
 }
 EOF
 )
@@ -616,30 +634,57 @@ EOF
 
 # 获取详细系统上下文
 get_detailed_system_context() {
-    local context=$(cat << 'EOF'
+    # 复用瓶颈检测的数据获取机制
+    local latest_data=$(get_latest_monitoring_data)
+    
+    # 从监控数据提取字段
+    local cpu_usage=$(echo "$latest_data" | jq -r '.cpu_usage // 0' 2>/dev/null || echo "0")
+    local mem_usage=$(echo "$latest_data" | jq -r '.memory_usage // 0' 2>/dev/null || echo "0")
+    local ebs_util=$(echo "$latest_data" | jq -r '.ebs_util // 0' 2>/dev/null || echo "0")
+    local ebs_latency=$(echo "$latest_data" | jq -r '.ebs_latency // 0' 2>/dev/null || echo "0")
+    local network_util=$(echo "$latest_data" | jq -r '.network_util // 0' 2>/dev/null || echo "0")
+    
+    # 获取系统静态信息
+    local cpu_count=$(nproc 2>/dev/null || echo "1")
+    local load_avg=$(uptime | awk -F'load average:' '{print $2}' | xargs 2>/dev/null || echo "0.0 0.0 0.0")
+    local mem_total=$(free -g 2>/dev/null | awk '/^Mem:/ {print $2}' || echo "0")
+    local mem_available=$(free -g 2>/dev/null | awk '/^Mem:/ {print $7}' || echo "0")
+    
+    # 获取 AWS Standard IOPS 和 Throughput（与瓶颈检测保持一致）
+    local aws_iops=0
+    local aws_throughput=0
+    if [[ -n "$LEDGER_DEVICE" ]]; then
+        aws_iops=$(echo "$latest_data" | jq -r ".data_${LEDGER_DEVICE}_aws_standard_iops // 0" 2>/dev/null || echo "0")
+        aws_throughput=$(echo "$latest_data" | jq -r ".data_${LEDGER_DEVICE}_aws_standard_throughput_mibs // 0" 2>/dev/null || echo "0")
+    fi
+    
+    # 构建 JSON
+    local context=$(cat << EOF
 {
     "cpu_info": {
-        "usage": 0,
-        "load_avg": "0.0 0.0 0.0",
-        "core_count": 1
+        "usage": $cpu_usage,
+        "load_avg": "$load_avg",
+        "core_count": $cpu_count
     },
     "memory_info": {
-        "usage_percent": 0,
-        "available_gb": 0,
-        "total_gb": 0
+        "usage_percent": $mem_usage,
+        "available_gb": $mem_available,
+        "total_gb": $mem_total
     },
     "disk_info": {
-        "ebs_util": 0,
-        "ebs_latency": 0,
-        "iops": 0
+        "ebs_util": $ebs_util,
+        "ebs_latency": $ebs_latency,
+        "iops": $aws_iops,
+        "throughput_mibs": $aws_throughput
     },
     "network_info": {
-        "utilization": 0,
+        "utilization": $network_util,
         "connections": 0
     }
 }
 EOF
 )
+    
     echo "$context"
 }
 

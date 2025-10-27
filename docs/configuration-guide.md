@@ -204,16 +204,22 @@ BLOCK_HEIGHT_TIME_THRESHOLD=300           # Block time difference threshold (sec
 
 #### Bottleneck Detection Stop Rules
 
-The framework uses a **dual verification mechanism** to decide whether to stop testing:
+The framework uses a **triple verification mechanism** to decide whether to stop testing:
 
 **Stop Condition**:
 ```
-Resource Bottleneck (3 consecutive detections) AND Node Unhealthy → Stop Testing
+Condition 1: Resource Limit Exceeded (any resource exceeds threshold)
+AND
+Condition 2: 3 Consecutive Detections
+AND
+Condition 3: Node Unhealthy (block height delay or RPC failure)
+→ Stop Testing
 ```
 
 **Continue Condition**:
 ```
-Resource Bottleneck (3 consecutive detections) AND Node Healthy → Reset Counter, Continue Testing
+Condition 1 AND Condition 2 met, but Condition 3 not met (node healthy)
+→ Reset Counter, Continue Testing
 ```
 
 **Configuration Details**:
@@ -243,11 +249,13 @@ Resource Bottleneck (3 consecutive detections) AND Node Healthy → Reset Counte
 
 ```bash
 # Check after each QPS test round
-if Resource Bottleneck Detected (CPU/Memory/EBS/Network exceeds threshold):
+# Condition 1: Resource Limit Exceeded
+if Resource Exceeds Threshold (CPU/Memory/EBS/Network exceeds threshold):
     BOTTLENECK_COUNT++
     
+    # Condition 2: Consecutive Detection
     if BOTTLENECK_COUNT >= BOTTLENECK_CONSECUTIVE_COUNT:
-        # Check node health status
+        # Condition 3: Node Health Check
         if (block_height_diff > BLOCK_HEIGHT_DIFF_THRESHOLD) OR 
            (block_height_time_diff > BLOCK_HEIGHT_TIME_THRESHOLD):
             # Node unhealthy → Real performance bottleneck

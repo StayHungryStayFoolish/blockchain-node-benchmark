@@ -113,13 +113,6 @@ TRANSLATIONS = {
         'resource_usage_trends': 'Resource Usage Trends',
         'resource_proportion_analysis': 'Resource Proportion Analysis',
         'monitoring_performance_relationship': 'Monitoring Overhead and Performance Relationship',
-        'production_resource_planning': 'Production Environment Resource Planning Recommendations',
-        'test_env_usage': 'Test Environment Usage',
-        'production_recommendation': 'Production Environment Recommendation',
-        'at_least': 'At least',
-        'cores': 'cores',
-        'reserve': 'Reserve',
-        'margin': 'margin',
         # Monitoring Overhead Charts Section
         'resource_proportion_chart': 'Resource Proportion Analysis',
         'resource_distribution_image': 'Resource Distribution Chart',
@@ -134,8 +127,6 @@ TRANSLATIONS = {
         'monitoring_io_vs_ebs': 'Monitoring I/O Overhead vs EBS Performance',
         'monitoring_cpu_qps_relationship': 'Relationship between monitoring CPU usage and system throughput',
         'monitoring_io_ebs_relationship': 'Relationship between monitoring I/O and storage performance',
-        'production_planning_recommendations': 'Production Environment Resource Planning Recommendations',
-        'planning_based_on_analysis': 'Resource planning recommendations for production environment based on monitoring overhead analysis:',
         'monitoring_overhead_label': 'Monitoring Overhead',
         'iops_margin': 'IOPS margin',
         'monitoring_overhead_detailed': 'Monitoring Overhead Detailed Analysis',
@@ -195,59 +186,8 @@ TRANSLATIONS = {
         'monitoring_has_some_impact': 'Monitoring system has some impact on device, but is not the main bottleneck source. Should optimize both business logic and monitoring system.',
         'root_cause_minor_impact': 'Root Cause Analysis: Minor Monitoring System Impact',
         'bottleneck_from_workload': 'Device bottleneck is mainly caused by business workload, monitoring system impact is negligible. Should optimize business logic or upgrade EBS configuration.',
-        'load_bottleneck_info': 'Load bottleneck detection information',
-        'bottleneck_info_load_failed': 'Bottleneck information load failed',
-        'generate_production_planning': 'Generate production environment resource planning recommendations section',
-        'determine_main_bottleneck': 'Determine main bottleneck',
-        'no_obvious_bottleneck': 'No obvious bottleneck found',
-        'cpu_insufficient': 'CPU resources insufficient',
-        'memory_insufficient': 'Memory resources insufficient',
-        'data_device_bottleneck': 'DATA device bottleneck',
-        'test_conclusion_summary': 'Test Conclusion Summary',
-        'based_on_test_results': 'Based on performance test results, we conclude:',
-        'main_bottleneck_label': 'Main bottleneck',
-        'monitoring_resource_usage': 'Monitoring system resource usage',
-        'significant_label': 'Significant',
-        'minor_label': 'Minor',
-        'blockchain_resource_demand': 'Blockchain node resource demand',
-        'high_label': 'High',
-        'medium_label': 'Medium',
-        'low_label': 'Low',
-        'performance_optimization_recommendations': 'Performance Optimization Recommendations',
-        'component_label': 'Component',
-        'optimization_recommendation': 'Optimization Recommendation',
-        'expected_effect': 'Expected Effect',
-        'monitoring_system_label': 'Monitoring System',
-        'reduce_frequency': 'Reduce monitoring frequency',
-        'keep_current_config': 'Keep current configuration',
-        'use_separate_overhead_log': 'Use separate monitoring overhead log',
-        'cleanup_historical_data': 'Regularly clean up historical monitoring data',
-        'significantly_reduce_overhead': 'Significantly reduce monitoring overhead',
-        'maintain_low_overhead': 'Maintain low monitoring overhead',
-        'ebs_storage_label': 'EBS Storage',
-        'increase_iops_config': 'Increase IOPS configuration',
-        'current_config_suitable': 'Current configuration suitable for workload',
-        'consider_io2_over_gp3': 'Consider using IO2 instead of GP3',
-        'keep_current_storage_type': 'Keep current storage type',
-        'separate_data_accounts': 'Separate DATA and ACCOUNTS devices',
-        'current_device_config_reasonable': 'Current device configuration is reasonable',
-        'eliminate_storage_bottleneck': 'Eliminate storage bottleneck, improve overall performance',
-        'maintain_good_storage_performance': 'Maintain good storage performance',
-        'blockchain_node_label': 'Blockchain Node',
-        'increase_cpu_cores': 'Increase CPU cores',
-        'current_cpu_suitable': 'Current CPU configuration suitable for workload',
-        'increase_memory_config': 'Increase memory configuration',
-        'current_memory_suitable': 'Current memory configuration suitable for workload',
-        'optimize_node_params': 'Optimize blockchain node configuration parameters',
-        'improve_node_capacity': 'Improve node processing capacity, eliminate performance bottleneck',
-        'maintain_stable_performance': 'Maintain stable node performance',
-        'generate_overhead_table': 'Generate complete monitoring overhead data table',
-        'overhead_data_not_available': 'Monitoring Overhead Data Not Available',
-        'overhead_file_not_found': 'Monitoring overhead data file not found or empty. Please ensure monitoring overhead statistics are enabled during performance testing.',
-        'expected_file_label': 'Expected file',
-        'description_label': 'Description',
-        'overhead_auto_generated': 'Monitoring overhead data is automatically generated by unified_monitor.sh, no need to manually run additional tools.',
         'overhead_detailed_data': 'Monitoring Overhead Detailed Data',
+        'monitoring_overhead_breakdown': 'Monitoring Overhead Component Breakdown',
         'data_shows_component_consumption': 'The following data shows the resource consumption of each monitoring component during testing, helping to evaluate real resource requirements in production environment.',
         'monitoring_component_label': 'Monitoring Component',
         'avg_cpu_usage_label': 'Average CPU Usage',
@@ -268,7 +208,11 @@ TRANSLATIONS = {
         'total_monitoring_overhead': 'Total Monitoring Overhead',
         'overhead_analysis_notes': 'Monitoring Overhead Analysis Notes',
         'memory_usage_label': 'Memory Usage',
-        'production_env_recommendation': 'Production Environment Recommendation',
+        'overhead_data_not_available': 'Monitoring Overhead Data Not Available',
+        'overhead_file_not_found': 'Monitoring overhead data file not found or empty. Please ensure monitoring overhead statistics are enabled during performance testing.',
+        'expected_file_label': 'Expected file',
+        'description_label': 'Description',
+        'overhead_auto_generated': 'Monitoring overhead data is automatically generated by unified_monitor.sh, no need to manually run additional tools.',
         'total_overhead_usually': 'Total monitoring overhead usually accounts for 1-3% of system resources and can be ignored.',
         'iops_throughput_zero_reason': 'Reasons for IOPS/Throughput Being 0',
         'monitoring_reads_proc': 'Monitoring system mainly reads <code>/proc</code> virtual filesystem, kernel does not count physical I/O statistics',
@@ -497,6 +441,17 @@ TRANSLATIONS = {
         'monitoring_overhead_analysis': 'Monitoring Overhead Analysis',
         'blockchain_node_specific_analysis': 'Blockchain Node Specific Analysis',
         'bottleneck_detection_analysis': 'Bottleneck Detection Analysis',
+        'system_bottleneck_analysis': 'System-Level Bottleneck Analysis',
+        'system_bottleneck_detected': 'System-Level Performance Bottleneck Detected',
+        'no_system_bottleneck_detected': 'No System-Level Performance Bottleneck Detected',
+        'bottleneck_criteria_title': 'System-Level Bottleneck Criteria',
+        'bottleneck_criteria_note': 'All three conditions must be met simultaneously:',
+        'bottleneck_condition_1': 'Resource Limit: CPU>85% OR Memory>90% OR EBS IOPS/Throughput>90% OR Network>80% OR Error Rate>5%',
+        'bottleneck_condition_2': 'Persistence: 3 consecutive detections of above resource limits',
+        'bottleneck_condition_3': 'Node Unhealthy: Block height diff>50 AND duration>300s, OR RPC call failure',
+        'bottleneck_current_status': 'Current Status',
+        'bottleneck_status_normal': 'No system-level bottleneck stop condition was triggered during testing. Although intermittent performance events may exist (see "Performance Warnings" below), the system is running normally and the node is syncing healthily.',
+        'consecutive_detections': 'Consecutive Detections',
         'html_content_generation_failed': 'HTML content generation failed',
         'performance_analysis_charts': 'Performance Analysis Charts',
         'charts_provide_comprehensive_visualization': 'The following charts provide comprehensive visualization analysis of system performance, including performance trends, correlation analysis, bottleneck identification, etc.',
@@ -719,13 +674,6 @@ TRANSLATIONS = {
         'resource_usage_trends': '资源使用趋势',
         'resource_proportion_analysis': '资源占比分析',
         'monitoring_performance_relationship': '监控开销与性能关系',
-        'production_resource_planning': '生产环境资源规划建议',
-        'test_env_usage': '测试环境使用',
-        'production_recommendation': '生产环境建议',
-        'at_least': '至少',
-        'cores': '核心',
-        'reserve': '预留',
-        'margin': '余量',
         # Monitoring Overhead Charts Section
         'resource_proportion_chart': '资源占比分析',
         'resource_distribution_image': '资源分布图',
@@ -740,8 +688,6 @@ TRANSLATIONS = {
         'monitoring_io_vs_ebs': '监控I/O开销 vs EBS性能',
         'monitoring_cpu_qps_relationship': '监控CPU使用与系统吞吐量的关系',
         'monitoring_io_ebs_relationship': '监控I/O与存储性能的关系',
-        'production_planning_recommendations': '生产环境资源规划建议',
-        'planning_based_on_analysis': '基于监控开销分析，对生产环境的资源规划建议:',
         'monitoring_overhead_label': '监控开销',
         'iops_margin': 'IOPS 余量',
         'monitoring_overhead_detailed': '监控开销详细分析',
@@ -801,59 +747,8 @@ TRANSLATIONS = {
         'monitoring_has_some_impact': '监控系统对设备有一定影响，但不是主要瓶颈来源。应同时优化业务逻辑和监控系统。',
         'root_cause_minor_impact': '根因分析: 监控系统影响较小',
         'bottleneck_from_workload': '设备瓶颈主要由业务负载引起，监控系统影响可忽略。应优化业务逻辑或提升EBS配置。',
-        'load_bottleneck_info': '加载瓶颈检测信息',
-        'bottleneck_info_load_failed': '瓶颈信息加载失败',
-        'generate_production_planning': '生成生产环境资源规划建议部分',
-        'determine_main_bottleneck': '确定主要瓶颈',
-        'no_obvious_bottleneck': '未发现明显瓶颈',
-        'cpu_insufficient': 'CPU资源不足',
-        'memory_insufficient': '内存资源不足',
-        'data_device_bottleneck': 'DATA设备瓶颈',
-        'test_conclusion_summary': '测试结论摘要',
-        'based_on_test_results': '基于性能测试结果，我们得出以下结论:',
-        'main_bottleneck_label': '主要瓶颈',
-        'monitoring_resource_usage': '监控系统资源占用',
-        'significant_label': '显著',
-        'minor_label': '较小',
-        'blockchain_resource_demand': '区块链节点资源需求',
-        'high_label': '高',
-        'medium_label': '中等',
-        'low_label': '低',
-        'performance_optimization_recommendations': '性能优化建议',
-        'component_label': '组件',
-        'optimization_recommendation': '优化建议',
-        'expected_effect': '预期效果',
-        'monitoring_system_label': '监控系统',
-        'reduce_frequency': '降低监控频率',
-        'keep_current_config': '保持当前配置',
-        'use_separate_overhead_log': '使用独立的监控开销日志',
-        'cleanup_historical_data': '定期清理历史监控数据',
-        'significantly_reduce_overhead': '显著降低监控开销',
-        'maintain_low_overhead': '维持低监控开销',
-        'ebs_storage_label': 'EBS存储',
-        'increase_iops_config': '提高IOPS配置',
-        'current_config_suitable': '当前配置适合负载',
-        'consider_io2_over_gp3': '考虑使用IO2而非GP3',
-        'keep_current_storage_type': '保持当前存储类型',
-        'separate_data_accounts': '分离DATA和ACCOUNTS设备',
-        'current_device_config_reasonable': '当前设备配置合理',
-        'eliminate_storage_bottleneck': '消除存储瓶颈，提升整体性能',
-        'maintain_good_storage_performance': '维持良好存储性能',
-        'blockchain_node_label': '区块链节点',
-        'increase_cpu_cores': '增加CPU核心数',
-        'current_cpu_suitable': '当前CPU配置适合负载',
-        'increase_memory_config': '增加内存配置',
-        'current_memory_suitable': '当前内存配置适合负载',
-        'optimize_node_params': '优化区块链节点配置参数',
-        'improve_node_capacity': '提升节点处理能力，消除性能瓶颈',
-        'maintain_stable_performance': '维持稳定节点性能',
-        'generate_overhead_table': '生成完整的监控开销数据表格',
-        'overhead_data_not_available': '监控开销Data Not Available',
-        'overhead_file_not_found': '监控开销数据文件未找到或为空。请确保在性能测试期间启用了监控开销统计。',
-        'expected_file_label': '预期文件',
-        'description_label': '说明',
-        'overhead_auto_generated': '监控开销数据由unified_monitor.sh自动生成，无需手动运行额外工具。',
         'overhead_detailed_data': '监控开销详细数据',
+        'monitoring_overhead_breakdown': '监控开销组件分解',
         'data_shows_component_consumption': '以下数据显示了测试期间各监控组件的资源消耗情况，帮助评估生产环境的真实资源需求。',
         'monitoring_component_label': '监控组件',
         'avg_cpu_usage_label': '平均CPU Usage',
@@ -874,7 +769,6 @@ TRANSLATIONS = {
         'total_monitoring_overhead': '总监控开销',
         'overhead_analysis_notes': '监控开销分析说明',
         'memory_usage_label': '内存使用',
-        'production_env_recommendation': '生产环境建议',
         'total_overhead_usually': '总监控开销通常占系统资源的1-3%，可以忽略不计。',
         'iops_throughput_zero_reason': 'IOPS/Throughput 为 0 的原因',
         'monitoring_reads_proc': '监控系统主要读取 <code>/proc</code> 虚拟文件系统，内核不计入物理 I/O 统计',
@@ -1103,6 +997,17 @@ TRANSLATIONS = {
         'monitoring_overhead_analysis': '监控开销分析',
         'blockchain_node_specific_analysis': 'Blockchain Node 特定分析',
         'bottleneck_detection_analysis': '瓶颈检测分析',
+        'system_bottleneck_analysis': '系统级瓶颈分析',
+        'system_bottleneck_detected': '检测到系统级性能瓶颈',
+        'no_system_bottleneck_detected': '未检测到系统级性能瓶颈',
+        'bottleneck_criteria_title': '系统级瓶颈判定条件',
+        'bottleneck_criteria_note': '需同时满足以下三个条件：',
+        'bottleneck_condition_1': '资源超限：CPU>85% 或 内存>90% 或 EBS IOPS/Throughput>90% 或 网络>80% 或 错误率>5%',
+        'bottleneck_condition_2': '持续性：连续3次检测到上述资源超限',
+        'bottleneck_condition_3': '节点不健康：区块高度差异>50且持续时间>300秒，或 RPC调用失败',
+        'bottleneck_current_status': '当前状态',
+        'bottleneck_status_normal': '测试过程中未触发系统级瓶颈停止条件。虽然可能存在间歇性性能事件（见下方"性能警告"），但系统整体运行正常，节点同步健康。',
+        'consecutive_detections': '连续检测次数',
         'html_content_generation_failed': 'HTML内容生成失败',
         'performance_analysis_charts': '性能分析图表',
         'charts_provide_comprehensive_visualization': '以下图表提供了系统性能的全方位可视化分析，包括性能趋势、关联性分析、瓶颈识别等',
@@ -1338,7 +1243,7 @@ class ReportGenerator:
                     with open(bottleneck_file, 'r') as f:
                         data = json.load(f)
                         # Validate data structure
-                        if isinstance(data, dict) and 'bottlenecks' in data:
+                        if isinstance(data, dict) and 'bottleneck_detected' in data:
                             print(f"✅ Successfully loaded bottleneck data: {bottleneck_file}")
                             return data
                         else:
@@ -1565,7 +1470,8 @@ class ReportGenerator:
         
         # Validate bottleneck data
         if self.bottleneck_data and isinstance(self.bottleneck_data, dict):
-            if 'bottlenecks' in self.bottleneck_data:
+            # Support both new format (bottleneck_detected) and old format (bottlenecks)
+            if 'bottleneck_detected' in self.bottleneck_data or 'bottlenecks' in self.bottleneck_data:
                 validation_results['bottleneck_data'] = True
                 print("✅ Bottleneck data validation passed")
             else:
@@ -1854,12 +1760,16 @@ class ReportGenerator:
             data_throughput_col = [col for col in df.columns if col.startswith('data_') and col.endswith('_aws_standard_throughput_mibs')]
             
             if data_iops_col:
-                stats_data['DATA_IOPS_Min'] = df[data_iops_col[0]].min()
+                # Filter out noise values (< 10 IOPS) for Min calculation
+                meaningful_data = df[df[data_iops_col[0]] >= 10][data_iops_col[0]]
+                stats_data['DATA_IOPS_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                 stats_data['DATA_IOPS_Max'] = df[data_iops_col[0]].max()
                 stats_data['DATA_IOPS_Avg'] = df[data_iops_col[0]].mean()
             
             if data_throughput_col:
-                stats_data['DATA_Throughput_Min'] = df[data_throughput_col[0]].min()
+                # Filter out noise values (< 1.0 MiB/s) for Min calculation
+                meaningful_data = df[df[data_throughput_col[0]] >= 1.0][data_throughput_col[0]]
+                stats_data['DATA_Throughput_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                 stats_data['DATA_Throughput_Max'] = df[data_throughput_col[0]].max()
                 stats_data['DATA_Throughput_Avg'] = df[data_throughput_col[0]].mean()
             
@@ -1868,12 +1778,16 @@ class ReportGenerator:
             accounts_throughput_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith('_aws_standard_throughput_mibs')]
             
             if accounts_iops_col:
-                stats_data['ACCOUNTS_IOPS_Min'] = df[accounts_iops_col[0]].min()
+                # Filter out noise values (< 10 IOPS) for Min calculation
+                meaningful_data = df[df[accounts_iops_col[0]] >= 10][accounts_iops_col[0]]
+                stats_data['ACCOUNTS_IOPS_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                 stats_data['ACCOUNTS_IOPS_Max'] = df[accounts_iops_col[0]].max()
                 stats_data['ACCOUNTS_IOPS_Avg'] = df[accounts_iops_col[0]].mean()
             
             if accounts_throughput_col:
-                stats_data['ACCOUNTS_Throughput_Min'] = df[accounts_throughput_col[0]].min()
+                # Filter out noise values (< 1.0 MiB/s) for Min calculation
+                meaningful_data = df[df[accounts_throughput_col[0]] >= 1.0][accounts_throughput_col[0]]
+                stats_data['ACCOUNTS_Throughput_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                 stats_data['ACCOUNTS_Throughput_Max'] = df[accounts_throughput_col[0]].max()
                 stats_data['ACCOUNTS_Throughput_Avg'] = df[accounts_throughput_col[0]].mean()
             
@@ -1964,9 +1878,19 @@ class ReportGenerator:
             for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
                 data_col = [col for col in df.columns if col.startswith('data_') and col.endswith(f'_{metric}')]
                 if data_col:
-                    # Filter out 0 values for Min calculation
-                    non_zero_data = df[df[data_col[0]] > 0][data_col[0]]
-                    iostat_stats[f'DATA_{metric}_Min'] = non_zero_data.min() if len(non_zero_data) > 0 else 0
+                    # Filter out noise values for Min calculation
+                    if metric == 'total_iops':
+                        meaningful_data = df[df[data_col[0]] >= 10][data_col[0]]  # >= 10 IOPS
+                    elif metric == 'total_throughput_mibs':
+                        meaningful_data = df[df[data_col[0]] >= 1.0][data_col[0]]  # >= 1.0 MiB/s
+                    elif metric == 'util':
+                        meaningful_data = df[df[data_col[0]] >= 1.0][data_col[0]]  # >= 1.0%
+                    elif metric == 'avg_await':
+                        meaningful_data = df[df[data_col[0]] >= 0.1][data_col[0]]  # >= 0.1 ms
+                    else:
+                        meaningful_data = df[df[data_col[0]] > 0][data_col[0]]
+                    
+                    iostat_stats[f'DATA_{metric}_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                     iostat_stats[f'DATA_{metric}_Max'] = df[data_col[0]].max()
                     iostat_stats[f'DATA_{metric}_Avg'] = df[data_col[0]].mean()
             
@@ -1974,9 +1898,19 @@ class ReportGenerator:
             for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
                 accounts_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith(f'_{metric}')]
                 if accounts_col:
-                    # Filter out 0 values for Min calculation
-                    non_zero_data = df[df[accounts_col[0]] > 0][accounts_col[0]]
-                    iostat_stats[f'ACCOUNTS_{metric}_Min'] = non_zero_data.min() if len(non_zero_data) > 0 else 0
+                    # Filter out noise values for Min calculation
+                    if metric == 'total_iops':
+                        meaningful_data = df[df[accounts_col[0]] >= 10][accounts_col[0]]  # >= 10 IOPS
+                    elif metric == 'total_throughput_mibs':
+                        meaningful_data = df[df[accounts_col[0]] >= 1.0][accounts_col[0]]  # >= 1.0 MiB/s
+                    elif metric == 'util':
+                        meaningful_data = df[df[accounts_col[0]] >= 1.0][accounts_col[0]]  # >= 1.0%
+                    elif metric == 'avg_await':
+                        meaningful_data = df[df[accounts_col[0]] >= 0.1][accounts_col[0]]  # >= 0.1 ms
+                    else:
+                        meaningful_data = df[df[accounts_col[0]] > 0][accounts_col[0]]
+                    
+                    iostat_stats[f'ACCOUNTS_{metric}_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                     iostat_stats[f'ACCOUNTS_{metric}_Max'] = df[accounts_col[0]].max()
                     iostat_stats[f'ACCOUNTS_{metric}_Avg'] = df[accounts_col[0]].mean()
             
@@ -2086,50 +2020,6 @@ class ReportGenerator:
             '''
         else:
             html += f'<p style="color: #6c757d;">{self.t["no_iostat_data"]}</p>'
-        
-        html += '</div>'
-        
-        # Add EBS Bottleneck Analysis subsection
-        html += f'''
-            <div class="subsection">
-                <h3>&#128192; {self.t['ebs_bottleneck_analysis']}</h3>
-        '''
-        
-        # Load bottleneck info
-        bottleneck_info = self._load_bottleneck_info()
-        
-        if bottleneck_info and 'ebs_bottlenecks' in bottleneck_info and bottleneck_info['ebs_bottlenecks']:
-            ebs_bottlenecks = bottleneck_info['ebs_bottlenecks']
-            
-            html += '<div class="warning-list" style="margin: 15px 0;">'
-            for bottleneck in ebs_bottlenecks:
-                device_type = bottleneck.get('device_type', 'DATA')
-                bottleneck_type = bottleneck.get('type', 'Unknown')
-                severity = bottleneck.get('severity', 'Medium')
-                details = bottleneck.get('details', {})
-                
-                color = "#dc3545" if severity == "High" else "#fd7e14"
-                
-                details_html = ""
-                for key, value in details.items():
-                    details_html += f"<li><strong>{key}:</strong> {value}</li>"
-                
-                html += f'''
-                <div style="border-left: 4px solid {color}; padding: 12px; margin: 8px 0; background: #f8f9fa; border-radius: 4px;">
-                    <strong style="color: {color};">{device_type} Device</strong> - {bottleneck_type} <span style="color: {color};">({severity})</span>
-                    <ul style="margin: 8px 0; padding-left: 20px;">
-                        {details_html}
-                    </ul>
-                </div>
-                '''
-            html += '</div>'
-        else:
-            html += f'''
-                <div class="success" style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin: 15px 0;">
-                    <h4 style="color: #155724; margin: 0 0 8px 0;">&#9989; {self.t['no_ebs_bottleneck_detected']}</h4>
-                    <p style="color: #155724; margin: 0;">{self.t['no_ebs_bottleneck_found']}</p>
-                </div>
-            '''
         
         html += '</div>'
         
@@ -2979,111 +2869,13 @@ class ReportGenerator:
             </div>
             """
     
-    def _load_bottleneck_info(self):
-        """Load bottleneck detection information"""
-        if self.bottleneck_info and os.path.exists(self.bottleneck_info):
-            try:
-                with open(self.bottleneck_info, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"⚠️ {self.t['bottleneck_info_load_failed']}: {e}")
-        return None
-    
-    def _generate_production_resource_planning_section(self):
-        """Generate production environment resource planning recommendations section"""
-        overhead_data = self.overhead_data  # Use cached data instead of reloading
-        bottleneck_info = self._load_bottleneck_info()
-        
-        # Determine main bottleneck
-        main_bottleneck = self.t['no_obvious_bottleneck']
-        bottleneck_component = self.t['none_label']
-        if bottleneck_info:
-            if bottleneck_info.get('cpu_bottleneck', False):
-                main_bottleneck = self.t['cpu_insufficient']
-                bottleneck_component = "CPU"
-            elif bottleneck_info.get('memory_bottleneck', False):
-                main_bottleneck = self.t['memory_insufficient']
-                bottleneck_component = self.t['memory_usage']
-            elif bottleneck_info.get('ebs_bottlenecks', []):
-                for bottleneck in bottleneck_info.get('ebs_bottlenecks', []):
-                    if bottleneck.get('device_type') == 'data':
-                        main_bottleneck = f"DATA{self.t['device_label']}{bottleneck.get('type', 'EBS')}{self.t['device_bottleneck']}"
-                        bottleneck_component = self.t['storage_io_label']
-                        break
-        
-
-        
-        section_html = f"""
-        <div class="section">
-            <h2>&#127919; {self.t['production_resource_planning']}</h2>
-            
-            <div class="conclusion">
-                <h3>&#128221; {self.t['test_conclusion_summary']}</h3>
-                <p>{self.t['based_on_test_results']}</p>
-                <ul>
-                    <li>{self.t['main_bottleneck_label']}: <strong>{main_bottleneck}</strong></li>
-                    <li>{self.t['monitoring_resource_usage']}: {self.t['significant_label'] if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else self.t['minor_label']}</li>
-                    <li>{self.t['blockchain_resource_demand']}: {self.t['high_label'] if overhead_data and overhead_data.get('blockchain_cpu_percent_avg', 0) > 50 else self.t['medium_label'] if overhead_data and overhead_data.get('blockchain_cpu_percent_avg', 0) > 20 else self.t['low_label']}</li>
-                </ul>
-            </div>
-            
-
-            <div class="info-card">
-                <h3>&#128161; {self.t['performance_optimization_recommendations']}</h3>
-                <table class="data-table">
-                    <tr>
-                        <th>{self.t['component_label']}</th>
-                        <th>{self.t['optimization_recommendation']}</th>
-                        <th>{self.t['expected_effect']}</th>
-                    </tr>
-                    <tr>
-                        <td>{self.t['monitoring_system_label']}</td>
-                        <td>
-                            <ul>
-                                <li>{self.t['reduce_frequency'] if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else self.t['keep_current_config']}</li>
-                                <li>{self.t['use_separate_overhead_log']}</li>
-                                <li>{self.t['cleanup_historical_data']}</li>
-                            </ul>
-                        </td>
-                        <td>{self.t['significantly_reduce_overhead'] if overhead_data and overhead_data.get('monitoring_cpu_ratio', 0) > 0.05 else self.t['maintain_low_overhead']}</td>
-                    </tr>
-                    <tr>
-                        <td>{self.t['ebs_storage_label']}</td>
-                        <td>
-                            <ul>
-                                <li>{self.t['increase_iops_config'] if bottleneck_component == self.t['storage_io_label'] else self.t['current_config_suitable']}</li>
-                                <li>{self.t['consider_io2_over_gp3'] if bottleneck_component == self.t['storage_io_label'] else self.t['keep_current_storage_type']}</li>
-                                <li>{self.t['separate_data_accounts'] if bottleneck_component == self.t['storage_io_label'] else self.t['current_device_config_reasonable']}</li>
-                            </ul>
-                        </td>
-                        <td>{self.t['eliminate_storage_bottleneck'] if bottleneck_component == self.t['storage_io_label'] else self.t['maintain_good_storage_performance']}</td>
-                    </tr>
-                    <tr>
-                        <td>{self.t['blockchain_node_label']}</td>
-                        <td>
-                            <ul>
-                                <li>{self.t['increase_cpu_cores'] if bottleneck_component == 'CPU' else self.t['current_cpu_suitable']}</li>
-                                <li>{self.t['increase_memory_config'] if bottleneck_component == self.t['memory_usage'] else self.t['current_memory_suitable']}</li>
-                                <li>{self.t['optimize_node_params']}</li>
-                            </ul>
-                        </td>
-                        <td>{self.t['improve_node_capacity'] if bottleneck_component in ['CPU', self.t['memory_usage']] else self.t['maintain_stable_performance']}</td>
-                    </tr>
-                </table>
-            </div>
-            
-
-        </div>
-        """
-        return section_html
-        
 
 
-    
     def _generate_overhead_data_table(self):
         """Generate complete monitoring overhead data table"""
         if not self.overhead_data:
             return f"""
+            <h2>&#128202; {self.t['monitoring_overhead_breakdown']}</h2>
             <div class="warning">
                 <h4>&#9888; {self.t['overhead_data_not_available']}</h4>
                 <p>{self.t['overhead_file_not_found']}</p>
@@ -3095,6 +2887,7 @@ class ReportGenerator:
         try:
             # Generate detailed monitoring overhead table
             table_html = f"""
+            <h2>&#128202; {self.t['monitoring_overhead_breakdown']}</h2>
             <div class="info">
                 <h4>&#128202; {self.t['overhead_detailed_data']}</h4>
                 <p>{self.t['data_shows_component_consumption']}</p>
@@ -3217,7 +3010,7 @@ class ReportGenerator:
                     <li><strong>Throughput</strong>: {self.t['disk_throughput_generated']}</li>
                     <li><strong>{self.t['data_completeness_label']}</strong>: {self.t['data_completeness_percentage']}</li>
                 </ul>
-                <p><strong>{self.t['production_env_recommendation']}</strong>: {self.t['total_overhead_usually']}</p>
+                <p>{self.t['total_overhead_usually']}</p>
                 <p><strong>{self.t['iops_throughput_zero_reason']}</strong>:</p>
                 <ul style="margin-top: 5px;">
                     <li>{self.t['monitoring_reads_proc']}</li>
@@ -4049,7 +3842,6 @@ class ReportGenerator:
             # Generate each section - using actually existing methods
             monitoring_overhead_analysis = self._generate_monitoring_overhead_section()
             monitoring_overhead_detailed = self._generate_monitoring_overhead_detailed_section()
-            production_resource_planning = self._generate_production_resource_planning_section()
             ena_warnings = self._generate_ena_warnings_section(df)
             ena_data_table = self._generate_ena_data_table(df)
             
@@ -4097,12 +3889,11 @@ class ReportGenerator:
                     {charts_section}
                     {monitoring_overhead_analysis}
                     {monitoring_overhead_detailed}
-                    {production_resource_planning}
+                    {overhead_table}
                     {ena_warnings}
                     {ena_data_table}
 
                     {correlation_table}
-                    {overhead_table}
                 </div>
             </body>
             </html>
@@ -4384,93 +4175,100 @@ class ReportGenerator:
             """
 
     def _generate_bottleneck_section(self):
-        """Generate bottleneck information display section"""
-        if not self.bottleneck_data:
-            return ""
-        
+        """Generate system-level bottleneck analysis section - always display"""
         try:
-            bottleneck_detected = self.bottleneck_data.get('bottleneck_detected', False)
-            if not bottleneck_detected:
-                return ""
+            bottleneck_detected = False
+            if self.bottleneck_data:
+                bottleneck_detected = self.bottleneck_data.get('bottleneck_detected', False)
             
-            max_qps = self.bottleneck_data.get('max_successful_qps', 0)
-            bottleneck_qps = self.bottleneck_data.get('bottleneck_qps', 0)
-            reasons = self.bottleneck_data.get('bottleneck_reasons', self.t['unknown'])
-            severity = self.bottleneck_data.get('severity', 'medium')
-            detection_time = self.bottleneck_data.get('detection_time', self.t['unknown'])
-            recommendations = self.bottleneck_data.get('recommendations', [])
-            
-            # Calculate performance drop
-            performance_drop = 0.0
-            if max_qps > 0:
-                performance_drop = ((bottleneck_qps - max_qps) / max_qps) * 100
-            
-            # Severity color
-            severity_color = {
-                'low': '#28a745',
-                'medium': '#ffc107', 
-                'high': '#dc3545'
-            }.get(severity.lower(), '#ffc107')
-            
-            # Generate recommendations list
-            recommendations_html = ""
-            if recommendations:
-                rec_items = [f"<li>{rec}</li>" for rec in recommendations[:5]]
-                recommendations_html = f"<ul>{''.join(rec_items)}</ul>"
-            
-            return f"""
-            <div class="section bottleneck-alert" style="border-left: 5px solid {severity_color}; background-color: #FEF5E7;">
-                <h2 style="color: {severity_color};">&#128680; {self.t['performance_bottleneck_detection_result']}</h2>
+            if bottleneck_detected:
+                # 有瓶颈：显示详细信息
+                max_qps = self.bottleneck_data.get('max_successful_qps', 0)
+                bottleneck_qps = self.bottleneck_data.get('bottleneck_qps', 0)
+                reasons = self.bottleneck_data.get('bottleneck_reasons', self.t['unknown'])
+                severity = self.bottleneck_data.get('severity', 'medium')
+                detection_time = self.bottleneck_data.get('detection_time', self.t['unknown'])
+                consecutive_detections = self.bottleneck_data.get('consecutive_detections', 0)
                 
-                <div class="bottleneck-summary">
-                    <div class="bottleneck-stats">
-                        <div class="stat-item">
-                            <h4>&#127942; {self.t['max_successful_qps']}</h4>
-                            <div class="stat-value" style="color: #28a745; font-size: 2em; font-weight: bold;">{max_qps}</div>
+                performance_drop = 0.0
+                if max_qps > 0:
+                    performance_drop = ((bottleneck_qps - max_qps) / max_qps) * 100
+                
+                severity_color = {
+                    'low': '#28a745',
+                    'medium': '#ffc107', 
+                    'high': '#dc3545'
+                }.get(severity.lower(), '#ffc107')
+                
+                return f"""
+                <div class="section" style="border-left: 5px solid {severity_color}; background-color: #FEF5E7;">
+                    <h2 style="color: {severity_color};">&#128680; {self.t['system_bottleneck_analysis']}</h2>
+                    
+                    <div style="background: #fff3cd; border: 1px solid {severity_color}; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                        <h3 style="color: {severity_color}; margin-top: 0;">&#9888; {self.t['system_bottleneck_detected']}</h3>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0;">
+                        <div style="background: white; padding: 15px; border-radius: 4px; border: 1px solid #ddd;">
+                            <h4 style="margin: 0 0 10px 0; color: #666;">&#127942; {self.t['max_successful_qps']}</h4>
+                            <div style="color: #28a745; font-size: 2em; font-weight: bold;">{max_qps}</div>
                         </div>
-                        <div class="stat-item">
-                            <h4>&#128680; {self.t['bottleneck_trigger_qps']}</h4>
-                            <div class="stat-value" style="color: #dc3545; font-size: 2em; font-weight: bold;">{bottleneck_qps}</div>
+                        <div style="background: white; padding: 15px; border-radius: 4px; border: 1px solid #ddd;">
+                            <h4 style="margin: 0 0 10px 0; color: #666;">&#128680; {self.t['bottleneck_trigger_qps']}</h4>
+                            <div style="color: #dc3545; font-size: 2em; font-weight: bold;">{bottleneck_qps}</div>
                         </div>
-                        <div class="stat-item">
-                            <h4>&#128201; {self.t['performance_drop']}</h4>
-                            <div class="stat-value" style="color: #dc3545; font-size: 1.5em; font-weight: bold;">{performance_drop:.1f}%</div>
+                        <div style="background: white; padding: 15px; border-radius: 4px; border: 1px solid #ddd;">
+                            <h4 style="margin: 0 0 10px 0; color: #666;">&#128201; {self.t['performance_drop']}</h4>
+                            <div style="color: #dc3545; font-size: 2em; font-weight: bold;">{performance_drop:.1f}%</div>
                         </div>
                     </div>
-                </div>
-                
-                <div class="bottleneck-details">
-                    <h3>&#128269; {self.t['bottleneck_details']}</h3>
-                    <div class="info">
+                    
+                    <div style="background: white; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                        <h3>&#128269; {self.t['bottleneck_details']}</h3>
                         <p><strong>{self.t['detection_time']}:</strong> {detection_time}</p>
                         <p><strong>{self.t['severity_level']}:</strong> <span style="color: {severity_color}; font-weight: bold;">{severity.upper()}</span></p>
                         <p><strong>{self.t['bottleneck_reason']}:</strong> {reasons}</p>
+                        <p><strong>{self.t['consecutive_detections']}:</strong> {consecutive_detections}</p>
+                    </div>
+                    
+                    <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                        <h3 style="margin-top: 0;">&#128203; {self.t['bottleneck_criteria_title']}</h3>
+                        <p><strong>{self.t['bottleneck_criteria_note']}</strong></p>
+                        <ol style="margin: 10px 0; padding-left: 20px;">
+                            <li>{self.t['bottleneck_condition_1']}</li>
+                            <li>{self.t['bottleneck_condition_2']}</li>
+                            <li>{self.t['bottleneck_condition_3']}</li>
+                        </ol>
                     </div>
                 </div>
+                """
+            else:
+                # 无瓶颈：显示判定条件
+                return f"""
+                <div class="section">
+                    <h2>&#9989; {self.t['system_bottleneck_analysis']}</h2>
+                    
+                    <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                        <h3 style="color: #155724; margin-top: 0;">&#9989; {self.t['no_system_bottleneck_detected']}</h3>
+                    </div>
+                    
+                    <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                        <h3 style="margin-top: 0;">&#128203; {self.t['bottleneck_criteria_title']}</h3>
+                        <p><strong>{self.t['bottleneck_criteria_note']}</strong></p>
+                        <ol style="margin: 10px 0; padding-left: 20px;">
+                            <li>{self.t['bottleneck_condition_1']}</li>
+                            <li>{self.t['bottleneck_condition_2']}</li>
+                            <li>{self.t['bottleneck_condition_3']}</li>
+                        </ol>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                        <h3 style="margin-top: 0;">&#128202; {self.t['bottleneck_current_status']}</h3>
+                        <p>{self.t['bottleneck_status_normal']}</p>
+                    </div>
+                </div>
+                """
                 
-                {f'''
-                <div class="bottleneck-recommendations">
-                    <h3>&#128161; {self.t['optimization_recommendations']}</h3>
-                    <div class="info">
-                        {recommendations_html}
-                    </div>
-                </div>
-                ''' if recommendations else ''}
-                
-                <div class="bottleneck-actions">
-                    <h3>&#127919; {self.t['suggested_next_actions']}</h3>
-                    <div class="info">
-                        <ul>
-                            <li>{self.t['view_detailed_bottleneck_charts']}</li>
-                            <li>{self.t['adjust_system_config_per_recommendations']}</li>
-                            <li>{self.t['consider_hardware_upgrade_or_app_optimization']}</li>
-                            <li>{self.t['rerun_test_to_verify_improvements']}</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            """
-            
         except Exception as e:
             return f"""
             <div class="section error">

@@ -194,6 +194,9 @@ monitor_block_height_diff() {
                 echo "🚨 CRITICAL: Block height difference has exceeded threshold for ${duration}s (> ${BLOCK_HEIGHT_TIME_THRESHOLD}s)"
                 echo "🚨 CRITICAL: Local node may be considered unavailable for service"
                 
+                # 设置持续超限标志文件（用于系统级瓶颈判断）
+                echo "1" > "${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag"
+                
                 # 记录事件
                 BLOCK_HEIGHT_DIFF_EVENTS+=("CRITICAL: Block height diff $block_height_diff for ${duration}s at $(get_unified_timestamp)")
             fi

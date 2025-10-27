@@ -560,15 +560,16 @@ graph TB
 4. **Network**: Utilization > 80%
 5. **Error Rate**: > 5%
 
-**Stop Rules** (Dual Verification):
+**Stop Rules** (Triple Verification):
 
 ```bash
-# Condition 1: Resource Bottleneck (3 consecutive detections)
-if Resource Bottleneck Detected:
+# Condition 1: Resource Limit Exceeded
+if Resource Exceeds Threshold (CPU>85% OR Memory>90% OR EBS>90% OR Network>80% OR Error>5%):
     BOTTLENECK_COUNT++
     
+    # Condition 2: Consecutive Detection
     if BOTTLENECK_COUNT >= 3:
-        # Condition 2: Node Health Check
+        # Condition 3: Node Health Check
         if (block_height_diff > 50) OR (block_height_time_diff > 300):
             # Node unhealthy → Real performance bottleneck
             Stop testing
@@ -578,6 +579,13 @@ if Resource Bottleneck Detected:
             Reset BOTTLENECK_COUNT = 0
             Continue testing
 ```
+
+**Three Conditions Explained**:
+1. **Condition 1 - Resource Limit Exceeded**: Any resource metric exceeds threshold
+2. **Condition 2 - Consecutive Detection**: Resource exceeded detected 3 consecutive times
+3. **Condition 3 - Node Unhealthy**: Block height delay or RPC failure
+
+**Only when all three conditions are met**, the system identifies it as a real system-level bottleneck and stops testing.
 
 **Key Configuration**:
 ```bash

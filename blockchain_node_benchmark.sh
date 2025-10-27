@@ -170,6 +170,9 @@ prepare_benchmark_data() {
 start_monitoring_system() {
     echo "📊 启动监控系统..."
     
+    # 清理上次测试的区块高度持续超限标志文件
+    rm -f "${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag" 2>/dev/null || true
+    
     # 在启动监控前创建框架运行状态文件
     echo "running" > "$TMP_DIR/qps_test_status.tmp"
     mv "$TMP_DIR/qps_test_status.tmp" "$TMP_DIR/qps_test_status"
@@ -858,10 +861,10 @@ cleanup_temp_files() {
         rm -rf "$TEST_SESSION_DIR"
     fi
     
-    # 清理状态文件
-    if [[ -f "$QPS_STATUS_FILE" ]]; then
-        rm -f "$QPS_STATUS_FILE"
-    fi
+    # 不删除 qps_status.json，保留用于归档
+    # if [[ -f "$QPS_STATUS_FILE" ]]; then
+    #     rm -f "$QPS_STATUS_FILE"
+    # fi
 }
 
 # 解析RPC模式参数

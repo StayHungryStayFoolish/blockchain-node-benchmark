@@ -44,6 +44,12 @@ copy_shared_memory_stats() {
         cp "$MEMORY_SHARE_DIR/bottleneck_status.json" "$stats_dir/"
         echo "✅ bottleneck_status.json已归档到: $stats_dir/"
     fi
+    
+    # 复制qps_status.json到归档（系统级瓶颈检测数据）
+    if [[ -f "$MEMORY_SHARE_DIR/qps_status.json" ]]; then
+        cp "$MEMORY_SHARE_DIR/qps_status.json" "$stats_dir/"
+        echo "✅ qps_status.json已归档到: $stats_dir/"
+    fi
 }
 
 # 自动检测瓶颈信息 (开发环境优化版)

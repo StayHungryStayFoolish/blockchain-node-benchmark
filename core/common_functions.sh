@@ -120,18 +120,9 @@ get_cached_block_height_data() {
         # 两个节点都无法获取区块高度数据
         data_loss="1"  # 数值：1=true
     elif [[ "$local_block_height" != "N/A" && "$mainnet_block_height" != "N/A" ]]; then
-        # 如果能获取到区块高度数据，检查差异是否过大
-        local abs_block_height_diff
-        if [[ $block_height_diff -lt 0 ]]; then
-            abs_block_height_diff=$((-block_height_diff))
-        else
-            abs_block_height_diff=$block_height_diff
-        fi
-        
-        # 使用配置的阈值来判断数据丢失
-        if [[ $abs_block_height_diff -gt ${BLOCK_HEIGHT_DIFF_THRESHOLD:-50} ]]; then
-            data_loss="1"  # 数值：1=true
-        fi
+        # 能获取到区块高度数据，data_loss 保持为 0
+        # 区块高度差异的判断交给 block_height_monitor.sh 处理（需要持续时间判断）
+        data_loss="0"
     elif [[ "$local_block_height" == "N/A" || "$mainnet_block_height" == "N/A" ]]; then
         # 只有一个节点无法获取数据，检查是否持续
         # 这里可以添加更复杂的逻辑，比如检查历史数据

@@ -204,16 +204,22 @@ BLOCK_HEIGHT_TIME_THRESHOLD=300           # 区块时间差异阈值（秒）
 
 #### 瓶颈检测停止规则
 
-框架使用**双重验证机制**来决定是否停止测试：
+框架使用**三重验证机制**来决定是否停止测试：
 
 **停止条件**：
 ```
-资源瓶颈（连续3次检测） AND 节点不健康 → 停止测试
+条件1: 资源限制超标 (任一资源超过阈值)
+AND
+条件2: 连续3次检测
+AND
+条件3: 节点不健康 (区块高度延迟或RPC失败)
+→ 停止测试
 ```
 
 **继续条件**：
 ```
-资源瓶颈（连续3次检测） AND 节点健康 → 重置计数器，继续测试
+条件1 AND 条件2 满足，但条件3不满足 (节点健康)
+→ 重置计数器，继续测试
 ```
 
 **配置说明**：
@@ -243,11 +249,22 @@ BLOCK_HEIGHT_TIME_THRESHOLD=300           # 区块时间差异阈值（秒）
 
 ```bash
 # 每轮 QPS 测试后检查
-if 检测到资源瓶颈 (CPU/Memory/EBS/Network 超过阈值):
+# 条件1: 资源限制超标
+if 检测到资源超标 (CPU/Memory/EBS/Network 超过阈值):
     BOTTLENECK_COUNT++
     
+    # 条件2: 连续检测
     if BOTTLENECK_COUNT >= BOTTLENECK_CONSECUTIVE_COUNT:
-        # 检查节点健康状态
+        # 条件3: 节点健康检查
+        if (block_height_diff > BLOCK_HEIGHT_DIFF_THRESHOLD) OR 
+           (block_height_time_diff > BLOCK_HEIGHT_TIME_THRESHOLD):
+            # 节点不健康 → 真正的性能瓶颈
+            停止测试，保存瓶颈上下文
+        else:
+            # 节点健康 → 可能是误判（例如 iostat 100% 但 AWS EBS 利用率低）
+            重置 BOTTLENECK_COUNT = 0
+            继续测试
+```
         if (block_height_diff > BLOCK_HEIGHT_DIFF_THRESHOLD) OR 
            (block_height_time_diff > BLOCK_HEIGHT_TIME_THRESHOLD):
             # 节点不健康 → 真正的性能瓶颈
