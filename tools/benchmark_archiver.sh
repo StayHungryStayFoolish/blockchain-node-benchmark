@@ -259,6 +259,17 @@ archive_current_test() {
     # 更新测试历史索引
     update_test_history "$run_id" "$benchmark_mode" "$max_qps" "$status"
     
+    # 清理已归档的共享内存文件
+    if [[ -n "${MEMORY_SHARE_DIR:-}" ]] && [[ -d "$MEMORY_SHARE_DIR" ]]; then
+        echo "🧹 清理共享内存已归档文件..."
+        rm -f "$MEMORY_SHARE_DIR"/bottleneck_status.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/qps_status.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/data_loss_stats.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/event_notification.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/*.flag 2>/dev/null || true
+        echo "✅ 共享内存已归档文件已清理"
+    fi
+    
     echo "🎉 测试归档完成: $run_id"
     echo "📊 数据大小: $(du -sh "$archive_path" | cut -f1)"
     
