@@ -386,9 +386,10 @@ TRANSLATIONS = {
         'generate_improved_table': 'Generate improved HTML table',
         'set_row_color_by_strength': 'Set row color based on correlation strength',
         'correlation_analysis_notes': 'Correlation Analysis Notes',
+        'cpu_ebs_correlation_analysis': 'CPU-EBS Correlation Analysis',
         'correlation_range': 'Correlation coefficient range',
         'larger_abs_stronger': '-1.0 to 1.0, larger absolute value indicates stronger correlation',
-        'significance_levels': '*** p<0.001, ** p<0.01, * p<0.05',
+        'significance_levels': 'p<0.001 (***), p<0.01 (**), p<0.05 (*)',
         'strength_classification': 'Correlation strength classification: |r|≥0.8 very strong, |r|≥0.6 strong, |r|≥0.4 moderate, |r|≥0.2 weak',
         'data_integrity_percentage': 'Data integrity: Percentage of valid data points out of total data points',
         'format_block_height_readable': 'Convert block_height related field values to human-readable format',
@@ -942,9 +943,10 @@ TRANSLATIONS = {
         'generate_improved_table': '生成改进的HTML表格',
         'set_row_color_by_strength': '根据相关性强度设置行颜色',
         'correlation_analysis_notes': '相关性分析说明',
+        'cpu_ebs_correlation_analysis': 'CPU-EBS相关性分析',
         'correlation_range': '相关系数范围',
         'larger_abs_stronger': '-1.0 到 1.0，绝对值越大相关性越强',
-        'significance_levels': '*** p<0.001, ** p<0.01, * p<0.05',
+        'significance_levels': 'p<0.001 (***), p<0.01 (**), p<0.05 (*)',
         'strength_classification': '相关强度分类: |r|≥0.8极强, |r|≥0.6强, |r|≥0.4中等, |r|≥0.2弱',
         'data_integrity_percentage': '数据完整性: 有效数据点占总数据点的百分比',
         'format_block_height_readable': '将block_height相关字段的数值转换为人类可读格式',
@@ -3892,7 +3894,8 @@ class ReportGenerator:
                     {overhead_table}
                     {ena_warnings}
                     {ena_data_table}
-
+                    
+                    <h2>&#128202; {self.t['cpu_ebs_correlation_analysis']}</h2>
                     {correlation_table}
                 </div>
             </body>
