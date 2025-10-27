@@ -22,7 +22,7 @@
 
 ## ⚡ 快速配置
 
-**在运行框架之前**，您必须在 `config/config_loader.sh` 中配置以下参数：
+**在运行框架之前**，您必须在 `config/config_loader.sh` 和 `config/user_loader.sh` 中配置以下参数：
 
 ```bash
 # 1. RPC 端点（必需）

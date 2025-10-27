@@ -22,7 +22,7 @@ A professional multi blockchain node performance benchmarking framework with com
 
 ## ⚡ Quick Configuration
 
-**Before running the framework**, you must configure the following parameters in `config/config_loader.sh`:
+**Before running the framework**, you must configure the following parameters in `config/config_loader.sh` and `config/user_loader.sh`:
 
 ```bash
 # 1. RPC Endpoint (Required)
