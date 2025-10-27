@@ -192,7 +192,77 @@ BOTTLENECK_EBS_THROUGHPUT_THRESHOLD=90    # Throughput utilization > 90% = bottl
 # Network thresholds
 BOTTLENECK_NETWORK_THRESHOLD=80           # Network > 80% = bottleneck
 BOTTLENECK_ERROR_RATE_THRESHOLD=5         # Error rate > 5% = bottleneck
+
+# Bottleneck Detection Control
+BOTTLENECK_CONSECUTIVE_COUNT=3            # Consecutive detection count threshold
+BOTTLENECK_ANALYSIS_WINDOW=30             # Bottleneck analysis time window (seconds)
+
+# Blockchain Node Health Check Thresholds
+BLOCK_HEIGHT_DIFF_THRESHOLD=50            # Block height difference threshold
+BLOCK_HEIGHT_TIME_THRESHOLD=300           # Block time difference threshold (seconds)
 ```
+
+#### Bottleneck Detection Stop Rules
+
+The framework uses a **dual verification mechanism** to decide whether to stop testing:
+
+**Stop Condition**:
+```
+Resource Bottleneck (3 consecutive detections) AND Node Unhealthy → Stop Testing
+```
+
+**Continue Condition**:
+```
+Resource Bottleneck (3 consecutive detections) AND Node Healthy → Reset Counter, Continue Testing
+```
+
+**Configuration Details**:
+
+1. **BOTTLENECK_CONSECUTIVE_COUNT** (Default: 3)
+   - Number of consecutive bottleneck detections required
+   - Prevents false positives from transient performance spikes
+   - Recommended: 3-5 times
+
+2. **BOTTLENECK_ANALYSIS_WINDOW** (Default: 30 seconds)
+   - Time window for offline bottleneck analysis
+   - Analyzes data N seconds before and after bottleneck occurrence
+   - Used for deep root cause analysis
+   - Recommended: 30-60 seconds
+
+3. **BLOCK_HEIGHT_DIFF_THRESHOLD** (Default: 50)
+   - Block height difference threshold between local node and mainnet
+   - Exceeding this indicates node sync lag
+   - Recommended: 50-100 blocks
+
+4. **BLOCK_HEIGHT_TIME_THRESHOLD** (Default: 300 seconds)
+   - Time difference threshold between local node and mainnet block time
+   - Exceeding this indicates node sync delay
+   - Recommended: 300-600 seconds (5-10 minutes)
+
+**How It Works**:
+
+```bash
+# Check after each QPS test round
+if Resource Bottleneck Detected (CPU/Memory/EBS/Network exceeds threshold):
+    BOTTLENECK_COUNT++
+    
+    if BOTTLENECK_COUNT >= BOTTLENECK_CONSECUTIVE_COUNT:
+        # Check node health status
+        if (block_height_diff > BLOCK_HEIGHT_DIFF_THRESHOLD) OR 
+           (block_height_time_diff > BLOCK_HEIGHT_TIME_THRESHOLD):
+            # Node unhealthy → Real performance bottleneck
+            Stop testing, save bottleneck context
+        else:
+            # Node healthy → Possible false positive (e.g., iostat 100% but AWS EBS utilization low)
+            Reset BOTTLENECK_COUNT = 0
+            Continue testing
+```
+
+**Use Cases**:
+
+- **Increase Threshold**: If testing stops too early, increase `BOTTLENECK_CONSECUTIVE_COUNT` to 5
+- **Shorten Window**: If bottleneck analysis data is too large, reduce `BOTTLENECK_ANALYSIS_WINDOW` to 20 seconds
+- **Relax Node Check**: If node sync is slow, increase `BLOCK_HEIGHT_DIFF_THRESHOLD` to 100
 
 ### Multi-Level Threshold System
 

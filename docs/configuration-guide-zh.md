@@ -192,7 +192,77 @@ BOTTLENECK_EBS_THROUGHPUT_THRESHOLD=90    # 吞吐量利用率 > 90% = 瓶颈
 # 网络阈值
 BOTTLENECK_NETWORK_THRESHOLD=80           # 网络 > 80% = 瓶颈
 BOTTLENECK_ERROR_RATE_THRESHOLD=5         # 错误率 > 5% = 瓶颈
+
+# 瓶颈检测控制
+BOTTLENECK_CONSECUTIVE_COUNT=3            # 连续检测次数阈值
+BOTTLENECK_ANALYSIS_WINDOW=30             # 瓶颈分析时间窗口（秒）
+
+# 区块链节点健康检查阈值
+BLOCK_HEIGHT_DIFF_THRESHOLD=50            # 区块高度差异阈值
+BLOCK_HEIGHT_TIME_THRESHOLD=300           # 区块时间差异阈值（秒）
 ```
+
+#### 瓶颈检测停止规则
+
+框架使用**双重验证机制**来决定是否停止测试：
+
+**停止条件**：
+```
+资源瓶颈（连续3次检测） AND 节点不健康 → 停止测试
+```
+
+**继续条件**：
+```
+资源瓶颈（连续3次检测） AND 节点健康 → 重置计数器，继续测试
+```
+
+**配置说明**：
+
+1. **BOTTLENECK_CONSECUTIVE_COUNT** (默认: 3)
+   - 需要连续检测到瓶颈的次数
+   - 避免偶发性能波动导致误判
+   - 建议值：3-5次
+
+2. **BOTTLENECK_ANALYSIS_WINDOW** (默认: 30秒)
+   - 离线分析时聚焦的时间窗口
+   - 分析瓶颈发生前后N秒的数据
+   - 用于深度分析瓶颈根因
+   - 建议值：30-60秒
+
+3. **BLOCK_HEIGHT_DIFF_THRESHOLD** (默认: 50)
+   - 本地节点与主网的区块高度差异阈值
+   - 超过此值表示节点同步落后
+   - 建议值：50-100个区块
+
+4. **BLOCK_HEIGHT_TIME_THRESHOLD** (默认: 300秒)
+   - 本地节点区块时间与主网的时间差异阈值
+   - 超过此值表示节点同步延迟
+   - 建议值：300-600秒（5-10分钟）
+
+**工作原理**：
+
+```bash
+# 每轮 QPS 测试后检查
+if 检测到资源瓶颈 (CPU/Memory/EBS/Network 超过阈值):
+    BOTTLENECK_COUNT++
+    
+    if BOTTLENECK_COUNT >= BOTTLENECK_CONSECUTIVE_COUNT:
+        # 检查节点健康状态
+        if (block_height_diff > BLOCK_HEIGHT_DIFF_THRESHOLD) OR 
+           (block_height_time_diff > BLOCK_HEIGHT_TIME_THRESHOLD):
+            # 节点不健康 → 真正的性能瓶颈
+            停止测试，保存瓶颈上下文
+        else:
+            # 节点健康 → 可能是误判（如 iostat 100% 但 AWS EBS 利用率低）
+            重置 BOTTLENECK_COUNT = 0
+            继续测试
+```
+
+**使用场景**：
+
+- **提高阈值**：如果测试过早停止，可以增加 `BOTTLENECK_CONSECUTIVE_COUNT` 到 5
+- **缩短窗口**：如果瓶颈分析数据过多，可以减少 `BOTTLENECK_ANALYSIS_WINDOW` 到 20秒
+- **放宽节点检查**：如果节点同步较慢，可以增加 `BLOCK_HEIGHT_DIFF_THRESHOLD` 到 100
 
 ### 多级阈值系统
 
