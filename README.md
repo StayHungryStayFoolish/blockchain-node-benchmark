@@ -415,10 +415,76 @@ chmod +x monitoring/monitoring_coordinator.sh
 ```
 
 ### Log File Locations
-- **Main Log**: `logs/blockchain_node_benchmark.log`
-- **Monitoring Log**: `logs/unified_monitor.log`
-- **Performance Data**: `logs/performance_YYYYMMDD_HHMMSS.csv`
-- **Bottleneck Events**: `logs/bottleneck_events.jsonl`
+
+All logs are stored in `blockchain-node-benchmark-result/current/logs/`:
+
+- **QPS Test Log**: `master_qps_executor.log` - QPS test progress and results
+- **Monitoring Log**: `unified_monitor.log` - System monitoring data
+- **Bottleneck Detection**: `bottleneck_detector.log` - Bottleneck detection events
+- **EBS Analysis**: `ebs_bottleneck_detector.log` - EBS performance analysis
+- **Performance Data**: `performance_YYYYMMDD_HHMMSS.csv` - Raw performance metrics
+- **Monitoring Overhead**: `monitoring_overhead_YYYYMMDD_HHMMSS.csv` - Monitoring system overhead
+
+### Viewing Test Progress
+
+If your terminal disconnects during testing, you can reconnect and view progress:
+
+```bash
+# View QPS test progress in real-time
+tail -f blockchain-node-benchmark-result/current/logs/master_qps_executor.log
+
+# Check current test status
+ps aux | grep vegeta | grep -v grep
+
+# View latest performance data
+tail -20 blockchain-node-benchmark-result/current/logs/performance_latest.csv
+
+# Check if bottleneck detected
+cat /dev/shm/blockchain-node-benchmark/bottleneck_status.json | jq '.'
+
+# View completed test results
+ls -lt blockchain-node-benchmark-result/current/vegeta_results/ | head -10
+```
+
+### After Test Completion
+
+Once testing is complete, all results are archived:
+
+```bash
+# View archived results
+ls -lt blockchain-node-benchmark-result/archives/
+
+# Access specific test run
+cd blockchain-node-benchmark-result/archives/run_XXX_YYYYMMDD_HHMMSS/
+
+# View logs
+cat logs/master_qps_executor.log
+
+# View reports
+open reports/performance_report_en_*.html
+```
+
+### Best Practices for Long-Running Tests
+
+To prevent terminal disconnection issues:
+
+```bash
+# Method 1: Use screen (recommended)
+screen -S benchmark
+./blockchain_node_benchmark.sh --intensive
+# Press Ctrl+A+D to detach
+# Reconnect: screen -r benchmark
+
+# Method 2: Use tmux
+tmux new -s benchmark
+./blockchain_node_benchmark.sh --intensive
+# Press Ctrl+B+D to detach
+# Reconnect: tmux attach -t benchmark
+
+# Method 3: Use nohup
+nohup ./blockchain_node_benchmark.sh --intensive > test.log 2>&1 &
+# View progress: tail -f test.log
+```
 
 
 

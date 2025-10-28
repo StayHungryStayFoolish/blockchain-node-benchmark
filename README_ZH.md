@@ -415,10 +415,76 @@ chmod +x monitoring/monitoring_coordinator.sh
 ```
 
 ### 日志文件位置
-- **主日志**：`logs/blockchain_node_benchmark.log`
-- **监控日志**：`logs/unified_monitor.log`
-- **性能数据**：`logs/performance_YYYYMMDD_HHMMSS.csv`
-- **瓶颈事件**：`logs/bottleneck_events.jsonl`
+
+所有日志存储在 `blockchain-node-benchmark-result/current/logs/` 目录下：
+
+- **QPS测试日志**：`master_qps_executor.log` - QPS测试进度和结果
+- **监控日志**：`unified_monitor.log` - 系统监控数据
+- **瓶颈检测**：`bottleneck_detector.log` - 瓶颈检测事件
+- **EBS分析**：`ebs_bottleneck_detector.log` - EBS性能分析
+- **性能数据**：`performance_YYYYMMDD_HHMMSS.csv` - 原始性能指标
+- **监控开销**：`monitoring_overhead_YYYYMMDD_HHMMSS.csv` - 监控系统开销
+
+### 查看测试进度
+
+如果终端在测试期间断开连接，可以重新连接并查看进度：
+
+```bash
+# 实时查看QPS测试进度
+tail -f blockchain-node-benchmark-result/current/logs/master_qps_executor.log
+
+# 检查当前测试状态
+ps aux | grep vegeta | grep -v grep
+
+# 查看最新性能数据
+tail -20 blockchain-node-benchmark-result/current/logs/performance_latest.csv
+
+# 检查是否检测到瓶颈
+cat /dev/shm/blockchain-node-benchmark/bottleneck_status.json | jq '.'
+
+# 查看已完成的测试结果
+ls -lt blockchain-node-benchmark-result/current/vegeta_results/ | head -10
+```
+
+### 测试完成后
+
+测试完成后，所有结果都会被归档：
+
+```bash
+# 查看归档结果
+ls -lt blockchain-node-benchmark-result/archives/
+
+# 访问特定测试运行
+cd blockchain-node-benchmark-result/archives/run_XXX_YYYYMMDD_HHMMSS/
+
+# 查看日志
+cat logs/master_qps_executor.log
+
+# 查看报告
+open reports/performance_report_zh_*.html
+```
+
+### 长时间测试的最佳实践
+
+为防止终端断开问题：
+
+```bash
+# 方法1：使用screen（推荐）
+screen -S benchmark
+./blockchain_node_benchmark.sh --intensive
+# 按 Ctrl+A+D 分离
+# 重新连接：screen -r benchmark
+
+# 方法2：使用tmux
+tmux new -s benchmark
+./blockchain_node_benchmark.sh --intensive
+# 按 Ctrl+B+D 分离
+# 重新连接：tmux attach -t benchmark
+
+# 方法3：使用nohup
+nohup ./blockchain_node_benchmark.sh --intensive > test.log 2>&1 &
+# 查看进度：tail -f test.log
+```
 
 
 
