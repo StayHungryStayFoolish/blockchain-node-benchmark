@@ -14,6 +14,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 # 初始化统一日志管理器
 init_logger "master_qps_executor" $LOG_LEVEL "${LOGS_DIR}/master_qps_executor.log"
 
+# 重定向stdout到日志文件（保留stderr给log_*函数使用）
+exec 1> >(tee -a "${LOGS_DIR}/master_qps_executor.log")
+
 source "${QPS_SCRIPT_DIR}/../utils/error_handler.sh"
 
 # 设置错误处理
