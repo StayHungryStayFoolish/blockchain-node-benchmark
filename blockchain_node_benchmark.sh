@@ -861,6 +861,16 @@ cleanup_temp_files() {
         rm -rf "$TEST_SESSION_DIR"
     fi
     
+    # 清理内存共享目录中的临时文件
+    if [[ -d "$MEMORY_SHARE_DIR" ]]; then
+        rm -f "$MEMORY_SHARE_DIR"/*.json 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/sample_count 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/*cache* 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/*.pid 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/*.lock 2>/dev/null || true
+        rm -f "$MEMORY_SHARE_DIR"/*.flag 2>/dev/null || true
+    fi
+    
     # 不删除 qps_status.json，保留用于归档
     # if [[ -f "$QPS_STATUS_FILE" ]]; then
     #     rm -f "$QPS_STATUS_FILE"
