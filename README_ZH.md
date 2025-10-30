@@ -500,13 +500,15 @@ exit
 # 列出所有 screen 会话
 screen -ls
 
-# 重新连接到特定会话（使用 PID 或名称）
+# 重新连接到特定会话
+# 如果显示 "(Detached)" - 使用简单重连：
 screen -r benchmark_1030_2200
-# 或者如果有多个会话，使用 PID
+# 或使用 PID：
 screen -r 12345
 
-# 如果会话显示 "(Attached)"，强制重新连接
+# 如果显示 "(Attached)" - 使用强制重连：
 screen -d -r 12345
+# 这会断开现有连接并重新连接你
 ```
 
 **常见问题：**

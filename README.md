@@ -500,13 +500,15 @@ exit
 # List all screen sessions
 screen -ls
 
-# Reconnect to specific session (use PID or name)
+# Reconnect to specific session
+# If shows "(Detached)" - use simple reconnect:
 screen -r benchmark_1030_2200
-# Or use PID if multiple sessions exist
+# Or use PID:
 screen -r 12345
 
-# If session shows "(Attached)", force reconnect
+# If shows "(Attached)" - use force reconnect:
 screen -d -r 12345
+# This detaches any existing connection and reconnects you
 ```
 
 **Common Issues:**

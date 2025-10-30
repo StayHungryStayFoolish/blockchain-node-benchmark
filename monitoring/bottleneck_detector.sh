@@ -469,11 +469,15 @@ check_ena_network_bottleneck() {
     
     # 遍历配置中的字段，不硬编码 - 使用标准化数组访问方式
     ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
+    
+    # 解析数据行（使用 IFS 避免空格分割问题）
+    local fields
+    IFS=',' read -ra fields <<< "$latest_data"
+    
     for field in "${ena_fields[@]}"; do
         local field_idx=$(echo "$header" | tr ',' '\n' | grep -n "^$field$" | cut -d: -f1)
         if [[ -n "$field_idx" ]]; then
             ena_field_indices["$field"]=$field_idx
-            local fields=($(echo "$latest_data" | tr ',' ' '))
             ena_field_values["$field"]="${fields[$((field_idx - 1))]:-0}"
         fi
     done
@@ -483,19 +487,73 @@ check_ena_network_bottleneck() {
         return 1  # 没有找到ENA数据
     fi
     
-    # 检测exceeded类型的字段 (基于字段名模式，不硬编码字段列表)
+    # ENA 基准值管理（懒加载）
+    local ena_baseline_file="${MEMORY_SHARE_DIR}/ena_baseline.json"
+    declare -A ena_baseline_values
+    
+    if [[ ! -f "$ena_baseline_file" ]]; then
+        # 第一次调用：读取 CSV 第二行作为基准值
+        local baseline_data=$(sed -n '2p' "$performance_csv" 2>/dev/null)
+        if [[ -n "$baseline_data" ]]; then
+            local baseline_fields
+            IFS=',' read -ra baseline_fields <<< "$baseline_data"
+            
+            # 保存基准值到文件
+            local baseline_json="{"
+            local first=true
+            for field in "${!ena_field_indices[@]}"; do
+                local idx="${ena_field_indices[$field]}"
+                local baseline_val="${baseline_fields[$((idx - 1))]:-0}"
+                ena_baseline_values["$field"]=$baseline_val
+                
+                if [[ "$first" == "true" ]]; then
+                    first=false
+                else
+                    baseline_json+=","
+                fi
+                baseline_json+="\"$field\":$baseline_val"
+            done
+            baseline_json+="}"
+            echo "$baseline_json" > "$ena_baseline_file"
+            log_debug "ENA 基准值已保存: $ena_baseline_file"
+        else
+            # CSV 只有 header，没有数据，跳过检测
+            return 1
+        fi
+    else
+        # 加载已有的基准值
+        for field in "${!ena_field_indices[@]}"; do
+            local baseline_val=$(jq -r ".\"$field\" // 0" "$ena_baseline_file" 2>/dev/null || echo "0")
+            ena_baseline_values["$field"]=$baseline_val
+        done
+    fi
+    
+    # 计算增量值
+    declare -A ena_delta_values
+    for field in "${!ena_field_values[@]}"; do
+        local current_val="${ena_field_values[$field]}"
+        local baseline_val="${ena_baseline_values[$field]:-0}"
+        local delta=$((current_val - baseline_val))
+        # 增量不能为负
+        if [[ $delta -lt 0 ]]; then
+            delta=0
+        fi
+        ena_delta_values["$field"]=$delta
+    done
+    
+    # 检测exceeded类型的字段（使用增量值）
     local exceeded_detected=false
     local exceeded_summary=""
     local exceeded_count=0
     
-    for field in "${!ena_field_values[@]}"; do
-        if [[ "$field" == *"exceeded"* ]] && [[ "${ena_field_values[$field]}" -gt 0 ]]; then
+    for field in "${!ena_delta_values[@]}"; do
+        if [[ "$field" == *"exceeded"* ]] && [[ "${ena_delta_values[$field]}" -gt 0 ]]; then
             exceeded_detected=true
             ((exceeded_count++))
             if [[ -n "$exceeded_summary" ]]; then
-                exceeded_summary="$exceeded_summary, $field=${ena_field_values[$field]}"
+                exceeded_summary="$exceeded_summary, $field=${ena_delta_values[$field]}"
             else
-                exceeded_summary="$field=${ena_field_values[$field]}"
+                exceeded_summary="$field=${ena_delta_values[$field]}"
             fi
         fi
     done
@@ -710,8 +768,8 @@ extract_performance_metrics() {
     
     # 使用CSV字段映射器动态解析字段位置
     local header=$(head -1 "$performance_csv")
-    local field_names=($(echo "$header" | tr ',' ' '))
-    local data_values=($(echo "$latest_data" | tr ',' ' '))
+    IFS=',' read -ra field_names <<< "$header"
+    IFS=',' read -ra data_values <<< "$latest_data"
     
     # 动态查找字段位置
     local cpu_usage=0
