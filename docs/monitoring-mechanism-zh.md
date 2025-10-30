@@ -337,29 +337,34 @@ system_cached_gb,system_buffers_gb,system_anon_pages_gb,system_mapped_gb,system_
 graph TB
     subgraph "即时监测 (Real-time Detection)"
         A[QPS 测试执行] --> B[每轮测试后检查]
-        B --> C{检测到瓶颈?}
+        B --> C{检测资源瓶颈?}
         C -->|是| D[BOTTLENECK_COUNT++]
-        C -->|否| E[BOTTLENECK_COUNT=0]
-        D --> F{连续3次?}
-        F -->|是| G[检查节点健康]
-        F -->|否| H[继续测试]
-        G --> I{节点不健康?}
-        I -->|是| J[停止测试<br/>保存瓶颈上下文]
-        I -->|否| K[重置计数器<br/>继续测试]
+        C -->|否| E[BOTTLENECK_COUNT不变]
+        D --> F[调用 bottleneck_detector]
+        E --> F
+        F --> G{节点健康检查}
+        G -->|场景A: 资源瓶颈+节点健康| H[重置计数器<br/>继续测试]
+        G -->|场景B: 资源瓶颈+节点不健康| I{连续3次?}
+        G -->|场景C: 无资源瓶颈+节点不健康| J[立即停止测试<br/>保存瓶颈上下文]
+        G -->|场景D: 无资源瓶颈+节点健康| K[继续测试]
+        I -->|是| L[停止测试<br/>保存瓶颈上下文]
+        I -->|否| M[继续测试]
     end
     
     subgraph "离线监测 (Offline Analysis)"
-        J --> L[读取瓶颈上下文]
-        L --> M[时间窗口分析<br/>瓶颈前后30秒]
-        L --> N[性能悬崖分析]
-        M --> O[生成28张图表]
-        N --> P[生成悬崖图表]
+        J --> N[读取瓶颈上下文]
+        L --> N
+        N --> O[时间窗口分析<br/>瓶颈前后30秒]
+        N --> P[性能悬崖分析]
+        O --> Q[生成28张图表]
+        P --> R[生成悬崖图表]
     end
     
     style A fill:#27AE60,color:#fff
     style J fill:#E74C3C,color:#fff
-    style M fill:#3498DB,color:#fff
-    style O fill:#F39C12,color:#fff
+    style L fill:#E74C3C,color:#fff
+    style O fill:#3498DB,color:#fff
+    style Q fill:#F39C12,color:#fff
 ```
 
 ### 即时监测机制
@@ -373,34 +378,55 @@ graph TB
 2. **内存**: 使用率 > 90%
 3. **EBS**: AWS Standard IOPS/Throughput > 90% baseline
 4. **网络**: 利用率 > 80%
-5. **错误率**: > 5%
+5. **QPS错误率**: > 5%
+6. **RPC延迟**: P99 > 1000ms
+7. **RPC连接**: 连接失败检测
 
-**停止规则** (三重验证):
+**四种场景判断逻辑**:
 
+框架通过 `bottleneck_detector.sh` 和 `master_qps_executor.sh` 协同工作，实现四种场景的精确判断：
+
+**场景A - 资源瓶颈 + 节点健康 → 误判**
 ```bash
-# 条件1: 资源限制超标
-if 检测到资源超标 (CPU>85% OR Memory>90% OR EBS>90% OR Network>80% OR Error>5%):
-    BOTTLENECK_COUNT++
-    
-    # 条件2: 连续检测
-    if BOTTLENECK_COUNT >= 3:
-        # 条件3: 节点健康检查
-        if (block_height_diff > 50) OR (block_height_time_diff > 300):
-            # 节点不健康 → 真正的性能瓶颈
-            停止测试
-            保存瓶颈上下文 (包含 analysis_window)
-        else:
-            # 节点健康 → 可能是误判
-            重置 BOTTLENECK_COUNT = 0
-            继续测试
+检测到资源瓶颈 (CPU/Memory/EBS/Network超标)
+    ↓
+BOTTLENECK_COUNT++
+    ↓
+调用 bottleneck_detector.sh 检查节点健康
+    ↓
+节点健康 (block_height_time_exceeded.flag ≠ 1)
+    ↓
+判定为误判 → 重置 BOTTLENECK_COUNT = 0 → 继续测试
 ```
 
-**三个条件说明**:
-1. **条件1 - 资源限制超标**: 任一资源指标超过阈值
-2. **条件2 - 连续检测**: 连续3次检测到资源超标
-3. **条件3 - 节点不健康**: 区块高度延迟或RPC失败
+**场景B - 资源瓶颈 + 节点不健康 → 真瓶颈**
+```bash
+检测到资源瓶颈
+    ↓
+BOTTLENECK_COUNT++
+    ↓
+调用 bottleneck_detector.sh 检查节点健康
+    ↓
+节点不健康 (block_height_diff > 50 持续 > 300s)
+    ↓
+累积计数，连续3次后 → 停止测试，保存瓶颈上下文
+```
 
-**只有三个条件同时满足**，才判定为真正的系统级瓶颈并停止测试。
+**场景C - 节点持续不健康（无资源瓶颈）→ 节点故障**
+```bash
+资源指标正常 (CPU/Memory/EBS/Network 都 < 阈值)
+    ↓
+调用 bottleneck_detector.sh 检查节点健康
+    ↓
+节点持续不健康 (block_height_diff > 50 持续 > 300s)
+    ↓
+立即停止测试，保存瓶颈上下文 (瓶颈类型: Node_Unhealthy)
+```
+
+**场景D - 正常运行**
+```bash
+资源指标正常 + 节点健康 → 继续测试
+```
 
 **关键配置**:
 ```bash
@@ -412,11 +438,16 @@ BLOCK_HEIGHT_TIME_THRESHOLD=300         # 区块时间差异阈值（秒）
 
 **为什么需要节点健康检查？**
 
-避免误判场景：
+避免误判场景（场景A）：
 - iostat 显示 100% 利用率
 - 但 AWS EBS 实际利用率只有 18.8%
 - 节点同步正常，区块高度无延迟
-- **结论**: 不是真正的瓶颈，继续测试
+- **结论**: 不是真正的瓶颈，重置计数器继续测试
+
+检测节点故障（场景C）：
+- 即使资源指标正常（CPU 50%, Memory 60%）
+- 但节点持续不健康（区块高度落后 > 50 持续 > 300s）
+- **结论**: 节点崩溃/网络分区/数据损坏，立即停止测试
 
 ### 离线监测机制
 
@@ -484,13 +515,29 @@ graph LR
 **即时监测 → 离线分析**:
 
 ```
-1. 瓶颈检测 (master_qps_executor.sh)
+1. 瓶颈检测 (master_qps_executor.sh::check_bottleneck_during_test)
+   ├─ 检测资源瓶颈 (CPU/Memory/EBS/Network/QPS)
+   ├─ 无条件调用 trigger_immediate_bottleneck_analysis()
+   │   └─ 调用 bottleneck_detector.sh detect
+   │       ├─ 检测资源瓶颈（7个维度）
+   │       ├─ 检测RPC连接失败
+   │       ├─ 读取 block_height_time_exceeded.flag
+   │       ├─ 判断4种场景
+   │       └─ 返回 0（真瓶颈）或 1（误判/正常）
+   │
+   ├─ 根据返回值处理
+   │   ├─ 场景A: 重置 BOTTLENECK_COUNT
+   │   ├─ 场景B: 累积计数，连续3次后 save_bottleneck_context()
+   │   ├─ 场景C: 立即 save_bottleneck_context()
+   │   └─ 场景D: 继续测试
+   │
    └─ save_bottleneck_context()
        └─ 保存到 qps_status.json
            ├─ detection_time
            ├─ analysis_window (使用 BOTTLENECK_ANALYSIS_WINDOW)
            ├─ max_successful_qps
-           └─ bottleneck_qps
+           ├─ bottleneck_qps
+           └─ bottleneck_reasons (可能包含 "Node_Unhealthy")
 
 2. 离线分析 (blockchain_node_benchmark.sh)
    └─ 读取 qps_status.json
@@ -502,14 +549,18 @@ graph LR
        └─ execute_performance_cliff_analysis()
            └─ qps_analyzer.py --cliff-analysis
 ```
+           └─ qps_analyzer.py --cliff-analysis
+```
 
 ### 监测机制优势
 
-1. **避免误判**: 双重验证（资源 + 节点健康）
-2. **精确定位**: 时间窗口聚焦瓶颈时刻
-3. **深度分析**: 离线分析提供详细根因
-4. **数据完整**: 保存完整的瓶颈上下文
-5. **可追溯**: 所有瓶颈事件记录到 JSONL
+1. **避免误判**: 四种场景精确判断（场景A：资源瓶颈+节点健康→重置计数器）
+2. **检测节点故障**: 独立检测节点不健康（场景C：无资源瓶颈+节点不健康→立即停止）
+3. **精确定位**: 时间窗口聚焦瓶颈时刻（前后30秒）
+4. **深度分析**: 离线分析提供详细根因
+5. **数据完整**: 保存完整的瓶颈上下文
+6. **可追溯**: 所有瓶颈事件记录到 JSONL
+7. **RPC连接监控**: 独立检测RPC连接失败（不依赖缓存）
 
 ## 监控协调器
 

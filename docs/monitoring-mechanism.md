@@ -522,29 +522,34 @@ The framework implements a **dual bottleneck monitoring mechanism**, combining r
 graph TB
     subgraph "Real-time Detection"
         A[QPS Test Execution] --> B[Check After Each Round]
-        B --> C{Bottleneck<br/>Detected?}
+        B --> C{Detect Resource<br/>Bottleneck?}
         C -->|Yes| D[BOTTLENECK_COUNT++]
-        C -->|No| E[BOTTLENECK_COUNT=0]
-        D --> F{3 Consecutive<br/>Times?}
-        F -->|Yes| G[Check Node Health]
-        F -->|No| H[Continue Testing]
-        G --> I{Node<br/>Unhealthy?}
-        I -->|Yes| J[Stop Testing<br/>Save Context]
-        I -->|No| K[Reset Counter<br/>Continue Testing]
+        C -->|No| E[BOTTLENECK_COUNT unchanged]
+        D --> F[Call bottleneck_detector]
+        E --> F
+        F --> G{Node Health Check}
+        G -->|Scenario A: Bottleneck+Healthy| H[Reset Counter<br/>Continue Testing]
+        G -->|Scenario B: Bottleneck+Unhealthy| I{3 Consecutive<br/>Times?}
+        G -->|Scenario C: No Bottleneck+Unhealthy| J[Stop Immediately<br/>Save Context]
+        G -->|Scenario D: No Bottleneck+Healthy| K[Continue Testing]
+        I -->|Yes| L[Stop Testing<br/>Save Context]
+        I -->|No| M[Continue Testing]
     end
     
     subgraph "Offline Analysis"
-        J --> L[Read Bottleneck Context]
-        L --> M[Time Window Analysis<br/>±30 seconds]
-        L --> N[Performance Cliff Analysis]
-        M --> O[Generate 28 Charts]
-        N --> P[Generate Cliff Charts]
+        J --> N[Read Bottleneck Context]
+        L --> N
+        N --> O[Time Window Analysis<br/>±30 seconds]
+        N --> P[Performance Cliff Analysis]
+        O --> Q[Generate 28 Charts]
+        P --> R[Generate Cliff Charts]
     end
     
     style A fill:#27AE60,color:#fff
     style J fill:#E74C3C,color:#fff
-    style M fill:#3498DB,color:#fff
-    style O fill:#F39C12,color:#fff
+    style L fill:#E74C3C,color:#fff
+    style O fill:#3498DB,color:#fff
+    style Q fill:#F39C12,color:#fff
 ```
 
 ### Real-time Detection Mechanism
@@ -558,9 +563,76 @@ graph TB
 2. **Memory**: Usage > 90%
 3. **EBS**: AWS Standard IOPS/Throughput > 90% baseline
 4. **Network**: Utilization > 80%
-5. **Error Rate**: > 5%
+5. **QPS Error Rate**: > 5%
+6. **RPC Latency**: P99 > 1000ms
+7. **RPC Connection**: Connection failure detection
 
-**Stop Rules** (Triple Verification):
+**Four Scenario Logic**:
+
+The framework uses `bottleneck_detector.sh` and `master_qps_executor.sh` to implement precise judgment across four scenarios:
+
+**Scenario A - Resource Bottleneck + Node Healthy → False Positive**
+```bash
+Resource bottleneck detected (CPU/Memory/EBS/Network exceeded)
+    ↓
+BOTTLENECK_COUNT++
+    ↓
+Call bottleneck_detector.sh to check node health
+    ↓
+Node healthy (block_height_time_exceeded.flag ≠ 1)
+    ↓
+Judged as false positive → Reset BOTTLENECK_COUNT = 0 → Continue testing
+```
+
+**Scenario B - Resource Bottleneck + Node Unhealthy → True Bottleneck**
+```bash
+Resource bottleneck detected
+    ↓
+BOTTLENECK_COUNT++
+    ↓
+Call bottleneck_detector.sh to check node health
+    ↓
+Node unhealthy (block_height_diff > 50 for > 300s)
+    ↓
+Accumulate count, stop after 3 consecutive times → Save bottleneck context
+```
+
+**Scenario C - Node Persistently Unhealthy (No Resource Bottleneck) → Node Failure**
+```bash
+Resource metrics normal (CPU/Memory/EBS/Network all < threshold)
+    ↓
+Call bottleneck_detector.sh to check node health
+    ↓
+Node persistently unhealthy (block_height_diff > 50 for > 300s)
+    ↓
+Stop testing immediately, save bottleneck context (type: Node_Unhealthy)
+```
+
+**Scenario D - Normal Operation**
+```bash
+Resource metrics normal + Node healthy → Continue testing
+```
+
+**Key Configuration**:
+```bash
+BOTTLENECK_CONSECUTIVE_COUNT=3          # Consecutive detection count
+BOTTLENECK_ANALYSIS_WINDOW=30           # Time window (seconds)
+BLOCK_HEIGHT_DIFF_THRESHOLD=50          # Block height difference threshold
+BLOCK_HEIGHT_TIME_THRESHOLD=300         # Block time difference threshold (seconds)
+```
+
+**Why Node Health Check?**
+
+Avoid false positives (Scenario A):
+- iostat shows 100% utilization
+- But AWS EBS actual utilization only 18.8%
+- Node syncing normally, no block height delay
+- **Conclusion**: Not a real bottleneck, reset counter and continue
+
+Detect node failures (Scenario C):
+- Even with normal resource metrics (CPU 50%, Memory 60%)
+- But node persistently unhealthy (block height behind > 50 for > 300s)
+- **Conclusion**: Node crash/network partition/data corruption, stop immediately
 
 ```bash
 # Condition 1: Resource Limit Exceeded
@@ -669,13 +741,29 @@ Using `BOTTLENECK_ANALYSIS_WINDOW=30` seconds:
 **Real-time Detection → Offline Analysis**:
 
 ```
-1. Bottleneck Detection (master_qps_executor.sh)
+1. Bottleneck Detection (master_qps_executor.sh::check_bottleneck_during_test)
+   ├─ Detect resource bottlenecks (CPU/Memory/EBS/Network/QPS)
+   ├─ Unconditionally call trigger_immediate_bottleneck_analysis()
+   │   └─ Call bottleneck_detector.sh detect
+   │       ├─ Detect resource bottlenecks (7 dimensions)
+   │       ├─ Detect RPC connection failures
+   │       ├─ Read block_height_time_exceeded.flag
+   │       ├─ Judge 4 scenarios
+   │       └─ Return 0 (true bottleneck) or 1 (false positive/normal)
+   │
+   ├─ Process based on return value
+   │   ├─ Scenario A: Reset BOTTLENECK_COUNT
+   │   ├─ Scenario B: Accumulate count, save_bottleneck_context() after 3 times
+   │   ├─ Scenario C: Immediately save_bottleneck_context()
+   │   └─ Scenario D: Continue testing
+   │
    └─ save_bottleneck_context()
        └─ Save to qps_status.json
            ├─ detection_time
            ├─ analysis_window (using BOTTLENECK_ANALYSIS_WINDOW)
            ├─ max_successful_qps
-           └─ bottleneck_qps
+           ├─ bottleneck_qps
+           └─ bottleneck_reasons (may include "Node_Unhealthy")
 
 2. Offline Analysis (blockchain_node_benchmark.sh)
    └─ Read qps_status.json
@@ -690,11 +778,13 @@ Using `BOTTLENECK_ANALYSIS_WINDOW=30` seconds:
 
 ### Monitoring Mechanism Advantages
 
-1. **Avoid False Positives**: Dual verification (resource + node health)
-2. **Precise Location**: Time window focuses on bottleneck moment
-3. **Deep Analysis**: Offline analysis provides detailed root cause
-4. **Complete Data**: Save complete bottleneck context
-5. **Traceable**: All bottleneck events logged to JSONL
+1. **Avoid False Positives**: Four-scenario precise judgment (Scenario A: Resource bottleneck + Node healthy → Reset counter)
+2. **Detect Node Failures**: Independent detection of node unhealthy (Scenario C: No resource bottleneck + Node unhealthy → Stop immediately)
+3. **Precise Location**: Time window focuses on bottleneck moment (±30 seconds)
+4. **Deep Analysis**: Offline analysis provides detailed root cause
+5. **Complete Data**: Save complete bottleneck context
+6. **Traceable**: All bottleneck events logged to JSONL
+7. **RPC Connection Monitoring**: Independent detection of RPC connection failures (no cache dependency)
 
 ## Monitoring Coordinator
 
