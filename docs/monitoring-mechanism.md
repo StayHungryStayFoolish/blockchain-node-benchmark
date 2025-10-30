@@ -527,11 +527,12 @@ graph TB
         C -->|No| E[BOTTLENECK_COUNT unchanged]
         D --> F[Call bottleneck_detector]
         E --> F
-        F --> G{Node Health Check}
-        G -->|Scenario A: Bottleneck+Healthy| H[Reset Counter<br/>Continue Testing]
-        G -->|Scenario B: Bottleneck+Unhealthy| I{3 Consecutive<br/>Times?}
-        G -->|Scenario C: No Bottleneck+Unhealthy| J[Stop Immediately<br/>Save Context]
-        G -->|Scenario D: No Bottleneck+Healthy| K[Continue Testing]
+        F --> G{Bottleneck Type<br/>Judgment}
+        G -->|Scenario A-Resource:<br/>Resource+Healthy| H[Reset Counter<br/>Continue Testing]
+        G -->|Scenario A-RPC:<br/>RPC+Healthy| I{3 Consecutive<br/>Times?}
+        G -->|Scenario B:<br/>Any+Unhealthy| I
+        G -->|Scenario C:<br/>None+Unhealthy| J[Stop Immediately<br/>Save Context]
+        G -->|Scenario D:<br/>None+Healthy| K[Continue Testing]
         I -->|Yes| L[Stop Testing<br/>Save Context]
         I -->|No| M[Continue Testing]
     end
@@ -558,20 +559,21 @@ graph TB
 
 **Detection Frequency**: After each QPS test round (~11 minute intervals)
 
-**Detection Dimensions**:
+**Detection Dimensions (8 dimensions)**:
 1. **CPU**: Usage > 85%
 2. **Memory**: Usage > 90%
 3. **EBS**: AWS Standard IOPS/Throughput > 90% baseline
 4. **Network**: Utilization > 80%
-5. **QPS Error Rate**: > 5%
-6. **RPC Latency**: P99 > 1000ms
-7. **RPC Connection**: Connection failure detection
+5. **RPC Success Rate**: < 95% (**Necessary Condition**)
+6. **RPC Latency**: P99 > 1000ms (**Necessary Condition**)
+7. **RPC Error Rate**: > 5%
+8. **RPC Connection**: Connection failure detection
 
-**Four Scenario Logic**:
+**Five Scenario Logic**:
 
-The framework uses `bottleneck_detector.sh` and `master_qps_executor.sh` to implement precise judgment across four scenarios:
+The framework uses `bottleneck_detector.sh` and `master_qps_executor.sh` to implement precise judgment across five scenarios:
 
-**Scenario A - Resource Bottleneck + Node Healthy → False Positive**
+**Scenario A-Resource - Resource Bottleneck + Node Healthy → False Positive**
 ```bash
 Resource bottleneck detected (CPU/Memory/EBS/Network exceeded)
     ↓
@@ -584,9 +586,22 @@ Node healthy (block_height_time_exceeded.flag ≠ 1)
 Judged as false positive → Reset BOTTLENECK_COUNT = 0 → Continue testing
 ```
 
-**Scenario B - Resource Bottleneck + Node Unhealthy → True Bottleneck**
+**Scenario A-RPC - RPC Performance Bottleneck + Node Healthy → True Bottleneck (Necessary Condition)**
 ```bash
-Resource bottleneck detected
+RPC performance bottleneck detected (success rate < 95% OR latency > 1000ms)
+    ↓
+BOTTLENECK_COUNT++
+    ↓
+Call bottleneck_detector.sh to check RPC performance
+    ↓
+Even if node is healthy, RPC performance violation constitutes true bottleneck
+    ↓
+Accumulate count, stop after 3 consecutive times → Save bottleneck context
+```
+
+**Scenario B - Any Bottleneck + Node Unhealthy → True Bottleneck**
+```bash
+Any bottleneck detected (resource or RPC)
     ↓
 BOTTLENECK_COUNT++
     ↓
@@ -597,9 +612,10 @@ Node unhealthy (block_height_diff > 50 for > 300s)
 Accumulate count, stop after 3 consecutive times → Save bottleneck context
 ```
 
-**Scenario C - Node Persistently Unhealthy (No Resource Bottleneck) → Node Failure**
+**Scenario C - Node Persistently Unhealthy (No Bottleneck) → Node Failure**
 ```bash
 Resource metrics normal (CPU/Memory/EBS/Network all < threshold)
+RPC performance normal (success rate >= 95% AND latency <= 1000ms)
     ↓
 Call bottleneck_detector.sh to check node health
     ↓
@@ -610,7 +626,7 @@ Stop testing immediately, save bottleneck context (type: Node_Unhealthy)
 
 **Scenario D - Normal Operation**
 ```bash
-Resource metrics normal + Node healthy → Continue testing
+Resource metrics normal + RPC performance normal + Node healthy → Continue testing
 ```
 
 **Key Configuration**:
@@ -619,11 +635,13 @@ BOTTLENECK_CONSECUTIVE_COUNT=3          # Consecutive detection count
 BOTTLENECK_ANALYSIS_WINDOW=30           # Time window (seconds)
 BLOCK_HEIGHT_DIFF_THRESHOLD=50          # Block height difference threshold
 BLOCK_HEIGHT_TIME_THRESHOLD=300         # Block time difference threshold (seconds)
+SUCCESS_RATE_THRESHOLD=95               # RPC success rate threshold (%)
+MAX_LATENCY_THRESHOLD=1000              # RPC latency threshold (ms)
 ```
 
 **Why Node Health Check?**
 
-Avoid false positives (Scenario A):
+Avoid false positives (Scenario A-Resource):
 - iostat shows 100% utilization
 - But AWS EBS actual utilization only 18.8%
 - Node syncing normally, no block height delay
@@ -633,6 +651,17 @@ Detect node failures (Scenario C):
 - Even with normal resource metrics (CPU 50%, Memory 60%)
 - But node persistently unhealthy (block height behind > 50 for > 300s)
 - **Conclusion**: Node crash/network partition/data corruption, stop immediately
+
+**Why RPC Performance is a Necessary Condition?**
+
+RPC performance violation (Scenario A-RPC):
+- RPC success rate 7% < 95% OR latency 27081ms > 1000ms
+- Even if node is healthy (block height syncing normally)
+- **Conclusion**: RPC service unavailable, constitutes system bottleneck, accumulate count
+
+Difference from resource bottlenecks:
+- **Resource Bottleneck**: Requires node health verification (may be false positive)
+- **RPC Performance Bottleneck**: No verification needed (necessary condition, directly constitutes bottleneck)
 
 ```bash
 # Condition 1: Resource Limit Exceeded
