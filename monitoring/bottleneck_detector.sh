@@ -183,6 +183,7 @@ initialize_bottleneck_counters() {
     BOTTLENECK_COUNTERS["network"]=0
     BOTTLENECK_COUNTERS["error_rate"]=0
     BOTTLENECK_COUNTERS["rpc_latency"]=0
+    BOTTLENECK_COUNTERS["rpc_success_rate"]=0
     BOTTLENECK_COUNTERS["rpc_connection"]=0
     BOTTLENECK_COUNTERS["ena_limit"]=0
     
@@ -567,6 +568,53 @@ check_rpc_connection_bottleneck() {
     return 1
 }
 
+# 检测RPC性能瓶颈（成功率和延迟）
+check_rpc_performance_bottleneck() {
+    local vegeta_result="$1"
+    
+    if [[ -z "$vegeta_result" || ! -f "$vegeta_result" ]]; then
+        log_debug "Vegeta结果文件不存在，跳过RPC性能检测: $vegeta_result"
+        return 1
+    fi
+    
+    local rpc_bottleneck_detected=false
+    
+    local total_requests=$(jq -r '.requests // 1' "$vegeta_result" 2>/dev/null || echo "1")
+    local success_requests=$(jq -r '.status_codes."200" // 0' "$vegeta_result" 2>/dev/null || echo "0")
+    local success_rate=$(awk "BEGIN {printf \"%.0f\", $success_requests * 100 / $total_requests}" 2>/dev/null || echo "0")
+    
+    local avg_latency_ns=$(jq -r '.latencies.mean // 0' "$vegeta_result" 2>/dev/null || echo "0")
+    local avg_latency=$(awk "BEGIN {printf \"%.2f\", $avg_latency_ns / 1000000}" 2>/dev/null || echo "0")
+    
+    if (( $(awk "BEGIN {print ($success_rate < $SUCCESS_RATE_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
+        BOTTLENECK_COUNTERS["rpc_success_rate"]=$((${BOTTLENECK_COUNTERS["rpc_success_rate"]:-0} + 1))
+        echo "⚠️  RPC成功率瓶颈: ${success_rate}% < ${SUCCESS_RATE_THRESHOLD}% (${BOTTLENECK_COUNTERS["rpc_success_rate"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        
+        if [[ ${BOTTLENECK_COUNTERS["rpc_success_rate"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+            rpc_bottleneck_detected=true
+        fi
+    else
+        BOTTLENECK_COUNTERS["rpc_success_rate"]=0
+    fi
+    
+    if (( $(awk "BEGIN {print ($avg_latency > $MAX_LATENCY_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
+        BOTTLENECK_COUNTERS["rpc_latency"]=$((${BOTTLENECK_COUNTERS["rpc_latency"]:-0} + 1))
+        echo "⚠️  RPC延迟瓶颈: ${avg_latency}ms > ${MAX_LATENCY_THRESHOLD}ms (${BOTTLENECK_COUNTERS["rpc_latency"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        
+        if [[ ${BOTTLENECK_COUNTERS["rpc_latency"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+            rpc_bottleneck_detected=true
+        fi
+    else
+        BOTTLENECK_COUNTERS["rpc_latency"]=0
+    fi
+    
+    if [[ "$rpc_bottleneck_detected" == "true" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # 从性能数据中提取指标
 extract_performance_metrics() {
     local performance_csv="$1"
@@ -745,6 +793,12 @@ detect_all_ebs_bottlenecks() {
 detect_bottleneck() {
     local current_qps="$1"
     local performance_csv="$2"
+    local vegeta_result="${3:-}"
+    
+    # 确保数组已声明
+    if [[ ! -v BOTTLENECK_COUNTERS ]]; then
+        declare -gA BOTTLENECK_COUNTERS
+    fi
     
     # 确保计数器已初始化（detect命令不会调用init）
     if [[ ${#BOTTLENECK_COUNTERS[@]} -eq 0 ]]; then
@@ -771,6 +825,7 @@ detect_bottleneck() {
     local bottleneck_detected=false
     local bottleneck_types=()
     local bottleneck_values=()
+    local rpc_bottleneck=false
     
     if check_cpu_bottleneck "$cpu_usage"; then
         bottleneck_detected=true
@@ -870,6 +925,27 @@ detect_bottleneck() {
         bottleneck_values+=("连接失败")
     fi
     
+    # 检测RPC性能瓶颈
+    if [[ -n "$vegeta_result" ]] && check_rpc_performance_bottleneck "$vegeta_result"; then
+        bottleneck_detected=true
+        rpc_bottleneck=true
+        
+        local total_requests=$(jq -r '.requests // 1' "$vegeta_result" 2>/dev/null || echo "1")
+        local success_requests=$(jq -r '.status_codes."200" // 0' "$vegeta_result" 2>/dev/null || echo "0")
+        local success_rate=$(awk "BEGIN {printf \"%.0f\", $success_requests * 100 / $total_requests}" 2>/dev/null || echo "0")
+        local avg_latency_ns=$(jq -r '.latencies.mean // 0' "$vegeta_result" 2>/dev/null || echo "0")
+        local avg_latency=$(awk "BEGIN {printf \"%.2f\", $avg_latency_ns / 1000000}" 2>/dev/null || echo "0")
+        
+        if (( $(awk "BEGIN {print ($success_rate < $SUCCESS_RATE_THRESHOLD) ? 1 : 0}") )); then
+            bottleneck_types+=("RPC_Success_Rate")
+            bottleneck_values+=("${success_rate}%")
+        fi
+        if (( $(awk "BEGIN {print ($avg_latency > $MAX_LATENCY_THRESHOLD) ? 1 : 0}") )); then
+            bottleneck_types+=("RPC_Latency")
+            bottleneck_values+=("${avg_latency}ms")
+        fi
+    fi
+    
     # ========== P0: 节点健康检查集成 ==========
     # 获取节点持续不健康标志（由 block_height_monitor.sh 写入）
     local node_unhealthy_flag="${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag"
@@ -884,12 +960,24 @@ detect_bottleneck() {
         fi
     fi
     
-    # 场景A: 资源瓶颈 + 节点健康 → 可能误判，重置计数器
+    # 场景A: 瓶颈 + 节点健康 → 需要区分资源瓶颈和 RPC 性能瓶颈
     if [[ "$bottleneck_detected" == "true" && "$is_node_critically_unhealthy" == "false" ]]; then
-        echo "✅ 节点健康正常，重置瓶颈计数器（可能误判）" | tee -a "$BOTTLENECK_LOG"
-        initialize_bottleneck_counters
-        generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
-        return 1
+        if [[ "$rpc_bottleneck" == "true" ]]; then
+            # 场景A-RPC: RPC 性能瓶颈 + 节点健康 → 真瓶颈（必要条件）
+            local bottleneck_list=$(IFS=,; echo "${bottleneck_types[*]}")
+            local value_list=$(IFS=,; echo "${bottleneck_values[*]}")
+            echo "🚨 RPC 性能瓶颈（必要条件），确认为真瓶颈" | tee -a "$BOTTLENECK_LOG"
+            echo "   瓶颈类型: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
+            echo "   瓶颈值: $value_list" | tee -a "$BOTTLENECK_LOG"
+            generate_bottleneck_status_json "bottleneck_detected" "true" "$bottleneck_list" "$value_list" "$current_qps" "$metrics_json"
+            return 0
+        else
+            # 场景A-资源: 资源瓶颈 + 节点健康 → 可能误判，重置计数器
+            echo "✅ 资源瓶颈但节点健康，判定为误判，重置计数器" | tee -a "$BOTTLENECK_LOG"
+            initialize_bottleneck_counters
+            generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
+            return 1
+        fi
     fi
     
     # 场景B: 资源瓶颈 + 节点持续不健康 → 真正的系统级瓶颈

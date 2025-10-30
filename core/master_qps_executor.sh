@@ -528,10 +528,13 @@ trigger_immediate_bottleneck_analysis() {
         
         # 获取最新的性能数据文件
         local performance_csv="${LOGS_DIR}/performance_latest.csv"
+        # 获取当前QPS的vegeta测试结果文件
+        local vegeta_result="${VEGETA_RESULTS_DIR}/vegeta_${qps}qps_${SESSION_TIMESTAMP}.json"
+        
         if [[ -f "$performance_csv" ]]; then
-            # 捕获 bottleneck_detector.sh 的返回值
+            # 捕获 bottleneck_detector.sh 的返回值，传递 vegeta 结果文件路径
             if "${QPS_SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" \
-                detect "$qps" "$performance_csv"; then
+                detect "$qps" "$performance_csv" "$vegeta_result"; then
                 # 返回 0 = 检测到真瓶颈（资源瓶颈 + 节点不健康 或 节点持续不健康）
                 bottleneck_detector_result=0
                 echo "🚨 bottleneck_detector 确认为真瓶颈"
