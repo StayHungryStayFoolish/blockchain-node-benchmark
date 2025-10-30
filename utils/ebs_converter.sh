@@ -1,13 +1,9 @@
 #!/bin/bash
 
-# AWS EBS IOPS/Throughput标准转换脚本
-# 用于将实际的IOPS和I/O大小转换为AWS EBS标准基准
+# AWS EBS IOPS/Throughput 处理脚本
+# 用于处理 EBS 性能指标、类型推荐和 io2 吞吐量计算
 
-# AWS标准基准常量
-# AWS EBS基准配置 - 使用system_config.sh中的配置，如果不可用则使用默认值
-# 注意：优先使用配置文件中的值，避免readonly冲突
-AWS_EBS_BASELINE_IO_SIZE_KIB=${AWS_EBS_BASELINE_IO_SIZE_KIB:-16}
-
+# AWS EBS 吞吐量基准（用于 throughput 转换，保留兼容性）
 AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB=${AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB:-128}
 
 if [[ -z "${IO2_THROUGHPUT_RATIO:-}" ]]; then
@@ -18,42 +14,33 @@ if [[ -z "${IO2_MAX_THROUGHPUT:-}" ]]; then
     readonly IO2_MAX_THROUGHPUT=4000
 fi
 
-# 注意: instance-store类型不使用AWS EBS标准转换
-# instance-store使用实际IOPS和throughput，不需要16KiB基准转换
+# 注意: 所有类型（gp3/io2/instance-store）都使用实际 IOPS 和 throughput
+# AWS EBS 按请求次数计数 IOPS，无需基于 I/O 大小进行转换
 
-# 转换实际IOPS为AWS标准IOPS
-# 参数: actual_iops actual_avg_io_size_kib
-# 返回: AWS标准IOPS (基于16 KiB)
-# 修复逻辑: 当 avg_io > 16 KiB 时不放大，避免误判容量需求
+# 获取 AWS EBS IOPS
+# 参数: actual_iops - 实际 IOPS (r/s + w/s)
+#       actual_avg_io_size_kib - 平均 I/O 大小（保留参数兼容性，未使用）
+# 返回: AWS EBS IOPS（等于实际 IOPS）
+# 说明: AWS EBS 按请求次数计数 IOPS，无需转换
+# 参考: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-io-characteristics.html
 convert_to_aws_standard_iops() {
     local actual_iops=$1
-    local actual_avg_io_size_kib=$2
+    local actual_avg_io_size_kib=$2  # 保留参数以保持接口兼容
     
+    # AWS EBS IOPS 按请求次数计数，无需转换
+    # 参考: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-io-characteristics.html
     if (( $(awk "BEGIN {print ($actual_iops <= 0) ? 1 : 0}") )); then
         echo "0"
         return
     fi
     
-    if (( $(awk "BEGIN {print ($actual_avg_io_size_kib <= 0) ? 1 : 0}") )); then
-        echo "0"
-        return
-    fi
-    
-    # 🔧 修复: 当 avg_io > 16 KiB 时，不放大（EBS 会聚合大块 IO）
-    if (( $(awk "BEGIN {print ($actual_avg_io_size_kib > $AWS_EBS_BASELINE_IO_SIZE_KIB) ? 1 : 0}") )); then
-        # avg_io > 16 KiB: 不放大，直接返回实际 IOPS
-        echo "$actual_iops"
-    else
-        # avg_io <= 16 KiB: 按比例缩小（小块 IO 效率低）
-        local aws_standard_iops=$(awk "BEGIN {printf \"%.2f\", $actual_iops * ($actual_avg_io_size_kib / $AWS_EBS_BASELINE_IO_SIZE_KIB)}")
-        echo "$aws_standard_iops"
-    fi
+    echo "$actual_iops"
 }
 
 # 转换实际throughput为AWS标准throughput
 # 参数: actual_throughput_mibs actual_avg_io_size_kib
 # 返回: AWS标准throughput (MiB/s)
-# 修复逻辑: Throughput 不需要转换，直接返回实际值
+# Throughput 不需要转换，直接返回实际值
 convert_to_aws_standard_throughput() {
     local actual_throughput_mibs="$1"
     local actual_avg_io_size_kib="$2"
@@ -64,7 +51,7 @@ convert_to_aws_standard_throughput() {
         return 1
     fi
     
-    # 🔧 修复: Throughput 不需要按 128 KiB 基准转换，直接返回实际值
+    # 🔧 Throughput 不需要按 128 KiB 基准转换，直接返回实际值
     # AWS EBS Throughput 配置的就是实际 MiB/s，不需要标准化
     echo "$actual_throughput_mibs"
 }
@@ -141,73 +128,6 @@ calculate_weighted_avg_io_size() {
     echo "$avg_io_kib"
 }
 
-# 从扇区转换为KiB
-# 参数: sectors
-# 返回: KiB
-sectors_to_kib() {
-    local sectors=$1
-    awk "BEGIN {printf \"%.2f\", $sectors * 0.5}"
-}
-
-# 主函数：完整的EBS性能转换
-# 参数: device_name r_s w_s rkb_s wkb_s rareq_sz wareq_sz
-# 返回: JSON格式的转换结果
-convert_ebs_performance() {
-    local device_name=$1
-    local r_s=$2
-    local w_s=$3
-    local rkb_s=$4
-    local wkb_s=$5
-    local rareq_sz=$6
-    local wareq_sz=$7
-    
-    # 计算基础指标
-    local total_iops=$(awk "BEGIN {printf \"%.2f\", $r_s + $w_s}")
-    local total_throughput_kbs=$(awk "BEGIN {printf \"%.2f\", $rkb_s + $wkb_s}")
-    local total_throughput_mibs=$(awk "BEGIN {printf \"%.2f\", $total_throughput_kbs / 1024}")
-    
-    # 计算平均I/O大小
-    local avg_read_io_kib=$(sectors_to_kib "$rareq_sz")
-    local avg_write_io_kib=$(sectors_to_kib "$wareq_sz")
-    local weighted_avg_io_kib=$(calculate_weighted_avg_io_size "$r_s" "$w_s" "$rkb_s" "$wkb_s")
-    
-    # 转换为AWS标准
-    local aws_standard_iops=$(convert_to_aws_standard_iops "$total_iops" "$weighted_avg_io_kib")
-    
-    # 推荐EBS类型
-    local recommended_type=$(recommend_ebs_type "$aws_standard_iops" "$total_throughput_mibs")
-    
-    # 输出JSON格式结果
-    cat << EOF
-{
-    "device": "$device_name",
-    "actual_performance": {
-        "total_iops": $total_iops,
-        "read_iops": $r_s,
-        "write_iops": $w_s,
-        "total_throughput_mibs": $total_throughput_mibs,
-        "avg_read_io_kib": $avg_read_io_kib,
-        "avg_write_io_kib": $avg_write_io_kib,
-        "weighted_avg_io_kib": $weighted_avg_io_kib
-    },
-    "aws_standard": {
-        "aws_standard_iops": $aws_standard_iops,
-        "conversion_formula": "实际IOPS × (实际平均I/O大小KiB ÷ 16)",
-        "calculation": "$total_iops × ($weighted_avg_io_kib ÷ 16) = $aws_standard_iops",
-        "note": "仅适用于EBS卷，instance-store使用实际IOPS"
-    },
-    "recommendation": {
-        "ebs_type": "$recommended_type",
-        "io2_auto_throughput": $(calculate_io2_throughput "$aws_standard_iops"),
-        "gp3_max_iops": 80000,
-        "gp3_max_throughput": 2000,
-        "io2_max_iops": 256000,
-        "io2_max_throughput": 4000
-    }
-}
-EOF
-}
-
 # 检查 ACCOUNTS 设备是否配置
 # 判断标准：3个关键环境变量都必须配置
 # 返回: 0=已配置, 1=未配置
@@ -221,8 +141,6 @@ export -f convert_to_aws_standard_throughput
 export -f calculate_io2_throughput
 export -f recommend_ebs_type
 export -f calculate_weighted_avg_io_size
-export -f sectors_to_kib
-export -f convert_ebs_performance
 export -f analyze_instance_store_performance
 export -f is_accounts_configured
 
@@ -234,5 +152,4 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "  convert_to_aws_standard_iops 1000 32"
     echo "  convert_to_aws_standard_throughput 100 64"
     echo "  calculate_io2_throughput 20000"
-    echo "  convert_ebs_performance nvme1n1 6687.17 7657.43 43668.93 282862.29 6.53 36.94"
 fi
