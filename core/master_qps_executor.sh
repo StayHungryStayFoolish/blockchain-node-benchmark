@@ -394,11 +394,30 @@ check_bottleneck_during_test() {
     
     # bottleneck_detector 返回 0：确认为真瓶颈
     if [[ "$bottleneck_found" == "false" ]]; then
-        # 场景C：无资源瓶颈 + 节点持续不健康 → 节点故障
-        echo "🚨 bottleneck_detector 检测到节点持续不健康（无资源瓶颈）"
-        BOTTLENECK_DETECTED=true
-        save_bottleneck_context "$current_qps" "Node_Unhealthy" "high"
-        return 1  # 停止测试
+        # 需要区分场景 A-RPC 和场景 C
+        # 读取 detector 保存的瓶颈类型
+        local is_rpc_bottleneck=false
+        local bottleneck_status_file="${MEMORY_SHARE_DIR}/bottleneck_status.json"
+        
+        if [[ -f "$bottleneck_status_file" ]]; then
+            local bottleneck_types=$(jq -r '.bottleneck_types[]' "$bottleneck_status_file" 2>/dev/null || echo "")
+            if echo "$bottleneck_types" | grep -qE "RPC_Success_Rate|RPC_Latency|RPC_Connection|error_rate"; then
+                is_rpc_bottleneck=true
+            fi
+        fi
+        
+        if [[ "$is_rpc_bottleneck" == "true" ]]; then
+            # 场景 A-RPC：RPC 性能瓶颈 + 节点健康 → 真瓶颈，累积计数
+            BOTTLENECK_COUNT=$((BOTTLENECK_COUNT + 1))
+            echo "🚨 检测到 RPC 性能瓶颈（必要条件）($BOTTLENECK_COUNT/${BOTTLENECK_CONSECUTIVE_COUNT})"
+            # 继续执行后续逻辑，检查是否达到连续次数
+        else
+            # 场景 C：无资源瓶颈 + 节点持续不健康 → 节点故障
+            echo "🚨 bottleneck_detector 检测到节点持续不健康（无资源瓶颈）"
+            BOTTLENECK_DETECTED=true
+            save_bottleneck_context "$current_qps" "Node_Unhealthy" "high"
+            return 1  # 停止测试
+        fi
     fi
     
     # 场景B：资源瓶颈 + 节点不健康 → 真瓶颈，继续累积计数

@@ -74,6 +74,7 @@ handle_detector_error() {
 trap 'handle_detector_error $LINENO' ERR
 
 readonly BOTTLENECK_STATUS_FILE="${MEMORY_SHARE_DIR}/bottleneck_status.json"
+readonly BOTTLENECK_COUNTERS_FILE="${MEMORY_SHARE_DIR}/bottleneck_counters.json"
 
 # 创建性能指标的JSON字符串
 create_performance_metrics_json() {
@@ -175,6 +176,47 @@ EOF
 # 瓶颈检测计数器 - 必须在使用前声明
 declare -A BOTTLENECK_COUNTERS
 
+# 保存计数器到共享内存文件
+save_bottleneck_counters() {
+    local json_content="{"
+    local first=true
+    
+    # 临时关闭 set -u 检查数组长度（空数组会触发 unbound variable）
+    set +u
+    local array_size=${#BOTTLENECK_COUNTERS[@]}
+    set -u
+    
+    if [[ $array_size -gt 0 ]]; then
+        for key in "${!BOTTLENECK_COUNTERS[@]}"; do
+            if [[ "$first" == "true" ]]; then
+                first=false
+            else
+                json_content+=","
+            fi
+            json_content+="\"$key\":${BOTTLENECK_COUNTERS[$key]}"
+        done
+    fi
+    
+    json_content+="}"
+    echo "$json_content" > "$BOTTLENECK_COUNTERS_FILE"
+}
+
+# 从共享内存文件加载计数器
+load_bottleneck_counters() {
+    if [[ -f "$BOTTLENECK_COUNTERS_FILE" ]]; then
+        # 使用 jq 解析 JSON 并填充数组
+        local keys=$(jq -r 'keys[]' "$BOTTLENECK_COUNTERS_FILE" 2>/dev/null)
+        if [[ -n "$keys" ]]; then
+            while IFS= read -r key; do
+                local value=$(jq -r ".\"$key\"" "$BOTTLENECK_COUNTERS_FILE" 2>/dev/null)
+                BOTTLENECK_COUNTERS["$key"]=$value
+            done <<< "$keys"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # 初始化瓶颈检测计数器
 initialize_bottleneck_counters() {
     # 基础计数器
@@ -202,7 +244,41 @@ initialize_bottleneck_counters() {
         log_debug "已初始化ACCOUNTS设备瓶颈计数器"
     fi
     
+    # 持久化到共享内存文件
+    save_bottleneck_counters
+    
     log_debug "瓶颈检测计数器初始化完成"
+}
+
+# 重置资源瓶颈计数器（保留 RPC 计数器）
+reset_resource_bottleneck_counters() {
+    # 只重置资源相关的计数器
+    BOTTLENECK_COUNTERS["cpu"]=0
+    BOTTLENECK_COUNTERS["memory"]=0
+    BOTTLENECK_COUNTERS["network"]=0
+    BOTTLENECK_COUNTERS["ena_limit"]=0
+    
+    # DATA设备计数器
+    BOTTLENECK_COUNTERS["ebs_util"]=0
+    BOTTLENECK_COUNTERS["ebs_latency"]=0
+    BOTTLENECK_COUNTERS["ebs_aws_iops"]=0
+    BOTTLENECK_COUNTERS["ebs_aws_throughput"]=0
+    
+    # ACCOUNTS设备计数器
+    if is_accounts_configured; then
+        BOTTLENECK_COUNTERS["accounts_ebs_util"]=0
+        BOTTLENECK_COUNTERS["accounts_ebs_latency"]=0
+        BOTTLENECK_COUNTERS["accounts_ebs_aws_iops"]=0
+        BOTTLENECK_COUNTERS["accounts_ebs_aws_throughput"]=0
+    fi
+    
+    # 保留 RPC 计数器：
+    # - rpc_success_rate
+    # - rpc_latency
+    # - rpc_connection
+    # - error_rate
+    
+    log_debug "资源瓶颈计数器已重置，RPC计数器保留"
 }
 
 # 初始化瓶颈检测
@@ -795,16 +871,6 @@ detect_bottleneck() {
     local performance_csv="$2"
     local vegeta_result="${3:-}"
     
-    # 确保数组已声明
-    if [[ ! -v BOTTLENECK_COUNTERS ]]; then
-        declare -gA BOTTLENECK_COUNTERS
-    fi
-    
-    # 确保计数器已初始化（detect命令不会调用init）
-    if [[ ${#BOTTLENECK_COUNTERS[@]} -eq 0 ]]; then
-        initialize_bottleneck_counters
-    fi
-    
     # 提取性能指标
     local metrics=$(extract_performance_metrics "$performance_csv")
     local cpu_usage=$(echo "$metrics" | cut -d',' -f1)
@@ -970,12 +1036,14 @@ detect_bottleneck() {
             echo "   瓶颈类型: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
             echo "   瓶颈值: $value_list" | tee -a "$BOTTLENECK_LOG"
             generate_bottleneck_status_json "bottleneck_detected" "true" "$bottleneck_list" "$value_list" "$current_qps" "$metrics_json"
+            save_bottleneck_counters
             return 0
         else
-            # 场景A-资源: 资源瓶颈 + 节点健康 → 可能误判，重置计数器
-            echo "✅ 资源瓶颈但节点健康，判定为误判，重置计数器" | tee -a "$BOTTLENECK_LOG"
-            initialize_bottleneck_counters
+            # 场景A-资源: 资源瓶颈 + 节点健康 → 可能误判，重置资源计数器（保留RPC计数器）
+            echo "✅ 资源瓶颈但节点健康，判定为误判，重置资源计数器（保留RPC计数器）" | tee -a "$BOTTLENECK_LOG"
+            reset_resource_bottleneck_counters
             generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
+            save_bottleneck_counters
             return 1
         fi
     fi
@@ -988,6 +1056,7 @@ detect_bottleneck() {
         echo "   瓶颈类型: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
         echo "   瓶颈值: $value_list" | tee -a "$BOTTLENECK_LOG"
         generate_bottleneck_status_json "bottleneck_detected" "true" "$bottleneck_list" "$value_list" "$current_qps" "$metrics_json"
+        save_bottleneck_counters
         return 0
     fi
     
@@ -1004,11 +1073,13 @@ detect_bottleneck() {
         local value_list=$(IFS=,; echo "${bottleneck_values[*]}")
         
         generate_bottleneck_status_json "bottleneck_detected" "true" "$bottleneck_list" "$value_list" "$current_qps" "$metrics_json"
+        save_bottleneck_counters
         return 0
     fi
     
     # 场景D: 无瓶颈 + 节点健康 → 正常运行
     generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
+    save_bottleneck_counters
     return 1
 }
 
@@ -1040,7 +1111,15 @@ main() {
         detect)
             local current_qps="$2"
             local performance_csv="$3"
-            detect_bottleneck "$current_qps" "$performance_csv"
+            local vegeta_result="${4:-}"
+            
+            # 从共享内存文件加载计数器（跨子进程持久化）
+            if ! load_bottleneck_counters; then
+                # 文件不存在，初始化计数器
+                initialize_bottleneck_counters
+            fi
+            
+            detect_bottleneck "$current_qps" "$performance_csv" "$vegeta_result"
             ;;
         status)
             get_bottleneck_info
