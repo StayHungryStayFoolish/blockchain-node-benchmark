@@ -77,7 +77,7 @@ buffered_write() {
 # 获取带缓存的 Block Height 数据
 get_cached_block_height_data() {
     local cache_file="$1"
-    local max_age_seconds="${2:-3}"  # 默认 3 秒
+    local max_age_seconds="${2:-1}"  # 默认 1 秒（从 3 秒调整）
     local local_rpc_url="$3"
     local mainnet_rpc_url="$4"
     
@@ -87,14 +87,17 @@ get_cached_block_height_data() {
         local cache_data=$(cat "$cache_file")
         local timestamp=$(echo "$cache_data" | jq -r '.timestamp_ms')
         
-        # 检查缓存是否过期
-        local current_time=$(date +%s.%N)
-        local age=$(awk "BEGIN {printf \"%.6f\", $current_time - $timestamp}")
-        
-        if (( $(awk "BEGIN {print ($age < $max_age_seconds) ? 1 : 0}") )); then
-            # 缓存未过期，返回缓存数据
-            echo "$cache_data"
-            return 0
+        # 验证 timestamp 是否有效
+        if [[ -n "$timestamp" && "$timestamp" != "null" && "$timestamp" != "N/A" ]]; then
+            # 检查缓存是否过期
+            local current_time=$(date +%s.%N)
+            local age=$(awk "BEGIN {printf \"%.6f\", $current_time - $timestamp}")
+            
+            if (( $(awk "BEGIN {print ($age < $max_age_seconds) ? 1 : 0}") )); then
+                # 缓存未过期，返回缓存数据
+                echo "$cache_data"
+                return 0
+            fi
         fi
     fi
     
@@ -148,9 +151,9 @@ get_cached_block_height_data() {
         '{
             timestamp_ms: ($timestamp_ms | tonumber),
             timestamp: $timestamp,
-            local_block_height: ($local_block_height | tonumber),
-            mainnet_block_height: ($mainnet_block_height | tonumber),
-            block_height_diff: ($block_height_diff | tonumber),
+            local_block_height: (if $local_block_height == "N/A" then null else ($local_block_height | tonumber) end),
+            mainnet_block_height: (if $mainnet_block_height == "N/A" then null else ($mainnet_block_height | tonumber) end),
+            block_height_diff: (if $block_height_diff == "N/A" then null else ($block_height_diff | tonumber) end),
             local_health: $local_health,
             mainnet_health: $mainnet_health,
             data_loss: $data_loss

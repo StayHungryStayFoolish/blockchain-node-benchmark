@@ -24,6 +24,7 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
 fi
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh"
 
 # 初始化统一日志管理器
 init_logger "bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/bottleneck_detector.log"
@@ -182,6 +183,7 @@ initialize_bottleneck_counters() {
     BOTTLENECK_COUNTERS["network"]=0
     BOTTLENECK_COUNTERS["error_rate"]=0
     BOTTLENECK_COUNTERS["rpc_latency"]=0
+    BOTTLENECK_COUNTERS["rpc_connection"]=0
     BOTTLENECK_COUNTERS["ena_limit"]=0
     
     # DATA设备计数器
@@ -539,6 +541,32 @@ check_qps_bottleneck() {
     fi
 }
 
+# 检测RPC连接失败
+check_rpc_connection_bottleneck() {
+    local timeout=2
+    
+    # 不使用缓存，直接测试连接（避免缓存掩盖故障）
+    local result=$(timeout $timeout curl -s -X POST -H "Content-Type: application/json" \
+        --data '{"jsonrpc":"2.0","id":1,"method":"getBlockHeight","params":[]}' \
+        "$LOCAL_RPC_URL" 2>&1)
+    
+    local exit_code=$?
+    
+    if [[ $exit_code -ne 0 ]]; then
+        # 连接失败
+        BOTTLENECK_COUNTERS["rpc_connection"]=$((${BOTTLENECK_COUNTERS["rpc_connection"]:-0} + 1))
+        echo "⚠️  RPC连接失败: exit_code=$exit_code (${BOTTLENECK_COUNTERS["rpc_connection"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        
+        if [[ ${BOTTLENECK_COUNTERS["rpc_connection"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+            return 0  # 检测到连接瓶颈
+        fi
+    else
+        BOTTLENECK_COUNTERS["rpc_connection"]=0
+    fi
+    
+    return 1
+}
+
 # 从性能数据中提取指标
 extract_performance_metrics() {
     local performance_csv="$1"
@@ -835,21 +863,65 @@ detect_bottleneck() {
         bottleneck_values+=("${error_rate}% error rate")
     fi
     
-    # 更新状态文件
-    if [[ "$bottleneck_detected" == "true" ]]; then
+    # 检测RPC连接失败
+    if check_rpc_connection_bottleneck; then
+        bottleneck_detected=true
+        bottleneck_types+=("RPC_Connection")
+        bottleneck_values+=("连接失败")
+    fi
+    
+    # ========== P0: 节点健康检查集成 ==========
+    # 获取节点持续不健康标志（由 block_height_monitor.sh 写入）
+    local node_unhealthy_flag="${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag"
+    local is_node_critically_unhealthy=false
+    
+    # 检查节点是否持续不健康（持续 > BLOCK_HEIGHT_TIME_THRESHOLD 秒）
+    if [[ -f "$node_unhealthy_flag" ]]; then
+        local flag_value=$(cat "$node_unhealthy_flag" 2>/dev/null || echo "0")
+        if [[ "$flag_value" == "1" ]]; then
+            is_node_critically_unhealthy=true
+            echo "🚨 节点持续不健康超过 ${BLOCK_HEIGHT_TIME_THRESHOLD}s" | tee -a "$BOTTLENECK_LOG"
+        fi
+    fi
+    
+    # 场景A: 资源瓶颈 + 节点健康 → 可能误判，重置计数器
+    if [[ "$bottleneck_detected" == "true" && "$is_node_critically_unhealthy" == "false" ]]; then
+        echo "✅ 节点健康正常，重置瓶颈计数器（可能误判）" | tee -a "$BOTTLENECK_LOG"
+        initialize_bottleneck_counters
+        generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
+        return 1
+    fi
+    
+    # 场景B: 资源瓶颈 + 节点持续不健康 → 真正的系统级瓶颈
+    if [[ "$bottleneck_detected" == "true" && "$is_node_critically_unhealthy" == "true" ]]; then
+        local bottleneck_list=$(IFS=,; echo "${bottleneck_types[*]}")
+        local value_list=$(IFS=,; echo "${bottleneck_values[*]}")
+        echo "🚨 确认系统级瓶颈: 资源瓶颈 + 节点不健康" | tee -a "$BOTTLENECK_LOG"
+        echo "   瓶颈类型: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
+        echo "   瓶颈值: $value_list" | tee -a "$BOTTLENECK_LOG"
+        generate_bottleneck_status_json "bottleneck_detected" "true" "$bottleneck_list" "$value_list" "$current_qps" "$metrics_json"
+        return 0
+    fi
+    
+    # 场景C: 节点持续不健康（无资源瓶颈）→ 节点故障
+    if [[ "$is_node_critically_unhealthy" == "true" ]]; then
+        echo "🚨 检测到节点持续不健康（持续 > ${BLOCK_HEIGHT_TIME_THRESHOLD}s）" | tee -a "$BOTTLENECK_LOG"
+        echo "   即使资源指标正常，节点已不可用" | tee -a "$BOTTLENECK_LOG"
+        
+        # 添加节点不健康到瓶颈类型
+        bottleneck_types+=("Node_Unhealthy")
+        bottleneck_values+=("持续>${BLOCK_HEIGHT_TIME_THRESHOLD}s")
+        
         local bottleneck_list=$(IFS=,; echo "${bottleneck_types[*]}")
         local value_list=$(IFS=,; echo "${bottleneck_values[*]}")
         
-        echo "🚨 检测到系统瓶颈: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
-        echo "   瓶颈值: $value_list" | tee -a "$BOTTLENECK_LOG"
-        
         generate_bottleneck_status_json "bottleneck_detected" "true" "$bottleneck_list" "$value_list" "$current_qps" "$metrics_json"
-        return 0  # 检测到瓶颈
-    else
-        # 更新计数器状态 - 保持格式一致性
-        generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
-        return 1  # 未检测到瓶颈
+        return 0
     fi
+    
+    # 场景D: 无瓶颈 + 节点健康 → 正常运行
+    generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
+    return 1
 }
 
 # 检查是否检测到瓶颈

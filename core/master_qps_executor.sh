@@ -374,54 +374,43 @@ check_bottleneck_during_test() {
         bottleneck_reasons+=("错误率: ${error_rate}% > ${BOTTLENECK_ERROR_RATE_THRESHOLD}% (严重)")
     fi
     
+    # 资源瓶颈检测：递增计数器
     if [[ "$bottleneck_found" == "true" ]]; then
         BOTTLENECK_COUNT=$((BOTTLENECK_COUNT + 1))
         echo "⚠️ 检测到瓶颈 ($BOTTLENECK_COUNT/${BOTTLENECK_CONSECUTIVE_COUNT}): ${bottleneck_reasons[*]}"
-        
-        # 立即触发瓶颈分析
-        trigger_immediate_bottleneck_analysis "$current_qps" "$bottleneck_severity" "${bottleneck_reasons[*]}"
-        
-        if [[ $BOTTLENECK_COUNT -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            # 读取 Block Height 数据进行健康检查
-            local block_height_diff=$(echo "$latest_data" | jq -r '.block_height_diff // 0' 2>/dev/null || echo "0")
-            local data_loss=$(echo "$latest_data" | jq -r '.data_loss // 0' 2>/dev/null || echo "0")
-            
-            # 检查区块高度差异是否持续超限
-            local block_height_time_exceeded=0
-            if [[ -f "${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag" ]]; then
-                block_height_time_exceeded=1
-            fi
-            
-            # 判断节点是否健康（需要同时满足当前状态和持续时间）
-            # 条件1: 当前区块高度差异超限 AND 已持续超过300秒
-            # 条件2: RPC调用失败
-            local node_unhealthy=false
-            local unhealthy_reason=""
-            
-            if (( $(awk "BEGIN {print ($block_height_diff > $BLOCK_HEIGHT_DIFF_THRESHOLD) ? 1 : 0}") )) && [[ "$block_height_time_exceeded" == "1" ]]; then
-                node_unhealthy=true
-                unhealthy_reason="区块高度差异=${block_height_diff} (阈值=${BLOCK_HEIGHT_DIFF_THRESHOLD}) 且已持续超过 ${BLOCK_HEIGHT_TIME_THRESHOLD}秒"
-            elif [[ "$data_loss" == "1" ]]; then
-                node_unhealthy=true
-                unhealthy_reason="RPC调用失败，无法获取区块高度数据"
-            fi
-            
-            if [[ "$node_unhealthy" == "true" ]]; then
-                # 节点不健康，确认为真正的瓶颈
-                echo "🚨 节点健康检查失败: ${unhealthy_reason}"
-                BOTTLENECK_DETECTED=true
-                save_bottleneck_context "$current_qps" "${bottleneck_reasons[*]}" "$bottleneck_severity"
-                return 1  # 触发停止
-            else
-                # 节点健康，可能是误判，重置计数器继续测试
-                echo "✅ 节点健康检查通过: 区块高度差异=${block_height_diff}, 持续超限标志=${block_height_time_exceeded}, 数据丢失=${data_loss}, 重置瓶颈计数器"
-                BOTTLENECK_COUNT=0
-            fi
-        fi
-    else
-        BOTTLENECK_COUNT=0  # 重置计数器
     fi
     
+    # 无论是否检测到资源瓶颈，都调用 bottleneck_detector 进行综合判断（包括节点健康检查）
+    if ! trigger_immediate_bottleneck_analysis "$current_qps" "$bottleneck_severity" "${bottleneck_reasons[*]}"; then
+        # bottleneck_detector 返回 1：误判或正常
+        if [[ "$bottleneck_found" == "true" ]]; then
+            # 场景A：资源瓶颈 + 节点健康 → 误判，重置计数器
+            echo "✅ bottleneck_detector 判定为误判（资源瓶颈但节点健康），重置 BOTTLENECK_COUNT"
+            BOTTLENECK_COUNT=0
+        fi
+        # 场景D：无资源瓶颈 + 节点健康 → 正常，不做任何操作
+        return 0  # 继续测试
+    fi
+    
+    # bottleneck_detector 返回 0：确认为真瓶颈
+    if [[ "$bottleneck_found" == "false" ]]; then
+        # 场景C：无资源瓶颈 + 节点持续不健康 → 节点故障
+        echo "🚨 bottleneck_detector 检测到节点持续不健康（无资源瓶颈）"
+        BOTTLENECK_DETECTED=true
+        save_bottleneck_context "$current_qps" "Node_Unhealthy" "high"
+        return 1  # 停止测试
+    fi
+    
+    # 场景B：资源瓶颈 + 节点不健康 → 真瓶颈，继续累积计数
+    if [[ $BOTTLENECK_COUNT -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        # 连续3次确认为真瓶颈，停止测试
+        echo "🚨 连续 ${BOTTLENECK_CONSECUTIVE_COUNT} 次检测到真瓶颈，停止测试"
+        BOTTLENECK_DETECTED=true
+        save_bottleneck_context "$current_qps" "${bottleneck_reasons[*]}" "$bottleneck_severity"
+        return 1  # 停止测试
+    fi
+    
+    # 未达到连续次数，继续测试
     return 0
 }
 
@@ -531,15 +520,26 @@ trigger_immediate_bottleneck_analysis() {
     
     echo "🚨 触发瓶颈分析，QPS: $qps, 严重程度: $severity"
     
-    # 调用瓶颈检测器进行实时分析
+    # 调用瓶颈检测器进行实时分析，并捕获返回值
+    local bottleneck_detector_result=1  # 默认值：未检测到瓶颈
+    
     if [[ -f "${QPS_SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" ]]; then
         echo "🔍 执行实时瓶颈分析..."
         
         # 获取最新的性能数据文件
         local performance_csv="${LOGS_DIR}/performance_latest.csv"
         if [[ -f "$performance_csv" ]]; then
-            "${QPS_SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" \
-                detect "$qps" "$performance_csv"
+            # 捕获 bottleneck_detector.sh 的返回值
+            if "${QPS_SCRIPT_DIR}/../monitoring/bottleneck_detector.sh" \
+                detect "$qps" "$performance_csv"; then
+                # 返回 0 = 检测到真瓶颈（资源瓶颈 + 节点不健康 或 节点持续不健康）
+                bottleneck_detector_result=0
+                echo "🚨 bottleneck_detector 确认为真瓶颈"
+            else
+                # 返回 1 = 误判（资源瓶颈 + 节点健康）或正常
+                bottleneck_detector_result=1
+                echo "✅ bottleneck_detector 判定为误判或正常"
+            fi
             
             # 等待瓶颈检测完成后再继续
             sleep 1
@@ -551,23 +551,25 @@ trigger_immediate_bottleneck_analysis() {
     # 检查是否已经通过monitoring_coordinator.sh启动
     if pgrep -f "ebs_bottleneck_detector.sh.*-b" >/dev/null 2>&1; then
         echo "💾 EBS瓶颈检测器已通过监控协调器启动，跳过重复启动"
-        return 0
-    fi
-    
-    # 调用EBS瓶颈检测器
-    if [[ -f "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" ]]; then
-        echo "💾 执行EBS瓶颈分析..."
-        "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" \
-            --background &
-        local ebs_analysis_pid=$!
-        echo "📊 EBS瓶颈分析进程启动 (PID: $ebs_analysis_pid)"
-        
-        # 记录PID到统一的监控PID文件
-        echo "ebs_analysis:$ebs_analysis_pid" >> "$MONITOR_PIDS_FILE"
+    else
+        # 调用EBS瓶颈检测器
+        if [[ -f "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" ]]; then
+            echo "💾 执行EBS瓶颈分析..."
+            "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" \
+                --background &
+            local ebs_analysis_pid=$!
+            echo "📊 EBS瓶颈分析进程启动 (PID: $ebs_analysis_pid)"
+            
+            # 记录PID到统一的监控PID文件
+            echo "ebs_analysis:$ebs_analysis_pid" >> "$MONITOR_PIDS_FILE"
+        fi
     fi
     
     # 记录瓶颈事件
     log_bottleneck_event "$qps" "$severity" "$reasons"
+    
+    # 返回 bottleneck_detector 的判断结果
+    return $bottleneck_detector_result
 }
 
 # 记录瓶颈事件
