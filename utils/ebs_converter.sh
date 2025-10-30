@@ -104,7 +104,7 @@ recommend_ebs_type() {
     local actual_throughput_mibs=$2
     
     # 检查gp3是否可满足
-    if (( $(awk "BEGIN {print ($aws_standard_iops <= 16000 && $actual_throughput_mibs <= 1000) ? 1 : 0}") )); then
+    if (( $(awk "BEGIN {print ($aws_standard_iops <= 80000 && $actual_throughput_mibs <= 2000) ? 1 : 0}") )); then
         echo "gp3"
         return
     fi
@@ -199,8 +199,8 @@ convert_ebs_performance() {
     "recommendation": {
         "ebs_type": "$recommended_type",
         "io2_auto_throughput": $(calculate_io2_throughput "$aws_standard_iops"),
-        "gp3_max_iops": 16000,
-        "gp3_max_throughput": 1000,
+        "gp3_max_iops": 80000,
+        "gp3_max_throughput": 2000,
         "io2_max_iops": 256000,
         "io2_max_throughput": 4000
     }
