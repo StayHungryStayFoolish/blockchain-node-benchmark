@@ -102,17 +102,17 @@ which sar       # 网络监控工具
 # 标准测试（90+ 分钟）- 建议使用 screen
 screen -S benchmark
 ./blockchain_node_benchmark.sh --standard
-# ⚠️ 关闭 SSH 前必须按 Ctrl+A 然后 D 分离会话！
+# ⚠️ 关闭 SSH 前必须按 Ctrl+a 然后 d 分离会话！
 
 # 密集测试（最多 8 小时）- 必须使用 screen/tmux
 screen -S benchmark
 ./blockchain_node_benchmark.sh --intensive
-# ⚠️ 关闭 SSH 前必须按 Ctrl+A 然后 D 分离会话！
+# ⚠️ 关闭 SSH 前必须按 Ctrl+a 然后 d 分离会话！
 ```
 
 **⚠️ 关键提示**：对于超过 30 分钟的测试，你**必须**：
 1. 使用 `screen` 或 `tmux`
-2. **分离会话**（screen 按 Ctrl+A+D）后再关闭 SSH
+2. **分离会话**（screen 按 Ctrl+a, 然后 d）后再关闭 SSH
 3. 否则 SSH 断开时测试会停止！
 
 详见下方[长时间测试最佳实践](#长时间测试最佳实践)。
@@ -489,7 +489,7 @@ screen -S benchmark
 ./blockchain_node_benchmark.sh --intensive
 
 # 步骤 3：⚠️ 重要 - 关闭 SSH 前必须分离会话
-# 按键：Ctrl+A，然后按 D
+# 按键：Ctrl+a，然后按 d
 # 你会看到：[detached from xxx.benchmark]
 
 # 步骤 4：现在可以安全关闭 SSH
@@ -511,13 +511,14 @@ tmux new -s benchmark
 ./blockchain_node_benchmark.sh --intensive
 
 # 步骤 3：⚠️ 重要 - 关闭 SSH 前必须分离会话
-# 按键：Ctrl+B，然后按 D
+# 按键：Ctrl+b，然后按 d
 
 # 步骤 4：随时重新连接
 tmux attach -t benchmark
 ```
 
 #### 方法 3：使用 nohup
+```
 nohup ./blockchain_node_benchmark.sh --intensive > test.log 2>&1 &
 # 查看进度：tail -f test.log
 ```
