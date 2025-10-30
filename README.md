@@ -96,15 +96,26 @@ which sar       # Network monitoring tool
 ### Basic Usage
 
 ```bash
-# Quick test (15+ minutes)
+# Quick test (15+ minutes) - can run directly
 ./blockchain_node_benchmark.sh --quick
 
-# Standard test (90+ minutes)
+# Standard test (90+ minutes) - recommended to use screen
+screen -S benchmark
 ./blockchain_node_benchmark.sh --standard
+# ⚠️ MUST press Ctrl+A then D to detach before closing SSH!
 
-# Intensive test (up to 8 hours with automatic bottleneck detection)
+# Intensive test (up to 8 hours) - MUST use screen/tmux
+screen -S benchmark
 ./blockchain_node_benchmark.sh --intensive
+# ⚠️ MUST press Ctrl+A then D to detach before closing SSH!
 ```
+
+**⚠️ Critical**: For tests longer than 30 minutes, you **MUST**:
+1. Use `screen` or `tmux` 
+2. **Detach the session** (Ctrl+A+D for screen) before closing SSH
+3. Otherwise the test will stop when SSH disconnects!
+
+See [Best Practices](#best-practices-for-long-running-tests) for detailed instructions.
 
 ### Custom Testing
 
@@ -466,22 +477,47 @@ open reports/performance_report_en_*.html
 
 ### Best Practices for Long-Running Tests
 
-To prevent terminal disconnection issues:
+**⚠️ CRITICAL**: To prevent SSH disconnection from stopping your test, you **MUST** use one of these methods:
+
+#### Method 1: Use screen (Recommended)
 
 ```bash
-# Method 1: Use screen (recommended)
+# Step 1: Create screen session
 screen -S benchmark
-./blockchain_node_benchmark.sh --intensive
-# Press Ctrl+A+D to detach
-# Reconnect: screen -r benchmark
 
-# Method 2: Use tmux
+# Step 2: Start test
+./blockchain_node_benchmark.sh --intensive
+
+# Step 3: ⚠️ IMPORTANT - Detach before closing SSH
+# Press: Ctrl+A, then press D
+# You should see: [detached from xxx.benchmark]
+
+# Step 4: Now you can safely close SSH
+exit
+
+# Step 5: Reconnect anytime
+screen -r benchmark
+```
+
+**Why detach is critical**: If you close SSH without detaching, the test will stop!
+
+#### Method 2: Use tmux
+
+```bash
+# Step 1: Create tmux session
 tmux new -s benchmark
-./blockchain_node_benchmark.sh --intensive
-# Press Ctrl+B+D to detach
-# Reconnect: tmux attach -t benchmark
 
-# Method 3: Use nohup
+# Step 2: Start test
+./blockchain_node_benchmark.sh --intensive
+
+# Step 3: ⚠️ IMPORTANT - Detach before closing SSH
+# Press: Ctrl+B, then press D
+
+# Step 4: Reconnect anytime
+tmux attach -t benchmark
+```
+
+#### Method 3: Use nohup
 nohup ./blockchain_node_benchmark.sh --intensive > test.log 2>&1 &
 # View progress: tail -f test.log
 ```

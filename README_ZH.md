@@ -96,15 +96,26 @@ which sar       # 网络监控工具
 ### 基本使用
 
 ```bash
-# 快速测试（15+ 分钟）
+# 快速测试（15+ 分钟）- 可以直接运行
 ./blockchain_node_benchmark.sh --quick
 
-# 标准测试（90+ 分钟）
+# 标准测试（90+ 分钟）- 建议使用 screen
+screen -S benchmark
 ./blockchain_node_benchmark.sh --standard
+# ⚠️ 关闭 SSH 前必须按 Ctrl+A 然后 D 分离会话！
 
-# 密集测试（最多 8 小时，带自动瓶颈检测）
+# 密集测试（最多 8 小时）- 必须使用 screen/tmux
+screen -S benchmark
 ./blockchain_node_benchmark.sh --intensive
+# ⚠️ 关闭 SSH 前必须按 Ctrl+A 然后 D 分离会话！
 ```
+
+**⚠️ 关键提示**：对于超过 30 分钟的测试，你**必须**：
+1. 使用 `screen` 或 `tmux`
+2. **分离会话**（screen 按 Ctrl+A+D）后再关闭 SSH
+3. 否则 SSH 断开时测试会停止！
+
+详见下方[长时间测试最佳实践](#长时间测试最佳实践)。
 
 ### 自定义测试
 
@@ -464,24 +475,49 @@ cat logs/master_qps_executor.log
 open reports/performance_report_zh_*.html
 ```
 
-### 长时间测试的最佳实践
+### 长时间测试最佳实践
 
-为防止终端断开问题：
+**⚠️ 关键提示**：为防止 SSH 断开导致测试中断，你**必须**使用以下方法之一：
+
+#### 方法 1：使用 screen（推荐）
 
 ```bash
-# 方法1：使用screen（推荐）
+# 步骤 1：创建 screen 会话
 screen -S benchmark
-./blockchain_node_benchmark.sh --intensive
-# 按 Ctrl+A+D 分离
-# 重新连接：screen -r benchmark
 
-# 方法2：使用tmux
+# 步骤 2：启动测试
+./blockchain_node_benchmark.sh --intensive
+
+# 步骤 3：⚠️ 重要 - 关闭 SSH 前必须分离会话
+# 按键：Ctrl+A，然后按 D
+# 你会看到：[detached from xxx.benchmark]
+
+# 步骤 4：现在可以安全关闭 SSH
+exit
+
+# 步骤 5：随时重新连接
+screen -r benchmark
+```
+
+**为什么分离很关键**：如果不分离就关闭 SSH，测试会停止！
+
+#### 方法 2：使用 tmux
+
+```bash
+# 步骤 1：创建 tmux 会话
 tmux new -s benchmark
-./blockchain_node_benchmark.sh --intensive
-# 按 Ctrl+B+D 分离
-# 重新连接：tmux attach -t benchmark
 
-# 方法3：使用nohup
+# 步骤 2：启动测试
+./blockchain_node_benchmark.sh --intensive
+
+# 步骤 3：⚠️ 重要 - 关闭 SSH 前必须分离会话
+# 按键：Ctrl+B，然后按 D
+
+# 步骤 4：随时重新连接
+tmux attach -t benchmark
+```
+
+#### 方法 3：使用 nohup
 nohup ./blockchain_node_benchmark.sh --intensive > test.log 2>&1 &
 # 查看进度：tail -f test.log
 ```
