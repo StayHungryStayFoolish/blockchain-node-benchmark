@@ -100,12 +100,12 @@ which sar       # Network monitoring tool
 ./blockchain_node_benchmark.sh --quick
 
 # Standard test (90+ minutes) - recommended to use screen
-screen -S benchmark
+screen -S benchmark_$(date +%m%d_%H%M)
 ./blockchain_node_benchmark.sh --standard
 # ⚠️ MUST press Ctrl+a then d to detach before closing SSH!
 
 # Intensive test (up to 8 hours) - MUST use screen/tmux
-screen -S benchmark
+screen -S benchmark_$(date +%m%d_%H%M)
 ./blockchain_node_benchmark.sh --intensive
 # ⚠️ MUST press Ctrl+a then d to detach before closing SSH!
 ```
@@ -482,21 +482,49 @@ open reports/performance_report_en_*.html
 #### Method 1: Use screen (Recommended)
 
 ```bash
-# Step 1: Create screen session
-screen -S benchmark
+# Step 1: Create screen session with unique name
+screen -S benchmark_$(date +%m%d_%H%M)
+# Example: benchmark_1030_2200
 
 # Step 2: Start test
 ./blockchain_node_benchmark.sh --intensive
 
 # Step 3: ⚠️ IMPORTANT - Detach before closing SSH
 # Press: Ctrl+a, then press d
-# You should see: [detached from xxx.benchmark]
+# You should see: [detached from xxx.benchmark_1030_2200]
 
 # Step 4: Now you can safely close SSH
 exit
 
 # Step 5: Reconnect anytime
-screen -r benchmark
+# List all screen sessions
+screen -ls
+
+# Reconnect to specific session (use PID or name)
+screen -r benchmark_1030_2200
+# Or use PID if multiple sessions exist
+screen -r 12345
+
+# If session shows "(Attached)", force reconnect
+screen -d -r 12345
+```
+
+**Common Issues:**
+
+```bash
+# Problem: Multiple sessions with same name
+screen -ls
+# Shows: 13813.benchmark, 19327.benchmark, 54872.benchmark
+
+# Solution 1: Use PID to reconnect to latest
+screen -r 13813
+
+# Solution 2: Clean up old sessions
+screen -X -S 19327 quit
+screen -X -S 54872 quit
+
+# Solution 3: Kill all and start fresh
+killall screen
 ```
 
 **Why detach is critical**: If you close SSH without detaching, the test will stop!

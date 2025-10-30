@@ -100,12 +100,12 @@ which sar       # 网络监控工具
 ./blockchain_node_benchmark.sh --quick
 
 # 标准测试（90+ 分钟）- 建议使用 screen
-screen -S benchmark
+screen -S benchmark_$(date +%m%d_%H%M)
 ./blockchain_node_benchmark.sh --standard
 # ⚠️ 关闭 SSH 前必须按 Ctrl+a 然后 d 分离会话！
 
 # 密集测试（最多 8 小时）- 必须使用 screen/tmux
-screen -S benchmark
+screen -S benchmark_$(date +%m%d_%H%M)
 ./blockchain_node_benchmark.sh --intensive
 # ⚠️ 关闭 SSH 前必须按 Ctrl+a 然后 d 分离会话！
 ```
@@ -482,21 +482,49 @@ open reports/performance_report_zh_*.html
 #### 方法 1：使用 screen（推荐）
 
 ```bash
-# 步骤 1：创建 screen 会话
-screen -S benchmark
+# 步骤 1：创建带唯一名称的 screen 会话
+screen -S benchmark_$(date +%m%d_%H%M)
+# 示例：benchmark_1030_2200
 
 # 步骤 2：启动测试
 ./blockchain_node_benchmark.sh --intensive
 
 # 步骤 3：⚠️ 重要 - 关闭 SSH 前必须分离会话
 # 按键：Ctrl+a，然后按 d
-# 你会看到：[detached from xxx.benchmark]
+# 你会看到：[detached from xxx.benchmark_1030_2200]
 
 # 步骤 4：现在可以安全关闭 SSH
 exit
 
 # 步骤 5：随时重新连接
-screen -r benchmark
+# 列出所有 screen 会话
+screen -ls
+
+# 重新连接到特定会话（使用 PID 或名称）
+screen -r benchmark_1030_2200
+# 或者如果有多个会话，使用 PID
+screen -r 12345
+
+# 如果会话显示 "(Attached)"，强制重新连接
+screen -d -r 12345
+```
+
+**常见问题：**
+
+```bash
+# 问题：多个同名会话
+screen -ls
+# 显示：13813.benchmark, 19327.benchmark, 54872.benchmark
+
+# 解决方案 1：使用 PID 连接到最新的会话
+screen -r 13813
+
+# 解决方案 2：清理旧会话
+screen -X -S 19327 quit
+screen -X -S 54872 quit
+
+# 解决方案 3：杀掉所有会话重新开始
+killall screen
 ```
 
 **为什么分离很关键**：如果不分离就关闭 SSH，测试会停止！
