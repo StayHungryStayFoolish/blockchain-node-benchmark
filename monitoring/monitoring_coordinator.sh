@@ -1,24 +1,24 @@
 #!/bin/bash
 # =====================================================================
-# 监控协调器 - 消除监控脚本重复，统一管理所有监控任务
+# Monitoring Coordinator - Eliminate monitoring script duplication, unified management of all monitoring tasks
 # =====================================================================
-# 这个脚本整合了所有监控功能，避免重复启动监控进程
-# 提供统一的监控启动、停止和状态管理
+# This script integrates all monitoring functions to avoid duplicate monitoring processes
+# Provides unified monitoring start, stop and status management
 # =====================================================================
 
-# 加载错误处理和配置
+# Load error handling and configuration
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/error_handler.sh"
-# 安全加载配置文件，避免readonly变量冲突
+# Safely load configuration file to avoid readonly variable conflicts
 if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
-    echo "警告: 配置文件加载失败，使用默认配置"
+    echo "Warning: Configuration file loading failed, using default configuration"
     MONITOR_INTERVAL=${MONITOR_INTERVAL:-5}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 
-setup_error_handling "$(basename "$0")" "监控协调器"
+setup_error_handling "$(basename "$0")" "Monitoring Coordinator"
 log_script_start "$(basename "$0")"
 
-# 监控状态文件 - 优先使用环境变量，否则使用默认值
+# Monitoring status file - prioritize environment variables, otherwise use default values
 if [[ -z "${MONITOR_STATUS_FILE:-}" ]]; then
     readonly MONITOR_STATUS_FILE="${TMP_DIR}/monitoring_status.json"
 fi
@@ -26,25 +26,25 @@ if [[ -z "${MONITOR_PIDS_FILE:-}" ]]; then
     readonly MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
 fi
 
-# 监控任务定义 - 包含所有必要的监控脚本
-# 注意：iostat功能由unified_monitor.sh统一管理，避免重复启动和进程冲突
-# 用户仍可通过 'start iostat' 命令启动，但会自动重定向到unified_monitor.sh
+# Monitoring task definitions - includes all necessary monitoring scripts
+# Note: iostat functionality is managed by unified_monitor.sh to avoid duplicate startup and process conflicts
+# Users can still start via 'start iostat' command, but will be automatically redirected to unified_monitor.sh
 declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
     ["block_height"]="block_height_monitor.sh"
     ["ena_network"]="ena_network_monitor.sh"
     ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
-    ["iostat"]="iostat_collector.sh"  # 通过unified_monitor.sh管理
+    ["iostat"]="iostat_collector.sh"  # Managed by unified_monitor.sh
 )
 
-# 初始化监控协调器
+# Initialize monitoring coordinator
 init_coordinator() {
-    echo "🔧 初始化监控协调器..."
+    echo "🔧 Initializing monitoring coordinator..."
     
-    # 创建必要的目录
+    # Create necessary directories
     mkdir -p "${TMP_DIR}" "${LOGS_DIR}"
     
-    # 初始化状态文件
+    # Initialize status file
     cat > "$MONITOR_STATUS_FILE" << EOF
 {
     "coordinator_start_time": "$(date -Iseconds)",
@@ -54,23 +54,23 @@ init_coordinator() {
 }
 EOF
     
-    # 清空PID文件
+    # Clear PID file
     > "$MONITOR_PIDS_FILE"
     
-    echo "✅ 监控协调器初始化完成"
+    echo "✅ Monitoring coordinator initialization completed"
 }
 
-# 检查监控任务是否已运行
+# Check if monitoring task is already running
 is_monitor_running() {
     local monitor_name="$1"
     local script_name="${MONITOR_TASKS[$monitor_name]:-}"
     
     if [[ -z "$script_name" ]]; then
-        echo "❌ 未知的监控任务: $monitor_name"
+        echo "❌ Unknown monitoring task: $monitor_name"
         return 1
     fi
     
-    # 检查进程是否存在
+    # Check if process exists
     if pgrep -f "$script_name" >/dev/null; then
         return 0
     else
@@ -78,87 +78,87 @@ is_monitor_running() {
     fi
 }
 
-# 启动单个监控任务
+# Start single monitoring task
 start_monitor() {
     local monitor_name="$1"
     local script_name="${MONITOR_TASKS[$monitor_name]:-}"
     
     if [[ -z "$script_name" ]]; then
-        echo "❌ 未知的监控任务: $monitor_name"
+        echo "❌ Unknown monitoring task: $monitor_name"
         return 1
     fi
     
     if is_monitor_running "$monitor_name"; then
-        echo "⚠️  监控任务 $monitor_name 已在运行"
+        echo "⚠️  Monitoring task $monitor_name is already running"
         return 0
     fi
     
-    echo "🚀 启动监控任务: $monitor_name ($script_name)"
+    echo "🚀 Starting monitoring task: $monitor_name ($script_name)"
     
-    # 获取当前脚本所在目录
+    # Get current script directory
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     
-    # 启动监控脚本
+    # Start monitoring script
     case "$monitor_name" in
         "unified")
-            # QPS测试模式：不传递duration，无限运行
-            # 清理日志相关环境变量，确保进程隔离
+            # QPS test mode: no duration passed, run indefinitely
+            # Clean log-related environment variables to ensure process isolation
             (
-                unset LOGGER_COMPONENT  # 防止日志组件标识污染
+                unset LOGGER_COMPONENT  # Prevent log component identifier pollution
                 cd "${script_dir}" && ./"${script_name}" -i "$MONITOR_INTERVAL"
             ) &
             ;;
         "block_height")
-            # QPS测试模式：不传递duration，无限运行
-            # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
+            # QPS test mode: no duration passed, run indefinitely
+            # Set correct working directory and environment variables to ensure subprocess can load dependencies correctly
             (
                 unset LOGGER_COMPONENT
                 cd "${script_dir}" && ./"${script_name}" -b
             ) &
             ;;
         "iostat")
-            # iostat功能由unified_monitor.sh统一管理，避免重复启动
-            echo "🔗 iostat功能由unified_monitor.sh统一管理"
+            # iostat functionality is managed by unified_monitor.sh to avoid duplicate startup
+            echo "🔗 iostat functionality is managed by unified_monitor.sh"
             if is_monitor_running "unified"; then
-                echo "✅ iostat功能已通过unified_monitor.sh启动"
-                # 验证iostat进程是否真正运行
+                echo "✅ iostat functionality already started via unified_monitor.sh"
+                # Verify iostat process is actually running
                 if pgrep -f "iostat -dx [0-9]+" >/dev/null 2>&1; then
-                    echo "✅ iostat进程确认运行中"
+                    echo "✅ iostat process confirmed running"
                 else
-                    echo "⚠️  unified_monitor运行中但iostat进程未检测到，可能正在启动"
+                    echo "⚠️  unified_monitor running but iostat process not detected, may be starting"
                 fi
                 return 0
             else
-                echo "⚠️  需要先启动unified监控器以启用iostat功能"
-                echo "🚀 自动启动unified监控器..."
+                echo "⚠️  Need to start unified monitor first to enable iostat functionality"
+                echo "🚀 Auto-starting unified monitor..."
                 start_monitor "unified"
                 return $?
             fi
             ;;
         "ena_network")
-            # ENA网络监控器
+            # ENA network monitor
             if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
-                # 使用正确的参数格式：start [duration] [interval]
-                # duration=0 表示持续运行
+                # Use correct parameter format: start [duration] [interval]
+                # duration=0 means continuous running
                 (
                     unset LOGGER_COMPONENT
                     cd "${script_dir}" && ./"${script_name}" start 0 "$MONITOR_INTERVAL"
                 ) &
             else
-                echo "⚠️  ENA监控已禁用，跳过ena_network任务"
+                echo "⚠️  ENA monitoring is disabled, skipping ena_network task"
                 return 0
             fi
             ;;
         "ebs_bottleneck")
-            # QPS测试模式：不传递duration，无限运行
-            # 设置正确的工作目录和环境变量，确保子进程能正确加载依赖
+            # QPS test mode: no duration passed, run indefinitely
+            # Set correct working directory and environment variables to ensure subprocess can load dependencies correctly
             (
                 unset LOGGER_COMPONENT
                 cd "${script_dir}/../tools" && ./"${script_name}" -b
             ) &
             ;;
         *)
-            echo "❌ 不支持的监控任务: $monitor_name"
+            echo "❌ Unsupported monitoring task: $monitor_name"
             return 1
             ;;
     esac
@@ -166,77 +166,77 @@ start_monitor() {
     local pid=$!
     echo "$monitor_name:$pid" >> "$MONITOR_PIDS_FILE"
     
-    # 更新状态文件
+    # Update status file
     update_monitor_status "$monitor_name" "started" "$pid"
     
-    echo "✅ 监控任务 $monitor_name 已启动 (PID: $pid)"
+    echo "✅ Monitoring task $monitor_name started (PID: $pid)"
     return 0
 }
 
-# 停止单个监控任务
+# Stop single monitoring task
 stop_monitor() {
     local monitor_name="$1"
     
-    echo "🛑 停止监控任务: $monitor_name"
+    echo "🛑 Stopping monitoring task: $monitor_name"
     
-    # 从PID文件中查找PID
+    # Find PID from PID file
     local pid=$(grep "^$monitor_name:" "$MONITOR_PIDS_FILE" 2>/dev/null | cut -d: -f2)
     
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-        echo "正在停止进程 $pid..."
+        echo "Stopping process $pid..."
         kill "$pid" 2>/dev/null
         sleep 3
         
-        # 如果还在运行，强制终止
+        # Force terminate if still running
         if kill -0 "$pid" 2>/dev/null; then
-            echo "强制终止进程 $pid..."
+            echo "Force terminating process $pid..."
             kill -9 "$pid" 2>/dev/null
         fi
         
-        # 从PID文件中移除
+        # Remove from PID file
         grep -v "^$monitor_name:" "$MONITOR_PIDS_FILE" > "${MONITOR_PIDS_FILE}.tmp" 2>/dev/null || true
         mv "${MONITOR_PIDS_FILE}.tmp" "$MONITOR_PIDS_FILE" 2>/dev/null || true
     fi
     
-    # 使用脚本名称查找并停止进程
+    # Find and stop process using script name
     local script_name="${MONITOR_TASKS[$monitor_name]:-}"
     if [[ -n "$script_name" ]]; then
         pkill -f "$script_name" 2>/dev/null || true
     fi
     
-    # 更新状态文件
+    # Update status file
     update_monitor_status "$monitor_name" "stopped" ""
     
-    echo "✅ 监控任务 $monitor_name 已停止"
+    echo "✅ Monitoring task $monitor_name stopped"
 }
 
-# 启动所有监控任务
+# Start all monitoring tasks
 start_all_monitors() {
-    echo "🚀 启动所有监控任务 (监控间隔: ${MONITOR_INTERVAL}秒)"
+    echo "🚀 Starting all monitoring tasks (monitoring interval: ${MONITOR_INTERVAL} seconds)"
     
-    # 按优先级启动监控任务 - 启动所有必要的监控脚本
+    # Start monitoring tasks by priority - start all necessary monitoring scripts
     local monitors_to_start=("unified" "ena_network" "block_height" "ebs_bottleneck")
     
     for monitor in "${monitors_to_start[@]}"; do
         start_monitor "$monitor"
-        sleep 1  # 避免同时启动造成资源竞争
+        sleep 1  # Avoid resource competition from simultaneous startup
     done
     
-    echo "✅ 所有监控任务启动完成"
+    echo "✅ All monitoring tasks startup completed"
     show_monitor_status
 }
 
-# 停止所有监控任务
+# Stop all monitoring tasks
 stop_all_monitors() {
-    echo "🛑 停止所有监控任务..."
+    echo "🛑 Stopping all monitoring tasks..."
     
-    # 停止所有已知的监控任务
+    # Stop all known monitoring tasks
     for monitor in "${!MONITOR_TASKS[@]}"; do
         stop_monitor "$monitor"
     done
     
-    # 额外清理：强制终止所有相关进程
-    # 检查是否有进程需要清理
+    # Additional cleanup: force terminate all related processes
+    # Check if there are processes that need cleanup
     local processes_to_clean=""
     for script in "${MONITOR_TASKS[@]}"; do
         local pids=$(pgrep -f "$script" 2>/dev/null || true)
@@ -245,100 +245,100 @@ stop_all_monitors() {
         fi
     done
     
-    # 只有在有进程需要清理时才输出日志和执行清理
+    # Only output logs and perform cleanup when there are processes to clean
     if [[ -n "$processes_to_clean" ]]; then
-        echo "🧹 清理残留的监控进程..."
+        echo "🧹 Cleaning up residual monitoring processes..."
         for script in "${MONITOR_TASKS[@]}"; do
             pkill -f "$script" 2>/dev/null || true
         done
-        echo "✅ 清理了监控进程:$processes_to_clean"
+        echo "✅ Cleaned up monitoring processes:$processes_to_clean"
     else
-        echo "ℹ️  没有发现需要清理的监控进程"
+        echo "ℹ️  No monitoring processes found that need cleanup"
     fi
     
-    # 停止iostat持续采样进程（由unified_monitor.sh启动）
+    # Stop iostat continuous sampling process (started by unified_monitor.sh)
     local iostat_pids=$(pgrep -f "iostat -dx [0-9]+" 2>/dev/null || true)
     if [[ -n "$iostat_pids" ]]; then
-        echo "🧹 清理iostat进程..."
+        echo "🧹 Cleaning up iostat processes..."
         pkill -f "iostat -dx [0-9]+" 2>/dev/null || true
-        # 清理iostat相关的临时文件
+        # Clean up iostat related temporary files
         rm -f /tmp/iostat_*.pid /tmp/iostat_*.data 2>/dev/null || true
-        echo "✅ iostat进程已清理"
+        echo "✅ iostat processes cleaned up"
     else
-        echo "ℹ️  没有发现需要清理的iostat进程"
+        echo "ℹ️  No iostat processes found that need cleanup"
     fi
     
-    # 清理PID文件
+    # Clean up PID file
     > "$MONITOR_PIDS_FILE"
     
-    echo "✅ 所有监控任务已停止"
+    echo "✅ All monitoring tasks stopped"
 }
 
-# 显示监控状态
+# Display monitoring status
 show_monitor_status() {
     echo ""
-    echo "📊 监控任务状态:"
+    echo "📊 Monitoring Task Status:"
     echo "================================"
     
     for monitor in "${!MONITOR_TASKS[@]}"; do
         local script_name="${MONITOR_TASKS[$monitor]:-}"
         
-        # iostat任务特殊处理：显示其通过unified_monitor.sh的管理状态
+        # Special handling for iostat task: show its management status via unified_monitor.sh
         if [[ "$monitor" == "iostat" ]]; then
             show_iostat_status
         else
-            # 其他任务的标准处理
+            # Standard handling for other tasks
             if is_monitor_running "$monitor"; then
                 local pid=$(pgrep -f "$script_name" | head -1)
-                echo "✅ $monitor ($script_name) - 运行中 (PID: $pid)"
+                echo "✅ $monitor ($script_name) - Running (PID: $pid)"
             else
-                echo "❌ $monitor ($script_name) - 已停止"
+                echo "❌ $monitor ($script_name) - Stopped"
             fi
         fi
     done
     
     echo ""
-    echo "📁 监控文件:"
-    echo "  状态文件: $MONITOR_STATUS_FILE"
-    echo "  PID文件: $MONITOR_PIDS_FILE"
-    echo "  日志目录: $LOGS_DIR"
+    echo "📁 Monitoring Files:"
+    echo "  Status file: $MONITOR_STATUS_FILE"
+    echo "  PID file: $MONITOR_PIDS_FILE"
+    echo "  Log directory: $LOGS_DIR"
 }
 
-# 显示iostat详细状态
+# Display iostat detailed status
 show_iostat_status() {
-    echo "📊 iostat (iostat_collector.sh) - 通过unified_monitor.sh管理"
+    echo "📊 iostat (iostat_collector.sh) - Managed by unified_monitor.sh"
     
     if is_monitor_running "unified"; then
-        echo "  └─ unified_monitor: ✅ 运行中"
+        echo "  └─ unified_monitor: ✅ Running"
         
-        # 检查真正的iostat进程（Linux环境）
+        # Check actual iostat process (Linux environment)
         if pgrep -f "iostat -dx [0-9]+" >/dev/null 2>&1; then
             local iostat_pid=$(pgrep -f "iostat -dx [0-9]+" | head -1)
-            echo "  └─ iostat进程: ✅ 运行中 (PID: $iostat_pid)"
+            echo "  └─ iostat process: ✅ Running (PID: $iostat_pid)"
         else
-            echo "  └─ iostat进程: ⚠️  未检测到 (可能在非Linux环境或未配置EBS设备)"
+            echo "  └─ iostat process: ⚠️  Not detected (may be in non-Linux environment or EBS device not configured)"
         fi
         
-        # 检查iostat数据文件
+        # Check iostat data files
         if ls /tmp/iostat_*.data >/dev/null 2>&1; then
             local data_files=$(ls /tmp/iostat_*.data 2>/dev/null | wc -l)
-            echo "  └─ 数据文件: ✅ $data_files 个设备数据文件"
+            echo "  └─ Data files: ✅ $data_files device data files"
         else
-            echo "  └─ 数据文件: ❌ 未找到数据文件"
+            echo "  └─ Data files: ❌ Data files not found"
         fi
     else
-        echo "  └─ unified_monitor: ❌ 未运行"
-        echo "  └─ iostat进程: ❌ 未运行"
+        echo "  └─ unified_monitor: ❌ Not running"
+        echo "  └─ iostat process: ❌ Not running"
     fi
 }
 
-# 更新监控状态
+# Update monitoring status
 update_monitor_status() {
     local monitor_name="$1"
     local status="$2"
     local pid="$3"
     
-    # 使用jq更新JSON状态文件（如果可用且文件存在）
+    # Use jq to update JSON status file (if available and file exists)
     if command -v jq >/dev/null 2>&1 && [[ -f "$MONITOR_STATUS_FILE" ]]; then
         local temp_file="${MONITOR_STATUS_FILE}.tmp"
         if jq --arg name "$monitor_name" --arg status "$status" --arg pid "$pid" --arg time "$(date -Iseconds)" \
@@ -346,15 +346,15 @@ update_monitor_status() {
            "$MONITOR_STATUS_FILE" > "$temp_file" 2>/dev/null; then
             mv "$temp_file" "$MONITOR_STATUS_FILE"
         else
-            # 如果jq操作失败，清理临时文件
+            # If jq operation fails, clean up temporary file
             rm -f "$temp_file" 2>/dev/null
         fi
     fi
 }
 
-# 健康检查
+# Health check
 health_check() {
-    echo "🏥 监控协调器健康检查"
+    echo "🏥 Monitoring Coordinator Health Check"
     echo "================================"
     
     local healthy=true
@@ -365,114 +365,114 @@ health_check() {
         total_monitors=$((total_monitors + 1))
         if is_monitor_running "$monitor"; then
             running_monitors=$((running_monitors + 1))
-            echo "✅ $monitor - 健康"
+            echo "✅ $monitor - Healthy"
         else
-            echo "❌ $monitor - 未运行"
+            echo "❌ $monitor - Not running"
             healthy=false
         fi
     done
     
     echo ""
-    echo "📊 健康状态摘要:"
-    echo "  总监控任务: $total_monitors"
-    echo "  运行中: $running_monitors"
-    echo "  健康度: $((running_monitors * 100 / total_monitors))%"
+    echo "📊 Health Status Summary:"
+    echo "  Total monitoring tasks: $total_monitors"
+    echo "  Running: $running_monitors"
+    echo "  Health score: $((running_monitors * 100 / total_monitors))%"
     
     if $healthy; then
-        echo "🎉 所有监控任务运行正常"
+        echo "🎉 All monitoring tasks running normally"
         return 0
     else
-        echo "⚠️  部分监控任务未运行"
+        echo "⚠️  Some monitoring tasks not running"
         return 1
     fi
 }
 
-# 清理状态标记
+# Cleanup status flag
 CLEANUP_COMPLETED=false
 
-# 清理函数
+# Cleanup function
 cleanup_coordinator() {
-    # 防止重复清理
+    # Prevent duplicate cleanup
     if [[ "$CLEANUP_COMPLETED" == "true" ]]; then
-        echo "ℹ️  监控协调器已清理，跳过重复清理"
+        echo "ℹ️  Monitoring coordinator already cleaned up, skipping duplicate cleanup"
         return 0
     fi
     
-    echo "🧹 清理监控协调器..."
+    echo "🧹 Cleaning up monitoring coordinator..."
     stop_all_monitors
     
-    # 增强清理：确保所有相关进程被清理
-    echo "🔍 清理可能的孤儿进程..."
+    # Enhanced cleanup: ensure all related processes are cleaned
+    echo "🔍 Cleaning up possible orphan processes..."
     pkill -f "ebs_bottleneck_detector" 2>/dev/null || true
     pkill -f "ena_network_monitor" 2>/dev/null || true
     pkill -f "block_height_monitor" 2>/dev/null || true
     pkill -f "tail.*performance_latest.csv" 2>/dev/null || true
 
-    # 清理共享内存文件
+    # Clean up shared memory files
     if [[ -n "${MEMORY_SHARE_DIR:-}" ]] && [[ -d "$MEMORY_SHARE_DIR" ]]; then
-        echo "🧹 清理共享内存文件..."
+        echo "🧹 Cleaning up shared memory files..."
         
-        # 清理监控相关文件
+        # Clean up monitoring related files
         rm -f "$MEMORY_SHARE_DIR"/latest_metrics.json 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/unified_metrics.json 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/block_height_monitor_cache.json 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/sample_count 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/*cache* 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/*.lock 2>/dev/null || true
-        # 保留qps_status.json直到框架最终清理
+        # Keep qps_status.json until framework final cleanup
         
-        # 统一的清理结果反馈
+        # Unified cleanup result feedback
         if [[ -z "$(ls -A "$MEMORY_SHARE_DIR" 2>/dev/null)" ]]; then
             rmdir "$MEMORY_SHARE_DIR" 2>/dev/null || true
-            echo "✅ 共享内存目录已完全清理"
+            echo "✅ Shared memory directory completely cleaned up"
         else
-            echo "✅ 共享内存监控文件已清理"
+            echo "✅ Shared memory monitoring files cleaned up"
         fi
     fi
 
-    # 保留状态文件用于调试
+    # Keep status file for debugging
     if [[ -f "$MONITOR_STATUS_FILE" ]]; then
-        echo "📊 监控状态文件保留: $MONITOR_STATUS_FILE"
+        echo "📊 Monitoring status file retained: $MONITOR_STATUS_FILE"
     fi
     
-    # 标记清理完成
+    # Mark cleanup completed
     CLEANUP_COMPLETED=true
-    echo "✅ 监控协调器清理完成"
+    echo "✅ Monitoring coordinator cleanup completed"
 }
 
-# 信号处理
+# Signal handling
 trap cleanup_coordinator EXIT INT TERM
 
-# 使用说明
+# Usage instructions
 show_usage() {
-    echo "监控协调器 - 统一管理所有监控任务"
+    echo "Monitoring Coordinator - Unified Management of All Monitoring Tasks"
     echo ""
-    echo "用法: $0 [选项] [命令]"
+    echo "Usage: $0 [options] [command]"
     echo ""
-    echo "命令:"
-    echo "  start                启动所有监控任务"
-    echo "  stop                 停止所有监控任务"
-    echo "  status               显示监控状态"
-    echo "  health               执行健康检查"
-    echo "  start-monitor <name> 启动指定监控任务"
-    echo "  stop-monitor <name>  停止指定监控任务"
+    echo "Commands:"
+    echo "  start                Start all monitoring tasks"
+    echo "  stop                 Stop all monitoring tasks"
+    echo "  status               Display monitoring status"
+    echo "  health               Perform health check"
+    echo "  start-monitor <name> Start specified monitoring task"
+    echo "  stop-monitor <name>  Stop specified monitoring task"
     echo ""
-    echo "可用的监控任务:"
+    echo "Available monitoring tasks:"
     for monitor in "${!MONITOR_TASKS[@]}"; do
         echo "  $monitor - ${MONITOR_TASKS[$monitor]:-}"
     done
     echo ""
-    echo "选项:"
-    echo "  -h, --help          显示此帮助信息"
+    echo "Options:"
+    echo "  -h, --help          Display this help information"
     echo ""
-    echo "示例:"
-    echo "  $0 start 1800       启动所有监控任务，持续30分钟"
-    echo "  $0 start-monitor unified  只启动统一监控器"
-    echo "  $0 status           查看监控状态"
-    echo "  $0 health           执行健康检查"
+    echo "Examples:"
+    echo "  $0 start 1800       Start all monitoring tasks, duration 30 minutes"
+    echo "  $0 start-monitor unified  Start unified monitor only"
+    echo "  $0 status           View monitoring status"
+    echo "  $0 health           Perform health check"
 }
 
-# 主函数
+# Main function
 main() {
     local command="${1:-status}"
     
@@ -480,13 +480,13 @@ main() {
         "start")
             init_coordinator
             start_all_monitors
-            # 保持监控协调器运行，监控子进程状态
-            echo "🔄 监控协调器保持运行，监控子进程状态..."
+            # Keep monitoring coordinator running, monitor subprocess status
+            echo "🔄 Monitoring coordinator keeps running, monitoring subprocess status..."
             
-            # 记录启动时间
+            # Record start time
             local start_time=$(date +%s)
             
-            # 检查QPS测试是否还在运行的函数
+            # Function to check if QPS test is still running
             is_qps_test_running() {
                 [[ -f "$TMP_DIR/qps_test_status" ]]
             }
@@ -571,7 +571,7 @@ main() {
             ;;
         "start-monitor")
             if [[ -z "$2" ]]; then
-                echo "❌ 请指定监控任务名称"
+                echo "❌ Please specify monitoring task name"
                 show_usage
                 exit 1
             fi
@@ -580,7 +580,7 @@ main() {
             ;;
         "stop-monitor")
             if [[ -z "$2" ]]; then
-                echo "❌ 请指定监控任务名称"
+                echo "❌ Please specify monitoring task name"
                 show_usage
                 exit 1
             fi
@@ -590,14 +590,14 @@ main() {
             show_usage
             ;;
         *)
-            echo "❌ 未知命令: $command"
+            echo "❌ Unknown command: $command"
             show_usage
             exit 1
             ;;
     esac
 }
 
-# 如果直接执行此脚本
+# If this script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi

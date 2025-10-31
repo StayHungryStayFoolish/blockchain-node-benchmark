@@ -1,19 +1,19 @@
 #!/bin/bash
 
 # =====================================================================
-# 多链区块高度监控模块
-# 用于监控本地区块链节点与主网之间的区块高度差异
+# Multi-Chain Block Height Monitor Module
+# Monitor block height difference between local blockchain node and mainnet
 # =====================================================================
 
-# 加载配置文件
-# 安全加载配置文件，避免readonly变量冲突
+# Load configuration file
+# Safely load configuration file to avoid readonly variable conflicts
 if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
-    echo "警告: 配置文件加载失败，使用默认配置"
+    echo "Warning: Configuration file loading failed, using default configuration"
     BLOCK_HEIGHT_MONITOR_RATE=${BLOCK_HEIGHT_MONITOR_RATE:-1}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 
-# 初始化变量
+# Initialize variables
 MONITOR_PID=""
 BLOCK_HEIGHT_DIFF_ALERT=false
 BLOCK_HEIGHT_DIFF_START_TIME=""
@@ -25,22 +25,22 @@ DATA_LOSS_START_TIME=""
 DATA_LOSS_END_TIME=""
 DATA_LOSS_EVENTS=()
 
-# 清理和退出函数
+# Cleanup and exit function
 cleanup_and_exit() {
     echo "Received termination signal, cleaning up block height monitor..."
     
-    # 刷新所有缓冲
+    # Flush all buffers
     if [[ -n "$BLOCK_HEIGHT_DATA_FILE" && -f "$BLOCK_HEIGHT_DATA_FILE" ]]; then
         sync "$BLOCK_HEIGHT_DATA_FILE" 2>/dev/null || true
         rm -f "${BLOCK_HEIGHT_DATA_FILE}.buffer" 2>/dev/null || true
     fi
     
-    # 删除PID文件
+    # Delete PID file
     rm -f "${TMP_DIR}/block_height_monitor.pid" 2>/dev/null || true
     
-    # 清理共享内存缓存 - 只清理block_height相关文件，保留QPS状态文件
+    # Clean shared memory cache - only clean block_height related files, keep QPS status file
     if [[ -n "$BASE_MEMORY_DIR" ]]; then
-        # 只清理block_height相关的缓存文件，保留其他进程的状态文件
+        # Only clean block_height related cache files, keep other process status files
         rm -f "$MEMORY_SHARE_DIR"/block_height_monitor_cache.json 2>/dev/null || true
         rm -f "$BASE_MEMORY_DIR"/node_health_*.cache 2>/dev/null || true
     fi
@@ -49,14 +49,14 @@ cleanup_and_exit() {
     exit 0
 }
 
-# 注意：信号处理将在后台监控模式下设置，而不是全局设置
+# Note: Signal handling will be set in background monitoring mode, not globally
 DATA_LOSS_COUNT=0
 DATA_LOSS_PERIODS=0
 DATA_LOSS_TOTAL_DURATION=0
 BACKGROUND=false
 VERBOSE=false
 
-# 帮助信息
+# Help information
 show_help() {
     echo "Multi-Chain Block Height Monitor"
     echo "Usage: $0 [options]"
@@ -74,7 +74,7 @@ show_help() {
     echo ""
 }
 
-# 参数解析
+# Parse arguments
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -123,7 +123,7 @@ parse_args() {
     done
 }
 
-# 检查依赖
+# Check dependencies
 check_dependencies() {
     if ! command -v curl &> /dev/null; then
         echo "Error: curl is not installed"
@@ -135,33 +135,33 @@ check_dependencies() {
     fi
 }
 
-# 获取本地节点区块高度
+# Get local node block height
 get_local_block_height() {
-    # 使用共享函数库中的函数获取区块高度
+    # Use function from shared function library to get block height
     source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && get_block_height "$LOCAL_RPC_URL"
 }
 
-# 获取主网区块高度
+# Get mainnet block height
 get_mainnet_block_height() {
-    # 使用共享函数库中的函数获取区块高度
+    # Use function from shared function library to get block height
     source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && get_block_height "$MAINNET_RPC_URL"
 }
 
-# 检查节点健康状态
+# Check node health status
 check_node_health() {
     local rpc_url=$1
-    # 使用共享函数库中的函数检查健康状态
+    # Use function from shared function library to check health status
     source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && check_node_health "$rpc_url"
 }
 
-# 监控区块高度差异
+# Monitor block height difference
 monitor_block_height_diff() {
     local timestamp=$(get_unified_timestamp)
     
-    # 使用共享函数库中的函数获取区块高度数据
+    # Use function from shared function library to get block height data
     local block_height_data=$(source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && get_cached_block_height_data "$BLOCK_HEIGHT_CACHE_FILE" 3 "$LOCAL_RPC_URL" "$MAINNET_RPC_URL")
     
-    # 解析数据
+    # Parse data
     local local_block_height=$(echo "$block_height_data" | jq -r '.local_block_height')
     local mainnet_block_height=$(echo "$block_height_data" | jq -r '.mainnet_block_height')
     local block_height_diff=$(echo "$block_height_data" | jq -r '.block_height_diff')
@@ -169,22 +169,22 @@ monitor_block_height_diff() {
     local mainnet_health=$(echo "$block_height_data" | jq -r '.mainnet_health')
     local data_loss=$(echo "$block_height_data" | jq -r '.data_loss')
     
-    # 使用缓冲写入减少磁盘 I/O
+    # Use buffered write to reduce disk I/O
     local data_line="$timestamp,$local_block_height,$mainnet_block_height,$block_height_diff,$local_health,$mainnet_health,$data_loss"
     source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && buffered_write "$BLOCK_HEIGHT_DATA_FILE" "$data_line" 10
     
-    # 检查区块高度差异是否超过阈值
+    # Check if block height difference exceeds threshold
     if [[ "$block_height_diff" != "null" && "$block_height_diff" != "N/A" && $block_height_diff -gt $BLOCK_HEIGHT_DIFF_THRESHOLD ]]; then
         if [[ "$BLOCK_HEIGHT_DIFF_ALERT" == "false" ]]; then
             BLOCK_HEIGHT_DIFF_ALERT=true
             BLOCK_HEIGHT_DIFF_START_TIME=$(get_unified_timestamp)
             echo "⚠️ ALERT: Block height difference ($block_height_diff) exceeds threshold ($BLOCK_HEIGHT_DIFF_THRESHOLD) at $BLOCK_HEIGHT_DIFF_START_TIME"
             
-            # 记录异常事件开始
+            # Record exception event start
             BLOCK_HEIGHT_DIFF_EVENT_ID=$(./unified_event_manager.sh start "block_height_diff" "block_height_monitor" "Block height difference $block_height_diff exceeds threshold $BLOCK_HEIGHT_DIFF_THRESHOLD")
         fi
         
-        # 检查持续时间是否超过阈值
+        # Check if duration exceeds threshold
         if [[ -n "$BLOCK_HEIGHT_DIFF_START_TIME" ]]; then
             local start_seconds=$(date -d "$BLOCK_HEIGHT_DIFF_START_TIME" +%s)
             local current_seconds=$(date +%s)
@@ -194,10 +194,10 @@ monitor_block_height_diff() {
                 echo "🚨 CRITICAL: Block height difference has exceeded threshold for ${duration}s (> ${BLOCK_HEIGHT_TIME_THRESHOLD}s)"
                 echo "🚨 CRITICAL: Local node may be considered unavailable for service"
                 
-                # 设置持续超限标志文件（用于系统级瓶颈判断）
+                # Set persistent exceeded flag file (for system-level bottleneck judgment)
                 echo "1" > "${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag"
                 
-                # 记录事件
+                # Record event
                 BLOCK_HEIGHT_DIFF_EVENTS+=("CRITICAL: Block height diff $block_height_diff for ${duration}s at $(get_unified_timestamp)")
             fi
         fi
@@ -205,27 +205,27 @@ monitor_block_height_diff() {
         BLOCK_HEIGHT_DIFF_ALERT=false
         BLOCK_HEIGHT_DIFF_END_TIME=$(get_unified_timestamp)
         
-        # 计算持续时间
+        # Calculate duration
         local start_seconds=$(date -d "$BLOCK_HEIGHT_DIFF_START_TIME" +%s)
         local end_seconds=$(date -d "$BLOCK_HEIGHT_DIFF_END_TIME" +%s)
         local duration=$((end_seconds - start_seconds))
         
         echo "✅ RESOLVED: Block height difference is now below threshold at $BLOCK_HEIGHT_DIFF_END_TIME (lasted ${duration}s)"
         
-        # 记录事件结束
+        # Record event end
         if [[ -n "$BLOCK_HEIGHT_DIFF_EVENT_ID" ]]; then
             ./unified_event_manager.sh end "$BLOCK_HEIGHT_DIFF_EVENT_ID"
         fi
         
-        # 记录事件
+        # Record event
         BLOCK_HEIGHT_DIFF_EVENTS+=("RESOLVED: Block height diff normalized after ${duration}s at $BLOCK_HEIGHT_DIFF_END_TIME")
         
-        # 重置开始时间
+        # Reset start time
         BLOCK_HEIGHT_DIFF_START_TIME=""
         BLOCK_HEIGHT_DIFF_EVENT_ID=""
     fi
     
-    # 检查数据丢失
+    # Check data loss
     if [[ "$data_loss" == "1" ]]; then
         DATA_LOSS_COUNT=$((DATA_LOSS_COUNT + 1))
         
@@ -233,7 +233,7 @@ monitor_block_height_diff() {
             DATA_LOSS_ALERT=true
             DATA_LOSS_START_TIME=$(get_unified_timestamp)
             DATA_LOSS_PERIODS=$((DATA_LOSS_PERIODS + 1))
-            # 转换数值为人类可读格式
+            # Convert numeric values to human-readable format
             local local_health_display=$([ "$local_health" = "1" ] && echo "healthy" || echo "unhealthy")
             local mainnet_health_display=$([ "$mainnet_health" = "1" ] && echo "healthy" || echo "unhealthy")
             
@@ -241,14 +241,14 @@ monitor_block_height_diff() {
             echo "    Local health: $local_health_display, Mainnet health: $mainnet_health_display"
             echo "    Local block height: $local_block_height, Mainnet block height: $mainnet_block_height"
             
-            # 记录数据丢失统计到共享文件
+            # Record data loss statistics to shared file
             update_data_loss_stats
         fi
     elif [[ "$DATA_LOSS_ALERT" == "true" ]]; then
         DATA_LOSS_ALERT=false
         DATA_LOSS_END_TIME=$(get_unified_timestamp)
         
-        # 计算持续时间
+        # Calculate duration
         local start_seconds=$(date -d "$DATA_LOSS_START_TIME" +%s)
         local end_seconds=$(date -d "$DATA_LOSS_END_TIME" +%s)
         local duration=$((end_seconds - start_seconds))
@@ -257,38 +257,38 @@ monitor_block_height_diff() {
         
         echo "✅ RESOLVED: Data loss or node health issue resolved at $DATA_LOSS_END_TIME (lasted ${duration}s)"
         
-        # 记录事件
+        # Record event
         DATA_LOSS_EVENTS+=("Data loss or node health issue for ${duration}s from $DATA_LOSS_START_TIME to $DATA_LOSS_END_TIME")
         
-        # 更新统计
+        # Update statistics
         update_data_loss_stats
         
-        # 重置开始时间
+        # Reset start time
         DATA_LOSS_START_TIME=""
     fi
     
-    # 详细输出
+    # Verbose output
     if [[ "$VERBOSE" == "true" ]]; then
-        # 转换数值为人类可读格式
+        # Convert numeric values to human-readable format
         local local_health_display=$([ "$local_health" = "1" ] && echo "healthy" || echo "unhealthy")
         local mainnet_health_display=$([ "$mainnet_health" = "1" ] && echo "healthy" || echo "unhealthy")
         local data_loss_display=$([ "$data_loss" = "1" ] && echo "detected" || echo "none")
         echo "[$timestamp] Local: $local_block_height, Mainnet: $mainnet_block_height, Diff: $block_height_diff, Local Health: $local_health_display, Mainnet Health: $mainnet_health_display, Data Loss: $data_loss_display"
     fi
     
-    # 清理旧的缓存数据
+    # Clean up old cache data
     source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && cleanup_block_height_cache "$MEMORY_SHARE_DIR" 5
 }
 
-# 显示当前状态
+# Display current status
 show_status() {
     echo "Block Height Monitor Status"
     echo "===================="
     
-    # 获取最新的区块高度数据
+    # Get latest block height data
     local block_height_data=$(source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && get_cached_block_height_data "$BLOCK_HEIGHT_CACHE_FILE" "$CACHE_MAX_AGE" "$LOCAL_RPC_URL" "$MAINNET_RPC_URL")
     
-    # 解析数据
+    # Parse data
     local timestamp=$(echo "$block_height_data" | jq -r '.timestamp')
     local local_block_height=$(echo "$block_height_data" | jq -r '.local_block_height')
     local mainnet_block_height=$(echo "$block_height_data" | jq -r '.mainnet_block_height')
@@ -297,7 +297,7 @@ show_status() {
     local mainnet_health=$(echo "$block_height_data" | jq -r '.mainnet_health')
     local data_loss=$(echo "$block_height_data" | jq -r '.data_loss')
     
-    # 转换数值为人类可读格式
+    # Convert numeric values to human-readable format
     local local_health_display=$([ "$local_health" = "1" ] && echo "healthy" || echo "unhealthy")
     local mainnet_health_display=$([ "$mainnet_health" = "1" ] && echo "healthy" || echo "unhealthy")
     local data_loss_display=$([ "$data_loss" = "1" ] && echo "detected" || echo "none")
@@ -310,14 +310,14 @@ show_status() {
     echo "Mainnet health: $mainnet_health_display"
     echo "Data loss: $data_loss_display"
     
-    # 检查是否超过阈值
+    # Check if threshold exceeded
     if [[ "$block_height_diff" != "null" && $block_height_diff -gt $BLOCK_HEIGHT_DIFF_THRESHOLD ]]; then
         echo "⚠️ WARNING: Block height difference exceeds threshold ($BLOCK_HEIGHT_DIFF_THRESHOLD)"
     else
         echo "✅ OK: Block height difference is within threshold"
     fi
     
-    # 检查是否有进程在运行
+    # Check if process is running
     if [[ -f "${TMP_DIR}/block_height_monitor.pid" ]]; then
         local pid=$(cat "${TMP_DIR}/block_height_monitor.pid")
         if kill -0 "$pid" 2>/dev/null; then
@@ -330,7 +330,7 @@ show_status() {
     fi
 }
 
-# 停止监控
+# Stop monitoring
 stop_monitor() {
     echo "Stopping block height monitor..."
     
@@ -341,7 +341,7 @@ stop_monitor() {
             kill "$pid" 2>/dev/null
             sleep 2
             
-            # 检查进程是否还在运行
+            # Check if process is still running
             if kill -0 "$pid" 2>/dev/null; then
                 echo "Force killing Block height monitor (PID: $pid)..."
                 kill -9 "$pid" 2>/dev/null
@@ -354,22 +354,22 @@ stop_monitor() {
         rm -f "${TMP_DIR}/block_height_monitor.pid"
     else
         echo "Block height monitor PID file not found"
-        # 尝试通过进程名终止
+        # Try to terminate by process name
         pkill -f "block_height_monitor.sh" 2>/dev/null || true
     fi
     
-    # 清理缓冲文件
+    # Clean up buffer files
     if [[ -n "$BLOCK_HEIGHT_DATA_FILE" ]]; then
         rm -f "${BLOCK_HEIGHT_DATA_FILE}.buffer" 2>/dev/null || true
     fi
     
-    # 清理共享内存
+    # Clean up shared memory
     rm -rf /dev/shm/blockchain-node-qps-test/ 2>/dev/null || true
     
     echo "Block height monitor cleanup completed"
 }
 
-# 启动监控
+# Start monitoring
 start_monitoring() {
     echo "Starting Block Height monitor..."
     echo "Monitoring rate: ${BLOCK_HEIGHT_MONITOR_RATE}/s"
@@ -377,27 +377,27 @@ start_monitoring() {
     echo "Block height time difference threshold: ${BLOCK_HEIGHT_TIME_THRESHOLD}s"
     echo "Output file: $BLOCK_HEIGHT_DATA_FILE"
     
-    # 创建输出目录
+    # Create output directory
     mkdir -p "$(dirname "$BLOCK_HEIGHT_DATA_FILE")"
     
-    # 创建缓存目录
+    # Create cache directory
     if [[ "$USE_MEMORY_CACHE" == "true" ]]; then
         mkdir -p "$(dirname "$BLOCK_HEIGHT_CACHE_FILE")"
     fi
     
-    # 写入 CSV 头
+    # Write CSV header
     echo "timestamp,local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss" > "$BLOCK_HEIGHT_DATA_FILE"
     
-    # 统一的监控循环 - 跟随框架生命周期
+    # Unified monitoring loop - follow framework lifecycle
     if [[ "$BACKGROUND" == "true" ]]; then
         (
-            # 在后台进程中设置信号处理
+            # Set signal handling in background process
             trap 'cleanup_and_exit' SIGTERM SIGINT SIGQUIT EXIT
             
-            # 频率转换：计算sleep间隔
+            # Frequency conversion: calculate sleep interval
             local sleep_interval=$(awk "BEGIN {printf \"%.3f\", 1/$BLOCK_HEIGHT_MONITOR_RATE}" 2>/dev/null || echo "1")
             
-            # 跟随框架生命周期
+            # Follow framework lifecycle
             while [[ -f "$TMP_DIR/qps_test_status" ]]; do
                 monitor_block_height_diff
                 sleep "$sleep_interval"
@@ -407,13 +407,13 @@ start_monitoring() {
         echo "Monitor started in background with PID: $MONITOR_PID"
         echo "$MONITOR_PID" > "${TMP_DIR}/block_height_monitor.pid"
     else
-        # 前台模式（保留用于调试）
+        # Foreground mode (kept for debugging)
         trap 'cleanup_and_exit' SIGTERM SIGINT SIGQUIT
         
-        # 频率转换：计算sleep间隔
+        # Frequency conversion: calculate sleep interval
         local sleep_interval=$(awk "BEGIN {printf \"%.3f\", 1/$BLOCK_HEIGHT_MONITOR_RATE}" 2>/dev/null || echo "1")
         
-        # 跟随框架生命周期
+        # Follow framework lifecycle
         while [[ -f "$TMP_DIR/qps_test_status" ]]; do
             monitor_block_height_diff
             sleep "$sleep_interval"
@@ -421,25 +421,25 @@ start_monitoring() {
     fi
 }
 
-# 主函数
+# Main function
 main() {
-    # 检查依赖
+    # Check dependencies
     check_dependencies
     
-    # 解析参数
+    # Parse arguments
     parse_args "$@"
     
-    # 启动监控
+    # Start monitoring
     start_monitoring
 }
 
-# 执行主函数
+# Execute main function
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
-# 更新数据丢失统计
+# Update data loss statistics
 update_data_loss_stats() {
-    # 创建统一的数据丢失统计JSON
+    # Create unified data loss statistics JSON
     local stats_json="{
         \"data_loss_count\": $DATA_LOSS_COUNT,
         \"data_loss_periods\": $DATA_LOSS_PERIODS,
@@ -447,6 +447,6 @@ update_data_loss_stats() {
         \"last_updated\": \"$(date +"%Y-%m-%d %H:%M:%S")\"
     }"
     
-    # 写入共享文件
+    # Write to shared file
     echo "$stats_json" > "${MEMORY_SHARE_DIR}/data_loss_stats.json"
 }

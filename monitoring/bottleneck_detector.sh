@@ -1,24 +1,24 @@
 #!/bin/bash
 # =====================================================================
-# 智能瓶颈检测器 - 极限测试专用
+# Intelligent Bottleneck Detector - For Intensive Testing
 # =====================================================================
-# 实时监控系统各项指标，自动检测性能瓶颈
-# 用于极限测试模式的自动停止条件判断
-# 使用统一日志管理器
+# Real-time monitoring of system metrics, automatic bottleneck detection
+# Used for automatic stop condition determination in intensive test mode
+# Uses unified logger
 # =====================================================================
 
-# 严格错误处理 - 但允许在交互式环境中安全使用
+# Strict error handling - but allow safe use in interactive environments
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # 脚本直接执行时使用严格模式
+    # Use strict mode when script is executed directly
     set -euo pipefail
 else
-    # 被source时使用宽松模式，避免退出shell
+    # Use relaxed mode when sourced to avoid exiting shell
     set -uo pipefail
 fi
 
-# 安全加载配置文件，避免readonly变量冲突
+# Safely load configuration file to avoid readonly variable conflicts
 if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
-    echo "警告: 配置文件加载失败，使用默认配置"
+    echo "Warning: Configuration file loading failed, using default configuration"
     MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
@@ -26,57 +26,57 @@ source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh"
 
-# 初始化统一日志管理器
+# Initialize unified logger
 init_logger "bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/bottleneck_detector.log"
 
-# 定义瓶颈检测日志文件变量（用于 tee 输出）
+# Define bottleneck detection log file variable (for tee output)
 BOTTLENECK_LOG="${LOGS_DIR}/bottleneck_detector.log"
-# 动态构建设备字段匹配模式 - 修复硬编码设备名问题
+# Dynamically build device field matching patterns - fix hardcoded device name issue
 build_device_field_patterns() {
     local field_type="$1"  # util, r_await, avg_await, aws_standard_iops, throughput_mibs
     local patterns=()
     
-    # DATA设备模式（必须存在）
+    # DATA device pattern (required)
     patterns+=("data_${LEDGER_DEVICE}_${field_type}")
     
-    # ACCOUNTS设备模式（可选）
+    # ACCOUNTS device pattern (optional)
     if is_accounts_configured; then
         patterns+=("accounts_${ACCOUNTS_DEVICE}_${field_type}")
     fi
 
-    # 返回用|分隔的模式字符串
+    # Return pattern string separated by |
     local IFS='|'
     echo "${patterns[*]}"
 }
 
-# 构建所有需要的字段模式
+# Build all required field patterns
 EBS_UTIL_PATTERNS=$(build_device_field_patterns "util")
 EBS_R_AWAIT_PATTERNS=$(build_device_field_patterns "r_await")
 EBS_AVG_AWAIT_PATTERNS=$(build_device_field_patterns "avg_await")
 EBS_AWS_IOPS_PATTERNS=$(build_device_field_patterns "aws_standard_iops")
 EBS_THROUGHPUT_PATTERNS=$(build_device_field_patterns "throughput_mibs")
 
-log_info "🔧 动态字段模式构建完成:"
-log_info "   EBS利用率模式: $EBS_UTIL_PATTERNS"
-log_info "   EBS延迟模式: $EBS_R_AWAIT_PATTERNS"
+log_info "🔧 Dynamic field pattern construction completed:"
+log_info "   EBS utilization pattern: $EBS_UTIL_PATTERNS"
+log_info "   EBS latency pattern: $EBS_R_AWAIT_PATTERNS"
 
-# 错误处理函数
+# Error handling function
 handle_detector_error() {
     local exit_code=$?
     local line_number=$1
-    log_error "瓶颈检测器错误发生在第 $line_number 行，退出码: $exit_code"
-    log_warn "瓶颈检测器异常退出，但不影响主测试流程"
-    # 瓶颈检测器错误不应该中断主测试，返回安全的退出码
+    log_error "Bottleneck detector error occurred at line $line_number, exit code: $exit_code"
+    log_warn "Bottleneck detector exited abnormally, but does not affect main test process"
+    # Bottleneck detector errors should not interrupt main test, return safe exit code
     exit 0
 }
 
-# 设置错误陷阱
+# Set error trap
 trap 'handle_detector_error $LINENO' ERR
 
 readonly BOTTLENECK_STATUS_FILE="${MEMORY_SHARE_DIR}/bottleneck_status.json"
 readonly BOTTLENECK_COUNTERS_FILE="${MEMORY_SHARE_DIR}/bottleneck_counters.json"
 
-# 创建性能指标的JSON字符串
+# Create performance metrics JSON string
 create_performance_metrics_json() {
     local cpu_usage="$1"
     local memory_usage="$2"
@@ -101,7 +101,7 @@ create_performance_metrics_json() {
 EOF
 }
 
-# 统一的瓶颈状态JSON生成函数
+# Unified bottleneck status JSON generation function
 generate_bottleneck_status_json() {
     local status="$1"
     local detected="$2"
@@ -110,7 +110,7 @@ generate_bottleneck_status_json() {
     local current_qps="$5"
     local metrics_json="$6"
     
-    # 从JSON中提取值
+    # Extract values from JSON
     local cpu_usage=$(echo "$metrics_json" | jq -r '.cpu_usage // null' 2>/dev/null || echo "null")
     local memory_usage=$(echo "$metrics_json" | jq -r '.memory_usage // null' 2>/dev/null || echo "null")
     local ebs_util=$(echo "$metrics_json" | jq -r '.ebs_util // null' 2>/dev/null || echo "null")
@@ -120,7 +120,7 @@ generate_bottleneck_status_json() {
     local network_util=$(echo "$metrics_json" | jq -r '.network_util // null' 2>/dev/null || echo "null")
     local error_rate=$(echo "$metrics_json" | jq -r '.error_rate // null' 2>/dev/null || echo "null")
     
-    # 构建JSON数组
+    # Build JSON arrays
     local types_array="[]"
     local values_array="[]"
     local summary=""
@@ -131,7 +131,7 @@ generate_bottleneck_status_json() {
         summary="$types_csv"
     fi
     
-    # 生成统一的JSON结构
+    # Generate unified JSON structure
     cat > "$BOTTLENECK_STATUS_FILE" << EOF
 {
     "status": "$status",
@@ -173,15 +173,15 @@ generate_bottleneck_status_json() {
 EOF
 }
 
-# 瓶颈检测计数器 - 必须在使用前声明
+# Bottleneck detection counters - must be declared before use
 declare -A BOTTLENECK_COUNTERS
 
-# 保存计数器到共享内存文件
+# Save counters to shared memory file
 save_bottleneck_counters() {
     local json_content="{"
     local first=true
     
-    # 临时关闭 set -u 检查数组长度（空数组会触发 unbound variable）
+    # Temporarily disable set -u to check array length (empty array triggers unbound variable)
     set +u
     local array_size=${#BOTTLENECK_COUNTERS[@]}
     set -u
@@ -201,10 +201,10 @@ save_bottleneck_counters() {
     echo "$json_content" > "$BOTTLENECK_COUNTERS_FILE"
 }
 
-# 从共享内存文件加载计数器
+# Load counters from shared memory file
 load_bottleneck_counters() {
     if [[ -f "$BOTTLENECK_COUNTERS_FILE" ]]; then
-        # 使用 jq 解析 JSON 并填充数组
+        # Use jq to parse JSON and populate array
         local keys=$(jq -r 'keys[]' "$BOTTLENECK_COUNTERS_FILE" 2>/dev/null)
         if [[ -n "$keys" ]]; then
             while IFS= read -r key; do
@@ -217,9 +217,9 @@ load_bottleneck_counters() {
     return 1
 }
 
-# 初始化瓶颈检测计数器
+# Initialize bottleneck detection counters
 initialize_bottleneck_counters() {
-    # 基础计数器
+    # Basic counters
     BOTTLENECK_COUNTERS["cpu"]=0
     BOTTLENECK_COUNTERS["memory"]=0
     BOTTLENECK_COUNTERS["network"]=0
@@ -229,42 +229,42 @@ initialize_bottleneck_counters() {
     BOTTLENECK_COUNTERS["rpc_connection"]=0
     BOTTLENECK_COUNTERS["ena_limit"]=0
     
-    # DATA设备计数器
+    # DATA device counters
     BOTTLENECK_COUNTERS["ebs_util"]=0
     BOTTLENECK_COUNTERS["ebs_latency"]=0
     BOTTLENECK_COUNTERS["ebs_aws_iops"]=0
     BOTTLENECK_COUNTERS["ebs_aws_throughput"]=0
     
-    # ACCOUNTS设备计数器 (如果配置了ACCOUNTS设备)
+    # ACCOUNTS device counters (if ACCOUNTS device is configured)
     if is_accounts_configured; then
         BOTTLENECK_COUNTERS["accounts_ebs_util"]=0
         BOTTLENECK_COUNTERS["accounts_ebs_latency"]=0
         BOTTLENECK_COUNTERS["accounts_ebs_aws_iops"]=0
         BOTTLENECK_COUNTERS["accounts_ebs_aws_throughput"]=0
-        log_debug "已初始化ACCOUNTS设备瓶颈计数器"
+        log_debug "ACCOUNTS device bottleneck counters initialized"
     fi
     
-    # 持久化到共享内存文件
+    # Persist to shared memory file
     save_bottleneck_counters
     
-    log_debug "瓶颈检测计数器初始化完成"
+    log_debug "Bottleneck detection counters initialization completed"
 }
 
-# 重置资源瓶颈计数器（保留 RPC 计数器）
+# Reset resource bottleneck counters (preserve RPC counters)
 reset_resource_bottleneck_counters() {
-    # 只重置资源相关的计数器
+    # Only reset resource-related counters
     BOTTLENECK_COUNTERS["cpu"]=0
     BOTTLENECK_COUNTERS["memory"]=0
     BOTTLENECK_COUNTERS["network"]=0
     BOTTLENECK_COUNTERS["ena_limit"]=0
     
-    # DATA设备计数器
+    # DATA device counters
     BOTTLENECK_COUNTERS["ebs_util"]=0
     BOTTLENECK_COUNTERS["ebs_latency"]=0
     BOTTLENECK_COUNTERS["ebs_aws_iops"]=0
     BOTTLENECK_COUNTERS["ebs_aws_throughput"]=0
     
-    # ACCOUNTS设备计数器
+    # ACCOUNTS device counters
     if is_accounts_configured; then
         BOTTLENECK_COUNTERS["accounts_ebs_util"]=0
         BOTTLENECK_COUNTERS["accounts_ebs_latency"]=0
@@ -272,142 +272,142 @@ reset_resource_bottleneck_counters() {
         BOTTLENECK_COUNTERS["accounts_ebs_aws_throughput"]=0
     fi
     
-    # 保留 RPC 计数器：
+    # Preserve RPC counters:
     # - rpc_success_rate
     # - rpc_latency
     # - rpc_connection
     # - error_rate
     
-    log_debug "资源瓶颈计数器已重置，RPC计数器保留"
+    log_debug "Resource bottleneck counters reset, RPC counters preserved"
 }
 
-# 初始化瓶颈检测
+# Initialize bottleneck detection
 init_bottleneck_detection() {
-    echo "🔍 初始化智能瓶颈检测器..." | tee -a "$BOTTLENECK_LOG"
+    echo "🔍 Initializing intelligent bottleneck detector..." | tee -a "$BOTTLENECK_LOG"
     
-    # 确保状态文件目录存在
+    # Ensure status file directory exists
     mkdir -p "$(dirname "$BOTTLENECK_STATUS_FILE")"
-    log_info "状态文件目录已创建: $(dirname "$BOTTLENECK_STATUS_FILE")"
+    log_info "Status file directory created: $(dirname "$BOTTLENECK_STATUS_FILE")"
     
-    # 初始化计数器
+    # Initialize counters
     initialize_bottleneck_counters
     
-    echo "📊 瓶颈检测阈值:" | tee -a "$BOTTLENECK_LOG"
-    echo "  CPU使用率: ${BOTTLENECK_CPU_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
-    echo "  内存使用率: ${BOTTLENECK_MEMORY_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
-    echo "  EBS利用率: ${BOTTLENECK_EBS_UTIL_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
-    echo "  EBS延迟: ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms" | tee -a "$BOTTLENECK_LOG"
-    echo "  网络利用率: ${BOTTLENECK_NETWORK_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
-    echo "  错误率: ${BOTTLENECK_ERROR_RATE_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
+    echo "📊 Bottleneck detection thresholds:" | tee -a "$BOTTLENECK_LOG"
+    echo "  CPU usage: ${BOTTLENECK_CPU_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
+    echo "  Memory usage: ${BOTTLENECK_MEMORY_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
+    echo "  EBS utilization: ${BOTTLENECK_EBS_UTIL_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
+    echo "  EBS latency: ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms" | tee -a "$BOTTLENECK_LOG"
+    echo "  Network utilization: ${BOTTLENECK_NETWORK_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
+    echo "  Error rate: ${BOTTLENECK_ERROR_RATE_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
     
-    # 显示EBS基准配置
+    # Display EBS baseline configuration
     if [[ -n "$DATA_VOL_MAX_IOPS" ]]; then
-        echo "📋 EBS性能基准:" | tee -a "$BOTTLENECK_LOG"
-        echo "  DATA设备基准: ${DATA_VOL_MAX_IOPS} IOPS, ${DATA_VOL_MAX_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
+        echo "📋 EBS performance baselines:" | tee -a "$BOTTLENECK_LOG"
+        echo "  DATA device baseline: ${DATA_VOL_MAX_IOPS} IOPS, ${DATA_VOL_MAX_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
         
-        # 修正：使用完整的ACCOUNTS检查逻辑，与其他地方保持一致
+        # Fix: Use complete ACCOUNTS check logic, consistent with other places
         if is_accounts_configured && [[ -n "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
-            echo "  ACCOUNTS设备基准: ${ACCOUNTS_VOL_MAX_IOPS} IOPS, ${ACCOUNTS_VOL_MAX_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
+            echo "  ACCOUNTS device baseline: ${ACCOUNTS_VOL_MAX_IOPS} IOPS, ${ACCOUNTS_VOL_MAX_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
         fi
     fi
-    echo "  连续检测次数: ${BOTTLENECK_CONSECUTIVE_COUNT}" | tee -a "$BOTTLENECK_LOG"
+    echo "  Consecutive detection count: ${BOTTLENECK_CONSECUTIVE_COUNT}" | tee -a "$BOTTLENECK_LOG"
     echo ""
     
-    # 初始化状态文件
+    # Initialize status file
     local empty_metrics=$(create_performance_metrics_json "null" "null" "null" "null" "null" "null" "null" "null")
     generate_bottleneck_status_json "initialized" "false" "" "" "null" "$empty_metrics"
     
-    echo "✅ 瓶颈检测器初始化完成"
-    echo "📄 状态文件: $BOTTLENECK_STATUS_FILE"
+    echo "✅ Bottleneck detector initialization completed"
+    echo "📄 Status file: $BOTTLENECK_STATUS_FILE"
     
-    # 验证状态文件是否创建成功
+    # Verify status file creation
     if [[ -f "$BOTTLENECK_STATUS_FILE" ]]; then
-        log_info "瓶颈状态文件已成功创建: $BOTTLENECK_STATUS_FILE"
-        echo "📊 初始状态文件内容:"
+        log_info "Bottleneck status file created successfully: $BOTTLENECK_STATUS_FILE"
+        echo "📊 Initial status file content:"
         cat "$BOTTLENECK_STATUS_FILE" | jq . 2>/dev/null || cat "$BOTTLENECK_STATUS_FILE"
     else
-        log_error "瓶颈状态文件创建失败: $BOTTLENECK_STATUS_FILE"
+        log_error "Bottleneck status file creation failed: $BOTTLENECK_STATUS_FILE"
     fi
 }
 
-# 检测CPU瓶颈
+# Detect CPU bottleneck
 check_cpu_bottleneck() {
     local cpu_usage="$1"
     
     if (( $(awk "BEGIN {print ($cpu_usage > $BOTTLENECK_CPU_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["cpu"]=$((${BOTTLENECK_COUNTERS["cpu"]:-0} + 1))
-        echo "⚠️  CPU瓶颈检测: ${cpu_usage}% > ${BOTTLENECK_CPU_THRESHOLD}% (${BOTTLENECK_COUNTERS["cpu"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  CPU bottleneck detection: ${cpu_usage}% > ${BOTTLENECK_CPU_THRESHOLD}% (${BOTTLENECK_COUNTERS["cpu"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["cpu"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            return 0  # 检测到瓶颈
+            return 0  # Bottleneck detected
         fi
     else
-        BOTTLENECK_COUNTERS["cpu"]=0  # 重置计数器
+        BOTTLENECK_COUNTERS["cpu"]=0  # Reset counter
     fi
     
-    return 1  # 未检测到瓶颈
+    return 1  # No bottleneck detected
 }
 
-# 检测内存瓶颈
+# Detect memory bottleneck
 check_memory_bottleneck() {
     local memory_usage="$1"
     
     if (( $(awk "BEGIN {print ($memory_usage > $BOTTLENECK_MEMORY_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["memory"]=$((${BOTTLENECK_COUNTERS["memory"]:-0} + 1))
-        echo "⚠️  内存瓶颈检测: ${memory_usage}% > ${BOTTLENECK_MEMORY_THRESHOLD}% (${BOTTLENECK_COUNTERS["memory"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  Memory bottleneck detection: ${memory_usage}% > ${BOTTLENECK_MEMORY_THRESHOLD}% (${BOTTLENECK_COUNTERS["memory"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["memory"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            return 0  # 检测到瓶颈
+            return 0  # Bottleneck detected
         fi
     else
-        BOTTLENECK_COUNTERS["memory"]=0  # 重置计数器
+        BOTTLENECK_COUNTERS["memory"]=0  # Reset counter
     fi
     
-    return 1  # 未检测到瓶颈
+    return 1  # No bottleneck detected
 }
 
 check_ebs_bottleneck() {
     local ebs_aws_iops="$1"
     local ebs_throughput="$2"
-    local device_type="${3:-data}" # 设备类型: "data" 或 "accounts"，默认为 "data"
+    local device_type="${3:-data}" # Device type: "data" or "accounts", default is "data"
     
     local bottleneck_detected=false
     
-    # 根据设备类型选择正确的基准值和计数器前缀
+    # Select correct baseline values and counter prefix based on device type
     local baseline_iops="$DATA_VOL_MAX_IOPS"
     local baseline_throughput="$DATA_VOL_MAX_THROUGHPUT"
     local counter_prefix="ebs"
     
     if [[ "$device_type" == "accounts" ]]; then
-        # 检查ACCOUNTS设备的基准值是否已配置
+        # Check if ACCOUNTS device baseline values are configured
         if [[ -n "$ACCOUNTS_VOL_MAX_IOPS" && -n "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
             baseline_iops="$ACCOUNTS_VOL_MAX_IOPS"
             baseline_throughput="$ACCOUNTS_VOL_MAX_THROUGHPUT"
             counter_prefix="accounts_ebs"
-            log_debug "使用ACCOUNTS设备基准: IOPS=$baseline_iops, 吞吐量=$baseline_throughput"
+            log_debug "Using ACCOUNTS device baseline: IOPS=$baseline_iops, Throughput=$baseline_throughput"
         else
-            log_debug "ACCOUNTS设备基准值未配置，使用DATA设备基准值"
+            log_debug "ACCOUNTS device baseline values not configured, using DATA device baseline values"
         fi
     else
-        log_debug "使用DATA设备基准: IOPS=$baseline_iops, 吞吐量=$baseline_throughput"
+        log_debug "Using DATA device baseline: IOPS=$baseline_iops, Throughput=$baseline_throughput"
     fi
     
-    # 验证基准值有效性
+    # Validate baseline values
     if [[ -z "$baseline_iops" || -z "$baseline_throughput" ]]; then
-        log_debug "基准值无效，跳过AWS基准瓶颈检测"
+        log_debug "Invalid baseline values, skipping AWS baseline bottleneck detection"
         baseline_iops=""
         baseline_throughput=""
     fi
     
-    # AWS基准IOPS瓶颈检测 (使用设备特定的基准值)
+    # AWS baseline IOPS bottleneck detection (using device-specific baseline values)
     if [[ -n "$ebs_aws_iops" && -n "$baseline_iops" ]]; then
         local aws_iops_utilization=$(awk "BEGIN {printf \"%.4f\", $ebs_aws_iops / $baseline_iops}" 2>/dev/null || echo "0")
         local aws_iops_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} / 100}")
-        log_debug "EBS IOPS瓶颈检测阈值: ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90}% (${aws_iops_threshold})"
+        log_debug "EBS IOPS bottleneck detection threshold: ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90}% (${aws_iops_threshold})"
         
         if (( $(awk "BEGIN {print ($aws_iops_utilization > $aws_iops_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
             BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0} + 1))
-            echo "⚠️  EBS AWS基准IOPS瓶颈 (${device_type}): ${ebs_aws_iops}/${baseline_iops} (${aws_iops_utilization%.*}%) > ${aws_iops_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+            echo "⚠️  EBS AWS baseline IOPS bottleneck (${device_type}): ${ebs_aws_iops}/${baseline_iops} (${aws_iops_utilization%.*}%) > ${aws_iops_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
             
             if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_detected=true
@@ -417,15 +417,15 @@ check_ebs_bottleneck() {
         fi
     fi
     
-    # AWS基准吞吐量瓶颈检测 (使用设备特定的基准值)
+    # AWS baseline throughput bottleneck detection (using device-specific baseline values)
     if [[ -n "$ebs_throughput" && -n "$baseline_throughput" ]]; then
         local aws_throughput_utilization=$(awk "BEGIN {printf \"%.4f\", $ebs_throughput / $baseline_throughput}" 2>/dev/null || echo "0")
         local aws_throughput_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} / 100}")
-        log_debug "EBS Throughput瓶颈检测阈值: ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90}% (${aws_throughput_threshold})"
+        log_debug "EBS Throughput bottleneck detection threshold: ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90}% (${aws_throughput_threshold})"
         
         if (( $(awk "BEGIN {print ($aws_throughput_utilization > $aws_throughput_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
             BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0} + 1))
-            echo "⚠️  EBS AWS基准吞吐量瓶颈 (${device_type}): ${ebs_throughput}/${baseline_throughput} MiB/s (${aws_throughput_utilization%.*}%) > ${aws_throughput_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+            echo "⚠️  EBS AWS baseline throughput bottleneck (${device_type}): ${ebs_throughput}/${baseline_throughput} MiB/s (${aws_throughput_utilization%.*}%) > ${aws_throughput_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
             
             if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_detected=true
@@ -442,11 +442,11 @@ check_ebs_bottleneck() {
     fi
 }
 
-# 检测ENA网络限制瓶颈
+# Detect ENA network limit bottleneck
 check_ena_network_bottleneck() {
     local performance_csv="$1"
     
-    # 检查是否启用ENA监控
+    # Check if ENA monitoring is enabled
     if [[ "$ENA_MONITOR_ENABLED" != "true" ]]; then
         return 1
     fi
@@ -455,7 +455,7 @@ check_ena_network_bottleneck() {
         return 1
     fi
     
-    # 获取最新的ENA数据
+    # Get latest ENA data
     local latest_data=$(tail -1 "$performance_csv" 2>/dev/null)
     if [[ -z "$latest_data" ]]; then
         return 1
@@ -463,14 +463,14 @@ check_ena_network_bottleneck() {
     
     local header=$(head -1 "$performance_csv")
     
-    # 配置驱动：动态查找所有ENA字段索引
+    # Configuration-driven: dynamically find all ENA field indices
     declare -A ena_field_indices
     declare -A ena_field_values
     
-    # 遍历配置中的字段，不硬编码 - 使用标准化数组访问方式
+    # Iterate through configured fields, no hardcoding - use standardized array access
     ena_fields=($ENA_ALLOWANCE_FIELDS_STR)
     
-    # 解析数据行（使用 IFS 避免空格分割问题）
+    # Parse data line (use IFS to avoid space splitting issues)
     local fields
     IFS=',' read -ra fields <<< "$latest_data"
     
@@ -482,23 +482,23 @@ check_ena_network_bottleneck() {
         fi
     done
     
-    # 检查是否找到任何ENA字段
+    # Check if any ENA fields were found
     if [[ ${#ena_field_values[@]} -eq 0 ]]; then
-        return 1  # 没有找到ENA数据
+        return 1  # No ENA data found
     fi
     
-    # ENA 基准值管理（懒加载）
+    # ENA baseline value management (lazy loading)
     local ena_baseline_file="${MEMORY_SHARE_DIR}/ena_baseline.json"
     declare -A ena_baseline_values
     
     if [[ ! -f "$ena_baseline_file" ]]; then
-        # 第一次调用：读取 CSV 第二行作为基准值
+        # First call: read CSV second line as baseline values
         local baseline_data=$(sed -n '2p' "$performance_csv" 2>/dev/null)
         if [[ -n "$baseline_data" ]]; then
             local baseline_fields
             IFS=',' read -ra baseline_fields <<< "$baseline_data"
             
-            # 保存基准值到文件
+            # Save baseline values to file
             local baseline_json="{"
             local first=true
             for field in "${!ena_field_indices[@]}"; do
@@ -515,33 +515,33 @@ check_ena_network_bottleneck() {
             done
             baseline_json+="}"
             echo "$baseline_json" > "$ena_baseline_file"
-            log_debug "ENA 基准值已保存: $ena_baseline_file"
+            log_debug "ENA baseline values saved: $ena_baseline_file"
         else
-            # CSV 只有 header，没有数据，跳过检测
+            # CSV only has header, no data, skip detection
             return 1
         fi
     else
-        # 加载已有的基准值
+        # Load existing baseline values
         for field in "${!ena_field_indices[@]}"; do
             local baseline_val=$(jq -r ".\"$field\" // 0" "$ena_baseline_file" 2>/dev/null || echo "0")
             ena_baseline_values["$field"]=$baseline_val
         done
     fi
     
-    # 计算增量值
+    # Calculate delta values
     declare -A ena_delta_values
     for field in "${!ena_field_values[@]}"; do
         local current_val="${ena_field_values[$field]}"
         local baseline_val="${ena_baseline_values[$field]:-0}"
         local delta=$((current_val - baseline_val))
-        # 增量不能为负
+        # Delta cannot be negative
         if [[ $delta -lt 0 ]]; then
             delta=0
         fi
         ena_delta_values["$field"]=$delta
     done
     
-    # 检测exceeded类型的字段（使用增量值）
+    # Detect exceeded type fields (using delta values)
     local exceeded_detected=false
     local exceeded_summary=""
     local exceeded_count=0
@@ -558,16 +558,16 @@ check_ena_network_bottleneck() {
         fi
     done
     
-    # 检测available类型字段的异常低值 (可选的额外检测)
+    # Detect abnormally low values for available type fields (optional additional detection)
     for field in "${!ena_field_values[@]}"; do
         if [[ "$field" == *"available"* ]]; then
             local available_value="${ena_field_values[$field]}"
-            # 如果available值为0，也可能表示资源耗尽
+            # If available value is 0, may also indicate resource exhaustion
             if [[ "$available_value" -eq 0 ]]; then
                 if [[ -n "$exceeded_summary" ]]; then
-                    exceeded_summary="$exceeded_summary, $field=0(耗尽)"
+                    exceeded_summary="$exceeded_summary, $field=0(exhausted)"
                 else
-                    exceeded_summary="$field=0(耗尽)"
+                    exceeded_summary="$field=0(exhausted)"
                 fi
                 exceeded_detected=true
             fi
@@ -576,40 +576,40 @@ check_ena_network_bottleneck() {
     
     if [[ "$exceeded_detected" == "true" ]]; then
         BOTTLENECK_COUNTERS["ena_limit"]=$((${BOTTLENECK_COUNTERS["ena_limit"]:-0} + 1))
-        echo "⚠️  ENA网络限制检测: $exceeded_summary (${BOTTLENECK_COUNTERS["ena_limit"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  ENA network limit detection: $exceeded_summary (${BOTTLENECK_COUNTERS["ena_limit"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["ena_limit"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            return 0  # 检测到ENA瓶颈
+            return 0  # ENA bottleneck detected
         fi
     else
-        BOTTLENECK_COUNTERS["ena_limit"]=0  # 重置计数器
+        BOTTLENECK_COUNTERS["ena_limit"]=0  # Reset counter
     fi
 
-    # 未检测到ENA瓶颈
+    # No ENA bottleneck detected
     return 1
 }
 
-# 检测通用网络瓶颈 (基于网络利用率阈值)
+# Detect general network bottleneck (based on network utilization threshold)
 check_network_bottleneck() {
     local network_util="$1"
     
     if (( $(awk "BEGIN {print ($network_util > $BOTTLENECK_NETWORK_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["network"]=$((${BOTTLENECK_COUNTERS["network"]:-0} + 1))
-        echo "⚠️  网络瓶颈检测: ${network_util}% > ${BOTTLENECK_NETWORK_THRESHOLD}% (${BOTTLENECK_COUNTERS["network"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  Network bottleneck detection: ${network_util}% > ${BOTTLENECK_NETWORK_THRESHOLD}% (${BOTTLENECK_COUNTERS["network"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["network"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            return 0  # 检测到瓶颈
+            return 0  # Bottleneck detected
         fi
     else
-        BOTTLENECK_COUNTERS["network"]=0  # 重置计数器
+        BOTTLENECK_COUNTERS["network"]=0  # Reset counter
     fi
     
-    return 1  # 未检测到瓶颈
+    return 1  # No bottleneck detected
 }
 
-# 获取最新的QPS错误率
+# Get latest QPS error rate
 get_latest_qps_error_rate() {
-    # 查找最新的QPS测试报告文件
+    # Find latest QPS test report file
     local latest_report=$(find "${REPORTS_DIR}" -name "qps_*_report.txt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
     
     if [[ -z "$latest_report" || ! -f "$latest_report" ]]; then
@@ -617,7 +617,7 @@ get_latest_qps_error_rate() {
         return
     fi
     
-    # 从报告中提取成功率，计算错误率
+    # Extract success rate from report, calculate error rate
     local success_rate=$(grep "Success" "$latest_report" | awk '{print $NF}' | sed 's/%//' 2>/dev/null)
     
     if [[ -n "$success_rate" && "$success_rate" =~ ^[0-9]+\.?[0-9]*$ ]]; then
@@ -628,26 +628,26 @@ get_latest_qps_error_rate() {
     fi
 }
 
-# 检测QPS瓶颈 (错误率和RPC延迟)
+# Detect QPS bottleneck (error rate and RPC latency)
 check_qps_bottleneck() {
     local current_qps="$1"
     local error_rate="$2"
     
-    # 获取最新的QPS测试延迟
+    # Get latest QPS test latency
     local latest_report=$(find "${REPORTS_DIR}" -name "qps_*_report.txt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
     local rpc_latency=0
     
     if [[ -n "$latest_report" && -f "$latest_report" ]]; then
-        # 提取P99延迟
+        # Extract P99 latency
         rpc_latency=$(grep "Latencies" "$latest_report" | awk -F',' '{print $(NF-1)}' | sed 's/[^0-9.]//g' 2>/dev/null || echo "0")
     fi
     
     local qps_bottleneck_detected=false
     
-    # 检测错误率瓶颈
+    # Detect error rate bottleneck
     if (( $(awk "BEGIN {print ($error_rate > $BOTTLENECK_ERROR_RATE_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["error_rate"]=$((${BOTTLENECK_COUNTERS["error_rate"]:-0} + 1))
-        echo "⚠️  QPS错误率瓶颈检测: ${error_rate}% > ${BOTTLENECK_ERROR_RATE_THRESHOLD}% (${BOTTLENECK_COUNTERS["error_rate"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  QPS error rate bottleneck detection: ${error_rate}% > ${BOTTLENECK_ERROR_RATE_THRESHOLD}% (${BOTTLENECK_COUNTERS["error_rate"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["error_rate"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             qps_bottleneck_detected=true
@@ -656,11 +656,11 @@ check_qps_bottleneck() {
         BOTTLENECK_COUNTERS["error_rate"]=0
     fi
     
-    # 检测RPC延迟瓶颈 (P99延迟超过1000ms视为瓶颈)
+    # Detect RPC latency bottleneck (P99 latency exceeding 1000ms considered bottleneck)
     local rpc_latency_threshold=1000
     if (( $(awk "BEGIN {print ($rpc_latency > $rpc_latency_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["rpc_latency"]=$((${BOTTLENECK_COUNTERS["rpc_latency"]:-0} + 1))
-        echo "⚠️  RPC延迟瓶颈检测: ${rpc_latency}ms > ${rpc_latency_threshold}ms (${BOTTLENECK_COUNTERS["rpc_latency"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  RPC latency bottleneck detection: ${rpc_latency}ms > ${rpc_latency_threshold}ms (${BOTTLENECK_COUNTERS["rpc_latency"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["rpc_latency"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             qps_bottleneck_detected=true
@@ -670,17 +670,17 @@ check_qps_bottleneck() {
     fi
     
     if [[ "$qps_bottleneck_detected" == "true" ]]; then
-        return 0  # 检测到QPS瓶颈
+        return 0  # QPS bottleneck detected
     else
-        return 1  # 未检测到QPS瓶颈
+        return 1  # No QPS bottleneck detected
     fi
 }
 
-# 检测RPC连接失败
+# Detect RPC connection failure
 check_rpc_connection_bottleneck() {
     local timeout=2
     
-    # 不使用缓存，直接测试连接（避免缓存掩盖故障）
+    # Don't use cache, test connection directly (avoid cache masking failures)
     local result=$(timeout $timeout curl -s -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","id":1,"method":"getBlockHeight","params":[]}' \
         "$LOCAL_RPC_URL" 2>&1)
@@ -688,12 +688,12 @@ check_rpc_connection_bottleneck() {
     local exit_code=$?
     
     if [[ $exit_code -ne 0 ]]; then
-        # 连接失败
+        # Connection failed
         BOTTLENECK_COUNTERS["rpc_connection"]=$((${BOTTLENECK_COUNTERS["rpc_connection"]:-0} + 1))
-        echo "⚠️  RPC连接失败: exit_code=$exit_code (${BOTTLENECK_COUNTERS["rpc_connection"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  RPC connection failed: exit_code=$exit_code (${BOTTLENECK_COUNTERS["rpc_connection"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["rpc_connection"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            return 0  # 检测到连接瓶颈
+            return 0  # Connection bottleneck detected
         fi
     else
         BOTTLENECK_COUNTERS["rpc_connection"]=0
@@ -702,12 +702,12 @@ check_rpc_connection_bottleneck() {
     return 1
 }
 
-# 检测RPC性能瓶颈（成功率和延迟）
+# Detect RPC performance bottleneck (success rate and latency)
 check_rpc_performance_bottleneck() {
     local vegeta_result="$1"
     
     if [[ -z "$vegeta_result" || ! -f "$vegeta_result" ]]; then
-        log_debug "Vegeta结果文件不存在，跳过RPC性能检测: $vegeta_result"
+        log_debug "Vegeta result file does not exist, skipping RPC performance detection: $vegeta_result"
         return 1
     fi
     
@@ -722,7 +722,7 @@ check_rpc_performance_bottleneck() {
     
     if (( $(awk "BEGIN {print ($success_rate < $SUCCESS_RATE_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["rpc_success_rate"]=$((${BOTTLENECK_COUNTERS["rpc_success_rate"]:-0} + 1))
-        echo "⚠️  RPC成功率瓶颈: ${success_rate}% < ${SUCCESS_RATE_THRESHOLD}% (${BOTTLENECK_COUNTERS["rpc_success_rate"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  RPC success rate bottleneck: ${success_rate}% < ${SUCCESS_RATE_THRESHOLD}% (${BOTTLENECK_COUNTERS["rpc_success_rate"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["rpc_success_rate"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             rpc_bottleneck_detected=true
@@ -733,7 +733,7 @@ check_rpc_performance_bottleneck() {
     
     if (( $(awk "BEGIN {print ($avg_latency > $MAX_LATENCY_THRESHOLD) ? 1 : 0}" 2>/dev/null || echo 0) )); then
         BOTTLENECK_COUNTERS["rpc_latency"]=$((${BOTTLENECK_COUNTERS["rpc_latency"]:-0} + 1))
-        echo "⚠️  RPC延迟瓶颈: ${avg_latency}ms > ${MAX_LATENCY_THRESHOLD}ms (${BOTTLENECK_COUNTERS["rpc_latency"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+        echo "⚠️  RPC latency bottleneck: ${avg_latency}ms > ${MAX_LATENCY_THRESHOLD}ms (${BOTTLENECK_COUNTERS["rpc_latency"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
         
         if [[ ${BOTTLENECK_COUNTERS["rpc_latency"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
             rpc_bottleneck_detected=true
@@ -749,7 +749,7 @@ check_rpc_performance_bottleneck() {
     fi
 }
 
-# 从性能数据中提取指标
+# Extract metrics from performance data
 extract_performance_metrics() {
     local performance_csv="$1"
     
@@ -758,7 +758,7 @@ extract_performance_metrics() {
         return
     fi
     
-    # 获取最新的性能数据 (最后一行)
+    # Get latest performance data (last line)
     local latest_data=$(tail -1 "$performance_csv" 2>/dev/null)
     
     if [[ -z "$latest_data" ]]; then
@@ -766,12 +766,12 @@ extract_performance_metrics() {
         return
     fi
     
-    # 使用CSV字段映射器动态解析字段位置
+    # Use CSV field mapper to dynamically parse field positions
     local header=$(head -1 "$performance_csv")
     IFS=',' read -ra field_names <<< "$header"
     IFS=',' read -ra data_values <<< "$latest_data"
     
-    # 动态查找字段位置
+    # Dynamically find field positions
     local cpu_usage=0
     local memory_usage=0
     local ebs_util=0
@@ -781,19 +781,19 @@ extract_performance_metrics() {
     local network_util=0
     local error_rate=0
     
-    # 使用动态字段匹配替代硬编码
+    # Use dynamic field matching instead of hardcoding
     for i in "${!field_names[@]}"; do
         local field_name="${field_names[i]}"
         
         case "$field_name" in
-            # CPU和内存字段（保持不变）
+            # CPU and memory fields (unchanged)
             "cpu_usage"|"cpu_percent"|"cpu_total")
                 cpu_usage=${data_values[i]:-0}
                 ;;
             "mem_usage"|"memory_usage"|"mem_percent")
                 memory_usage=${data_values[i]:-0}
                 ;;
-            # 网络总流量字段（保持不变）
+            # Network total traffic fields (unchanged)
             "net_total_mbps"|"network_total_mbps"|"total_mbps")
                 local current_mbps=${data_values[i]:-0}
                 network_util=$(awk "BEGIN {printf \"%.2f\", ($current_mbps / $NETWORK_MAX_BANDWIDTH_MBPS) * 100}" 2>/dev/null || echo "0")
@@ -801,68 +801,68 @@ extract_performance_metrics() {
                 ;;
         esac
         
-        # 使用动态模式匹配EBS字段
+        # Use dynamic pattern matching for EBS fields
         if [[ "$EBS_UTIL_PATTERNS" == *"$field_name"* ]]; then
             ebs_util=${data_values[i]:-0}
-            log_debug "匹配到EBS利用率字段: $field_name = $ebs_util"
+            log_debug "Matched EBS utilization field: $field_name = $ebs_util"
         fi
         
         if [[ "$EBS_R_AWAIT_PATTERNS" == *"$field_name"* ]]; then
             ebs_latency=${data_values[i]:-0}
-            log_debug "匹配到EBS读延迟字段: $field_name = $ebs_latency"
+            log_debug "Matched EBS read latency field: $field_name = $ebs_latency"
         elif [[ "$EBS_AVG_AWAIT_PATTERNS" == *"$field_name"* ]] && [[ "$ebs_latency" == "0" ]]; then
-            # 如果还没有设置延迟值，使用平均延迟
+            # If latency value not set yet, use average latency
             ebs_latency=${data_values[i]:-0}
-            log_debug "匹配到EBS平均延迟字段: $field_name = $ebs_latency"
+            log_debug "Matched EBS average latency field: $field_name = $ebs_latency"
         fi
         
         if [[ "$EBS_AWS_IOPS_PATTERNS" == *"$field_name"* ]]; then
             ebs_aws_iops=${data_values[i]:-0}
-            log_debug "匹配到EBS AWS IOPS字段: $field_name = $ebs_aws_iops"
+            log_debug "Matched EBS AWS IOPS field: $field_name = $ebs_aws_iops"
         fi
         
         if [[ "$EBS_THROUGHPUT_PATTERNS" == *"$field_name"* ]]; then
             ebs_throughput=${data_values[i]:-0}
-            log_debug "匹配到EBS吞吐量字段: $field_name = $ebs_throughput"
+            log_debug "Matched EBS throughput field: $field_name = $ebs_throughput"
         fi
     done
     
-    # 这需要读取最新的QPS测试报告文件
+    # This requires reading the latest QPS test report file
     error_rate=$(get_latest_qps_error_rate)
     
     echo "$cpu_usage,$memory_usage,$ebs_util,$ebs_latency,$ebs_aws_iops,$ebs_throughput,$network_util,$error_rate"
 }
 
-# 多设备EBS瓶颈检测协调器
+# Multi-device EBS bottleneck detection coordinator
 detect_all_ebs_bottlenecks() {
     local performance_csv="$1"
     local bottleneck_detected=false
     local bottleneck_info=()
     
-    # 读取CSV数据
+    # Read CSV data
     if [[ ! -f "$performance_csv" ]]; then
-        log_debug "性能数据文件不存在: $performance_csv"
+        log_debug "Performance data file does not exist: $performance_csv"
         return 1
     fi
     
     local latest_line=$(tail -n 1 "$performance_csv")
     if [[ -z "$latest_line" ]]; then
-        log_debug "性能数据文件为空"
+        log_debug "Performance data file is empty"
         return 1
     fi
     
-    # 解析CSV表头和数据
+    # Parse CSV header and data
     local header_line=$(head -n 1 "$performance_csv")
     IFS=',' read -ra field_names <<< "$header_line"
     IFS=',' read -ra data_values <<< "$latest_line"
     
-    # 检测DATA设备
+    # Detect DATA device
     local data_util=0 data_latency=0 data_aws_iops=0 data_throughput=0
     
     for i in "${!field_names[@]}"; do
         local field_name="${field_names[i]}"
         
-        # DATA设备字段匹配
+        # DATA device field matching
         if [[ "$field_name" == data_${LEDGER_DEVICE}_util ]]; then
             data_util=${data_values[i]:-0}
         elif [[ "$field_name" == data_${LEDGER_DEVICE}_r_await ]]; then
@@ -876,20 +876,20 @@ detect_all_ebs_bottlenecks() {
         fi
     done
     
-    # 检测DATA设备瓶颈
+    # Detect DATA device bottleneck
     if check_ebs_bottleneck "$data_aws_iops" "$data_throughput" "data"; then
         bottleneck_detected=true
-        bottleneck_info+=("DATA设备瓶颈: AWS_IOPS=${data_aws_iops}, 吞吐量=${data_throughput}MiB/s")
+        bottleneck_info+=("DATA device bottleneck: AWS_IOPS=${data_aws_iops}, Throughput=${data_throughput}MiB/s")
     fi
     
-    # 检测ACCOUNTS设备 (如果配置了)
+    # Detect ACCOUNTS device (if configured)
     if is_accounts_configured; then
         local accounts_util=0 accounts_latency=0 accounts_aws_iops=0 accounts_throughput=0
         
         for i in "${!field_names[@]}"; do
             local field_name="${field_names[i]}"
             
-            # ACCOUNTS设备字段匹配
+            # ACCOUNTS device field matching
             if [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_util ]]; then
                 accounts_util=${data_values[i]:-0}
             elif [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_r_await ]]; then
@@ -903,33 +903,33 @@ detect_all_ebs_bottlenecks() {
             fi
         done
         
-        # 检测ACCOUNTS设备瓶颈
+        # Detect ACCOUNTS device bottleneck
         if check_ebs_bottleneck "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
             bottleneck_detected=true
-            bottleneck_info+=("ACCOUNTS设备瓶颈: AWS_IOPS=${accounts_aws_iops}, 吞吐量=${accounts_throughput}MiB/s")
+            bottleneck_info+=("ACCOUNTS device bottleneck: AWS_IOPS=${accounts_aws_iops}, Throughput=${accounts_throughput}MiB/s")
         fi
     fi
     
-    # 输出检测结果
+    # Output detection results
     if [[ "$bottleneck_detected" == "true" ]]; then
-        echo "🚨 检测到EBS瓶颈:" | tee -a "$BOTTLENECK_LOG"
+        echo "🚨 EBS bottleneck detected:" | tee -a "$BOTTLENECK_LOG"
         for info in "${bottleneck_info[@]}"; do
             echo "   - $info" | tee -a "$BOTTLENECK_LOG"
         done
         return 0
     else
-        log_debug "未检测到EBS瓶颈"
+        log_debug "No EBS bottleneck detected"
         return 1
     fi
 }
 
-# 综合瓶颈检测
+# Comprehensive bottleneck detection
 detect_bottleneck() {
     local current_qps="$1"
     local performance_csv="$2"
     local vegeta_result="${3:-}"
     
-    # 提取性能指标
+    # Extract performance metrics
     local metrics=$(extract_performance_metrics "$performance_csv")
     local cpu_usage=$(echo "$metrics" | cut -d',' -f1)
     local memory_usage=$(echo "$metrics" | cut -d',' -f2)
@@ -940,12 +940,12 @@ detect_bottleneck() {
     local network_util=$(echo "$metrics" | cut -d',' -f7)
     local error_rate=$(echo "$metrics" | cut -d',' -f8)
     
-    echo "📊 当前QPS: $current_qps, 性能指标: CPU=${cpu_usage}%, MEM=${memory_usage}%, EBS=${ebs_util}%/${ebs_latency}ms, AWS_IOPS=${ebs_aws_iops}, THROUGHPUT=${ebs_throughput}MiB/s, NET=${network_util}%, ERR=${error_rate}%" | tee -a "$BOTTLENECK_LOG"
+    echo "📊 Current QPS: $current_qps, Performance metrics: CPU=${cpu_usage}%, MEM=${memory_usage}%, EBS=${ebs_util}%/${ebs_latency}ms, AWS_IOPS=${ebs_aws_iops}, THROUGHPUT=${ebs_throughput}MiB/s, NET=${network_util}%, ERR=${error_rate}%" | tee -a "$BOTTLENECK_LOG"
     
-    # 创建性能指标JSON
+    # Create performance metrics JSON
     local metrics_json=$(create_performance_metrics_json "$cpu_usage" "$memory_usage" "$ebs_util" "$ebs_latency" "$ebs_aws_iops" "$ebs_throughput" "$network_util" "$error_rate")
     
-    # 检测各种瓶颈
+    # Detect various bottlenecks
     local bottleneck_detected=false
     local bottleneck_types=()
     local bottleneck_values=()
@@ -963,7 +963,7 @@ detect_bottleneck() {
         bottleneck_values+=("${memory_usage}%")
     fi
     
-    # 检测DATA设备EBS瓶颈
+    # Detect DATA device EBS bottleneck
     if check_ebs_bottleneck "$ebs_aws_iops" "$ebs_throughput" "data"; then
         bottleneck_detected=true
         if [[ ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
@@ -976,19 +976,19 @@ detect_bottleneck() {
         fi
     fi
     
-    # 检测ACCOUNTS设备EBS瓶颈 (如果配置)
+    # Detect ACCOUNTS device EBS bottleneck (if configured)
     if is_accounts_configured; then
-        # 获取ACCOUNTS设备的性能指标
+        # Get ACCOUNTS device performance metrics
         local accounts_util=0
         local accounts_latency=0
         local accounts_aws_iops=0
         local accounts_throughput=0
         
-        # 从CSV数据中提取ACCOUNTS设备指标
+        # Extract ACCOUNTS device metrics from CSV data
         for i in "${!field_names[@]}"; do
             local field_name="${field_names[i]}"
             
-            # 匹配ACCOUNTS设备字段
+            # Match ACCOUNTS device fields
             if [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_util ]]; then
                 accounts_util=${data_values[i]:-0}
             fi
@@ -1008,7 +1008,7 @@ detect_bottleneck() {
             fi
         done
         
-        log_debug "ACCOUNTS设备指标: AWS_IOPS=${accounts_aws_iops}, 吞吐量=${accounts_throughput}MiB/s"
+        log_debug "ACCOUNTS device metrics: AWS_IOPS=${accounts_aws_iops}, Throughput=${accounts_throughput}MiB/s"
         
         if check_ebs_bottleneck "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
             bottleneck_detected=true
@@ -1029,11 +1029,11 @@ detect_bottleneck() {
         bottleneck_values+=("${network_util}%")
     fi
     
-    # 检测ENA网络限制瓶颈
+    # Detect ENA network limit bottleneck
     if check_ena_network_bottleneck "$performance_csv"; then
         bottleneck_detected=true
         bottleneck_types+=("ENA_Network_Limit")
-        bottleneck_values+=("AWS网络限制")
+        bottleneck_values+=("AWS network limit")
     fi
     
     if check_qps_bottleneck "$current_qps" "$error_rate"; then
@@ -1042,14 +1042,14 @@ detect_bottleneck() {
         bottleneck_values+=("${error_rate}% error rate")
     fi
     
-    # 检测RPC连接失败
+    # Detect RPC connection failure
     if check_rpc_connection_bottleneck; then
         bottleneck_detected=true
         bottleneck_types+=("RPC_Connection")
-        bottleneck_values+=("连接失败")
+        bottleneck_values+=("Connection failed")
     fi
     
-    # 检测RPC性能瓶颈
+    # Detect RPC performance bottleneck
     if [[ -n "$vegeta_result" ]] && check_rpc_performance_bottleneck "$vegeta_result"; then
         bottleneck_detected=true
         rpc_bottleneck=true
@@ -1070,35 +1070,35 @@ detect_bottleneck() {
         fi
     fi
     
-    # ========== P0: 节点健康检查集成 ==========
-    # 获取节点持续不健康标志（由 block_height_monitor.sh 写入）
+    # ========== P0: Node Health Check Integration ==========
+    # Get node persistent unhealthy flag (written by block_height_monitor.sh)
     local node_unhealthy_flag="${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag"
     local is_node_critically_unhealthy=false
     
-    # 检查节点是否持续不健康（持续 > BLOCK_HEIGHT_TIME_THRESHOLD 秒）
+    # Check if node is persistently unhealthy (persistent > BLOCK_HEIGHT_TIME_THRESHOLD seconds)
     if [[ -f "$node_unhealthy_flag" ]]; then
         local flag_value=$(cat "$node_unhealthy_flag" 2>/dev/null || echo "0")
         if [[ "$flag_value" == "1" ]]; then
             is_node_critically_unhealthy=true
-            echo "🚨 节点持续不健康超过 ${BLOCK_HEIGHT_TIME_THRESHOLD}s" | tee -a "$BOTTLENECK_LOG"
+            echo "🚨 Node persistently unhealthy exceeding ${BLOCK_HEIGHT_TIME_THRESHOLD}s" | tee -a "$BOTTLENECK_LOG"
         fi
     fi
     
-    # 场景A: 瓶颈 + 节点健康 → 需要区分资源瓶颈和 RPC 性能瓶颈
+    # Scenario A: Bottleneck + Node Healthy → Need to distinguish resource bottleneck and RPC performance bottleneck
     if [[ "$bottleneck_detected" == "true" && "$is_node_critically_unhealthy" == "false" ]]; then
         if [[ "$rpc_bottleneck" == "true" ]]; then
-            # 场景A-RPC: RPC 性能瓶颈 + 节点健康 → 真瓶颈（必要条件）
+            # Scenario A-RPC: RPC performance bottleneck + Node healthy → True bottleneck (necessary condition)
             local bottleneck_list=$(IFS=,; echo "${bottleneck_types[*]}")
             local value_list=$(IFS=,; echo "${bottleneck_values[*]}")
-            echo "🚨 RPC 性能瓶颈（必要条件），确认为真瓶颈" | tee -a "$BOTTLENECK_LOG"
-            echo "   瓶颈类型: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
-            echo "   瓶颈值: $value_list" | tee -a "$BOTTLENECK_LOG"
+            echo "🚨 RPC performance bottleneck (necessary condition), confirmed as true bottleneck" | tee -a "$BOTTLENECK_LOG"
+            echo "   Bottleneck types: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
+            echo "   Bottleneck values: $value_list" | tee -a "$BOTTLENECK_LOG"
             generate_bottleneck_status_json "bottleneck_detected" "true" "$bottleneck_list" "$value_list" "$current_qps" "$metrics_json"
             save_bottleneck_counters
             return 0
         else
-            # 场景A-资源: 资源瓶颈 + 节点健康 → 可能误判，重置资源计数器（保留RPC计数器）
-            echo "✅ 资源瓶颈但节点健康，判定为误判，重置资源计数器（保留RPC计数器）" | tee -a "$BOTTLENECK_LOG"
+            # Scenario A-Resource: Resource bottleneck + Node healthy → Possible false positive, reset resource counters (preserve RPC counters)
+            echo "✅ Resource bottleneck but node healthy, judged as false positive, reset resource counters (preserve RPC counters)" | tee -a "$BOTTLENECK_LOG"
             reset_resource_bottleneck_counters
             generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
             save_bottleneck_counters
@@ -1106,26 +1106,26 @@ detect_bottleneck() {
         fi
     fi
     
-    # 场景B: 资源瓶颈 + 节点持续不健康 → 真正的系统级瓶颈
+    # Scenario B: Resource bottleneck + Node persistently unhealthy → True system-level bottleneck
     if [[ "$bottleneck_detected" == "true" && "$is_node_critically_unhealthy" == "true" ]]; then
         local bottleneck_list=$(IFS=,; echo "${bottleneck_types[*]}")
         local value_list=$(IFS=,; echo "${bottleneck_values[*]}")
-        echo "🚨 确认系统级瓶颈: 资源瓶颈 + 节点不健康" | tee -a "$BOTTLENECK_LOG"
-        echo "   瓶颈类型: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
-        echo "   瓶颈值: $value_list" | tee -a "$BOTTLENECK_LOG"
+        echo "🚨 Confirmed system-level bottleneck: Resource bottleneck + Node unhealthy" | tee -a "$BOTTLENECK_LOG"
+        echo "   Bottleneck types: $bottleneck_list (QPS: $current_qps)" | tee -a "$BOTTLENECK_LOG"
+        echo "   Bottleneck values: $value_list" | tee -a "$BOTTLENECK_LOG"
         generate_bottleneck_status_json "bottleneck_detected" "true" "$bottleneck_list" "$value_list" "$current_qps" "$metrics_json"
         save_bottleneck_counters
         return 0
     fi
     
-    # 场景C: 节点持续不健康（无资源瓶颈）→ 节点故障
+    # Scenario C: Node persistently unhealthy (no resource bottleneck) → Node failure
     if [[ "$is_node_critically_unhealthy" == "true" ]]; then
-        echo "🚨 检测到节点持续不健康（持续 > ${BLOCK_HEIGHT_TIME_THRESHOLD}s）" | tee -a "$BOTTLENECK_LOG"
-        echo "   即使资源指标正常，节点已不可用" | tee -a "$BOTTLENECK_LOG"
+        echo "🚨 Detected node persistently unhealthy (persistent > ${BLOCK_HEIGHT_TIME_THRESHOLD}s)" | tee -a "$BOTTLENECK_LOG"
+        echo "   Even if resource metrics are normal, node is unavailable" | tee -a "$BOTTLENECK_LOG"
         
-        # 添加节点不健康到瓶颈类型
+        # Add node unhealthy to bottleneck types
         bottleneck_types+=("Node_Unhealthy")
-        bottleneck_values+=("持续>${BLOCK_HEIGHT_TIME_THRESHOLD}s")
+        bottleneck_values+=("Persistent>${BLOCK_HEIGHT_TIME_THRESHOLD}s")
         
         local bottleneck_list=$(IFS=,; echo "${bottleneck_types[*]}")
         local value_list=$(IFS=,; echo "${bottleneck_values[*]}")
@@ -1135,13 +1135,13 @@ detect_bottleneck() {
         return 0
     fi
     
-    # 场景D: 无瓶颈 + 节点健康 → 正常运行
+    # Scenario D: No bottleneck + Node healthy → Normal operation
     generate_bottleneck_status_json "monitoring" "false" "" "" "$current_qps" "$metrics_json"
     save_bottleneck_counters
     return 1
 }
 
-# 检查是否检测到瓶颈
+# Check if bottleneck detected
 is_bottleneck_detected() {
     if [[ -f "$BOTTLENECK_STATUS_FILE" ]]; then
         local status=$(jq -r '.bottleneck_detected' "$BOTTLENECK_STATUS_FILE" 2>/dev/null)
@@ -1151,7 +1151,7 @@ is_bottleneck_detected() {
     fi
 }
 
-# 获取瓶颈信息
+# Get bottleneck information
 get_bottleneck_info() {
     if [[ -f "$BOTTLENECK_STATUS_FILE" ]]; then
         cat "$BOTTLENECK_STATUS_FILE" | jq .
@@ -1160,7 +1160,7 @@ get_bottleneck_info() {
     fi
 }
 
-# 主函数
+# Main function
 main() {
     case "${1:-help}" in
         init)
@@ -1171,9 +1171,9 @@ main() {
             local performance_csv="$3"
             local vegeta_result="${4:-}"
             
-            # 从共享内存文件加载计数器（跨子进程持久化）
+            # Load counters from shared memory file (persist across subprocesses)
             if ! load_bottleneck_counters; then
-                # 文件不存在，初始化计数器
+                # File does not exist, initialize counters
                 initialize_bottleneck_counters
             fi
             
@@ -1195,23 +1195,23 @@ main() {
             echo "Usage: $0 <command> [options]"
             echo ""
             echo "Commands:"
-            echo "  init                     初始化瓶颈检测器"
-            echo "  detect <qps> <csv>       检测当前QPS下的瓶颈"
-            echo "  status                   显示瓶颈检测状态"
-            echo "  is-detected              检查是否检测到瓶颈"
-            echo "  help                     显示帮助"
+            echo "  init                     Initialize bottleneck detector"
+            echo "  detect <qps> <csv>       Detect bottleneck at current QPS"
+            echo "  status                   Display bottleneck detection status"
+            echo "  is-detected              Check if bottleneck detected"
+            echo "  help                     Display help"
             echo ""
-            echo "瓶颈检测类型:"
-            echo "  CPU使用率 > ${BOTTLENECK_CPU_THRESHOLD}%"
-            echo "  内存使用率 > ${BOTTLENECK_MEMORY_THRESHOLD}%"
-            echo "  EBS利用率 > ${BOTTLENECK_EBS_UTIL_THRESHOLD}%"
-            echo "  EBS延迟 > ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms"
-            echo "  网络利用率 > ${BOTTLENECK_NETWORK_THRESHOLD}%"
-            echo "  错误率 > ${BOTTLENECK_ERROR_RATE_THRESHOLD}%"
+            echo "Bottleneck detection types:"
+            echo "  CPU usage > ${BOTTLENECK_CPU_THRESHOLD}%"
+            echo "  Memory usage > ${BOTTLENECK_MEMORY_THRESHOLD}%"
+            echo "  EBS utilization > ${BOTTLENECK_EBS_UTIL_THRESHOLD}%"
+            echo "  EBS latency > ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms"
+            echo "  Network utilization > ${BOTTLENECK_NETWORK_THRESHOLD}%"
+            echo "  Error rate > ${BOTTLENECK_ERROR_RATE_THRESHOLD}%"
             ;;
         *)
-            echo "❌ 未知命令: $1"
-            echo "使用 '$0 help' 查看帮助"
+            echo "❌ Unknown command: $1"
+            echo "Use '$0 help' to view help"
             exit 1
             ;;
     esac

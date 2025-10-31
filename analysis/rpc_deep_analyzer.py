@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-RPC深度分析器 - 从comprehensive_analysis.py拆分出来的独立模块
-专门负责RPC性能的深度分析，包括延迟趋势、异常检测、性能悬崖检测等
+RPC Deep Analyzer - Independent module split from comprehensive_analysis.py
+Specialized in deep analysis of RPC performance, including latency trends, anomaly detection, performance cliff detection, etc.
 """
 
 import sys
 import os
 
-# 添加项目根目录到Python路径
+# Add project root directory to Python path
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.insert(0, project_root)
@@ -19,28 +19,28 @@ from utils.unified_logger import get_logger
 import traceback
 from typing import Dict, Any, Optional
 
-# 配置日志
+# Configure logging
 logger = get_logger(__name__)
 
 
 class RpcAnalysisConfig:
-    """RPC分析配置类 - 集中管理所有阈值和参数"""
+    """RPC Analysis Configuration Class - Centralized management of all thresholds and parameters"""
     
-    # 异常检测配置
-    IQR_MULTIPLIER = 1.5  # IQR异常检测倍数
-    MIN_LATENCY_THRESHOLD = 30  # 最小延迟阈值(ms)
-    SIGMA_MULTIPLIER = 2  # 标准差倍数
+    # Anomaly detection configuration
+    IQR_MULTIPLIER = 1.5  # IQR anomaly detection multiplier
+    MIN_LATENCY_THRESHOLD = 30  # Minimum latency threshold (ms)
+    SIGMA_MULTIPLIER = 2  # Standard deviation multiplier
     
-    # 同步分析配置
-    BLOCK_HEIGHT_SYNC_THRESHOLD = 20  # 区块高度同步偏移阈值
+    # Sync analysis configuration
+    BLOCK_HEIGHT_SYNC_THRESHOLD = 20  # Block height sync offset threshold
     
-    # 性能悬崖检测配置
-    CLIFF_THRESHOLD_ABSOLUTE = 10  # 绝对延迟增长阈值(ms)
-    CLIFF_THRESHOLD_PERCENTAGE = 50  # 相对延迟增长阈值(%)
+    # Performance cliff detection configuration
+    CLIFF_THRESHOLD_ABSOLUTE = 10  # Absolute latency increase threshold (ms)
+    CLIFF_THRESHOLD_PERCENTAGE = 50  # Relative latency increase threshold (%)
     
-    # 瓶颈分类配置
-    HIGH_CPU_THRESHOLD = int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85))     # 高CPU使用率阈值(%)
-    HIGH_MEMORY_THRESHOLD = int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))       # 高内存使用率阈值(%)
+    # Bottleneck classification configuration
+    HIGH_CPU_THRESHOLD = int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85))     # High CPU usage threshold (%)
+    HIGH_MEMORY_THRESHOLD = int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))       # High memory usage threshold (%)
     LOW_CPU_THRESHOLD = 30  # 低CPU使用率阈值(%)
     HIGH_LATENCY_THRESHOLD = 50  # 高延迟阈值(ms)
     VERY_HIGH_LATENCY_THRESHOLD = 100  # 极高延迟阈值(ms)

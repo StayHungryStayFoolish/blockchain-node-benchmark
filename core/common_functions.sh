@@ -1,21 +1,21 @@
 #!/bin/bash
 
 # =====================================================================
-# Blockchain Node Benchmark QPS 共享函数库
-# 包含多个脚本共用的函数
+# Blockchain Node Benchmark QPS Shared Function Library
+# Contains functions shared across multiple scripts
 # =====================================================================
 
-# 加载系统配置以获取时间戳函数
+# Load system configuration to get timestamp function
 LOCAL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${LOCAL_SCRIPT_DIR}/../config/system_config.sh" 2>/dev/null || {
-    # 如果无法加载系统配置，提供备用时间戳函数
+    # If system config cannot be loaded, provide fallback timestamp function
     get_unified_timestamp() {
         date +"%Y-%m-%d %H:%M:%S"
     }
 }
 
-# 检查 Block Height 差异
-# 缓冲数据写入
+# Check Block Height difference
+# Buffered data write
 buffered_write() {
     local file="$1"
     local data="$2"
@@ -23,50 +23,50 @@ buffered_write() {
     local buffer_size="${3:-10}"
     local buffer_count=0
     
-    # 检查目录是否存在
+    # Check if directory exists
     local dir=$(dirname "$file")
     if [[ ! -d "$dir" ]]; then
         echo "Warning: Directory $dir does not exist, skipping write" >&2
         return 1
     fi
     
-    # 安全地处理缓冲文件
+    # Safely handle buffer file
     if [[ ! -f "$buffer_file" ]]; then
         if ! echo "0" > "$buffer_file" 2>/dev/null; then
             echo "Warning: Cannot create buffer file $buffer_file, using direct write" >&2
-            # 直接写入，不使用缓冲
+            # Direct write without buffering
             echo "$data" >> "$file" 2>/dev/null || return 1
             return 0
         fi
     fi
     
-    # 安全地读取缓冲计数
+    # Safely read buffer count
     if ! buffer_count=$(cat "$buffer_file" 2>/dev/null); then
         echo "Warning: Cannot read buffer file $buffer_file, resetting to 0" >&2
         buffer_count=0
     fi
     
-    # 验证缓冲计数是数字
+    # Verify buffer count is numeric
     if ! [[ "$buffer_count" =~ ^[0-9]+$ ]]; then
         buffer_count=0
     fi
     
-    # 安全地写入数据
+    # Safely write data
     if ! echo "$data" >> "$file" 2>/dev/null; then
         echo "Warning: Cannot write to file $file" >&2
         return 1
     fi
     
-    # 更新缓冲计数
+    # Update buffer count
     buffer_count=$((buffer_count + 1))
     
-    # 刷新缓冲
+    # Flush buffer
     if [[ $buffer_count -ge $buffer_size ]]; then
         sync "$file" 2>/dev/null || true
         buffer_count=0
     fi
     
-    # 安全地更新缓冲计数
+    # Safely update buffer count
     if ! echo "$buffer_count" > "$buffer_file" 2>/dev/null; then
         echo "Warning: Cannot update buffer count for $buffer_file" >&2
     fi
@@ -74,68 +74,68 @@ buffered_write() {
     return 0
 }
 
-# 获取带缓存的 Block Height 数据
+# Get cached Block Height data
 get_cached_block_height_data() {
     local cache_file="$1"
-    local max_age_seconds="${2:-1}"  # 默认 1 秒（从 3 秒调整）
+    local max_age_seconds="${2:-1}"  # Default 1 second (adjusted from 3 seconds)
     local local_rpc_url="$3"
     local mainnet_rpc_url="$4"
     
-    # 检查缓存文件是否存在
+    # Check if cache file exists
     if [[ -f "$cache_file" ]]; then
-        # 读取缓存数据
+        # Read cache data
         local cache_data=$(cat "$cache_file")
         local timestamp=$(echo "$cache_data" | jq -r '.timestamp_ms')
         
-        # 验证 timestamp 是否有效
+        # Verify timestamp is valid
         if [[ -n "$timestamp" && "$timestamp" != "null" && "$timestamp" != "N/A" ]]; then
-            # 检查缓存是否过期
+            # Check if cache is expired
             local current_time=$(date +%s.%N)
             local age=$(awk "BEGIN {printf \"%.6f\", $current_time - $timestamp}")
             
             if (( $(awk "BEGIN {print ($age < $max_age_seconds) ? 1 : 0}") )); then
-                # 缓存未过期，返回缓存数据
+                # Cache not expired, return cached data
                 echo "$cache_data"
                 return 0
             fi
         fi
     fi
     
-    # 缓存不存在或已过期，获取新数据
+    # Cache doesn't exist or expired, fetch new data
     local local_block_height=$(get_block_height "$local_rpc_url")
     local mainnet_block_height=$(get_block_height "$mainnet_rpc_url")
     local local_health=$(check_node_health "$local_rpc_url")
     local mainnet_health=$(check_node_health "$mainnet_rpc_url")
     
-    # 计算区块高度差异
+    # Calculate block height difference
     local block_height_diff="N/A"
     if [[ "$local_block_height" != "N/A" && "$mainnet_block_height" != "N/A" ]]; then
         block_height_diff=$((mainnet_block_height - local_block_height))
     fi
     
-    # 检测数据丢失 - 改进的逻辑
-    local data_loss="0"  # 使用数值：0=false, 1=true
+    # Detect data loss - improved logic
+    local data_loss="0"  # Use numeric: 0=false, 1=true
     
-    # 更严格的数据丢失检测条件
-    # 1. 只有当区块高度数据完全无法获取时才标记为数据丢失
-    # 2. 或者当区块高度差异超过配置阈值时（BLOCK_HEIGHT_DIFF_THRESHOLD）
+    # Stricter data loss detection conditions
+    # 1. Only mark as data loss when block height data is completely unavailable
+    # 2. Or when block height difference exceeds configured threshold (BLOCK_HEIGHT_DIFF_THRESHOLD)
     if [[ "$local_block_height" == "N/A" && "$mainnet_block_height" == "N/A" ]]; then
-        # 两个节点都无法获取区块高度数据
-        data_loss="1"  # 数值：1=true
+        # Both nodes cannot retrieve block height data
+        data_loss="1"  # Numeric: 1=true
     elif [[ "$local_block_height" != "N/A" && "$mainnet_block_height" != "N/A" ]]; then
-        # 能获取到区块高度数据，data_loss 保持为 0
-        # 区块高度差异的判断交给 block_height_monitor.sh 处理（需要持续时间判断）
+        # Can retrieve block height data, data_loss remains 0
+        # Block height difference judgment is handled by block_height_monitor.sh (requires duration check)
         data_loss="0"
     elif [[ "$local_block_height" == "N/A" || "$mainnet_block_height" == "N/A" ]]; then
-        # 只有一个节点无法获取数据，检查是否持续
-        # 这里可以添加更复杂的逻辑，比如检查历史数据
-        # 暂时不标记为数据丢失，除非健康状态也异常
+        # Only one node cannot retrieve data, check if persistent
+        # More complex logic can be added here, such as checking historical data
+        # Don't mark as data loss for now unless health status is also abnormal
         if [[ "$local_health" == "0" && "$mainnet_health" == "0" ]]; then  # 0=unhealthy
-            data_loss="1"  # 数值：1=true
+            data_loss="1"  # Numeric: 1=true
         fi
     fi
     
-    # 创建新的缓存数据（带毫秒时间戳）
+    # Create new cache data (with millisecond timestamp)
     local timestamp_ms=$(date +%s%3N)
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     local new_data
@@ -159,24 +159,24 @@ get_cached_block_height_data() {
             data_loss: $data_loss
         }')
     
-    # 更新缓存
+    # Update cache
     echo "$new_data" > "$cache_file"
     
-    # 返回新数据
+    # Return new data
     echo "$new_data"
     return 0
 }
 
-# 清理旧的缓存数据（保留最近 5 分钟）
+# Clean up old cache data (keep last 5 minutes)
 cleanup_block_height_cache() {
     local cache_dir="$1"
-    local max_age_minutes="${2:-5}"  # 默认 5 分钟
+    local max_age_minutes="${2:-5}"  # Default 5 minutes
     
-    # 查找并删除旧的缓存文件
+    # Find and delete old cache files
     find "$cache_dir" -name "block_height_*.json" -type f -mmin +$max_age_minutes -delete
 }
 
-# 多链区块高度获取函数 (基于实际测试验证)
+# Multi-chain block height retrieval function (based on actual test verification)
 get_block_height() {
     local rpc_url="$1"
     local blockchain_type="${BLOCKCHAIN_NODE,,}"
@@ -184,16 +184,16 @@ get_block_height() {
     local health_cache_file="${MEMORY_SHARE_DIR:-/tmp}/node_health_${url_hash}.cache"
     local result
     
-    # 验证输入参数
+    # Validate input parameters
     if [[ -z "$rpc_url" ]]; then
-        echo "0" > "$health_cache_file"  # 缓存数值：0=unhealthy
+        echo "0" > "$health_cache_file"  # Cache numeric: 0=unhealthy
         echo "N/A"
         return 1
     fi
     
     case "$blockchain_type" in
         solana)
-            # Solana: 使用getBlockHeight (已验证返回: 337632288)
+            # Solana: Use getBlockHeight (verified returns: 337632288)
             for i in {1..3}; do
                 result=$(curl -s -X POST -H "Content-Type: application/json" \
                     --data '{"jsonrpc":"2.0","id":1,"method":"getBlockHeight","params":[]}' \
@@ -202,7 +202,7 @@ get_block_height() {
                 if [[ -n "$result" ]] && echo "$result" | jq -e '.result' >/dev/null 2>&1; then
                     local height=$(echo "$result" | jq -r '.result')
                     if [[ "$height" =~ ^[0-9]+$ ]]; then
-                        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
+                        echo "1" > "$health_cache_file"  # Cache numeric: 1=healthy
                         echo "$height"
                         return 0
                     fi
@@ -211,7 +211,7 @@ get_block_height() {
             done
             ;;
         ethereum|bsc|base|polygon|scroll)
-            # EVM链: 使用eth_blockNumber (已验证返回十六进制格式)
+            # EVM chains: Use eth_blockNumber (verified returns hexadecimal format)
             for i in {1..3}; do
                 result=$(curl -s -X POST -H "Content-Type: application/json" \
                     --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
@@ -220,10 +220,10 @@ get_block_height() {
                 if [[ -n "$result" ]] && echo "$result" | jq -e '.result' >/dev/null 2>&1; then
                     local block_hex=$(echo "$result" | jq -r '.result')
                     if [[ "$block_hex" =~ ^0x[0-9a-fA-F]+$ ]]; then
-                        # 转换十六进制为十进制 (如: 0x160cda4 → 23256484)
+                        # Convert hexadecimal to decimal (e.g.: 0x160cda4 → 23256484)
                         local block_num="${block_hex#0x}"
                         local decimal_height=$(printf "%d" "$((16#$block_num))")
-                        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
+                        echo "1" > "$health_cache_file"  # Cache numeric: 1=healthy
                         echo "$decimal_height"
                         return 0
                     fi
@@ -232,7 +232,7 @@ get_block_height() {
             done
             ;;
         starknet)
-            # StarkNet: 使用starknet_blockNumber (已验证返回: 1717483)
+            # StarkNet: Use starknet_blockNumber (verified returns: 1717483)
             for i in {1..3}; do
                 result=$(curl -s -X POST -H "Content-Type: application/json" \
                     --data '{"jsonrpc":"2.0","id":1,"method":"starknet_blockNumber","params":[]}' \
@@ -241,7 +241,7 @@ get_block_height() {
                 if [[ -n "$result" ]] && echo "$result" | jq -e '.result' >/dev/null 2>&1; then
                     local height=$(echo "$result" | jq -r '.result')
                     if [[ "$height" =~ ^[0-9]+$ ]]; then
-                        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
+                        echo "1" > "$health_cache_file"  # Cache numeric: 1=healthy
                         echo "$height"
                         return 0
                     fi
@@ -250,7 +250,7 @@ get_block_height() {
             done
             ;;
         sui)
-            # Sui: 使用sui_getTotalTransactionBlocks (已验证返回: 3953306852)
+            # Sui: Use sui_getTotalTransactionBlocks (verified returns: 3953306852)
             for i in {1..3}; do
                 result=$(curl -s -X POST -H "Content-Type: application/json" \
                     --data '{"jsonrpc":"2.0","id":1,"method":"sui_getTotalTransactionBlocks","params":[]}' \
@@ -259,7 +259,7 @@ get_block_height() {
                 if [[ -n "$result" ]] && echo "$result" | jq -e '.result' >/dev/null 2>&1; then
                     local height=$(echo "$result" | jq -r '.result')
                     if [[ "$height" =~ ^[0-9]+$ ]]; then
-                        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
+                        echo "1" > "$health_cache_file"  # Cache numeric: 1=healthy
                         echo "$height"
                         return 0
                     fi
@@ -268,51 +268,50 @@ get_block_height() {
             done
             ;;
         *)
-            echo "❌ 不支持的区块链类型: $blockchain_type" >&2
-            echo "0" > "$health_cache_file"  # 缓存数值：0=unhealthy
+            echo "❌ Unsupported blockchain type: $blockchain_type" >&2
+            echo "0" > "$health_cache_file"  # Cache numeric: 0=unhealthy
             echo "N/A"
             return 1
             ;;
     esac
     
-    echo "0" > "$health_cache_file"  # 缓存数值：0=unhealthy
+    echo "0" > "$health_cache_file"  # Cache numeric: 0=unhealthy
     echo "N/A"
     return 1
 }
 
-# 检查节点健康状态
-# 检查节点健康状态 - 基于缓存的健康状态检查
+# Check node health status - cache-based health check
 check_node_health() {
     local rpc_url="$1"
     local url_hash=$(echo "$rpc_url" | md5sum | cut -d' ' -f1)
     local health_cache_file="${MEMORY_SHARE_DIR:-/tmp}/node_health_${url_hash}.cache"
     
-    # 验证输入参数
+    # Validate input parameters
     if [[ -z "$rpc_url" ]]; then
-        echo "0"  # 返回数值：0=unhealthy
+        echo "0"  # Return numeric: 0=unhealthy
         return 1
     fi
     
-    # 检查缓存文件是否存在且是最近的（60秒内）
+    # Check if cache file exists and is recent (within 60 seconds)
     if [[ -f "$health_cache_file" ]]; then
         local cache_age=$(($(date +%s) - $(stat -c %Y "$health_cache_file" 2>/dev/null || echo 0)))
         if [[ $cache_age -lt 60 ]]; then
-            # 使用缓存的健康状态
+            # Use cached health status
             cat "$health_cache_file" 2>/dev/null || echo "0"
             return 0
         fi
     fi
     
-    # 缓存过期或不存在，通过get_block_height测试连接性
+    # Cache expired or doesn't exist, test connectivity via get_block_height
     local block_height=$(get_block_height "$rpc_url")
     
     if [[ "$block_height" != "N/A" && "$block_height" =~ ^[0-9]+$ ]]; then
-        echo "1" > "$health_cache_file"  # 缓存数值：1=healthy
-        echo "1"  # 返回数值：1=healthy
+        echo "1" > "$health_cache_file"  # Cache numeric: 1=healthy
+        echo "1"  # Return numeric: 1=healthy
         return 0
     else
-        echo "0" > "$health_cache_file"  # 缓存数值：0=unhealthy
-        echo "0"  # 返回数值：0=unhealthy
+        echo "0" > "$health_cache_file"  # Cache numeric: 0=unhealthy
+        echo "0"  # Return numeric: 0=unhealthy
         return 1
     fi
 }

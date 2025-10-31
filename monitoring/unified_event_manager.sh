@@ -1,19 +1,19 @@
 #!/bin/bash
 # =====================================================================
-# 统一异常事件管理器
+# Unified Exception Event Manager
 # =====================================================================
-# 管理所有组件的异常事件，确保时间范围关联分析
-# 当任何组件检测到异常时，通知其他组件记录相同时间范围的数据
+# Manage exception events from all components, ensure time range correlation analysis
+# When any component detects an exception, notify other components to record data for the same time range
 # =====================================================================
 
-# 安全加载配置文件，避免readonly变量冲突
+# Safely load configuration file to avoid readonly variable conflicts
 if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
-    echo "警告: 配置文件加载失败，使用默认配置"
+    echo "Warning: Configuration file loading failed, using default configuration"
     MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 
-# 避免重复定义只读变量
+# Avoid redefining readonly variables
 if [[ -z "${EVENT_LOG:-}" ]]; then
     readonly EVENT_LOG="${MEMORY_SHARE_DIR}/unified_events.json"
 fi
@@ -21,38 +21,38 @@ if [[ -z "${EVENT_LOCK:-}" ]]; then
     readonly EVENT_LOCK="${MEMORY_SHARE_DIR}/event_manager.lock"
 fi
 
-# 初始化事件管理器
+# Initialize event manager
 init_event_manager() {
-    echo "🎯 初始化统一异常事件管理器..."
+    echo "🎯 Initializing unified exception event manager..."
     
-    # 创建事件日志文件
+    # Create event log file
     echo "[]" > "$EVENT_LOG"
     
-    echo "✅ 事件管理器初始化完成"
+    echo "✅ Event manager initialization completed"
 }
 
-# 记录异常事件开始
+# Record exception event start
 record_event_start() {
     local event_type="$1"      # block_height_diff, cpu_high, ebs_bottleneck, etc.
     local event_source="$2"    # block_height_monitor, unified_monitor, bottleneck_detector
-    local event_details="$3"   # 详细信息
-    local current_qps="${4:-0}" # 当前QPS (如果适用)
+    local event_details="$3"   # Detailed information
+    local current_qps="${4:-0}" # Current QPS (if applicable)
     
     local start_time=$(get_unified_timestamp)
     local start_epoch=$(get_unified_epoch)
     local event_id="${event_type}_${start_epoch}"
     
-    # 使用文件锁确保并发安全
+    # Use file lock to ensure concurrency safety
     (
         flock -x 200
         
-        # 读取现有事件
+        # Read existing events
         local events="[]"
         if [[ -f "$EVENT_LOG" ]]; then
             events=$(cat "$EVENT_LOG")
         fi
         
-        # 创建新事件记录
+        # Create new event record
         local new_event="{
             \"event_id\": \"$event_id\",
             \"event_type\": \"$event_type\",
@@ -67,35 +67,35 @@ record_event_start() {
             \"status\": \"active\"
         }"
         
-        # 添加到事件列表
+        # Add to event list
         echo "$events" | jq ". += [$new_event]" > "$EVENT_LOG"
         
-        echo "📢 异常事件开始: $event_type (ID: $event_id)"
-        echo "  来源: $event_source"
-        echo "  时间: $start_time"
-        echo "  详情: $event_details"
+        echo "📢 Exception event started: $event_type (ID: $event_id)"
+        echo "  Source: $event_source"
+        echo "  Time: $start_time"
+        echo "  Details: $event_details"
         
-        # 通知其他组件开始记录详细数据
+        # Notify other components to start recording detailed data
         notify_components_event_start "$event_id" "$event_type" "$start_time"
         
     ) 200>"$EVENT_LOCK"
     
-    echo "$event_id"  # 返回事件ID
+    echo "$event_id"  # Return event ID
 }
 
-# 记录异常事件结束
+# Record exception event end
 record_event_end() {
     local event_id="$1"
     
     local end_time=$(get_unified_timestamp)
     local end_epoch=$(get_unified_epoch)
     
-    # 使用文件锁确保并发安全
+    # Use file lock to ensure concurrency safety
     (
         flock -x 200
         
         if [[ -f "$EVENT_LOG" ]]; then
-            # 更新事件记录
+            # Update event record
             local updated_events=$(cat "$EVENT_LOG" | jq "
                 map(if .event_id == \"$event_id\" then
                     .end_time = \"$end_time\" |
@@ -107,33 +107,33 @@ record_event_end() {
             
             echo "$updated_events" > "$EVENT_LOG"
             
-            # 获取事件信息
+            # Get event information
             local event_info=$(echo "$updated_events" | jq ".[] | select(.event_id == \"$event_id\")")
             local event_type=$(echo "$event_info" | jq -r '.event_type')
             local start_time=$(echo "$event_info" | jq -r '.start_time')
             local duration=$(echo "$event_info" | jq -r '.duration')
             
-            echo "✅ 异常事件结束: $event_type (ID: $event_id)"
-            echo "  持续时间: ${duration}s"
-            echo "  时间范围: $start_time → $end_time"
+            echo "✅ Exception event ended: $event_type (ID: $event_id)"
+            echo "  Duration: ${duration}s"
+            echo "  Time range: $start_time → $end_time"
             
-            # 通知其他组件事件结束，开始关联分析
+            # Notify other components event ended, start correlation analysis
             notify_components_event_end "$event_id" "$event_type" "$start_time" "$end_time"
             
-            # 记录时间范围供后续分析使用
+            # Record time range for subsequent analysis
             record_time_range "$event_type" "$start_time" "$end_time"
         fi
         
     ) 200>"$EVENT_LOCK"
 }
 
-# 通知组件事件开始
+# Notify components of event start
 notify_components_event_start() {
     local event_id="$1"
     local event_type="$2"
     local start_time="$3"
     
-    # 创建通知文件
+    # Create notification file
     local notification="{
         \"action\": \"event_start\",
         \"event_id\": \"$event_id\",
@@ -144,17 +144,17 @@ notify_components_event_start() {
     
     echo "$notification" > "${MEMORY_SHARE_DIR}/event_notification.json"
     
-    # 可以在这里添加更多通知机制，比如信号或消息队列
+    # Can add more notification mechanisms here, such as signals or message queues
 }
 
-# 通知组件事件结束
+# Notify components of event end
 notify_components_event_end() {
     local event_id="$1"
     local event_type="$2"
     local start_time="$3"
     local end_time="$4"
     
-    # 创建通知文件
+    # Create notification file
     local notification="{
         \"action\": \"event_end\",
         \"event_id\": \"$event_id\",
@@ -166,12 +166,12 @@ notify_components_event_end() {
     
     echo "$notification" > "${MEMORY_SHARE_DIR}/event_notification.json"
     
-    echo "🔗 已通知所有组件进行时间范围关联分析"
-    echo "  事件类型: $event_type"
-    echo "  时间范围: $start_time → $end_time"
+    echo "🔗 Notified all components for time range correlation analysis"
+    echo "  Event type: $event_type"
+    echo "  Time range: $start_time → $end_time"
 }
 
-# 获取活跃事件
+# Get active events
 get_active_events() {
     if [[ -f "$EVENT_LOG" ]]; then
         cat "$EVENT_LOG" | jq '.[] | select(.status == "active")'
@@ -180,7 +180,7 @@ get_active_events() {
     fi
 }
 
-# 获取所有事件
+# Get all events
 get_all_events() {
     if [[ -f "$EVENT_LOG" ]]; then
         cat "$EVENT_LOG"
@@ -189,7 +189,7 @@ get_all_events() {
     fi
 }
 
-# 获取指定类型的事件
+# Get events by type
 get_events_by_type() {
     local event_type="$1"
     
@@ -200,9 +200,9 @@ get_events_by_type() {
     fi
 }
 
-# 清理旧事件
+# Clean up old events
 cleanup_old_events() {
-    local max_age_hours="${1:-24}"  # 默认保留24小时
+    local max_age_hours="${1:-24}"  # Default keep 24 hours
     local cutoff_epoch=$(($(get_unified_epoch) - max_age_hours * 3600))
     
     if [[ -f "$EVENT_LOG" ]]; then
@@ -212,13 +212,13 @@ cleanup_old_events() {
             local filtered_events=$(cat "$EVENT_LOG" | jq "map(select(.start_epoch > $cutoff_epoch))")
             echo "$filtered_events" > "$EVENT_LOG"
             
-            echo "🧹 已清理 ${max_age_hours} 小时前的旧事件"
+            echo "🧹 Cleaned up old events from ${max_age_hours} hours ago"
             
         ) 200>"$EVENT_LOCK"
     fi
 }
 
-# 主函数
+# Main function
 main() {
     case "${1:-help}" in
         init)
@@ -246,27 +246,27 @@ main() {
             echo "Usage: $0 <command> [options]"
             echo ""
             echo "Commands:"
-            echo "  init                     初始化事件管理器"
-            echo "  start <type> <source> <details> [qps]  记录事件开始"
-            echo "  end <event_id>           记录事件结束"
-            echo "  active                   显示活跃事件"
-            echo "  all                      显示所有事件"
-            echo "  type <event_type>        显示指定类型事件"
-            echo "  cleanup [hours]          清理旧事件"
-            echo "  help                     显示帮助"
+            echo "  init                     Initialize event manager"
+            echo "  start <type> <source> <details> [qps]  Record event start"
+            echo "  end <event_id>           Record event end"
+            echo "  active                   Show active events"
+            echo "  all                      Show all events"
+            echo "  type <event_type>        Show events of specified type"
+            echo "  cleanup [hours]          Clean up old events"
+            echo "  help                     Show help"
             echo ""
-            echo "事件类型:"
-            echo "  block_height_diff        区块高度差异异常"
-            echo "  cpu_high                 CPU使用率过高"
-            echo "  memory_high              内存使用率过高"
-            echo "  ebs_bottleneck           EBS性能瓶颈"
-            echo "  network_bottleneck       网络瓶颈"
-            echo "  qps_failure              QPS测试失败"
+            echo "Event types:"
+            echo "  block_height_diff        Block height difference exception"
+            echo "  cpu_high                 High CPU usage"
+            echo "  memory_high              High memory usage"
+            echo "  ebs_bottleneck           EBS performance bottleneck"
+            echo "  network_bottleneck       Network bottleneck"
+            echo "  qps_failure              QPS test failure"
             echo ""
             ;;
         *)
-            echo "❌ 未知命令: $1"
-            echo "使用 '$0 help' 查看帮助"
+            echo "❌ Unknown command: $1"
+            echo "Use '$0 help' to view help"
             exit 1
             ;;
     esac
