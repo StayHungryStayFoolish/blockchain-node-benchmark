@@ -691,6 +691,10 @@ class NodeQPSAnalyzer:
             ax4.grid(True, alpha=0.3)
         
         ax4.set_title('RPC Latency & Success Rate vs QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        
+        # Disable scientific notation on axes
+        ax4.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+        ax4.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
 
         # [1,1] QPS vs Success Rate Scatter
         ax5 = axes[1, 1]
