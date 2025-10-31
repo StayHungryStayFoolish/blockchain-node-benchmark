@@ -286,8 +286,8 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # Ultra-high-frequency monitoring interval
 
 View complete sample reports generated from real test data (Standard mode, 90+ minutes):
 
-- [HTML Report](./docs/image/performance_report_en_20251025_150834.html) - Interactive HTML with all charts
-- [PDF Report](./docs/image/performance_report_en_20251025_150834.pdf) - Printable PDF version
+- [HTML Report](./docs/image/performance_report_en_20251030_171541.html) - Interactive HTML with all charts
+- [PDF Report](./docs/image/performance_report_en_20251030_171541.pdf) - Printable PDF version
 
 ### 32 Professional Charts (Complete Framework Coverage)
 
