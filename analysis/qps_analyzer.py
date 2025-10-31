@@ -16,6 +16,7 @@ import os
 import sys
 import json
 import argparse
+import re
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 from pathlib import Path
@@ -496,6 +497,13 @@ class NodeQPSAnalyzer:
             numeric_df['current_qps'] = pd.to_numeric(numeric_df['current_qps'])
             numeric_df['timestamp'] = pd.to_datetime(numeric_df['timestamp'], errors='coerce')
 
+            # 过滤 QPS=0 的监控数据，只保留实际测试数据
+            if 'current_qps' in numeric_df.columns:
+                original_count = len(numeric_df)
+                numeric_df = numeric_df[numeric_df['current_qps'] > 0].copy()
+                filtered_count = len(numeric_df)
+                print(f"📊 Filtered QPS data: {filtered_count}/{original_count} active test points (QPS > 0)")
+
             # 清理数值列 - 使用映射后的标准字段名
             numeric_cols = ['cpu_usage', 'mem_usage', 'rpc_latency_ms', 'elapsed_time', 'remaining_time']
             for col in numeric_cols:
@@ -580,62 +588,174 @@ class NodeQPSAnalyzer:
         return bottlenecks
 
     def generate_performance_charts(self, df: pd.DataFrame) -> Optional[plt.Figure]:
-        """生成性能图表"""
+        """生成性能图表 - 2x3 布局"""
         print("\n📈 Generating performance charts...")
 
         if len(df) == 0:
             print("❌ No QPS data for chart generation")
             return None
 
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        # Using English title directly
+        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
         fig.suptitle('Blockchain Node QPS Performance Analysis Dashboard', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
 
-        # 1. CPU使用率 vs QPS
-        if len(df) > 0:
-            axes[0, 0].plot(df['current_qps'], df['cpu_usage'], 'bo-', alpha=0.7, markersize=4)
-            axes[0, 0].axhline(y=85, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.8, label='Warning (85%)')
-            axes[0, 0].set_title('CPU Usage vs QPS')
-            axes[0, 0].set_xlabel('QPS')
-            axes[0, 0].set_ylabel('CPU %')
-            axes[0, 0].legend()
-            axes[0, 0].grid(True, alpha=0.3)
+        # 加载 Vegeta Success Rate 数据
+        success_df = self.load_vegeta_success_rates()
+        has_success_data = not success_df.empty
+        
+        # 为 Vegeta 数据添加延迟数值列
+        if has_success_data:
+            success_df['avg_latency_ms'] = success_df['avg_latency'].apply(self._parse_latency_to_ms)
 
-        # 2. 内存使用率 vs QPS
-        if len(df) > 0:
-            axes[0, 1].plot(df['current_qps'], df['mem_usage'], 'go-', alpha=0.7, markersize=4)
-            axes[0, 1].axhline(y=90, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.8, label='Warning (90%)')
-            axes[0, 1].set_title('Memory Usage vs QPS')
-            axes[0, 1].set_xlabel('QPS')
-            axes[0, 1].set_ylabel('Memory %')
-            axes[0, 1].legend()
-            axes[0, 1].grid(True, alpha=0.3)
+        # [0,0] CPU Time Series
+        ax1 = axes[0, 0]
+        qps_levels = sorted(df['current_qps'].unique())
+        colors = plt.cm.tab10(np.linspace(0, 1, len(qps_levels)))
+        
+        for idx, qps in enumerate(qps_levels):
+            df_step = df[df['current_qps'] == qps]
+            ax1.plot(df_step['timestamp'], df_step['cpu_usage'], 
+                    color=colors[idx], label=f'{int(qps)} QPS', linewidth=1.5, alpha=0.7)
+        
+        ax1.axhline(y=85, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.8, linewidth=2, label='Threshold (85%)')
+        ax1.set_title('CPU Usage Time Series', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax1.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax1.set_ylabel('CPU %', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax1.legend(loc='upper left', bbox_to_anchor=(1.02, 1), ncol=1, fontsize=7)
+        ax1.grid(True, alpha=0.3)
+        UnifiedChartStyle.format_time_axis(ax1, df['timestamp'])
 
-        # 3. RPC延迟 vs QPS
-        if len(df) > 0:
-            axes[1, 0].plot(df['current_qps'], df['rpc_latency_ms'], 'ro-', alpha=0.7, markersize=4)
-            axes[1, 0].axhline(y=1000, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.8, label='High Latency (1s)')
-            axes[1, 0].set_title('RPC Latency vs QPS')
-            axes[1, 0].set_xlabel('QPS')
-            axes[1, 0].set_ylabel('Latency (ms)')
-            axes[1, 0].legend()
-            axes[1, 0].grid(True, alpha=0.3)
+        # [0,1] Memory Time Series
+        ax2 = axes[0, 1]
+        for idx, qps in enumerate(qps_levels):
+            df_step = df[df['current_qps'] == qps]
+            ax2.plot(df_step['timestamp'], df_step['mem_usage'], 
+                    color=colors[idx], label=f'{int(qps)} QPS', linewidth=1.5, alpha=0.7)
+        
+        ax2.axhline(y=90, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.8, linewidth=2, label='Threshold (90%)')
+        ax2.set_title('Memory Usage Time Series', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax2.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax2.set_ylabel('Memory %', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax2.legend(loc='upper left', bbox_to_anchor=(1.02, 1), ncol=1, fontsize=7)
+        ax2.grid(True, alpha=0.3)
+        UnifiedChartStyle.format_time_axis(ax2, df['timestamp'])
 
-        # 4. RPC延迟分布
-        if len(df) > 0 and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
-            axes[1, 1].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
-            if 'rpc_latency_ms' in df.columns:
-                mean_latency = df['rpc_latency_ms'].mean()
-                p95_latency = df['rpc_latency_ms'].quantile(0.95)
-                axes[1, 1].axvline(mean_latency, color=UnifiedChartStyle.COLORS["critical"], linestyle='--',
-                                   label=f'Mean: {mean_latency:.1f}ms')
-                axes[1, 1].axvline(p95_latency, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--',
-                                   label=f'P95: {p95_latency:.1f}ms')
-            axes[1, 1].set_title('RPC Latency Distribution')
-            axes[1, 1].set_xlabel('Latency (ms)')
-            axes[1, 1].set_ylabel('Frequency')
-            axes[1, 1].legend()
-            axes[1, 1].grid(True, alpha=0.3)
+        # [0,2] Latency Time Series
+        ax3 = axes[0, 2]
+        df_latency = df[df['rpc_latency_ms'] > 0]
+        
+        for idx, qps in enumerate(qps_levels):
+            df_step = df_latency[df_latency['current_qps'] == qps]
+            if len(df_step) > 0:
+                ax3.plot(df_step['timestamp'], df_step['rpc_latency_ms'], 
+                        color=colors[idx], label=f'{int(qps)} QPS', linewidth=1.5, marker='o', markersize=3, alpha=0.7)
+        
+        ax3.axhline(y=1000, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.8, linewidth=2, label='Threshold (1s)')
+        ax3.set_title('RPC Latency Time Series', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax3.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax3.set_ylabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax3.legend(loc='upper left', bbox_to_anchor=(1.02, 1), ncol=1, fontsize=7)
+        ax3.grid(True, alpha=0.3)
+        UnifiedChartStyle.format_time_axis(ax3, df_latency['timestamp'])
+
+        # [1,0] Latency & Success Rate vs QPS (双Y轴)
+        ax4 = axes[1, 0]
+        if has_success_data:
+            line1 = ax4.plot(success_df['qps'], success_df['avg_latency_ms'], 
+                            'ro-', alpha=0.7, markersize=6, linewidth=2, label='Avg Latency')
+            ax4.axhline(y=1000, color=UnifiedChartStyle.COLORS["warning"], 
+                       linestyle='--', alpha=0.8, linewidth=2, label='Latency Threshold (1s)')
+            ax4.set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax4.set_ylabel('Latency (ms)', color='r', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax4.tick_params(axis='y', labelcolor='r')
+            ax4.grid(True, alpha=0.3)
+            
+            ax4_right = ax4.twinx()
+            line2 = ax4_right.plot(success_df['qps'], success_df['success_rate'], 
+                                  'g^-', alpha=0.7, markersize=8, linewidth=2, label='Success Rate')
+            ax4_right.axhline(y=95, color=UnifiedChartStyle.COLORS["warning"], 
+                             linestyle='--', alpha=0.8, linewidth=2, label='Success Threshold (95%)')
+            ax4_right.set_ylabel('Success Rate (%)', color='g', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax4_right.set_ylim(0, 105)
+            ax4_right.tick_params(axis='y', labelcolor='g')
+            
+            lines = line1 + line2
+            labels = [l.get_label() for l in lines]
+            ax4.legend(lines, labels, loc='upper left', fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+        else:
+            ax4.plot(df['current_qps'], df['rpc_latency_ms'], 'ro-', alpha=0.7, markersize=4)
+            ax4.axhline(y=1000, color=UnifiedChartStyle.COLORS["warning"], 
+                       linestyle='--', alpha=0.8, label='High Latency (1s)')
+            ax4.set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax4.set_ylabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+            ax4.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+            ax4.grid(True, alpha=0.3)
+        
+        ax4.set_title('RPC Latency & Success Rate vs QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+
+        # [1,1] QPS vs Success Rate Scatter
+        ax5 = axes[1, 1]
+        if has_success_data:
+            # 纯散点图（不画连接线，因为没有中间数据）
+            colors_scatter = []
+            for sr in success_df['success_rate']:
+                if sr >= 95:
+                    colors_scatter.append(UnifiedChartStyle.COLORS["success"])
+                elif sr >= 80:
+                    colors_scatter.append(UnifiedChartStyle.COLORS["warning"])
+                else:
+                    colors_scatter.append(UnifiedChartStyle.COLORS["critical"])
+            
+            # 绘制散点（参考 EBS 图表样式：小圆点，无黑色边框）
+            ax5.scatter(success_df['qps'], success_df['success_rate'], 
+                       c=colors_scatter, s=60, alpha=0.8, zorder=2)
+            
+            # 阈值线
+            ax5.axhline(y=95, color=UnifiedChartStyle.COLORS["warning"], 
+                       linestyle='--', alpha=0.8, linewidth=2, label='Threshold (95%)')
+            
+            # 标注低成功率的点
+            for idx, row in success_df.iterrows():
+                if row['success_rate'] < 95:
+                    ax5.annotate(f"{int(row['qps'])}\n{row['success_rate']:.1f}%", 
+                               xy=(row['qps'], row['success_rate']),
+                               xytext=(0, -15), textcoords='offset points',
+                               fontsize=8, color='red', ha='center', fontweight='bold')
+            
+            # 增加颜色图例
+            from matplotlib.patches import Patch
+            legend_elements = [
+                Patch(facecolor=UnifiedChartStyle.COLORS["success"], label='Healthy (≥95%)'),
+                Patch(facecolor=UnifiedChartStyle.COLORS["warning"], label='Warning (80-95%)'),
+                Patch(facecolor=UnifiedChartStyle.COLORS["critical"], label='Critical (<80%)')
+            ]
+            ax5.legend(handles=legend_elements, loc='lower left', fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+            
+            ax5.set_ylim(0, 105)
+        
+        ax5.set_title('QPS vs Success Rate (Performance Cliff Detection)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax5.set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax5.set_ylabel('Success Rate (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax5.grid(True, alpha=0.3)
+
+        # [1,2] Success Rate Distribution
+        ax6 = axes[1, 2]
+        if has_success_data:
+            ax6.hist(success_df['success_rate'], bins=15, alpha=0.7, color='skyblue', edgecolor='black', linewidth=1.5)
+            
+            mean_sr = success_df['success_rate'].mean()
+            median_sr = success_df['success_rate'].median()
+            ax6.axvline(mean_sr, color=UnifiedChartStyle.COLORS["critical"], 
+                       linestyle='--', linewidth=2, label=f'Mean: {mean_sr:.1f}%')
+            ax6.axvline(median_sr, color=UnifiedChartStyle.COLORS["warning"], 
+                       linestyle='--', linewidth=2, label=f'Median: {median_sr:.1f}%')
+            ax6.axvline(95, color=UnifiedChartStyle.COLORS["success"], 
+                       linestyle='--', linewidth=2, label='Threshold (95%)')
+        
+        ax6.set_title('Success Rate Distribution', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+        ax6.set_xlabel('Success Rate (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax6.set_ylabel('Frequency', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+        ax6.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
+        ax6.grid(True, alpha=0.3)
 
         # 使用统一样式应用布局
         UnifiedChartStyle.apply_layout('auto')
@@ -647,8 +767,66 @@ class NodeQPSAnalyzer:
         plt.savefig(chart_file, dpi=300, bbox_inches='tight', 
                    facecolor='white', edgecolor='none')
         print(f"✅ Performance charts saved: {chart_file}")
+        plt.close()
 
         return fig
+
+    def load_vegeta_success_rates(self) -> pd.DataFrame:
+        """从 vegeta txt 报告提取 QPS, Success Rate, Latency"""
+        reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
+        vegeta_reports = glob.glob(f"{reports_dir}/vegeta_*qps_*.txt")
+        data = []
+        
+        for report in vegeta_reports:
+            try:
+                filename = os.path.basename(report)
+                qps = int(re.search(r'vegeta_(\d+)qps_', filename).group(1))
+                
+                with open(report, 'r') as f:
+                    content = f.read()
+                
+                # 提取 Success Rate
+                success_match = re.search(r'Success\s+\[ratio\]\s+([\d.]+)%', content)
+                success_rate = float(success_match.group(1)) if success_match else 0.0
+                
+                # 提取 Latency (mean)
+                latency_match = re.search(r'Latencies\s+\[min, mean,.*?\]\s+[\d.µms]+,\s+([\d.µmsh]+),', content)
+                avg_latency = latency_match.group(1) if latency_match else 'N/A'
+                
+                data.append({
+                    'qps': qps,
+                    'success_rate': success_rate,
+                    'avg_latency': avg_latency
+                })
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to parse {filename}: {e}")
+        
+        if data:
+            df = pd.DataFrame(data).sort_values('qps')
+            print(f"✅ Loaded success rate data for {len(df)} QPS levels")
+            return df
+        else:
+            print("⚠️  No success rate data found")
+            return pd.DataFrame()
+    
+    def _parse_latency_to_ms(self, latency_str: str) -> float:
+        """将 Vegeta 的延迟字符串转换为毫秒数值"""
+        try:
+            if 'm' in latency_str and 's' in latency_str:  # 如 "1m27s"
+                parts = latency_str.replace('m', ' ').replace('s', '').split()
+                minutes = float(parts[0]) if len(parts) > 0 else 0
+                seconds = float(parts[1]) if len(parts) > 1 else 0
+                return (minutes * 60 + seconds) * 1000
+            elif 's' in latency_str and 'ms' not in latency_str:  # 如 "31.43s"
+                return float(latency_str.replace('s', '')) * 1000
+            elif 'ms' in latency_str:  # 如 "110.256ms"
+                return float(latency_str.replace('ms', ''))
+            elif 'µs' in latency_str:  # 如 "76.231µs"
+                return float(latency_str.replace('µs', '')) / 1000
+            else:
+                return 0.0
+        except:
+            return 0.0
 
     def analyze_vegeta_reports(self) -> Optional[pd.DataFrame]:
         """分析Vegeta测试报告"""
