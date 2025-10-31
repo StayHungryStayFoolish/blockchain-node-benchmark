@@ -1,0 +1,39 @@
+Performance Metrics Correlation Analysis Insights Report
+==================================================
+
+Analysis Time: 2025-10-30 19:43:27
+Number of Metrics Analyzed: 75
+Strong Correlation Pairs: 103
+
+🔍 Strong Correlation Pairs (|r| > 0.7):
+----------------------------------------
+ 1. net_tx_mbps ↔ net_tx_gbps
+    Correlation Coefficient: 1.000 (Strong Positive)
+
+ 2. cpu_usage ↔ cpu_idle
+    Correlation Coefficient: -1.000 (Strong Negative)
+
+ 3. data_nvme2n1_total_iops ↔ data_nvme2n1_aws_standard_iops
+    Correlation Coefficient: 1.000 (Strong Positive)
+
+ 4. data_nvme2n1_total_throughput_mibs ↔ data_nvme2n1_aws_standard_throughput_mibs
+    Correlation Coefficient: 1.000 (Strong Positive)
+
+ 5. accounts_nvme1n1_total_iops ↔ accounts_nvme1n1_aws_standard_iops
+    Correlation Coefficient: 1.000 (Strong Positive)
+
+ 6. accounts_nvme1n1_total_throughput_mibs ↔ accounts_nvme1n1_aws_standard_throughput_mibs
+    Correlation Coefficient: 1.000 (Strong Positive)
+
+ 7. net_total_mbps ↔ net_total_gbps
+    Correlation Coefficient: 1.000 (Strong Positive)
+
+ 8. net_rx_mbps ↔ net_rx_gbps
+    Correlation Coefficient: 1.000 (Strong Positive)
+
+ 9. data_nvme2n1_wkb_s ↔ data_nvme2n1_write_throughput_mibs
+    Correlation Coefficient: 1.000 (Strong Positive)
+
+10. accounts_nvme1n1_wkb_s ↔ accounts_nvme1n1_write_throughput_mibs
+    Correlation Coefficient: 1.000 (Strong Positive)
+

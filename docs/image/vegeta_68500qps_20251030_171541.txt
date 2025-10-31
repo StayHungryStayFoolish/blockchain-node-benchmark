@@ -1,0 +1,12 @@
+Requests      [total, rate, throughput]         16622318, 27703.82, 1403.58
+Duration      [total, attack, wait]             10m31s, 10m0s, 31.042s
+Latencies     [min, mean, 50, 90, 95, 99, max]  66.04µs, 32.732s, 31.677s, 50.332s, 1m13s, 1m36s, 5m47s
+Bytes In      [total, mean]                     158854944, 9.56
+Bytes Out     [total, mean]                     95560043, 5.75
+Success       [ratio]                           5.33%
+Status Codes  [code:count]                      0:15736600  200:885718  
+Error Set:
+Post "http://172.31.28.15:8899": dial tcp 0.0.0.0:0->172.31.28.15:8899: bind: address already in use
+Post "http://172.31.28.15:8899": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+Post "http://172.31.28.15:8899": dial tcp 0.0.0.0:0->172.31.28.15:8899: bind: address already in use (Client.Timeout exceeded while awaiting headers)
+Post "http://172.31.28.15:8899": dial tcp 0.0.0.0:0->172.31.28.15:8899: i/o timeout (Client.Timeout exceeded while awaiting headers)

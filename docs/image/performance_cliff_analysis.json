@@ -1,0 +1,8 @@
+{
+  "max_qps": 67500,
+  "bottleneck_qps": 70000,
+  "performance_drop_percent": 3.7037037037037033,
+  "cliff_detected": false,
+  "cliff_factors": [],
+  "recommendations": []
+}

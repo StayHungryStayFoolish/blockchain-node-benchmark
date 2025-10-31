@@ -1,24 +1,24 @@
 # Blockchain Node QPS Performance Analysis Report
-Generated: 2025-10-25 16:55:36
+Generated: 2025-10-30 19:43:53
 
 ## Executive Summary
-- **Maximum QPS Achieved**: 5,000
-- **Performance Grade**: N/A
-- **Performance Level**: 无法评估
-- **Benchmark Mode**: standard
-- **Test Duration**: 1049 monitoring points
+- **Maximum QPS Achieved**: 70,000
+- **Performance Grade**: A (Excellent)
+- **Performance Level**: 优秀
+- **Benchmark Mode**: intensive
+- **Test Duration**: 1061 monitoring points
 
 ## Performance Evaluation
-- **Evaluation Basis**: insufficient_benchmark_depth
-- **Evaluation Reason**: standard基准测试模式无法准确评估系统性能等级，需要intensive模式进行深度分析
+- **Evaluation Basis**: intensive_bottleneck_analysis
+- **Evaluation Reason**: 系统在70000 QPS下未出现明显瓶颈，性能表现优秀
 
 ## System Performance Metrics
-- **Average CPU Usage**: 13.1%
-- **Average Memory Usage**: 59.7%
-- **Average RPC Latency**: 0.1ms
-- **CPU Peak**: 27.4%
-- **Memory Peak**: 59.9%
-- **RPC Latency Peak**: 0.2ms
+- **Average CPU Usage**: 55.7%
+- **Average Memory Usage**: 61.3%
+- **Average RPC Latency**: 15125.3ms
+- **CPU Peak**: 100.0%
+- **Memory Peak**: 64.5%
+- **RPC Latency Peak**: 32927.9ms
 
 ## Performance Bottlenecks Analysis
 - ✅ No critical bottlenecks detected in tested range
@@ -26,17 +26,17 @@ Generated: 2025-10-25 16:55:36
 ## Optimization Recommendations
 
 ### Based on Bottleneck Analysis
-- 当前standard基准测试仅用于快速验证
-- 如需准确的性能等级评估，请使用intensive基准测试模式
-- 深度基准测试将触发系统瓶颈以获得准确的性能评估
+- 🎉 系统性能优秀，当前配置可稳定支持 70000 QPS
+- 💡 可考虑进一步提升QPS目标或优化成本效率
+- 📊 建议定期监控以维持当前性能水平
 
 ### Production Deployment Guidelines
-- **Recommended Production QPS**: 4,000 (80% of maximum tested)
+- **Recommended Production QPS**: 56,000 (80% of maximum tested)
 - **Monitoring Thresholds**: 
   - Alert if CPU usage > 85%
   - Alert if Memory usage > 90%
   - Alert if RPC latency > 1000ms sustained
-- **Capacity Assessment**: 需要intensive基准测试模式进行准确的容量评估
+- **Capacity Assessment**: 当前配置可稳定处理高负载 (已测试至 70,000 QPS，瓶颈评分: 0.000)
 
 ## Files Generated
 - **Performance Charts**: `/data/data/blockchain-node-benchmark-result/current/reports/qps_performance_analysis.png`
