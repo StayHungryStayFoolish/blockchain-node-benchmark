@@ -42,9 +42,10 @@ class RpcAnalysisConfig:
     HIGH_CPU_THRESHOLD = int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85))     # High CPU usage threshold (%)
     HIGH_MEMORY_THRESHOLD = int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))       # High memory usage threshold (%)
     LOW_CPU_THRESHOLD = 30  # 低CPU使用率阈值(%)
+    RPC_WARNING_LATENCY_THRESHOLD = 20  # RPC延迟警告阈值(ms)
     HIGH_LATENCY_THRESHOLD = 50  # 高延迟阈值(ms)
     VERY_HIGH_LATENCY_THRESHOLD = 100  # 极高延迟阈值(ms)
-    SPECIAL_QPS_ANALYSIS = 75000  # 特殊QPS分析点
+    SPECIAL_QPS_ANALYSIS_RATIO = 0.75  # 特殊QPS分析点比例（最大QPS的75%）
     
     # 相关性分析配置
     STRONG_CORRELATION_THRESHOLD = 0.7  # 强相关性阈值
@@ -374,20 +375,30 @@ class RpcDeepAnalyzer:
 
             print(f"\n🎯 Bottleneck type classification:")
 
-            # 特殊分析配置的QPS阶段（如果存在）
-            qps_special = df[df['current_qps'] == self.config.SPECIAL_QPS_ANALYSIS] if 'current_qps' in df.columns else pd.DataFrame()
+            # 动态计算特殊分析QPS点（最大QPS的75%）
+            qps_special = pd.DataFrame()
+            closest_qps = 0
+            max_qps = 0
+            
+            if 'current_qps' in df.columns and len(df[df['current_qps'] > 0]) > 0:
+                max_qps = df['current_qps'].max()
+                target_qps = int(max_qps * self.config.SPECIAL_QPS_ANALYSIS_RATIO)
+                # 找到最接近目标QPS的实际测试点
+                closest_qps = df.loc[(df['current_qps'] - target_qps).abs().idxmin(), 'current_qps']
+                qps_special = df[df['current_qps'] == closest_qps]
+            
             if len(qps_special) > 0:
                 avg_cpu_special = qps_special['cpu_usage'].mean() if 'cpu_usage' in qps_special.columns else 0.0
                 avg_latency_special = qps_special['rpc_latency_ms'].mean() if 'rpc_latency_ms' in qps_special.columns else 0.0
-                print(f"{self.config.SPECIAL_QPS_ANALYSIS} QPS phase analysis:")
+                print(f"{int(closest_qps)} QPS phase analysis (75% of max {int(max_qps)} QPS):")
                 print(f"  🖥️ Average CPU: {avg_cpu_special:.1f}%")
                 print(f"  ⏱️ Average latency: {avg_latency_special:.1f}ms")
 
-                if avg_latency_special > 20 and avg_cpu_special < self.config.LOW_CPU_THRESHOLD:
+                if avg_latency_special > self.config.RPC_WARNING_LATENCY_THRESHOLD and avg_cpu_special < self.config.LOW_CPU_THRESHOLD:
                     bottleneck_classification['primary_bottleneck'] = 'rpc_processing'
                     bottleneck_classification['bottleneck_confidence'] = 0.8
                     bottleneck_classification['evidence'].append(
-                        f"High latency ({avg_latency_special:.1f}ms) at {self.config.SPECIAL_QPS_ANALYSIS} QPS with low CPU ({avg_cpu_special:.1f}%)")
+                        f"High latency ({avg_latency_special:.1f}ms) at {int(closest_qps)} QPS with low CPU ({avg_cpu_special:.1f}%)")
                     print("🔍 Bottleneck type: RPC processing capacity limitation (non-CPU bottleneck)")
                     print("💡 Optimization suggestions:")
                     print("  🔧 - Increase RPC thread count")
