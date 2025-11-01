@@ -500,6 +500,53 @@ detect_deployment_platform() {
 }
 ```
 
+**Network Interface Auto-Detection:**
+
+The framework automatically detects the active network interface for monitoring:
+
+```bash
+# Automatic network interface detection (in config_loader.sh)
+detect_network_interface() {
+    # Priority 1: Detect active interfaces (eth/ens/enp with state UP)
+    # Works on all platforms: AWS, other clouds, IDC, local Linux
+    ena_interfaces=($(ip link show 2>/dev/null | grep -E "^[0-9]+: (eth|ens|enp)" | grep "state UP" | cut -d: -f2 | tr -d ' '))
+    
+    if [[ ${#ena_interfaces[@]} -gt 0 ]]; then
+        NETWORK_INTERFACE="${ena_interfaces[0]}"
+        return 0
+    fi
+    
+    # Priority 2: Use default route interface
+    interface=$(ip route 2>/dev/null | grep default | awk '{print $5}' | head -1)
+    
+    # Priority 3: Fallback to eth0
+    if [[ -z "$interface" ]]; then
+        interface="eth0"
+    fi
+    
+    NETWORK_INTERFACE="$interface"
+}
+```
+
+**Detection Logic:**
+1. **Active Interface Detection**: Finds interfaces with names `eth*`, `ens*`, or `enp*` that are in UP state
+2. **Default Route**: Uses the interface associated with the default route
+3. **Fallback**: Defaults to `eth0` if detection fails
+
+**Cross-Platform Compatibility:**
+- ✅ AWS: Detects ENA interfaces (eth0, eth1, etc.)
+- ✅ Other Clouds: Detects standard interfaces (eth0, ens3, etc.)
+- ✅ IDC/Local: Detects any active network interface
+
+**Manual Override:**
+
+If auto-detection doesn't work for your environment:
+
+```bash
+# In user_config.sh or environment variable
+export NETWORK_INTERFACE="ens5"  # Specify your network interface
+```
+
 **Platform-Specific Features:**
 
 | Feature | AWS | Other Clouds | IDC | Local Linux |

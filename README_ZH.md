@@ -83,7 +83,6 @@ NETWORK_MAX_BANDWIDTH_GBPS=25        # 您的实例网络带宽（Gbps）
 # 验证您的区块链进程名称
 ps aux | grep -i validator
 ps aux | grep -i agave
-ps aux | grep -i solana
 
 # 验证您的 EBS 设备
 lsblk
@@ -110,6 +109,15 @@ lsblk
 ### 前置条件
 
 ```bash
+# 安装 Vegeta v12.12.0（QPS 测试工具）
+wget https://github.com/tsenart/vegeta/releases/download/v12.12.0/vegeta_12.12.0_linux_amd64.tar.gz
+tar -xzf vegeta_12.12.0_linux_amd64.tar.gz
+sudo mv vegeta /usr/local/bin/
+vegeta -version  # 验证安装
+
+# 安装系统监控工具
+sudo apt-get install sysstat  # 提供 iostat、mpstat、sar
+
 # 安装 Python 和虚拟环境支持
 sudo apt-get install python3 python3-venv
 
@@ -122,10 +130,10 @@ source node-env/bin/activate
 # 检查 Python 版本（需要 Python 3.8+）
 python3 --version
 
-# 安装 Python 依赖
+# 安装 Python 依赖（从项目根目录执行）
 pip3 install -r requirements.txt
 
-# 验证系统工具
+# 验证所有工具已安装
 which vegeta    # QPS 测试工具
 which iostat    # I/O 监控工具
 which mpstat    # CPU 监控工具
@@ -472,24 +480,44 @@ ls reports/
 
 #### 1. Vegeta 未安装
 ```bash
+# 推荐：安装特定版本 v12.12.0
+wget https://github.com/tsenart/vegeta/releases/download/v12.12.0/vegeta_12.12.0_linux_amd64.tar.gz
+tar -xzf vegeta_12.12.0_linux_amd64.tar.gz
+sudo mv vegeta /usr/local/bin/
+vegeta -version  # 应显示：Version: 12.12.0
+
+# 备选：通过包管理器安装（可能是旧版本）
 # Ubuntu/Debian
 sudo apt-get install vegeta
-
-# CentOS/RHEL
-sudo yum install vegeta
-
-# macOS
-brew install vegeta
 ```
 
-#### 2. 缺少系统监控工具
+#### 2. 网络接口检测问题
+```bash
+# 检查检测到的网络接口
+echo $NETWORK_INTERFACE
+
+# 列出所有网络接口
+ip link show
+
+# 如果自动检测失败，手动指定网络接口
+export NETWORK_INTERFACE="eth0"    # 替换为您的接口名称
+# 或添加到 config/user_config.sh：
+# NETWORK_INTERFACE="eth0"
+
+# 常见接口名称：
+# - AWS：eth0、eth1
+# - 其他云：eth0、ens3、ens5
+# - 本地：eth0、enp0s3、wlan0
+```
+
+#### 3. 缺少系统监控工具
 ```bash
 # 安装 sysstat 包
 sudo apt-get install sysstat  # Ubuntu/Debian
 sudo yum install sysstat      # CentOS/RHEL
 ```
 
-#### 3. Python 依赖问题
+#### 4. Python 依赖问题
 ```bash
 # 重新安装依赖
 pip3 install --upgrade -r requirements.txt
@@ -498,7 +526,7 @@ pip3 install --upgrade -r requirements.txt
 python3 -c "import matplotlib, pandas, numpy; print('All packages OK')"
 ```
 
-#### 4. 权限问题
+#### 5. 权限问题
 ```bash
 # 授予执行权限
 chmod +x blockchain_node_benchmark.sh

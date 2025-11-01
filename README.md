@@ -83,7 +83,6 @@ NETWORK_MAX_BANDWIDTH_GBPS=25        # Your instance's network bandwidth (Gbps)
 # Verify your blockchain process name
 ps aux | grep -i validator
 ps aux | grep -i agave
-ps aux | grep -i solana
 
 # Verify your EBS devices
 lsblk
@@ -110,6 +109,15 @@ lsblk
 ### Prerequisites
 
 ```bash
+# Install Vegeta v12.12.0 (QPS testing tool)
+wget https://github.com/tsenart/vegeta/releases/download/v12.12.0/vegeta_12.12.0_linux_amd64.tar.gz
+tar -xzf vegeta_12.12.0_linux_amd64.tar.gz
+sudo mv vegeta /usr/local/bin/
+vegeta -version  # Verify installation
+
+# Install system monitoring tools
+sudo apt-get install sysstat  # Provides iostat, mpstat, sar
+
 # Install Python and virtual environment support
 sudo apt-get install python3 python3-venv
 
@@ -122,10 +130,10 @@ source node-env/bin/activate
 # Check Python version (requires Python 3.8+)
 python3 --version
 
-# Install Python dependencies
+# Install Python dependencies (from project root directory)
 pip3 install -r requirements.txt
 
-# Verify system tools
+# Verify all tools are installed
 which vegeta    # QPS testing tool
 which iostat    # I/O monitoring tool
 which mpstat    # CPU monitoring tool
@@ -472,24 +480,44 @@ ls reports/
 
 #### 1. Vegeta Not Installed
 ```bash
+# Recommended: Install specific version v12.12.0
+wget https://github.com/tsenart/vegeta/releases/download/v12.12.0/vegeta_12.12.0_linux_amd64.tar.gz
+tar -xzf vegeta_12.12.0_linux_amd64.tar.gz
+sudo mv vegeta /usr/local/bin/
+vegeta -version  # Should show: Version: 12.12.0
+
+# Alternative: Install via package manager (may be older version)
 # Ubuntu/Debian
 sudo apt-get install vegeta
-
-# CentOS/RHEL
-sudo yum install vegeta
-
-# macOS
-brew install vegeta
 ```
 
-#### 2. Missing System Monitoring Tools
+#### 2. Network Interface Detection Issues
+```bash
+# Check detected network interface
+echo $NETWORK_INTERFACE
+
+# List all network interfaces
+ip link show
+
+# Manually specify network interface if auto-detection fails
+export NETWORK_INTERFACE="eth0"    # Replace with your interface name
+# Or add to config/user_config.sh:
+# NETWORK_INTERFACE="eth0"
+
+# Common interface names:
+# - AWS: eth0, eth1
+# - Other clouds: eth0, ens3, ens5
+# - Local: eth0, enp0s3, wlan0
+```
+
+#### 3. Missing System Monitoring Tools
 ```bash
 # Install sysstat package
 sudo apt-get install sysstat  # Ubuntu/Debian
 sudo yum install sysstat      # CentOS/RHEL
 ```
 
-#### 3. Python Dependencies Issues
+#### 4. Python Dependencies Issues
 ```bash
 # Reinstall dependencies
 pip3 install --upgrade -r requirements.txt
@@ -498,7 +526,7 @@ pip3 install --upgrade -r requirements.txt
 python3 -c "import matplotlib, pandas, numpy; print('All packages OK')"
 ```
 
-#### 4. Permission Issues
+#### 5. Permission Issues
 ```bash
 # Grant execution permissions
 chmod +x blockchain_node_benchmark.sh

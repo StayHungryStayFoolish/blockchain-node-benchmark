@@ -509,6 +509,53 @@ detect_deployment_platform() {
 }
 ```
 
+**网络接口自动检测：**
+
+框架自动检测活跃的网络接口用于监控：
+
+```bash
+# 自动网络接口检测（在 config_loader.sh 中）
+detect_network_interface() {
+    # 优先级 1：检测活跃接口（eth/ens/enp 且状态为 UP）
+    # 适用于所有平台：AWS、其他云、IDC、本地 Linux
+    ena_interfaces=($(ip link show 2>/dev/null | grep -E "^[0-9]+: (eth|ens|enp)" | grep "state UP" | cut -d: -f2 | tr -d ' '))
+    
+    if [[ ${#ena_interfaces[@]} -gt 0 ]]; then
+        NETWORK_INTERFACE="${ena_interfaces[0]}"
+        return 0
+    fi
+    
+    # 优先级 2：使用默认路由接口
+    interface=$(ip route 2>/dev/null | grep default | awk '{print $5}' | head -1)
+    
+    # 优先级 3：回退到 eth0
+    if [[ -z "$interface" ]]; then
+        interface="eth0"
+    fi
+    
+    NETWORK_INTERFACE="$interface"
+}
+```
+
+**检测逻辑：**
+1. **活跃接口检测**：查找名称为 `eth*`、`ens*` 或 `enp*` 且状态为 UP 的接口
+2. **默认路由**：使用与默认路由关联的接口
+3. **回退方案**：如果检测失败，默认使用 `eth0`
+
+**跨平台兼容性：**
+- ✅ AWS：检测 ENA 接口（eth0、eth1 等）
+- ✅ 其他云：检测标准接口（eth0、ens3 等）
+- ✅ IDC/本地：检测任何活跃的网络接口
+
+**手动覆盖：**
+
+如果自动检测在您的环境中不起作用：
+
+```bash
+# 在 user_config.sh 或环境变量中
+export NETWORK_INTERFACE="ens5"  # 指定您的网络接口
+```
+
 **平台特定功能：**
 
 | 功能 | AWS | 其他云 | IDC | 本地 Linux |
