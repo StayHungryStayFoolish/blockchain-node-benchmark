@@ -2714,7 +2714,7 @@ class ReportGenerator:
     
     def _generate_ebs_bottleneck_section(self):
         """Generate EBS bottleneck analysis section - enhanced version with multi-device and root cause analysis"""
-        bottleneck_info = self._load_bottleneck_info()
+        bottleneck_info = self._load_bottleneck_data()
         overhead_data = self.overhead_data  # Use cached data instead of reloading
         
         # Device type list
@@ -4185,7 +4185,7 @@ class ReportGenerator:
                 bottleneck_detected = self.bottleneck_data.get('bottleneck_detected', False)
             
             if bottleneck_detected:
-                # 有瓶颈：显示详细信息
+                # Has bottleneck: display detailed information
                 max_qps = self.bottleneck_data.get('max_successful_qps', 0)
                 bottleneck_qps = self.bottleneck_data.get('bottleneck_qps', 0)
                 reasons = self.bottleneck_data.get('bottleneck_reasons', self.t['unknown'])
@@ -4246,7 +4246,7 @@ class ReportGenerator:
                 </div>
                 """
             else:
-                # 无瓶颈：显示判定条件
+                # No bottleneck: display criteria
                 return f"""
                 <div class="section">
                     <h2>&#9989; {self.t['system_bottleneck_analysis']}</h2>

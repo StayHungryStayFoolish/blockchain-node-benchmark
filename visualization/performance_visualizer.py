@@ -43,7 +43,7 @@ def format_summary_text(device_info, data_stats, accounts_stats=None):
     return temp_manager.format_summary_text(device_info, data_stats, accounts_stats)
 
 def add_text_summary(ax, summary_text, title):
-    """辅助函数：统一文本摘要样式"""
+    """Helper function: unified text summary style"""
     ax.axis('off')
     ax.text(0.05, 0.95, summary_text, transform=ax.transAxes, 
            fontsize=11, verticalalignment='top', fontfamily='monospace',
@@ -55,10 +55,10 @@ def setup_font():
 
 def format_time_axis(ax, df_timestamp):
     """
-    格式化时间轴显示 - 根据时间跨度自动选择格式
+    Format time axis display - automatically select format based on time span
     
     Args:
-        ax: matplotlib axis对象
+        ax: matplotlib axis object
         df_timestamp: pandas datetime series
     """
     if len(df_timestamp) == 0:
@@ -66,13 +66,13 @@ def format_time_axis(ax, df_timestamp):
     
     time_span = (df_timestamp.iloc[-1] - df_timestamp.iloc[0]).total_seconds()
     
-    if time_span < 300:  # 小于5分钟，显示 时:分:秒
+    if time_span < 300:  # Less than 5 minutes, display hour:minute:second
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
-    elif time_span < 3600:  # 小于1小时，显示 时:分
+    elif time_span < 3600:  # Less than 1 hour, display hour:minute
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-    elif time_span < 86400:  # 小于1天，显示 月-日 时:分
+    elif time_span < 86400:  # Less than 1 day, display month-day hour:minute
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
-    else:  # 大于1天，显示 月-日
+    else:  # Greater than 1 day, display month-day
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
     
     ax.tick_params(axis='x', rotation=45)
@@ -102,7 +102,7 @@ class PerformanceVisualizer(CSVDataProcessor):
     """Performance Visualizer - Based on unified CSV data processor"""
     
     def __init__(self, data_file, overhead_file=None):
-        super().__init__()  # 初始化CSV数据处理器
+        super().__init__()  # Initialize CSV data processor
         
         self.data_file = data_file
         self.overhead_file = overhead_file or self._find_monitoring_overhead_file() or os.getenv('MONITORING_OVERHEAD_LOG')
@@ -116,8 +116,8 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         self._accounts_thresholds_added = False
         
-        # 从环境变量读取阈值配置 - 使用统一框架
-        temp_manager = DeviceManager(pd.DataFrame())  # 临时实例获取配置
+        # Read threshold configuration from environment variables - use unified framework
+        temp_manager = DeviceManager(pd.DataFrame())  # Temporary instance to get configuration
         thresholds = temp_manager.get_visualization_thresholds()
         self.util_thresholds = {
             'normal': 70,      # Normal Threshold (%)
@@ -125,7 +125,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             'critical': thresholds['critical']    # Critical Threshold (%)
         }
         
-        # 初始化新工具
+        # Initialize new tools
         try:
             self.unit_converter = UnitConverter()
             self.correlation_analyzer = CPUEBSCorrelationAnalyzer(data_file)
@@ -137,13 +137,13 @@ class PerformanceVisualizer(CSVDataProcessor):
             self.chart_generator = None
     
     def _find_monitoring_overhead_file(self):
-        """智能查找监控开销文件 - 与report_generator.py保持一致"""
+        """Intelligently find monitoring overhead file - consistent with report_generator.py"""
         try:
-            # 多路径搜索策略
+            # Multi-path search strategy
             search_dirs = [
-                os.path.dirname(self.data_file),  # 与performance CSV同目录
-                os.path.join(os.path.dirname(self.data_file), 'logs'),  # logs子目录
-                os.getenv('LOGS_DIR', os.path.join(os.path.dirname(self.data_file), 'current', 'logs')),  # 环境变量指定
+                os.path.dirname(self.data_file),  # Same directory as performance CSV
+                os.path.join(os.path.dirname(self.data_file), 'logs'),  # logs subdirectory
+                os.getenv('LOGS_DIR', os.path.join(os.path.dirname(self.data_file), 'current', 'logs')),  # Environment variable specified
             ]
             
             for logs_dir in search_dirs:
@@ -151,7 +151,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                     pattern = os.path.join(logs_dir, 'monitoring_overhead_*.csv')
                     files = glob.glob(pattern)
                     if files:
-                        # 返回最新的文件
+                        # Return the latest file
                         latest_file = max(files, key=os.path.getctime)
                         print(f"✅ Found monitoring overhead file: {os.path.basename(latest_file)}")
                         return latest_file
@@ -162,20 +162,20 @@ class PerformanceVisualizer(CSVDataProcessor):
             return None
 
     def load_data(self):
-        """加载数据"""
+        """Load data"""
         try:
             success = self.load_csv_data(self.data_file)
             if success:
-                self.clean_data()  # 清洗数据
+                self.clean_data()  # Clean data
                 
-                # 安全的Time戳处理
+                # Safe timestamp handling
                 if 'timestamp' in self.df.columns:
                     try:
                         self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
                         print(f"✅ Timestamp field 'self.df['timestamp']' conversion successful")
                     except Exception as e:
                         print(f"⚠️  Timestamp conversion failed: {e}")
-                        # 创建默认Time戳
+                        # Create default timestamp
                         self.df['timestamp'] = pd.date_range(start='2024-01-01', periods=len(self.df), freq='1min')
                 else:
                     print("⚠️  Timestamp field not found, creating default timestamp")
@@ -240,12 +240,12 @@ class PerformanceVisualizer(CSVDataProcessor):
     def create_performance_overview_chart(self):
         """✅ System Performance Overview Chart - Systematic Refactor"""
         
-        # 数据检查 - 确保数据已加载
+        # Data check - ensure data is loaded
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 return None
         
-        # 加载配置
+        # Load configuration
         load_framework_config()
         
         accounts_configured = DeviceManager.is_accounts_configured(self.df)
@@ -253,12 +253,12 @@ class PerformanceVisualizer(CSVDataProcessor):
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
         fig.suptitle('System Performance Overview', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
-        # ✅ 修复字段名映射
+        # ✅ Fix field name mapping
         cpu_usage_col = 'cpu_usage' if 'cpu_usage' in self.df.columns else None
         cpu_iowait_col = 'cpu_iowait' if 'cpu_iowait' in self.df.columns else None
-        mem_usage_col = 'mem_usage' if 'mem_usage' in self.df.columns else None  # 修复字段名
+        mem_usage_col = 'mem_usage' if 'mem_usage' in self.df.columns else None  # Fix field name
         
-        # 查找设备列
+        # Find device columns
         data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_total_iops')]
         data_throughput_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_total_throughput_mibs')]
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
@@ -274,9 +274,9 @@ class PerformanceVisualizer(CSVDataProcessor):
             cpu_iowait_data = self.df[cpu_iowait_col].dropna()
             
             if len(cpu_usage_data) > 0 and len(cpu_iowait_data) > 0:
-                # 先绘制网格线（底层）
+                # Draw grid lines first (bottom layer)
                 ax1.grid(True, alpha=0.3, zorder=0)
-                # 再绘制数据线（上层）
+                # Then draw data lines (top layer)
                 ax1.plot(self.df['timestamp'], cpu_usage_data, label='CPU Usage', linewidth=2, color='blue', zorder=2)
                 ax1.plot(self.df['timestamp'], cpu_iowait_data, label='CPU I/O Wait', linewidth=2, color='red', zorder=2)
                 ax1.set_title('CPU Performance')
@@ -306,19 +306,19 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax2.text(0.5, 0.5, 'Memory data not found', ha='center', va='center', transform=ax2.transAxes)
             ax2.set_title('Memory Usage (No Data)')
         
-        # 3. EBS IOPS + Throughput (Bottom Left) - iostat原始数据
+        # 3. EBS IOPS + Throughput (Bottom Left) - iostat raw data
         ax3 = axes[1, 0]
         if data_iops_cols and data_throughput_cols:
-            # 双Y轴显示IOPS和throughput
+            # Dual Y-axis display IOPS and throughput
             ax3_twin = ax3.twinx()
             
-            # DATA设备
+            # DATA device
             ax3.plot(self.df['timestamp'], self.df[data_iops_cols[0]], 
                     label='DATA IOPS (iostat)', linewidth=2, color='blue')
             ax3_twin.plot(self.df['timestamp'], self.df[data_throughput_cols[0]], 
                          label='DATA Throughput (iostat)', linewidth=2, color='lightblue', linestyle='--')
             
-            # ACCOUNTS设备
+            # ACCOUNTS device
             if accounts_configured and accounts_iops_cols and accounts_throughput_cols:
                 ax3.plot(self.df['timestamp'], self.df[accounts_iops_cols[0]], 
                         label='ACCOUNTS IOPS (iostat)', linewidth=2, color='orange')
@@ -335,7 +335,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax3.text(0.5, 0.5, 'EBS IOPS/Throughput data not found', ha='center', va='center', transform=ax3.transAxes)
             ax3.set_title('EBS IOPS & Throughput (No Data)')
         
-        # 4. EBS Utilization (Bottom Right) - iostat原始数据
+        # 4. EBS Utilization (Bottom Right) - iostat raw data
         ax4 = axes[1, 1]
         if data_util_cols:
             ax4.plot(self.df['timestamp'], self.df[data_util_cols[0]], 
@@ -369,7 +369,7 @@ class PerformanceVisualizer(CSVDataProcessor):
     def create_correlation_visualization_chart(self):
         """CPU-EBS Performance Correlation Analysis - Dual Device Support"""
         
-        # Check data availability (与其他方法保持一致)
+        # Check data availability (consistent with other methods)
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for correlation analysis")
@@ -667,7 +667,7 @@ class PerformanceVisualizer(CSVDataProcessor):
     def create_await_threshold_analysis_chart(self):
         """Enhanced I/O Latency Threshold Analysis Chart"""
         
-        # 先加载数据，再检查ACCOUNTS配置
+        # Load data first, then check ACCOUNTS configuration
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for await threshold analysis")
@@ -689,22 +689,22 @@ class PerformanceVisualizer(CSVDataProcessor):
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
         accounts_await_col = accounts_await_cols[0] if accounts_await_cols else None
         
-        # 智能阈值设置 - 使用配置变量和统一计算规则
+        # Intelligent threshold setting - use configuration variables and unified calculation rules
         base_latency_threshold = int(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50'))
         
-        # DATA设备阈值 - 使用统一计算规则
+        # DATA device thresholds - use unified calculation rules
         data_thresholds = {
             'excellent': base_latency_threshold * 0.4,    # 40% of base threshold
             'good': base_latency_threshold * 0.6,         # 60% of base threshold
-            'warning': base_latency_threshold * 0.8,      # 80% of base threshold (统一规则)
+            'warning': base_latency_threshold * 0.8,      # 80% of base threshold (unified rule)
             'poor': base_latency_threshold * 1.0,         # 100% of base threshold
             'critical': base_latency_threshold * 1.2      # 120% of base threshold
         }
         
-        # ACCOUNTS设备独立阈值 - 使用相同的配置规则
-        accounts_thresholds = data_thresholds  # 默认使用DATA阈值
+        # ACCOUNTS device independent thresholds - use same configuration rules
+        accounts_thresholds = data_thresholds  # Default to DATA thresholds
         if accounts_configured and accounts_await_col:
-            # ACCOUNTS设备使用相同的配置阈值规则
+            # ACCOUNTS device uses same configuration threshold rules
             accounts_thresholds = {
                 'excellent': base_latency_threshold * 0.4,
                 'good': base_latency_threshold * 0.6,
@@ -713,7 +713,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 'critical': base_latency_threshold * 1.2
             }
         
-        # 用于显示的统一阈值（取两者最大值）
+        # Unified thresholds for display (take maximum of both)
         enhanced_thresholds = data_thresholds
         if accounts_configured and accounts_await_col:
             enhanced_thresholds = {
@@ -785,7 +785,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         axes[0, 1].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         axes[0, 1].grid(True, alpha=0.3)
         
-        # 3. Enhanced Violation Timeline - 使用各自的阈值
+        # 3. Enhanced Violation Timeline - use respective thresholds
         data_violations = {
             'critical': self.df[data_await_col] > data_thresholds['critical'],
             'poor': (self.df[data_await_col] > data_thresholds['poor']) & (self.df[data_await_col] <= data_thresholds['critical']),
@@ -801,14 +801,14 @@ class PerformanceVisualizer(CSVDataProcessor):
                        label='DATA Warning', linewidth=2, color=UnifiedChartStyle.COLORS['warning'], marker='^', markersize=3)
         
         if accounts_configured and accounts_await_col:
-            # ACCOUNTS使用自己的阈值
+            # ACCOUNTS uses its own thresholds
             accounts_violations = {
                 'critical': self.df[accounts_await_col] > accounts_thresholds['critical'],
                 'poor': (self.df[accounts_await_col] > accounts_thresholds['poor']) & (self.df[accounts_await_col] <= accounts_thresholds['critical']),
                 'warning': (self.df[accounts_await_col] > accounts_thresholds['warning']) & (self.df[accounts_await_col] <= accounts_thresholds['poor'])
             }
             
-            # ACCOUNTS violations with clearly different colors (紫色系)
+            # ACCOUNTS violations with clearly different colors (purple series)
             axes[1, 0].plot(self.df['timestamp'], accounts_violations['critical'].astype(int) * 3 + 0.1, 
                            label='ACCOUNTS Critical', linewidth=3, color='purple', marker='o', markersize=4, alpha=0.8)
             axes[1, 0].plot(self.df['timestamp'], accounts_violations['poor'].astype(int) * 2 + 0.1, 
@@ -835,7 +835,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             'max': self.df[data_await_col].max()
         }
         
-        # Calculate violation percentages - 使用DATA自己的阈值
+        # Calculate violation percentages - use DATA's own thresholds
         total_points = len(self.df)
         data_violations_pct = {
             'excellent': (self.df[data_await_col] < data_thresholds['excellent']).sum() / total_points * 100,
@@ -871,7 +871,7 @@ Performance Distribution (DATA):
                 'max': self.df[accounts_await_col].max()
             }
             
-            # Calculate ACCOUNTS violation percentages - 使用ACCOUNTS自己的阈值
+            # Calculate ACCOUNTS violation percentages - use ACCOUNTS' own thresholds
             accounts_violations_pct = {
                 'excellent': (self.df[accounts_await_col] < accounts_thresholds['excellent']).sum() / total_points * 100,
                 'good': ((self.df[accounts_await_col] >= accounts_thresholds['excellent']) & 
@@ -944,7 +944,7 @@ Recommendations:
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], 
                     fontweight='bold')
         
-        # 动态查找字段
+        # Dynamically find fields
         data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col and 'aws' not in col]
         data_tp_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_throughput_mibs' in col and 'aws' not in col]
         data_aqu_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_aqu_sz')]
@@ -961,7 +961,7 @@ Recommendations:
         accounts_r_s_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_r_s')] if accounts_configured else []
         accounts_w_s_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_w_s')] if accounts_configured else []
         
-        # 子图1: IOPS & Throughput (双Y轴)
+        # Subplot 1: IOPS & Throughput (dual Y-axis)
         ax1 = axes[0, 0]
         ax1_twin = ax1.twinx()
         
@@ -987,7 +987,7 @@ Recommendations:
         ax1.grid(True, alpha=0.3)
         format_time_axis(ax1, self.df['timestamp'])
         
-        # 子图2: Queue Depth
+        # Subplot 2: Queue Depth
         ax2 = axes[0, 1]
         if data_aqu_cols:
             ax2.plot(self.df['timestamp'], self.df[data_aqu_cols[0]], 
@@ -1003,7 +1003,7 @@ Recommendations:
         ax2.grid(True, alpha=0.3)
         format_time_axis(ax2, self.df['timestamp'])
         
-        # 子图3: Utilization
+        # Subplot 3: Utilization
         ax3 = axes[1, 0]
         if data_util_cols:
             ax3.plot(self.df['timestamp'], self.df[data_util_cols[0]], 
@@ -1019,7 +1019,7 @@ Recommendations:
         ax3.grid(True, alpha=0.3)
         format_time_axis(ax3, self.df['timestamp'])
         
-        # 子图4: Latency
+        # Subplot 4: Latency
         ax4 = axes[1, 1]
         if data_await_cols:
             ax4.plot(self.df['timestamp'], self.df[data_await_cols[0]], 
@@ -1035,7 +1035,7 @@ Recommendations:
         ax4.grid(True, alpha=0.3)
         format_time_axis(ax4, self.df['timestamp'])
         
-        # 子图5: Read/Write IOPS
+        # Subplot 5: Read/Write IOPS
         ax5 = axes[2, 0]
         if data_r_s_cols and data_w_s_cols:
             ax5.plot(self.df['timestamp'], self.df[data_r_s_cols[0]], 
@@ -1054,7 +1054,7 @@ Recommendations:
         ax5.grid(True, alpha=0.3)
         format_time_axis(ax5, self.df['timestamp'])
         
-        # 子图6: Summary
+        # Subplot 6: Summary
         summary_lines = [
             "Device Performance Summary:",
             "(Based on iostat raw data)",
@@ -1122,13 +1122,13 @@ Recommendations:
             if 'timestamp' in overhead_df.columns:
                 overhead_df['timestamp'] = pd.to_datetime(overhead_df['timestamp'])
             
-            # 智能字段映射配置
+            # Intelligent field mapping configuration
             field_mapping = {
                 'monitoring_cpu': ['monitoring_cpu_percent', 'monitoring_cpu', 'monitor_cpu'],
                 'monitoring_memory': ['monitoring_memory_mb', 'monitoring_mem_mb', 'monitor_memory_mb']
             }
             
-            # 查找实际字段
+            # Find actual fields
             monitoring_cpu_field = None
             monitoring_mem_field = None
             
@@ -1142,7 +1142,7 @@ Recommendations:
                     monitoring_mem_field = field
                     break
             
-            # 创建图表 - 使用统一样式
+            # Create chart - use unified style
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
             fig.suptitle('Monitoring Overhead Analysis', 
                         fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
@@ -1156,14 +1156,14 @@ Recommendations:
                 monitor_cpu = overhead_df[monitoring_cpu_field].mean()
                 monitor_mem_raw = overhead_df[monitoring_mem_field].mean()
                 
-                # 如果是MB单位，转换为百分比
+                # If in MB units, convert to percentage
                 if 'mb' in monitoring_mem_field.lower():
                     system_memory_gb = overhead_df['system_memory_gb'].mean() if 'system_memory_gb' in overhead_df.columns else 739.70
                     monitor_mem = (monitor_mem_raw / 1024 / system_memory_gb * 100)
                 else:
                     monitor_mem = monitor_mem_raw
                 
-                # 检测 memory 数据是否有效
+                # Detect if memory data is valid
                 mem_data_valid = monitor_mem > 0.001
                 
                 if mem_data_valid:
@@ -1205,7 +1205,7 @@ Recommendations:
                 ax2.tick_params(axis='both', labelsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax2.grid(True, alpha=0.3)
             
-            # 3. Impact analysis - 移到左下角
+            # 3. Impact analysis - move to lower left
             ax3 = axes[1, 0]
             ax3.set_title('Impact Analysis',
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
@@ -1232,7 +1232,7 @@ Recommendations:
                 ax3.tick_params(axis='both', labelsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax3.grid(True, alpha=0.3)
             
-            # 4. Statistics summary - 修复：移到右下角，使用统一样式
+            # 4. Statistics summary - fix: move to lower right, use unified style
             if monitoring_cpu_field and monitoring_mem_field:
                 summary_text = f"""Monitoring Overhead Summary:
 
@@ -1275,7 +1275,7 @@ Data Points: {len(overhead_df)}"""
     def generate_all_charts(self):
         print("🎨 Generating performance visualization charts...")
         
-        # 设置全局图表样式
+        # Set global chart style
         plt.rcParams.update({
             'font.size': 10,
             'axes.titlesize': 12,
@@ -1284,7 +1284,7 @@ Data Points: {len(overhead_df)}"""
             'ytick.labelsize': 9,
             'legend.fontsize': 9,
             'figure.titlesize': 14,
-            'font.family': 'DejaVu Sans'  # 确保跨平台字体兼容性
+            'font.family': 'DejaVu Sans'  # Ensure cross-platform font compatibility
         })
         
         if not self.load_data():
@@ -1562,7 +1562,7 @@ Data Points: {len(overhead_df)}"""
         """QPS trend analysis chart"""
         print("📊 Generating QPS trend analysis charts...")
         
-        # 检查数据是否已加载
+        # Check if data is loaded
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for QPS analysis")
@@ -1572,7 +1572,7 @@ Data Points: {len(overhead_df)}"""
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
             fig.suptitle('QPS Performance Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
             
-            # 查找数值型QPS字段
+            # Find numeric QPS fields
             qps_cols = []
             for col in self.df.columns:
                 if 'qps' in col.lower():
@@ -1588,7 +1588,7 @@ Data Points: {len(overhead_df)}"""
                 plt.close()
                 return None
             
-            # 1. QPS时间序列
+            # 1. QPS time series
             ax1 = axes[0, 0]
             for qps_col in qps_cols[:3]:
                 qps_data = pd.to_numeric(self.df[qps_col], errors='coerce')
@@ -1602,7 +1602,7 @@ Data Points: {len(overhead_df)}"""
             ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             ax1.grid(True, alpha=0.3)
             
-            # 2. QPS分布直方图
+            # 2. QPS distribution histogram
             ax2 = axes[0, 1]
             for qps_col in qps_cols[:2]:
                 qps_data = pd.to_numeric(self.df[qps_col], errors='coerce')
@@ -1615,7 +1615,7 @@ Data Points: {len(overhead_df)}"""
             ax2.set_ylabel('Frequency', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             
-            # 3. QPS与CPU相关性
+            # 3. QPS vs CPU correlation
             ax3 = axes[1, 0]
             if 'cpu_usage' in self.df.columns and qps_cols:
                 qps_data = pd.to_numeric(self.df[qps_cols[0]], errors='coerce')
@@ -1629,7 +1629,7 @@ Data Points: {len(overhead_df)}"""
                     ax3.set_ylabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                     ax3.grid(True, alpha=0.3)
             
-            # 4. QPS统计摘要
+            # 4. QPS statistics summary
             ax4 = axes[1, 1]
             stats_lines = ["QPS Statistics Summary:", ""]
             for qps_col in qps_cols[:3]:
@@ -1674,10 +1674,10 @@ Data Points: {len(overhead_df)}"""
             return None
 
     def create_resource_efficiency_analysis_chart(self):
-        """Resource efficiency analysis chart - 参考重构框架实现"""
+        """Resource efficiency analysis chart - reference refactored framework implementation"""
         print("📊 Generating resource efficiency analysis charts...")
         
-        # 检查数据是否已加载
+        # Check if data is loaded
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for resource efficiency analysis")
@@ -1689,7 +1689,7 @@ Data Points: {len(overhead_df)}"""
             
             # 1. CPU Efficiency (QPS per CPU%)
             if 'current_qps' in self.df.columns and 'cpu_usage' in self.df.columns:
-                cpu_efficiency = self.df['current_qps'] / (self.df['cpu_usage'] + 0.1)  # 避免除零
+                cpu_efficiency = self.df['current_qps'] / (self.df['cpu_usage'] + 0.1)  # Avoid division by zero
                 ax1.plot(self.df['timestamp'], cpu_efficiency, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2)
                 ax1.set_title('CPU Efficiency (QPS per CPU%)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax1.set_ylabel('QPS/CPU%', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
@@ -1705,11 +1705,11 @@ Data Points: {len(overhead_df)}"""
                 ax2.grid(True, alpha=0.3)
                 UnifiedChartStyle.format_time_axis(ax2, self.df['timestamp'])
             
-            # 3. IOPS & Throughput Efficiency - 区分 DATA 和 ACCOUNTS 设备
+            # 3. IOPS & Throughput Efficiency - distinguish DATA and ACCOUNTS devices
             if 'current_qps' in self.df.columns:
                 accounts_configured = DeviceManager.is_accounts_configured(self.df)
                 
-                # DATA 设备 IOPS
+                # DATA device IOPS
                 data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col]
                 if data_iops_cols:
                     data_iops = self.df[data_iops_cols[0]]
@@ -1717,7 +1717,7 @@ Data Points: {len(overhead_df)}"""
                     ax3.plot(self.df['timestamp'], data_iops_efficiency, 
                             color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, label='DATA IOPS Efficiency')
                 
-                # ACCOUNTS 设备 IOPS
+                # ACCOUNTS device IOPS
                 if accounts_configured:
                     accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_iops' in col]
                     if accounts_iops_cols:
@@ -1734,10 +1734,10 @@ Data Points: {len(overhead_df)}"""
                 ax3.grid(True, alpha=0.3)
                 UnifiedChartStyle.format_time_axis(ax3, self.df['timestamp'])
                 
-                # 添加右侧 Y 轴显示 Throughput Efficiency
+                # Add right Y-axis to display Throughput Efficiency
                 ax3_right = ax3.twinx()
                 
-                # DATA 设备 Throughput
+                # DATA device Throughput
                 data_throughput_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_throughput' in col]
                 if data_throughput_cols:
                     data_throughput = self.df[data_throughput_cols[0]]
@@ -1746,7 +1746,7 @@ Data Points: {len(overhead_df)}"""
                                   color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
                                   linestyle='--', alpha=0.7, label='DATA Throughput Eff')
                 
-                # ACCOUNTS 设备 Throughput
+                # ACCOUNTS device Throughput
                 if accounts_configured:
                     accounts_throughput_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_throughput' in col]
                     if accounts_throughput_cols:
@@ -1777,7 +1777,7 @@ Data Points: {len(overhead_df)}"""
             if 'current_qps' in self.df.columns:
                 accounts_configured = DeviceManager.is_accounts_configured(self.df)
                 
-                # DATA 设备效率
+                # DATA device efficiency
                 data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col]
                 if data_iops_cols:
                     data_iops = self.df[data_iops_cols[0]]
@@ -1792,7 +1792,7 @@ Data Points: {len(overhead_df)}"""
                     summary_lines.append(f"  Throughput: {data_throughput_eff:.3f} QPS/MiB/s")
                     summary_lines.append("")
                 
-                # ACCOUNTS 设备效率
+                # ACCOUNTS device efficiency
                 if accounts_configured:
                     accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_iops' in col]
                     if accounts_iops_cols:
@@ -1918,7 +1918,7 @@ Data Points: {len(overhead_df)}"""
             return None
 
     def create_bottleneck_identification_chart(self):
-        """System Bottleneck Identification Analysis - 专业化系统瓶颈识别分析"""
+        """System Bottleneck Identification Analysis - Professional system bottleneck identification analysis"""
         print("📊 Generating System Bottleneck Identification Analysis...")
 
         # Check data availability
@@ -1935,29 +1935,29 @@ Data Points: {len(overhead_df)}"""
         fig.suptitle('System Bottleneck Identification Analysis',
                     fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
-        # === 系统资源数据收集 ===
+        # === System resource data collection ===
         system_resources = {}
         
-        # CPU数据
+        # CPU data
         if 'cpu_usage' in self.df.columns:
             system_resources['CPU'] = self.df['cpu_usage']
         
-        # Memory数据
+        # Memory data
         if 'mem_usage' in self.df.columns:
             system_resources['Memory'] = self.df['mem_usage']
         
-        # EBS I/O数据 - DATA设备
+        # EBS I/O data - DATA device
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         if data_util_cols:
             system_resources['DATA_IO'] = self.df[data_util_cols[0]]
         
-        # EBS I/O数据 - ACCOUNTS设备
+        # EBS I/O data - ACCOUNTS device
         if accounts_configured:
             accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
             if accounts_util_cols:
                 system_resources['ACCOUNTS_IO'] = self.df[accounts_util_cols[0]]
         
-        # 专业瓶颈阈值定义 - 使用配置变量
+        # Professional bottleneck threshold definition - use configuration variables
         bottleneck_thresholds = {
             'CPU': int(os.getenv('BOTTLENECK_CPU_THRESHOLD', '85')),
             'Memory': int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', '90')),
@@ -1965,7 +1965,7 @@ Data Points: {len(overhead_df)}"""
             'ACCOUNTS_IO': int(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90'))
         }
         
-        # 系统瓶颈检测函数
+        # System bottleneck detection function
         def detect_system_bottlenecks(row_idx):
             bottlenecks = {}
             for resource, threshold in bottleneck_thresholds.items():
@@ -1974,10 +1974,10 @@ Data Points: {len(overhead_df)}"""
                     bottlenecks[resource] = value > threshold
             return bottlenecks
         
-        # === 1. 系统资源瓶颈时间线 (左上) ===
+        # === 1. System resource bottleneck timeline (top left) ===
         ax1 = axes[0, 0]
         
-        # 绘制各系统资源利用率
+        # Plot system resource utilization
         if 'CPU' in system_resources:
             ax1.plot(self.df['timestamp'], system_resources['CPU'], 
                     label='CPU Usage', linewidth=2.5, 
@@ -2006,14 +2006,14 @@ Data Points: {len(overhead_df)}"""
             ax1.axhline(y=bottleneck_thresholds['ACCOUNTS_IO'], color='#8B4513', 
                        linestyle=':', alpha=0.8, linewidth=2, label=f'ACCOUNTS I/O Bottleneck ({bottleneck_thresholds["ACCOUNTS_IO"]}%)')
         
-        # 计算综合瓶颈评分
+        # Calculate comprehensive bottleneck score
         bottleneck_scores = []
         for i in range(len(self.df)):
             bottlenecks = detect_system_bottlenecks(i)
-            score = sum(bottlenecks.values()) * 25  # 每个瓶颈25分，最高100分
+            score = sum(bottlenecks.values()) * 25  # Each bottleneck 25 points, max 100 points
             bottleneck_scores.append(score)
         
-        # 绘制综合瓶颈评分（右Y轴）
+        # Plot comprehensive bottleneck score (right Y-axis)
         ax1_twin = ax1.twinx()
         ax1_twin.fill_between(self.df['timestamp'], bottleneck_scores, alpha=0.3, 
                              color='red', label='Bottleneck Score')
@@ -2027,10 +2027,10 @@ Data Points: {len(overhead_df)}"""
         ax1.grid(True, alpha=0.3)
         ax1.tick_params(axis='x', rotation=45)
         
-        # === 2. 瓶颈类型分布与严重程度 (右上) ===
+        # === 2. Bottleneck type distribution and severity (top right) ===
         ax2 = axes[0, 1]
         
-        # 统计各类型瓶颈事件
+        # Count bottleneck events by type
         bottleneck_stats = {}
         for resource in system_resources.keys():
             if resource in bottleneck_thresholds:
@@ -2038,7 +2038,7 @@ Data Points: {len(overhead_df)}"""
                 bottleneck_count = (system_resources[resource] > threshold).sum()
                 bottleneck_stats[resource] = bottleneck_count
         
-        # 计算复合瓶颈（多个资源同时瓶颈）
+        # Calculate compound bottlenecks (multiple resources bottlenecked simultaneously)
         compound_bottlenecks = 0
         for i in range(len(self.df)):
             bottlenecks = detect_system_bottlenecks(i)
@@ -2048,9 +2048,9 @@ Data Points: {len(overhead_df)}"""
         if compound_bottlenecks > 0:
             bottleneck_stats['Compound'] = compound_bottlenecks
         
-        # 绘制瓶颈类型分布饼图
+        # Plot bottleneck type distribution pie chart
         if bottleneck_stats and sum(bottleneck_stats.values()) > 0:
-            # 定义专业颜色
+            # Define professional colors
             colors = {
                 'CPU': UnifiedChartStyle.COLORS['data_primary'],
                 'Memory': UnifiedChartStyle.COLORS['purple'],
@@ -2091,14 +2091,14 @@ Data Points: {len(overhead_df)}"""
             ax2.set_title('System Status: Optimal', 
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         
-        # === 3. 系统资源利用率关联分析 (左下) ===
+        # === 3. System resource utilization correlation analysis (bottom left) ===
         ax3 = axes[1, 0]
         
-        # 创建资源关联散点图
+        # Create resource correlation scatter plot
         available_resources = list(system_resources.keys())
         
         if len(available_resources) >= 2:
-            # 选择最重要的两个资源进行关联分析
+            # Select the two most important resources for correlation analysis
             primary_resources = []
             if 'CPU' in available_resources:
                 primary_resources.append('CPU')
@@ -2112,27 +2112,27 @@ Data Points: {len(overhead_df)}"""
             if len(primary_resources) >= 2:
                 resource1, resource2 = primary_resources[0], primary_resources[1]
                 
-                # 创建散点图，颜色表示瓶颈状态
+                # Create scatter plot, color indicates bottleneck status
                 colors = []
                 for i in range(len(self.df)):
                     bottlenecks = detect_system_bottlenecks(i)
                     if bottlenecks.get(resource1, False) and bottlenecks.get(resource2, False):
-                        colors.append(UnifiedChartStyle.COLORS['critical'])  # 双重瓶颈
+                        colors.append(UnifiedChartStyle.COLORS['critical'])  # Compound bottleneck
                     elif bottlenecks.get(resource1, False) or bottlenecks.get(resource2, False):
-                        colors.append(UnifiedChartStyle.COLORS['warning'])   # 单一瓶颈
+                        colors.append(UnifiedChartStyle.COLORS['warning'])   # Single bottleneck
                     else:
-                        colors.append(UnifiedChartStyle.COLORS['success'])   # 正常
+                        colors.append(UnifiedChartStyle.COLORS['success'])   # Normal
                 
                 ax3.scatter(system_resources[resource1], system_resources[resource2], 
                            c=colors, alpha=0.6, s=30)
                 
-                # 添加瓶颈阈值线
+                # Add bottleneck threshold lines
                 ax3.axvline(x=bottleneck_thresholds[resource1], color=UnifiedChartStyle.COLORS['critical'], 
                            linestyle='--', alpha=0.7, linewidth=2)
                 ax3.axhline(y=bottleneck_thresholds[resource2], color=UnifiedChartStyle.COLORS['critical'], 
                            linestyle='--', alpha=0.7, linewidth=2)
                 
-                # 标注瓶颈区域
+                # Mark bottleneck regions
                 ax3.axvspan(bottleneck_thresholds[resource1], 100, alpha=0.1, color='red')
                 ax3.axhspan(bottleneck_thresholds[resource2], 100, alpha=0.1, color='red')
                 
@@ -2157,19 +2157,19 @@ Data Points: {len(overhead_df)}"""
                     ha='center', va='center', transform=ax3.transAxes, 
                     fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         
-        # === 4. 系统瓶颈诊断报告 (右下) ===
+        # === 4. System bottleneck diagnostic report (bottom right) ===
         ax4 = axes[1, 1]
         
-        # 计算系统整体统计
+        # Calculate overall system statistics
         total_samples = len(self.df)
         total_bottleneck_events = sum(bottleneck_stats.values()) if bottleneck_stats else 0
         
-        # 识别主要瓶颈资源
+        # Identify primary bottleneck resource
         primary_bottleneck = 'None'
         if bottleneck_stats:
             primary_bottleneck = max(bottleneck_stats, key=bottleneck_stats.get) if bottleneck_stats else 'None'
         
-        # 计算系统健康评级
+        # Calculate system health rating
         overall_bottleneck_rate = (total_bottleneck_events / total_samples * 100) if total_samples > 0 else 0
         
         if overall_bottleneck_rate == 0:
@@ -2193,7 +2193,7 @@ Data Points: {len(overhead_df)}"""
             health_desc = "Persistent bottlenecks"
             recommendations = [f"Critical: Immediate {primary_bottleneck} scaling", "Emergency capacity increase"]
         
-        # 生成专业诊断报告
+        # Generate professional diagnostic report
         summary_lines = [
             f"System Bottleneck Diagnostic Report:",
             "",
@@ -2204,7 +2204,7 @@ Data Points: {len(overhead_df)}"""
             "Resource Analysis:"
         ]
         
-        # 各资源详细分析
+        # Detailed analysis for each resource
         for resource in system_resources.keys():
             if resource in bottleneck_thresholds:
                 max_util = system_resources[resource].max()
@@ -2220,7 +2220,7 @@ Data Points: {len(overhead_df)}"""
                     f"    Bottlenecks: {bottleneck_count} ({bottleneck_rate:.1f}%)"
                 ])
         
-        # 添加优化建议
+        # Add optimization recommendations
         summary_lines.extend([
             "",
             "Optimization Recommendations:"
@@ -2229,7 +2229,7 @@ Data Points: {len(overhead_df)}"""
         for i, rec in enumerate(recommendations, 1):
             summary_lines.append(f"  {i}. {rec}")
         
-        # 添加复合瓶颈警告
+        # Add compound bottleneck warning
         if compound_bottlenecks > 0:
             compound_rate = (compound_bottlenecks / total_samples * 100)
             summary_lines.extend([
@@ -2240,13 +2240,13 @@ Data Points: {len(overhead_df)}"""
         
         summary_text = "\n".join(summary_lines)
         
-        # 使用统一样式
+        # Use unified style
         UnifiedChartStyle.add_text_summary(ax4, summary_text, 'System Bottleneck Diagnostic Report')
         
-        # 应用统一布局
+        # Apply unified layout
         UnifiedChartStyle.apply_layout('auto')
         
-        # 保存文件
+        # Save file
         output_file = os.path.join(self.output_dir, 'bottleneck_identification.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight', 
                    facecolor='white', edgecolor='none')
@@ -2260,40 +2260,40 @@ Data Points: {len(overhead_df)}"""
         
         return output_file
 
-    # EBS委托方法 - 委托给EBS专用模块
+    # EBS delegation methods - delegate to EBS specialized module
     def generate_ebs_bottleneck_analysis(self):
-        """委托给EBS专用模块"""
+        """Delegate to EBS specialized module"""
         try:
             ebs_generator = EBSChartGenerator(self.df, self.output_dir)
             return ebs_generator.generate_ebs_bottleneck_analysis()
         except Exception as e:
-            print(f"⚠️ EBS瓶颈分析失败: {e}")
+            print(f"⚠️ EBS bottleneck analysis failed: {e}")
             return None
     
     def generate_ebs_time_series(self):
-        """委托给EBS专用模块"""
+        """Delegate to EBS specialized module"""
         try:
             ebs_generator = EBSChartGenerator(self.df, self.output_dir)
             return ebs_generator.generate_ebs_time_series()
         except Exception as e:
-            print(f"⚠️ EBS时间序列分析失败: {e}")
+            print(f"⚠️ EBS time series analysis failed: {e}")
             return None
     
     def create_block_height_sync_chart(self):
-        """生成区块高度同步状态综合分析图表 - 增强版4子图布局"""
+        """Generate comprehensive block height synchronization analysis chart - Enhanced 4-subplot layout"""
         print("📊 Generating enhanced block height synchronization analysis...")
         
         if not self.load_data():
             return None
         
         try:
-            # 检查必需字段
+            # Check required fields
             required_fields = ['timestamp', 'block_height_diff', 'data_loss']
             if not all(field in self.df.columns for field in required_fields):
                 print("⚠️ Block height fields not found, skipping chart generation")
                 return None
             
-            # 数据预处理
+            # Data preprocessing
             df_clean = self.df.dropna(subset=required_fields)
             if df_clean.empty:
                 print("⚠️ No valid block height data found")
@@ -2303,7 +2303,7 @@ Data Points: {len(overhead_df)}"""
             height_diff = pd.to_numeric(df_clean['block_height_diff'], errors='coerce')
             data_loss = pd.to_numeric(df_clean['data_loss'], errors='coerce')
             
-            # 检查可选字段
+            # Check optional fields
             local_height = None
             mainnet_height = None
             optional_fields = ['local_block_height', 'mainnet_block_height']
@@ -2311,12 +2311,12 @@ Data Points: {len(overhead_df)}"""
                 local_height = pd.to_numeric(df_clean['local_block_height'], errors='coerce')
                 mainnet_height = pd.to_numeric(df_clean['mainnet_block_height'], errors='coerce')
             
-            # 创建2x2布局 - 使用统一样式
+            # Create 2x2 layout - use unified style
             fig, axes, layout = UnifiedChartStyle.setup_subplot_layout('2x2')
             fig.suptitle('Block Height Synchronization Analysis', 
                         fontsize=layout['title_fontsize'], fontweight='bold')
             
-            # === 子图1: 区块高度对比 (左上) ===
+            # === Subplot 1: Block height comparison (top left) ===
             ax1 = axes[0, 0]
             if local_height is not None and mainnet_height is not None:
                 ax1.plot(timestamps, local_height, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
@@ -2326,7 +2326,7 @@ Data Points: {len(overhead_df)}"""
                 ax1.set_title('Block Height Comparison', fontsize=layout['subtitle_fontsize'])
                 ax1.set_ylabel('Block Height')
                 ax1.legend()
-                # 强制十进制格式显示，用逗号分隔
+                # Force decimal format display with comma separator
                 ax1.ticklabel_format(style='plain', axis='y', useOffset=False)
                 ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
             else:
@@ -2340,13 +2340,13 @@ Data Points: {len(overhead_df)}"""
             ax1.grid(True, alpha=0.3)
             ax1.tick_params(axis='x', rotation=45)
             
-            # === 子图2: 高度差值详细分析 (右上) ===
+            # === Subplot 2: Height difference detailed analysis (top right) ===
             ax2 = axes[0, 1]
             
             ax2.plot(timestamps, height_diff, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
                     label='Height Difference', alpha=0.8)
             
-            # 阈值线 - 使用配置变量
+            # Threshold lines - use configuration variables
             threshold = int(os.getenv('BLOCK_HEIGHT_DIFF_THRESHOLD', '50'))
             ax2.axhline(y=threshold, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', 
                        linewidth=2, alpha=0.7, label=f'Warning (+{threshold})')
@@ -2354,7 +2354,7 @@ Data Points: {len(overhead_df)}"""
                        linewidth=2, alpha=0.7, label=f'Warning (-{threshold})')
             ax2.axhline(y=0, color=UnifiedChartStyle.COLORS['success'], linestyle='-', alpha=0.5, label='Perfect Sync')
             
-            # 异常区域标注
+            # Mark anomaly regions
             anomaly_mask = data_loss > 0
             if anomaly_mask.any():
                 anomaly_periods = self._identify_anomaly_periods(timestamps, anomaly_mask)
@@ -2368,7 +2368,7 @@ Data Points: {len(overhead_df)}"""
             ax2.grid(True, alpha=0.3)
             ax2.tick_params(axis='x', rotation=45)
             
-            # === 子图3: 同步状态分布 (左下) ===
+            # === Subplot 3: Synchronization status distribution (bottom left) ===
             ax3 = axes[1, 0]
             
             sync_stats = self._calculate_sync_distribution(height_diff, threshold)
@@ -2389,7 +2389,7 @@ Data Points: {len(overhead_df)}"""
                         transform=ax3.transAxes, fontsize=12)
                 ax3.set_title('Synchronization Status Distribution (No Data)', fontsize=layout['subtitle_fontsize'])
             
-            # === 子图4: 分析摘要 (右下) ===
+            # === Subplot 4: Analysis summary (bottom right) ===
             if local_height is not None and mainnet_height is not None:
                 summary_text = self._generate_comprehensive_summary(
                     height_diff, data_loss, sync_stats, timestamps, local_height, mainnet_height
@@ -2399,10 +2399,10 @@ Data Points: {len(overhead_df)}"""
             
             UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Synchronization Analysis Summary')
             
-            # 布局调整
+            # Layout adjustment
             UnifiedChartStyle.apply_layout('auto')
             
-            # 保存文件
+            # Save file
             output_file = os.path.join(self.output_dir, 'block_height_sync_chart.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight', 
                        facecolor='white', edgecolor='none')
@@ -2416,7 +2416,7 @@ Data Points: {len(overhead_df)}"""
             return None
 
     def _identify_anomaly_periods(self, timestamps, data_loss):
-        """识别数据丢失时间段"""
+        """Identify data loss time periods"""
         periods = []
         start_time = None
         
@@ -2427,14 +2427,14 @@ Data Points: {len(overhead_df)}"""
                 periods.append((start_time, ts))
                 start_time = None
         
-        # 处理结尾的异常
+        # Handle trailing anomalies
         if start_time is not None and len(timestamps) > 0:
             periods.append((start_time, timestamps.iloc[-1]))
         
         return periods
 
     def _generate_sync_stats_text(self, height_diff, data_loss):
-        """生成同步统计文本"""
+        """Generate synchronization statistics text"""
         total_samples = len(height_diff)
         anomaly_samples = int(data_loss.sum())
         avg_diff = height_diff.mean()
@@ -2449,7 +2449,7 @@ Data Points: {len(overhead_df)}"""
 • Min Difference: {min_diff:.0f} blocks"""
 
     def _calculate_sync_distribution(self, height_diff, threshold):
-        """计算同步状态分布"""
+        """Calculate synchronization status distribution"""
         perfect_sync = (height_diff == 0).sum()
         good_sync = ((height_diff.abs() > 0) & (height_diff.abs() <= threshold)).sum()
         poor_sync = (height_diff.abs() > threshold).sum()
@@ -2481,7 +2481,7 @@ Data Points: {len(overhead_df)}"""
 
     def _generate_comprehensive_summary(self, height_diff, data_loss, sync_stats, 
                                       timestamps, local_height, mainnet_height):
-        """生成综合分析摘要"""
+        """Generate comprehensive analysis summary"""
         max_diff = height_diff.abs().max()
         avg_diff = height_diff.abs().mean()
         data_loss_events = (data_loss > 0).sum()
@@ -2531,12 +2531,12 @@ Data Points: {len(overhead_df)}"""
         return "\n".join(summary_lines)
 
     def generate_all_ebs_charts(self):
-        """生成所有EBS图表"""
+        """Generate all EBS charts"""
         try:
             ebs_generator = EBSChartGenerator(self.df, self.output_dir)
             return ebs_generator.generate_all_ebs_charts()
         except Exception as e:
-            print(f"⚠️ EBS图表生成失败: {e}")
+            print(f"⚠️ EBS chart generation failed: {e}")
             return []
 
 def main():

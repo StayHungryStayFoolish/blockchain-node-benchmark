@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-统一单位转换器 - 解决单位不统一问题
-严格使用二进制单位 (KiB, MiB, GiB) 进行存储相关计算
-使用十进制单位 (KB, MB, GB) 进行网络相关计算
+Unified Unit Converter - Solves unit inconsistency issues
+Strictly uses binary units (KiB, MiB, GiB) for storage-related calculations
+Uses decimal units (KB, MB, GB) for network-related calculations
 """
 
 import sys
 import os
 from typing import Union, Dict, List
 
-# 添加项目根目录到Python路径
+# Add project root directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.unified_logger import get_logger
@@ -18,9 +18,9 @@ logger = get_logger(__name__)
 
 
 class UnitConverter:
-    """统一单位转换器"""
+    """Unified unit converter"""
     
-    # 二进制单位 (用于存储)
+    # Binary units (for storage)
     BINARY_UNITS = {
         'B': 1,
         'KiB': 1024,
@@ -29,7 +29,7 @@ class UnitConverter:
         'TiB': 1024 ** 4
     }
     
-    # 十进制单位 (用于网络)
+    # Decimal units (for network)
     DECIMAL_UNITS = {
         'B': 1,
         'KB': 1000,
@@ -41,107 +41,107 @@ class UnitConverter:
     @classmethod
     def bytes_to_binary_unit(cls, bytes_value: Union[int, float], target_unit: str = 'MiB') -> float:
         """
-        将字节转换为二进制单位 (用于存储相关计算)
+        Convert bytes to binary unit (for storage-related calculations)
         
         Args:
-            bytes_value: 字节数
-            target_unit: 目标单位 (KiB, MiB, GiB, TiB)
+            bytes_value: Number of bytes
+            target_unit: Target unit (KiB, MiB, GiB, TiB)
             
         Returns:
-            转换后的值
+            Converted value
         """
         if target_unit not in cls.BINARY_UNITS:
-            raise ValueError(f"不支持的二进制单位: {target_unit}")
+            raise ValueError(f"Unsupported binary unit: {target_unit}")
         
-        # ✅ 添加日志记录
+        # ✅ Add logging
         result = bytes_value / cls.BINARY_UNITS[target_unit]
-        logger.debug(f"🔄 二进制单位转换: {bytes_value} B → {result:.2f} {target_unit}")
+        logger.debug(f"🔄 Binary unit conversion: {bytes_value} B → {result:.2f} {target_unit}")
         
         return result
     
     @classmethod
     def binary_unit_to_bytes(cls, value: Union[int, float], source_unit: str) -> int:
         """
-        将二进制单位转换为字节
+        Convert binary unit to bytes
         
         Args:
-            value: 数值
-            source_unit: 源单位 (KiB, MiB, GiB, TiB)
+            value: Numeric value
+            source_unit: Source unit (KiB, MiB, GiB, TiB)
             
         Returns:
-            字节数
+            Number of bytes
         """
         if source_unit not in cls.BINARY_UNITS:
-            raise ValueError(f"不支持的二进制单位: {source_unit}")
+            raise ValueError(f"Unsupported binary unit: {source_unit}")
         
-        # ✅ 添加日志记录
+        # ✅ Add logging
         result = int(value * cls.BINARY_UNITS[source_unit])
-        logger.debug(f"🔄 二进制单位转换: {value} {source_unit} → {result} B")
+        logger.debug(f"🔄 Binary unit conversion: {value} {source_unit} → {result} B")
         
         return result
     
     @classmethod
     def bytes_to_decimal_unit(cls, bytes_value: Union[int, float], target_unit: str = 'MB') -> float:
         """
-        将字节转换为十进制单位 (用于网络相关计算)
+        Convert bytes to decimal unit (for network-related calculations)
         
         Args:
-            bytes_value: 字节数
-            target_unit: 目标单位 (KB, MB, GB, TB)
+            bytes_value: Number of bytes
+            target_unit: Target unit (KB, MB, GB, TB)
             
         Returns:
-            转换后的值
+            Converted value
         """
         if target_unit not in cls.DECIMAL_UNITS:
-            raise ValueError(f"不支持的十进制单位: {target_unit}")
+            raise ValueError(f"Unsupported decimal unit: {target_unit}")
         
-        # ✅ 添加日志记录
+        # ✅ Add logging
         result = bytes_value / cls.DECIMAL_UNITS[target_unit]
-        logger.debug(f"🔄 十进制单位转换: {bytes_value} B → {result:.2f} {target_unit}")
+        logger.debug(f"🔄 Decimal unit conversion: {bytes_value} B → {result:.2f} {target_unit}")
         
         return result
     
     @classmethod
     def decimal_unit_to_bytes(cls, value: Union[int, float], source_unit: str) -> int:
         """
-        将十进制单位转换为字节
+        Convert decimal unit to bytes
         
         Args:
-            value: 数值
-            source_unit: 源单位 (KB, MB, GB, TB)
+            value: Numeric value
+            source_unit: Source unit (KB, MB, GB, TB)
             
         Returns:
-            字节数
+            Number of bytes
         """
         if source_unit not in cls.DECIMAL_UNITS:
-            raise ValueError(f"不支持的十进制单位: {source_unit}")
+            raise ValueError(f"Unsupported decimal unit: {source_unit}")
         
-        # ✅ 添加日志记录
+        # ✅ Add logging
         result = int(value * cls.DECIMAL_UNITS[source_unit])
-        logger.debug(f"🔄 十进制单位转换: {value} {source_unit} → {result} B")
+        logger.debug(f"🔄 Decimal unit conversion: {value} {source_unit} → {result} B")
         
         return result
     
     @classmethod
     def convert_storage_throughput(cls, kb_per_sec: Union[int, float]) -> Dict[str, float]:
         """
-        转换存储吞吐量 (iostat输出的kB/s)
+        Convert storage throughput (iostat output kB/s)
         
         Args:
-            kb_per_sec: kB/s (iostat输出，实际是KiB/s)
+            kb_per_sec: kB/s (iostat output, actually KiB/s)
             
         Returns:
-            包含各种单位的字典
+            Dictionary containing various units
         """
-        # iostat的kB/s实际上是KiB/s (1024字节)
+        # iostat's kB/s is actually KiB/s (1024 bytes)
         bytes_per_sec = kb_per_sec * 1024
         
         return {
             'bytes_per_sec': bytes_per_sec,
-            'kib_per_sec': kb_per_sec,  # 原值就是KiB/s
+            'kib_per_sec': kb_per_sec,  # Original value is KiB/s
             'mib_per_sec': cls.bytes_to_binary_unit(bytes_per_sec, 'MiB'),
             'gib_per_sec': cls.bytes_to_binary_unit(bytes_per_sec, 'GiB'),
-            # 也提供十进制单位用于对比
+            # Also provide decimal units for comparison
             'kb_per_sec_decimal': cls.bytes_to_decimal_unit(bytes_per_sec, 'KB'),
             'mb_per_sec_decimal': cls.bytes_to_decimal_unit(bytes_per_sec, 'MB')
         }
@@ -149,15 +149,15 @@ class UnitConverter:
     @classmethod
     def convert_network_throughput(cls, bytes_per_sec: Union[int, float]) -> Dict[str, float]:
         """
-        转换网络吞吐量 (符合AWS标准，使用Gbps)
+        Convert network throughput (AWS standard, using Gbps)
         
         Args:
-            bytes_per_sec: 字节/秒
+            bytes_per_sec: Bytes per second
             
         Returns:
-            包含各种单位的字典，重点是AWS标准的Gbps
+            Dictionary containing various units, focusing on AWS standard Gbps
         """
-        # 转换为比特/秒 (网络的基础单位)
+        # Convert to bits per second (network base unit)
         bits_per_sec = bytes_per_sec * 8
         
         return {
@@ -165,12 +165,12 @@ class UnitConverter:
             'kb_per_sec': cls.bytes_to_decimal_unit(bytes_per_sec, 'KB'),
             'mb_per_sec': cls.bytes_to_decimal_unit(bytes_per_sec, 'MB'),
             'gb_per_sec': cls.bytes_to_decimal_unit(bytes_per_sec, 'GB'),
-            # 网络比特率 (AWS标准)
+            # Network bit rate (AWS standard)
             'bps': bits_per_sec,
             'kbps': bits_per_sec / 1000,
             'mbps': bits_per_sec / 1000000,
-            'gbps': bits_per_sec / 1000000000,  # AWS标准单位
-            # 格式化显示
+            'gbps': bits_per_sec / 1000000000,  # AWS standard unit
+            # Formatted display
             'aws_standard_gbps': round(bits_per_sec / 1000000000, 6),
             'aws_display_mbps': round(bits_per_sec / 1000000, 3)
         }
@@ -178,32 +178,32 @@ class UnitConverter:
     @classmethod
     def convert_sar_network_data(cls, rx_kbs: Union[int, float], tx_kbs: Union[int, float]) -> Dict[str, float]:
         """
-        转换sar网络数据为AWS标准格式
+        Convert sar network data to AWS standard format
         
         Args:
-            rx_kbs: 接收速率 (kB/s，sar输出)
-            tx_kbs: 发送速率 (kB/s，sar输出)
+            rx_kbs: Receive rate (kB/s, sar output)
+            tx_kbs: Transmit rate (kB/s, sar output)
             
         Returns:
-            AWS标准的网络指标
+            AWS standard network metrics
         """
-        # sar的kB/s是十进制KB/s
+        # sar's kB/s is decimal KB/s
         rx_bytes_per_sec = rx_kbs * 1000
         tx_bytes_per_sec = tx_kbs * 1000
         total_bytes_per_sec = rx_bytes_per_sec + tx_bytes_per_sec
         
-        # 转换为比特率
+        # Convert to bit rate
         rx_bits_per_sec = rx_bytes_per_sec * 8
         tx_bits_per_sec = tx_bytes_per_sec * 8
         total_bits_per_sec = rx_bits_per_sec + tx_bits_per_sec
         
         return {
-            # 字节率
+            # Byte rate
             'rx_bytes_per_sec': rx_bytes_per_sec,
             'tx_bytes_per_sec': tx_bytes_per_sec,
             'total_bytes_per_sec': total_bytes_per_sec,
             
-            # 比特率 (网络标准)
+            # Bit rate (network standard)
             'rx_bps': rx_bits_per_sec,
             'tx_bps': tx_bits_per_sec,
             'total_bps': total_bits_per_sec,
@@ -213,12 +213,12 @@ class UnitConverter:
             'tx_mbps': round(tx_bits_per_sec / 1000000, 3),
             'total_mbps': round(total_bits_per_sec / 1000000, 3),
             
-            # Gbps (AWS标准)
+            # Gbps (AWS standard)
             'rx_gbps': round(rx_bits_per_sec / 1000000000, 6),
             'tx_gbps': round(tx_bits_per_sec / 1000000000, 6),
             'total_gbps': round(total_bits_per_sec / 1000000000, 6),
             
-            # AWS标准显示格式
+            # AWS standard display format
             'aws_rx_gbps': f"{rx_bits_per_sec / 1000000000:.6f}",
             'aws_tx_gbps': f"{tx_bits_per_sec / 1000000000:.6f}",
             'aws_total_gbps': f"{total_bits_per_sec / 1000000000:.6f}"
@@ -227,29 +227,29 @@ class UnitConverter:
     @classmethod
     def convert_aws_ebs_metrics(cls, iostat_data: Dict) -> Dict[str, float]:
         """
-        转换AWS EBS指标 (严格按照AWS文档)
+        Convert AWS EBS metrics (strictly following AWS documentation)
         
         Args:
-            iostat_data: iostat数据字典，包含r/s, w/s, rkB/s, wkB/s等
+            iostat_data: iostat data dictionary containing r/s, w/s, rkB/s, wkB/s, etc.
             
         Returns:
-            AWS EBS标准指标
+            AWS EBS standard metrics
         """
-        # 计算总IOPS
+        # Calculate total IOPS
         total_iops = iostat_data.get('r_s', 0) + iostat_data.get('w_s', 0)
         
-        # 计算总吞吐量 (iostat的kB/s实际是KiB/s)
+        # Calculate total throughput (iostat's kB/s is actually KiB/s)
         read_kib_s = iostat_data.get('rkB_s', 0)
         write_kib_s = iostat_data.get('wkB_s', 0)
         total_kib_s = read_kib_s + write_kib_s
         
-        # 转换为各种单位
+        # Convert to various units
         throughput_conversions = cls.convert_storage_throughput(total_kib_s)
         
-        # 计算平均I/O大小
+        # Calculate average I/O size
         avg_io_size_kib = total_kib_s / total_iops if total_iops > 0 else 0
         
-        # AWS EBS标准IOPS (16 KiB基准)
+        # AWS EBS standard IOPS (16 KiB baseline)
         aws_standard_iops = total_iops * (avg_io_size_kib / 16) if avg_io_size_kib > 0 else total_iops
         
         return {
@@ -271,14 +271,14 @@ class UnitConverter:
     @classmethod
     def format_storage_size(cls, bytes_value: Union[int, float], precision: int = 2) -> str:
         """
-        格式化存储大小显示 (自动选择合适的二进制单位)
+        Format storage size display (automatically select appropriate binary unit)
         
         Args:
-            bytes_value: 字节数
-            precision: 小数位数
+            bytes_value: Number of bytes
+            precision: Decimal places
             
         Returns:
-            格式化的字符串
+            Formatted string
         """
         for unit in ['TiB', 'GiB', 'MiB', 'KiB']:
             if bytes_value >= cls.BINARY_UNITS[unit]:
@@ -290,16 +290,16 @@ class UnitConverter:
     @classmethod
     def format_network_speed_aws_standard(cls, bits_per_sec: Union[int, float], precision: int = 3) -> str:
         """
-        按AWS标准格式化网络速度显示 (优先使用Gbps)
+        Format network speed display in AWS standard (prioritize Gbps)
         
         Args:
-            bits_per_sec: 比特/秒
-            precision: 小数位数
+            bits_per_sec: Bits per second
+            precision: Decimal places
             
         Returns:
-            AWS标准格式的字符串
+            AWS standard format string
         """
-        # AWS网络带宽标准：优先使用Gbps
+        # AWS network bandwidth standard: prioritize Gbps
         gbps = bits_per_sec / 1000000000
         if gbps >= 1.0:
             return f"{gbps:.{precision}f} Gbps"
@@ -317,30 +317,30 @@ class UnitConverter:
     @classmethod
     def validate_unit_consistency(cls, data_dict: Dict) -> Dict[str, Union[List[str], bool]]:
         """
-        验证数据中的单位一致性
+        Validate unit consistency in data
         
         Args:
-            data_dict: 包含各种指标的数据字典
+            data_dict: Data dictionary containing various metrics
             
         Returns:
-            验证结果和建议
+            Validation results and recommendations
         """
         issues = []
         recommendations = []
         
-        # 检查存储相关指标是否使用二进制单位
+        # Check if storage-related metrics use binary units
         storage_keys = [k for k in data_dict.keys() if any(term in k.lower() for term in ['throughput', 'iops', 'storage', 'disk', 'ebs'])]
         for key in storage_keys:
             if any(unit in str(data_dict[key]) for unit in ['KB', 'MB', 'GB']):
-                issues.append(f"存储指标 {key} 使用了十进制单位")
-                recommendations.append(f"建议 {key} 使用二进制单位 (KiB, MiB, GiB)")
+                issues.append(f"Storage metric {key} uses decimal units")
+                recommendations.append(f"Recommend {key} to use binary units (KiB, MiB, GiB)")
         
-        # 检查网络相关指标是否使用十进制单位
+        # Check if network-related metrics use decimal units
         network_keys = [k for k in data_dict.keys() if any(term in k.lower() for term in ['network', 'bandwidth', 'speed', 'bps'])]
         for key in network_keys:
             if any(unit in str(data_dict[key]) for unit in ['KiB', 'MiB', 'GiB']):
-                issues.append(f"网络指标 {key} 使用了二进制单位")
-                recommendations.append(f"建议 {key} 使用十进制单位 (KB, MB, GB)")
+                issues.append(f"Network metric {key} uses binary units")
+                recommendations.append(f"Recommend {key} to use decimal units (KB, MB, GB)")
         
         return {
             'issues': issues,
@@ -349,23 +349,23 @@ class UnitConverter:
         }
 
 
-# 便捷函数
+# Convenience functions
 def convert_iostat_to_standard_units(iostat_row: Dict) -> Dict[str, Union[float, str]]:
     """
-    将iostat输出转换为标准单位
+    Convert iostat output to standard units
     
     Args:
-        iostat_row: iostat的一行数据
+        iostat_row: One row of iostat data
         
     Returns:
-        标准化的数据
+        Standardized data
     """
     converter = UnitConverter()
     
-    # 转换AWS EBS指标
+    # Convert AWS EBS metrics
     aws_metrics = converter.convert_aws_ebs_metrics(iostat_row)
     
-    # 创建包含格式化显示的结果字典
+    # Create result dictionary with formatted display
     result: Dict[str, Union[float, str]] = dict(aws_metrics)
     result['formatted_throughput'] = converter.format_storage_size(
         aws_metrics['total_throughput_kib_s'] * 1024
@@ -376,13 +376,13 @@ def convert_iostat_to_standard_units(iostat_row: Dict) -> Dict[str, Union[float,
 
 def format_performance_metrics(metrics: Dict) -> Dict[str, str]:
     """
-    格式化性能指标用于显示
+    Format performance metrics for display
     
     Args:
-        metrics: 性能指标字典
+        metrics: Performance metrics dictionary
         
     Returns:
-        格式化后的指标
+        Formatted metrics
     """
     converter = UnitConverter()
     formatted = {}
@@ -400,26 +400,26 @@ def format_performance_metrics(metrics: Dict) -> Dict[str, str]:
     return formatted
 
 
-# 使用示例
+# Usage examples
 if __name__ == "__main__":
-    print("📏 统一单位转换器使用示例:")
+    print("📏 Unified Unit Converter Usage Examples:")
     
     converter = UnitConverter()
     
-    # 存储吞吐量转换
-    print("\n存储吞吐量转换:")
+    # Storage throughput conversion
+    print("\nStorage throughput conversion:")
     storage_result = converter.convert_storage_throughput(1024)  # 1024 KiB/s
     for unit, value in storage_result.items():
         print(f"  {unit}: {value:.2f}")
     
-    # 网络吞吐量转换
-    print("\n网络吞吐量转换:")
+    # Network throughput conversion
+    print("\nNetwork throughput conversion:")
     network_result = converter.convert_network_throughput(1048576)  # 1 MB/s
     for unit, value in network_result.items():
         print(f"  {unit}: {value:.2f}")
     
-    # AWS EBS指标转换
-    print("\nAWS EBS指标转换:")
+    # AWS EBS metrics conversion
+    print("\nAWS EBS metrics conversion:")
     iostat_data = {
         'r_s': 100,
         'w_s': 50,
@@ -435,13 +435,13 @@ if __name__ == "__main__":
     for metric, value in aws_result.items():
         print(f"  {metric}: {value:.2f}")
     
-    # 格式化显示
-    print(f"\n格式化显示:")
-    print(f"存储大小: {converter.format_storage_size(1073741824)}")  # 1 GiB
-    print(f"网络速度: {converter.format_network_speed_aws_standard(1000000000)}")   # 1 Gbps
+    # Formatted display
+    print(f"\nFormatted display:")
+    print(f"Storage size: {converter.format_storage_size(1073741824)}")  # 1 GiB
+    print(f"Network speed: {converter.format_network_speed_aws_standard(1000000000)}")   # 1 Gbps
     
-    # 测试sar网络数据转换
-    print(f"\nsar网络数据转换测试:")
+    # Test sar network data conversion
+    print(f"\nsar network data conversion test:")
     sar_result = converter.convert_sar_network_data(125000, 125000)  # 125MB/s each
-    print(f"输入: 125000 kB/s RX, 125000 kB/s TX")
-    print(f"输出: {sar_result['aws_total_gbps']} Gbps (AWS标准)")
+    print(f"Input: 125000 kB/s RX, 125000 kB/s TX")
+    print(f"Output: {sar_result['aws_total_gbps']} Gbps (AWS standard)")

@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Tuple
 from pathlib import Path
 
-# 添加项目根目录到Python路径
+# Add project root directory to Python path
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.insert(0, project_root)
@@ -35,29 +35,29 @@ from analysis.qps_analyzer import NodeQPSAnalyzer
 logger = get_logger(__name__)
 
 class DataProcessor:
-    """数据处理工具类 - 解决数据处理重复代码"""
+    """Data processing utility class - Solves data processing code duplication"""
     
     @staticmethod
     def validate_dataframe_column(df: pd.DataFrame, column: str) -> bool:
-        """验证DataFrame是否包含指定列且有数据"""
+        """Validate if DataFrame contains specified column and has data"""
         return column in df.columns and len(df) > 0 and not df[column].empty
     
     @staticmethod
     def safe_calculate_mean(df: pd.DataFrame, column: str) -> float:
-        """安全计算列的平均值 - 解决重复的均值计算代码"""
+        """Safely calculate column mean - Solves repeated mean calculation code"""
         if DataProcessor.validate_dataframe_column(df, column):
             return df[column].mean()
         return 0.0
     
     @staticmethod
     def safe_calculate_max(df: pd.DataFrame, column: str) -> float:
-        """安全计算列的最大值"""
+        """Safely calculate column maximum"""
         if DataProcessor.validate_dataframe_column(df, column):
             return df[column].max()
         return 0.0
 
 class FileManager:
-    """文件管理工具类 - 智能文件保存，支持备份和固定名称"""
+    """File management utility class - Smart file saving with backup and fixed naming"""
     
     def __init__(self, output_dir: str, session_timestamp: str):
         self.output_dir = output_dir
@@ -66,47 +66,47 @@ class FileManager:
         os.makedirs(self.reports_dir, exist_ok=True)
     
     def save_chart_with_backup(self, chart_name: str, plt_figure) -> str:
-        """保存图表，同时创建备份和当前版本"""
-        # 固定名称文件（供其他组件引用）
+        """Save chart, create both backup and current version"""
+        # Fixed name file (for reference by other components)
         current_path = os.path.join(self.reports_dir, f'{chart_name}.png')
         
-        # 带时间戳的备份文件
+        # Timestamped backup file
         backup_path = os.path.join(self.reports_dir, f'{chart_name}_{self.session_timestamp}.png')
         
-        # 保存两个版本
+        # Save both versions
         plt_figure.savefig(current_path, dpi=300, bbox_inches='tight')
         plt_figure.savefig(backup_path, dpi=300, bbox_inches='tight')
         
-        logger.info(f"📊 图表已保存: {current_path} (当前版本)")
-        logger.info(f"📊 备份已创建: {backup_path}")
+        logger.info(f"📊 Chart saved: {current_path} (current version)")
+        logger.info(f"📊 Backup created: {backup_path}")
         
         return current_path
     
     def save_report_with_backup(self, report_name: str, content: str) -> str:
-        """保存报告，同时创建备份和当前版本"""
-        # 固定名称文件（供其他组件引用）
+        """Save report, create both backup and current version"""
+        # Fixed name file (for reference by other components)
         current_path = os.path.join(self.reports_dir, f'{report_name}.md')
         
-        # 带时间戳的备份文件
+        # Timestamped backup file
         backup_path = os.path.join(self.reports_dir, f'{report_name}_{self.session_timestamp}.md')
         
-        # 保存两个版本
+        # Save both versions
         with open(current_path, 'w', encoding='utf-8') as f:
             f.write(content)
         with open(backup_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        logger.info(f"📄 报告已保存: {current_path} (当前版本)")
-        logger.info(f"📄 备份已创建: {backup_path}")
+        logger.info(f"📄 Report saved: {current_path} (current version)")
+        logger.info(f"📄 Backup created: {backup_path}")
         
         return current_path
 
 class OperationLogger:
-    """操作日志装饰器 - 统一日志格式，解决print语句重复问题"""
+    """Operation logger decorator - Unified log format, solves print statement duplication"""
     
     @staticmethod
     def log_operation(operation_name: str, emoji: str = "📊"):
-        """记录操作的装饰器"""
+        """Decorator for logging operations"""
         def decorator(func):
             def wrapper(*args, **kwargs):
                 print(f"\n{emoji} {operation_name}...")
@@ -120,12 +120,12 @@ class OperationLogger:
             return wrapper
         return decorator
 
-# 配置日志
+# Configure logging
 class BottleneckAnalysisMode:
-    """瓶颈分析模式配置"""
+    """Bottleneck analysis mode configuration"""
     
     def __init__(self, bottleneck_info: Optional[Dict] = None):
-        # 只有当提供了有效的瓶颈信息时才启用
+        # Only enable when valid bottleneck information is provided
         self.enabled = bottleneck_info is not None and len(bottleneck_info) > 0
         self.bottleneck_info = bottleneck_info or {}
         self.bottleneck_time = None
@@ -137,118 +137,118 @@ class BottleneckAnalysisMode:
             self._parse_bottleneck_info()
     
     def _parse_bottleneck_info(self):
-        """解析瓶颈信息"""
+        """Parse bottleneck information"""
         try:
             self.bottleneck_time = self.bottleneck_info.get('detection_time')
             self.analysis_window = self.bottleneck_info.get('analysis_window', {})
             self.max_qps = self.bottleneck_info.get('max_successful_qps', 0)
             self.bottleneck_qps = self.bottleneck_info.get('bottleneck_qps', 0)
             
-            logger.info(f"🚨 瓶颈分析模式: 最大QPS={self.max_qps}, 瓶颈QPS={self.bottleneck_qps}")
+            logger.info(f"🚨 Bottleneck analysis mode: Max QPS={self.max_qps}, Bottleneck QPS={self.bottleneck_qps}")
         except Exception as e:
-            logger.error(f"❌ 瓶颈信息解析失败: {e}")
+            logger.error(f"❌ Bottleneck information parsing failed: {e}")
             self.enabled = False
 
 class ComprehensiveAnalyzer:
-    """综合分析器 - 整合所有分析功能的主控制器 + 瓶颈模式支持"""
+    """Comprehensive Analyzer - Main controller integrating all analysis functions + bottleneck mode support"""
 
     def __init__(self, output_dir: Optional[str] = None, benchmark_mode: str = "standard", bottleneck_mode: Optional[BottleneckAnalysisMode] = None):
-        """重构的初始化方法 - 确保所有属性正确初始化"""
+        """Refactored initialization method - Ensures all attributes are properly initialized"""
         
-        # 应用统一样式
+        # Apply unified style
         UnifiedChartStyle.setup_matplotlib()
         
-        # 输出目录处理 - 优先使用框架设置的环境变量
+        # Output directory handling - Prioritize framework-set environment variables
         if output_dir is None:
             output_dir = os.environ.get('BASE_DATA_DIR') or os.environ.get('DATA_DIR', os.path.join(os.path.expanduser('~'), 'blockchain-node-benchmark-result'))
         
-        # 核心属性初始化
+        # Core attributes initialization
         self.output_dir = output_dir
         self.benchmark_mode = benchmark_mode
-        # 严格使用框架统一的SESSION_TIMESTAMP环境变量
+        # Strictly use framework unified SESSION_TIMESTAMP environment variable
         self.session_timestamp = os.environ.get('SESSION_TIMESTAMP')
         if not self.session_timestamp:
-            raise RuntimeError("SESSION_TIMESTAMP环境变量未设置，请确保通过config_loader.sh正确初始化框架")
+            raise RuntimeError("SESSION_TIMESTAMP environment variable not set, please ensure framework is properly initialized through config_loader.sh")
         
-        # 文件管理器初始化
+        # File manager initialization
         self.file_manager = FileManager(self.output_dir, self.session_timestamp)
         
-        # 关键修复：确保 FileManager 正确初始化
+        # Critical fix: Ensure FileManager is properly initialized
         if not hasattr(self.file_manager, 'reports_dir'):
-            raise RuntimeError(f"FileManager 初始化失败：缺少 reports_dir 属性。output_dir={self.output_dir}, session_timestamp={self.session_timestamp}")
+            raise RuntimeError(f"FileManager initialization failed: missing reports_dir attribute. output_dir={self.output_dir}, session_timestamp={self.session_timestamp}")
         
         self.reports_dir = self.file_manager.reports_dir
         
-        # 验证 reports_dir 有效性
+        # Validate reports_dir validity
         if not self.reports_dir:
-            raise RuntimeError(f"FileManager.reports_dir 为空。REPORTS_DIR环境变量={os.getenv('REPORTS_DIR')}")
+            raise RuntimeError(f"FileManager.reports_dir is empty. REPORTS_DIR environment variable={os.getenv('REPORTS_DIR')}")
         
-        # 确保目录存在
+        # Ensure directory exists
         os.makedirs(self.reports_dir, exist_ok=True)
         
-        # CSV文件路径
+        # CSV file path
         self.csv_file = self.get_latest_csv()
         if not self.csv_file:
-            raise FileNotFoundError(f"未找到性能数据CSV文件在目录: {output_dir}")
+            raise FileNotFoundError(f"Performance data CSV file not found in directory: {output_dir}")
         
-        # 瓶颈模式初始化
+        # Bottleneck mode initialization
         self.bottleneck_mode = bottleneck_mode or BottleneckAnalysisMode()
         
-        # 分析器初始化
+        # Analyzer initialization
         self.qps_analyzer = NodeQPSAnalyzer(output_dir, benchmark_mode, self.bottleneck_mode.enabled)
         self.rpc_deep_analyzer = RpcDeepAnalyzer(self.csv_file)
         
-        logger.info(f"🔍 综合分析器初始化完成")
-        logger.info(f"   输出目录: {self.output_dir}")
-        logger.info(f"   报告目录: {self.reports_dir}")
-        logger.info(f"   CSV文件: {self.csv_file}")
+        logger.info(f"🔍 Comprehensive analyzer initialization completed")
+        logger.info(f"   Output directory: {self.output_dir}")
+        logger.info(f"   Reports directory: {self.reports_dir}")
+        logger.info(f"   CSV file: {self.csv_file}")
         
         if self.bottleneck_mode.enabled:
-            logger.info(f"🚨 瓶颈分析模式已启用")
+            logger.info(f"🚨 Bottleneck analysis mode enabled")
     
     def get_latest_csv(self) -> Optional[str]:
-        """获取最新的CSV监控文件"""
-        # 使用环境变量LOGS_DIR，如果不存在则使用current/logs结构
+        """Get latest CSV monitoring file"""
+        # Use LOGS_DIR environment variable, if not exists use current/logs structure
         logs_dir = os.getenv('LOGS_DIR', os.path.join(self.output_dir, 'current', 'logs'))
         csv_files = glob.glob(f"{logs_dir}/*.csv")
         if not csv_files:
-            # 备用查找：检查archives目录
+            # Fallback search: check archives directory
             csv_files = glob.glob(f"{self.output_dir}/archives/*/logs/*.csv")
         return max(csv_files, key=os.path.getctime) if csv_files else None
 
     @staticmethod
     def filter_data_by_time_window(df: pd.DataFrame, start_time: str, end_time: str) -> pd.DataFrame:
-        """根据时间窗口过滤数据 - 静态方法"""
+        """Filter data by time window - Static method"""
         try:
             if 'timestamp' not in df.columns:
-                logger.warning("⚠️ 数据中没有timestamp列，无法进行时间窗口过滤")
+                logger.warning("⚠️ No timestamp column in data, cannot perform time window filtering")
                 return df
             
-            # 转换时间戳
+            # Convert timestamps
             if not pd.api.types.is_datetime64_any_dtype(df['timestamp']):
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
             start_dt = pd.to_datetime(start_time)
             end_dt = pd.to_datetime(end_time)
             
-            # 处理时区：如果参数有时区但DataFrame没有，移除参数的时区
+            # Handle timezone: if parameters have timezone but DataFrame doesn't, remove parameter timezone
             if start_dt.tz is not None and df['timestamp'].dt.tz is None:
                 start_dt = start_dt.tz_localize(None)
                 end_dt = end_dt.tz_localize(None)
-            # 如果DataFrame有时区但参数没有，添加UTC时区到DataFrame
+            # If DataFrame has timezone but parameters don't, add UTC timezone to DataFrame
             elif start_dt.tz is None and df['timestamp'].dt.tz is not None:
                 df['timestamp'] = df['timestamp'].dt.tz_localize(None)
             
-            # 过滤数据
+            # Filter data
             filtered_df = df[(df['timestamp'] >= start_dt) & (df['timestamp'] <= end_dt)]
-            logger.info(f"📊 时间窗口过滤: {len(df)} -> {len(filtered_df)} 条记录")
+            logger.info(f"📊 Time window filtering: {len(df)} -> {len(filtered_df)} records")
             
             return filtered_df
         except Exception as e:
-            logger.error(f"❌ 时间窗口过滤失败: {e}")
+            logger.error(f"❌ Time window filtering failed: {e}")
             return df
 
     def analyze_bottleneck_correlation(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """分析瓶颈相关性"""
+        """Analyze bottleneck correlation"""
         if not self.bottleneck_mode.enabled:
             return {}
         
@@ -257,22 +257,22 @@ class ComprehensiveAnalyzer:
                 'bottleneck_detected': True,
                 'max_qps': self.bottleneck_mode.max_qps,
                 'bottleneck_qps': self.bottleneck_mode.bottleneck_qps,
-                'performance_drop': 0.0,  # 使用float类型保持一致性
+                'performance_drop': 0.0,  # Use float type for consistency
                 'correlations': {},
                 'bottleneck_factors': []
             }
             
-            # 计算性能下降
+            # Calculate performance drop
             if self.bottleneck_mode.max_qps > 0:
                 performance_drop = ((self.bottleneck_mode.bottleneck_qps - self.bottleneck_mode.max_qps) / 
                                   self.bottleneck_mode.max_qps * 100)
                 analysis_result['performance_drop'] = performance_drop
             
-            # 分析各指标与QPS的相关性
+            # Analyze correlation between metrics and QPS
             numeric_columns = df.select_dtypes(include=[np.number]).columns
             qps_column = None
             
-            # 寻找QPS列
+            # Find QPS column
             for col in ['current_qps', 'qps', 'requests_per_second']:
                 if col in df.columns:
                     qps_column = col
@@ -286,7 +286,7 @@ class ComprehensiveAnalyzer:
                             if not np.isnan(correlation):
                                 analysis_result['correlations'][col] = correlation
                                 
-                                # 识别瓶颈因子
+                                # Identify bottleneck factors
                                 if abs(correlation) > 0.7:
                                     analysis_result['bottleneck_factors'].append({
                                         'metric': col,
@@ -294,17 +294,17 @@ class ComprehensiveAnalyzer:
                                         'impact': 'high' if abs(correlation) > 0.8 else 'medium'
                                     })
                         except Exception as e:
-                            logger.warning(f"⚠️ 计算{col}相关性失败: {e}")
+                            logger.warning(f"⚠️ Failed to calculate {col} correlation: {e}")
             
-            logger.info(f"🔍 瓶颈相关性分析完成，发现{len(analysis_result['bottleneck_factors'])}个关键因子")
+            logger.info(f"🔍 Bottleneck correlation analysis completed, found {len(analysis_result['bottleneck_factors'])} key factors")
             return analysis_result
             
         except Exception as e:
-            logger.error(f"❌ 瓶颈相关性分析失败: {e}")
+            logger.error(f"❌ Bottleneck correlation analysis failed: {e}")
             return {}
 
     def generate_ultimate_performance_charts(self, df: pd.DataFrame) -> Optional[plt.Figure]:
-        """生成终极性能图表，整合所有分析结果"""
+        """Generate ultimate performance charts, integrating all analysis results"""
         print("\n📈 Generating ultimate performance charts...")
 
         if len(df) == 0:
@@ -313,15 +313,15 @@ class ComprehensiveAnalyzer:
         
         fig, axes = plt.subplots(3, 2, figsize=(16, 18))
         
-        # 先设置主标题（在 apply_layout 之前）
+        # Set main title first (before apply_layout)
         fig.suptitle('Comprehensive Performance Analysis', 
                      fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], 
                      fontweight='bold')
 
-        # 简化QPS数据检查 - 只检查列是否存在
+        # Simplified QPS data check - only check if column exists
         qps_available = 'current_qps' in df.columns and len(df) > 0
         
-        # 1. CPU使用率 vs QPS
+        # 1. CPU Usage vs QPS
         if 'current_qps' in df.columns and 'cpu_usage' in df.columns:
             axes[0, 0].plot(df['current_qps'], df['cpu_usage'], 'bo-', alpha=0.7, markersize=4)
             axes[0, 0].axhline(y=85, color='red', linestyle='--', alpha=0.8, label='Warning (85%)')
@@ -337,7 +337,7 @@ class ComprehensiveAnalyzer:
             axes[0, 0].set_title('CPU Usage vs QPS (No Data)', 
                                 fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
-        # 2. 内存使用率 vs QPS
+        # 2. Memory Usage vs QPS
         if 'current_qps' in df.columns and 'mem_usage' in df.columns:
             axes[0, 1].plot(df['current_qps'], df['mem_usage'], 'go-', alpha=0.7, markersize=4)
             axes[0, 1].axhline(y=90, color='red', linestyle='--', alpha=0.8, label='Warning (90%)')
@@ -353,7 +353,7 @@ class ComprehensiveAnalyzer:
             axes[0, 1].set_title('Memory Usage vs QPS (No Data)', 
                                 fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
-        # 3. RPC延迟 vs QPS
+        # 3. RPC Latency vs QPS
         if 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
             axes[1, 0].plot(df['current_qps'], df['rpc_latency_ms'], 'ro-', alpha=0.7, markersize=4)
             axes[1, 0].axhline(y=1000, color='orange', linestyle='--', alpha=0.8, label='High Latency (1s)')
@@ -384,7 +384,7 @@ class ComprehensiveAnalyzer:
                            transform=axes[1, 1].transAxes, fontsize=12)
             axes[1, 1].set_title('EBS IOPS vs QPS (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
-        # 5. RPC延迟分布
+        # 5. RPC Latency Distribution
         if 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
             axes[2, 0].hist(df['rpc_latency_ms'], bins=30, alpha=0.7, color='purple')
             if 'rpc_latency_ms' in df.columns:
@@ -400,13 +400,13 @@ class ComprehensiveAnalyzer:
             axes[2, 0].legend()
             axes[2, 0].grid(True, alpha=0.3)
 
-        # 6. QPS Performance Analysis (替换Performance Cliff Detection)
+        # 6. QPS Performance Analysis (replace Performance Cliff Detection)
         if len(df) > 0 and qps_available and 'current_qps' in df.columns and 'rpc_latency_ms' in df.columns:
-            # 过滤有效QPS数据 - 排除 rpc_latency_ms=0 的无效数据
+            # Filter valid QPS data - exclude invalid data with rpc_latency_ms=0
             valid_qps_data = df[(df['current_qps'] > 0) & (df['rpc_latency_ms'] > 0)].copy()
             
-            if len(valid_qps_data) >= 2:  # 确保有足够数据点
-                # 按QPS分组计算平均延迟
+            if len(valid_qps_data) >= 2:  # Ensure sufficient data points
+                # Group by QPS and calculate average latency
                 qps_groups = valid_qps_data.groupby('current_qps').agg({
                     'rpc_latency_ms': ['mean', 'std', 'count']
                 }).round(3)
@@ -415,11 +415,11 @@ class ComprehensiveAnalyzer:
                 latency_means = qps_groups[('rpc_latency_ms', 'mean')].tolist()
                 latency_stds = qps_groups[('rpc_latency_ms', 'std')].tolist()
                 
-                # 绘制QPS vs 延迟关系
+                # Plot QPS vs latency relationship
                 axes[2, 1].errorbar(qps_values, latency_means, yerr=latency_stds,
                                    fmt='bo-', capsize=5, capthick=2, alpha=0.8, markersize=8)
                 
-                # 添加数据标注
+                # Add data annotations
                 for qps, latency in zip(qps_values, latency_means):
                     axes[2, 1].annotate(f'{latency:.3f}ms',
                                        (qps, latency), textcoords="offset points",
@@ -431,7 +431,7 @@ class ComprehensiveAnalyzer:
                 axes[2, 1].grid(True, alpha=0.3)
                 axes[2, 1].set_ylim(bottom=0)
                 
-                # 添加性能评估文本
+                # Add performance evaluation text
                 performance_text = f"Test Results:\n"
                 performance_text += f"QPS Levels: {len(qps_values)}\n"
                 performance_text += f"Max QPS: {max(qps_values)}\n"
@@ -450,10 +450,10 @@ class ComprehensiveAnalyzer:
                            ha='center', va='center', transform=axes[2, 1].transAxes, fontsize=12)
             axes[2, 1].set_title('QPS Performance Analysis (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
-        # 使用统一样式应用布局
+        # Apply layout using unified style
         UnifiedChartStyle.apply_layout('auto')
         
-        # 保存图表 - 使用文件管理器，同时创建当前版本和备份
+        # Save chart - use file manager to create current version and backup
         chart_file = self.file_manager.save_chart_with_backup('comprehensive_analysis_charts', plt)
         print(f"✅ Ultimate performance charts saved: {chart_file}")
 
@@ -463,34 +463,34 @@ class ComprehensiveAnalyzer:
                                           bottlenecks: Dict[str, Any], avg_cpu: float, 
                                           avg_mem: float, avg_rpc: float) -> Dict[str, Any]:
         """
-        基于实际监控数据的科学性能评估
-        整合QPS性能、系统资源使用率、RPC延迟等多维度监控数据
+        Scientific performance evaluation based on actual monitoring data
+        Integrates multi-dimensional monitoring data including QPS performance, system resource utilization, RPC latency, etc.
         """
         
-        # 只有深度基准测试模式才能进行准确的性能等级评估
+        # Only intensive benchmark mode can provide accurate performance level evaluation
         if benchmark_mode != "intensive":
             return {
                 'performance_level': 'Unable to Evaluate',
                 'performance_grade': 'N/A',
-                'evaluation_reason': f'{benchmark_mode}基准测试模式无法准确评估系统性能等级，需要intensive模式进行深度分析',
+                'evaluation_reason': f'{benchmark_mode} benchmark mode cannot accurately evaluate system performance level, intensive mode required for deep analysis',
                 'evaluation_basis': 'insufficient_benchmark_depth',
                 'max_sustainable_qps': max_qps,
                 'recommendations': [
-                    f'当前{benchmark_mode}基准测试仅用于快速验证',
-                    '如需准确的性能等级评估，请使用intensive基准测试模式',
-                    '深度基准测试将触发系统瓶颈以获得准确的性能评估'
+                    f'Current {benchmark_mode} benchmark is only for quick verification',
+                    'For accurate performance level evaluation, please use intensive benchmark mode',
+                    'Intensive benchmark will trigger system bottlenecks to obtain accurate performance evaluation'
                 ]
             }
         
-        # 综合瓶颈分析 - 基于实际监控数据
+        # Comprehensive bottleneck analysis - based on actual monitoring data
         bottleneck_types = bottlenecks.get('detected_bottlenecks', [])
         
-        # 计算综合瓶颈评分 - 不再依赖废弃的日志分析数据
+        # Calculate comprehensive bottleneck score - no longer relying on deprecated log analysis data
         comprehensive_score = ComprehensiveAnalyzer._calculate_comprehensive_bottleneck_score(
             bottleneck_types, avg_cpu, avg_mem, avg_rpc
         )
         
-        # 基于综合评分的科学等级评估
+        # Scientific level evaluation based on comprehensive score
         if comprehensive_score < 0.2:
             level = "Excellent"
             grade = "A (Excellent)"
@@ -507,9 +507,9 @@ class ComprehensiveAnalyzer:
             reason = f"System performs acceptably at {max_qps} QPS, with noticeable bottlenecks requiring attention"
             
         else:
-            level = "需要优化"
+            level = "Needs Improvement"
             grade = "D (Needs Improvement)"
-            reason = f"系统在{max_qps} QPS下存在严重问题，需要立即优化"
+            reason = f"System has serious issues at {max_qps} QPS, requires immediate optimization"
         
         return {
             'performance_level': level,
@@ -528,9 +528,9 @@ class ComprehensiveAnalyzer:
     @staticmethod
     def _calculate_comprehensive_bottleneck_score(bottleneck_types: list, 
                                                 avg_cpu: float, avg_mem: float, avg_rpc: float) -> float:
-        """计算综合瓶颈严重程度评分 - 基于实际监控数据"""
+        """Calculate comprehensive bottleneck severity score - based on actual monitoring data"""
         
-        # 系统资源瓶颈评分 (权重: 0.7)
+        # System resource bottleneck score (weight: 0.7)
         resource_score = 0.0
         if 'CPU' in bottleneck_types:
             resource_score += 0.3 * (1.5 if avg_cpu > 90 else 1.0)
@@ -539,11 +539,11 @@ class ComprehensiveAnalyzer:
         if 'EBS' in bottleneck_types:
             resource_score += 0.1
         
-        # RPC性能评分 (权重: 0.3) - 基于实际RPC延迟监控数据
+        # RPC performance score (weight: 0.3) - based on actual RPC latency monitoring data
         rpc_score = 0.0
-        if avg_rpc > 1000:  # 高延迟
+        if avg_rpc > 1000:  # High latency
             rpc_score += 0.15
-        if avg_rpc > 2000:  # 极高延迟
+        if avg_rpc > 2000:  # Very high latency
             rpc_score += 0.15
         
         total_score = resource_score + rpc_score
@@ -552,8 +552,8 @@ class ComprehensiveAnalyzer:
     
     @staticmethod
     def _generate_comprehensive_capacity_assessment(performance_evaluation: Dict[str, Any], max_qps: int) -> str:
-        """基于综合性能评估生成容量评估 - 静态方法"""
-        performance_level = performance_evaluation.get('performance_level', '未知')
+        """Generate capacity assessment based on comprehensive performance evaluation - static method"""
+        performance_level = performance_evaluation.get('performance_level', 'Unknown')
         comprehensive_score = performance_evaluation.get('comprehensive_score', 0.0)
         
         if performance_level == "Excellent":
@@ -562,15 +562,15 @@ class ComprehensiveAnalyzer:
             return f"Current configuration can handle medium-high load (tested up to {max_qps:,} QPS, with minor issues)" if not pd.isna(max_qps) else "Current configuration can handle medium-high load (insufficient test data, with minor issues)"
         elif performance_level == "Acceptable":
             return f"Current configuration suitable for medium load (tested up to {max_qps:,} QPS, with noticeable issues)" if not pd.isna(max_qps) else "Current configuration suitable for medium load (insufficient test data, with noticeable issues)"
-        elif performance_level == "需要优化":
-            return f"当前配置需要优化以处理高负载 (已测试至 {max_qps:,} QPS，存在严重问题)" if not pd.isna(max_qps) else "当前配置需要优化以处理高负载 (测试数据不足，存在严重问题)"
+        elif performance_level == "Needs Improvement":
+            return f"Current configuration needs optimization to handle high load (tested up to {max_qps:,} QPS, with serious issues)" if not pd.isna(max_qps) else "Current configuration needs optimization to handle high load (insufficient test data, with serious issues)"
         else:
-            return f"需要intensive基准测试模式进行准确的容量评估"
+            return f"Intensive benchmark mode required for accurate capacity assessment"
 
     @staticmethod
     def _generate_comprehensive_recommendations(bottleneck_types: list, 
                                              comprehensive_score: float, max_qps: int, avg_rpc: float) -> list:
-        """基于综合分析生成优化建议 - 基于实际监控数据"""
+        """Generate optimization recommendations based on comprehensive analysis - based on actual monitoring data"""
         recommendations = []
         
         if comprehensive_score < 0.2:
@@ -580,19 +580,19 @@ class ComprehensiveAnalyzer:
                 "� Recomdmend regular monitoring to maintain current performance level"
             ])
         else:
-            # 系统资源优化建议
+            # System resource optimization recommendations
             if 'CPU' in bottleneck_types:
-                recommendations.append("🔧 CPU瓶颈：考虑升级CPU或优化计算密集型进程")
+                recommendations.append("🔧 CPU bottleneck: Consider upgrading CPU or optimizing compute-intensive processes")
             if 'Memory' in bottleneck_types:
-                recommendations.append("🔧 内存瓶颈：考虑增加内存或优化内存使用")
+                recommendations.append("🔧 Memory bottleneck: Consider increasing memory or optimizing memory usage")
             if 'EBS' in bottleneck_types:
-                recommendations.append("🔧 存储瓶颈：考虑升级EBS类型或优化I/O模式")
+                recommendations.append("🔧 Storage bottleneck: Consider upgrading EBS type or optimizing I/O patterns")
             
-            # 基于实际RPC延迟的优化建议
+            # Optimization recommendations based on actual RPC latency
             if avg_rpc > 1000:
-                recommendations.append("🔧 RPC延迟较高：考虑优化RPC配置或增加RPC处理能力")
+                recommendations.append("🔧 High RPC latency: Consider optimizing RPC configuration or increasing RPC processing capacity")
             if avg_rpc > 2000:
-                recommendations.append("🔥 RPC延迟过高：需要立即优化RPC性能或检查网络连接")
+                recommendations.append("🔥 Excessive RPC latency: Immediate RPC performance optimization or network connection check required")
         
         return recommendations
 
@@ -601,35 +601,35 @@ class ComprehensiveAnalyzer:
                                     bottlenecks: Dict[str, Any], 
                                     rpc_deep_analysis: Dict[str, Any],
                                     benchmark_mode: str = "standard") -> str:
-        """生成基于瓶颈分析的综合报告，整合所有分析结果"""
+        """Generate comprehensive report based on bottleneck analysis, integrating all analysis results"""
 
-        # 验证 reports_dir 属性完整性 - 保守的修复方案
+        # Verify reports_dir attribute integrity - conservative fix
         if not hasattr(self, 'reports_dir') or not self.reports_dir:
-            logger.error("ComprehensiveAnalyzer.reports_dir 属性丢失，尝试恢复")
-            # 尝试从file_manager恢复
+            logger.error("ComprehensiveAnalyzer.reports_dir attribute missing, attempting recovery")
+            # Try to recover from file_manager
             if hasattr(self, 'file_manager') and hasattr(self.file_manager, 'reports_dir'):
                 self.reports_dir = self.file_manager.reports_dir
-                logger.warning(f"已从file_manager恢复reports_dir: {self.reports_dir}")
+                logger.warning(f"Recovered reports_dir from file_manager: {self.reports_dir}")
             else:
-                # 最后的备用方案：直接重建
+                # Last resort: rebuild directly
                 self.reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
                 os.makedirs(self.reports_dir, exist_ok=True)
-                logger.warning(f"已重建reports_dir: {self.reports_dir}")
+                logger.warning(f"Rebuilt reports_dir: {self.reports_dir}")
         
         if not self.reports_dir:
-            raise RuntimeError(f"ComprehensiveAnalyzer.reports_dir 为空 - output_dir={self.output_dir}")
+            raise RuntimeError(f"ComprehensiveAnalyzer.reports_dir is empty - output_dir={self.output_dir}")
 
-        # 基本性能指标 - 使用工具类避免重复代码
+        # Basic performance metrics - use utility class to avoid code duplication
         avg_cpu = DataProcessor.safe_calculate_mean(df, 'cpu_usage')
         avg_mem = DataProcessor.safe_calculate_mean(df, 'mem_usage')
         avg_rpc = DataProcessor.safe_calculate_mean(df, 'rpc_latency_ms') if 'rpc_latency_ms' in df.columns else 0
 
-        # 基于基准测试模式和瓶颈分析的性能评估
+        # Performance evaluation based on benchmark mode and bottleneck analysis
         performance_evaluation = self._evaluate_comprehensive_performance(
             benchmark_mode, max_qps, bottlenecks, avg_cpu, avg_mem, avg_rpc
         )
 
-        # 构建报告的各个部分
+        # Build report sections
         cpu_bottleneck = 'Detected' if 'CPU' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
         memory_bottleneck = 'Detected' if 'Memory' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
         network_bottleneck = 'Detected' if 'Network' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
@@ -641,7 +641,7 @@ class ComprehensiveAnalyzer:
         
         latency_trend = 'Stable' if max_rpc_latency < avg_rpc * 2 else 'Variable'
 
-        # 处理可能的NaN值
+        # Handle possible NaN values
         max_qps_display = f"{max_qps:,}" if not pd.isna(max_qps) else "N/A"
         
         report = f"""# Blockchain Node QPS Comprehensive Performance Analysis Report
@@ -690,19 +690,19 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - **Data Source**: Real-time system monitoring and RPC performance tracking
 """
 
-        # 添加RPC深度分析结果
+        # Add RPC deep analysis results
         if rpc_deep_analysis:
             rpc_deep_report = self.rpc_deep_analyzer.generate_rpc_deep_analysis_report(rpc_deep_analysis)
             report += rpc_deep_report
 
-        # 优化建议
+        # Optimization recommendations
         report += """
 ## 💡 Comprehensive Optimization Recommendations
 
 ### Immediate Actions
 """
 
-        # 基于现有监控数据的具体建议
+        # Specific recommendations based on existing monitoring data
         if avg_rpc > 1000:
             report += "- 🔧 **High Priority**: RPC latency is high, consider optimization\n"
             
@@ -713,11 +713,11 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             report += "- 🔥 **Critical**: High memory usage detected, consider increasing memory\n"
             report += "- 🔧 Monitor for potential memory leaks\n"
 
-        # 使用基于综合分析的建议
+        # Use recommendations based on comprehensive analysis
         for recommendation in performance_evaluation.get('recommendations', []):
             report += f"- {recommendation}\n"
 
-        # 基于RPC深度分析的建议
+        # Recommendations based on RPC deep analysis
         if rpc_deep_analysis:
             bottleneck_classification = rpc_deep_analysis.get('bottleneck_classification', {})
             recommendations = bottleneck_classification.get('recommendations', [])
@@ -726,11 +726,11 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 for rec in recommendations:
                     report += f"- 🔧 {rec}\n"
 
-        # 生产部署建议
+        # Production deployment recommendations
         capacity_assessment = ComprehensiveAnalyzer._generate_comprehensive_capacity_assessment(performance_evaluation, max_qps)
         csv_file_display = self.csv_file or 'N/A'
         
-        # 计算推荐生产QPS
+        # Calculate recommended production QPS
         recommended_qps_display = f"{int(max_qps * 0.8):,} (80% of maximum tested)" if not pd.isna(max_qps) else "N/A (insufficient test data)"
         
         report += f"""
@@ -753,18 +753,18 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 *Report generated by Comprehensive Blockchain Node QPS Analyzer v4.0*
 """
 
-        # 保存综合报告 - 使用文件管理器，同时创建当前版本和备份
+        # Save comprehensive report - use file manager to create current version and backup
         report_file = self.file_manager.save_report_with_backup('comprehensive_analysis_report', report)
 
         print(f"✅ Comprehensive report saved: {report_file}")
         return report
 
     def run_comprehensive_analysis(self) -> Dict[str, Any]:
-        """运行完整的综合分析"""
+        """Run complete comprehensive analysis"""
         print("🚀 Starting Comprehensive Blockchain Node QPS Analysis")
         print("=" * 80)
 
-        # 1. 运行QPS分析
+        # 1. Run QPS analysis
         print("\n📊 Phase 1: QPS Performance Analysis")
         qps_results = self.qps_analyzer.run_qps_analysis()
         df = qps_results['dataframe']
@@ -775,71 +775,71 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         logger.info("ℹ️  Using monitoring data for comprehensive analysis")
         print("  ℹ️  Using monitoring data for comprehensive analysis")
 
-        # 2. 运行RPC深度分析
+        # 2. Run RPC deep analysis
         print("\n🔍 Phase 2: RPC Deep Analysis")
         rpc_deep_analysis = self.rpc_deep_analyzer.analyze_rpc_deep_performance(df)
 
-        # 3. 生成综合图表和报告
+        # 3. Generate comprehensive charts and reports
         print("\n📈 Phase 3: Comprehensive Reporting")
         self.generate_ultimate_performance_charts(df)
         
-        # 4.1 生成性能可视化图表（包含阈值分析）
+        # 4.1 Generate performance visualization charts (including threshold analysis)
         print("\n🎨 Phase 4.1: Performance Visualization with Threshold Analysis")
         try:
-            # 保存临时CSV文件供performance_visualizer使用 - 使用进程ID和随机数避免冲突
+            # Save temporary CSV file for performance_visualizer - use process ID and random number to avoid conflicts
             process_id = os.getpid()
             random_id = random.randint(1000, 9999)
-            # 使用TMP_DIR环境变量或current/tmp目录保存临时文件
+            # Use TMP_DIR environment variable or current/tmp directory to save temporary file
             tmp_dir = os.getenv('TMP_DIR', os.path.join(self.output_dir, 'current', 'tmp'))
             os.makedirs(tmp_dir, exist_ok=True)
             temp_csv_path = os.path.join(tmp_dir, f'temp_performance_data_{process_id}_{random_id}.csv')
             df.to_csv(temp_csv_path, index=False)
             
-            # 查找监控开销文件 - 增强查找逻辑以处理归档情况
+            # Find monitoring overhead file - enhanced search logic to handle archiving
             overhead_files = glob.glob(f"{self.output_dir}/current/logs/monitoring_overhead_*.csv")
             if not overhead_files:
-                # 如果current目录没有，检查archives目录
+                # If not in current directory, check archives directory
                 overhead_files = glob.glob(f"{self.output_dir}/archives/*/logs/monitoring_overhead_*.csv")
             if not overhead_files:
-                # 最后检查当前工作目录
+                # Finally check current working directory
                 overhead_files = glob.glob("monitoring_overhead_*.csv")
             overhead_file = max(overhead_files, key=os.path.getctime) if overhead_files else None
             
-            # 创建性能可视化器并生成图表
+            # Create performance visualizer and generate charts
             visualizer = PerformanceVisualizer(temp_csv_path, overhead_file)
             chart_results = visualizer.generate_all_charts()
             
             if isinstance(chart_results, tuple) and len(chart_results) == 2:
                 chart_files, threshold_analysis = chart_results
-                print(f"✅ 生成了 {len(chart_files)} 张性能图表（包含阈值分析）")
+                print(f"✅ Generated {len(chart_files)} performance charts (including threshold analysis)")
                 
-                # 将阈值分析结果添加到综合结果中
+                # Add threshold analysis results to comprehensive results
                 if threshold_analysis:
-                    print("📊 阈值分析已完成并集成到报告中")
+                    print("📊 Threshold analysis completed and integrated into report")
             else:
                 chart_files = chart_results if isinstance(chart_results, list) else []
-                print(f"✅ 生成了 {len(chart_files)} 张性能图表")
+                print(f"✅ Generated {len(chart_files)} performance charts")
             
-            # 清理临时文件
+            # Clean up temporary file
             if os.path.exists(temp_csv_path):
                 os.remove(temp_csv_path)
                 
         except ImportError as e:
-            print(f"⚠️ 性能可视化器导入失败: {e}")
+            print(f"⚠️ Performance visualizer import failed: {e}")
         except Exception as e:
-            print(f"⚠️ 性能可视化图表生成失败: {e}")
+            print(f"⚠️ Performance visualization chart generation failed: {e}")
         
         comprehensive_report = self.generate_comprehensive_report(
             df, max_qps, bottlenecks, rpc_deep_analysis, self.benchmark_mode
         )
 
-        # 5. 显示RPC深度分析报告
+        # 5. Display RPC deep analysis report
 
         if rpc_deep_analysis:
             rpc_report = self.rpc_deep_analyzer.generate_rpc_deep_analysis_report(rpc_deep_analysis)
             print(rpc_report)
 
-        # 返回完整的分析结果
+        # Return complete analysis results
         comprehensive_results = {
             'qps_analysis': qps_results,
             'rpc_deep_analysis': rpc_deep_analysis,
@@ -860,23 +860,23 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 
 def main():
-    """主执行函数 - 支持瓶颈模式和时间窗口分析"""
-    parser = argparse.ArgumentParser(description='综合分析器 - 支持瓶颈模式')
-    parser.add_argument('csv_file', nargs='?', help='CSV数据文件路径')
+    """Main execution function - supports bottleneck mode and time window analysis"""
+    parser = argparse.ArgumentParser(description='Comprehensive Analyzer - supports bottleneck mode')
+    parser.add_argument('csv_file', nargs='?', help='CSV data file path')
     parser.add_argument('--benchmark-mode', default='standard', choices=['quick', 'standard', 'intensive'], 
-                       help='基准测试模式 (默认: standard)')
-    parser.add_argument('--bottleneck-mode', action='store_true', help='启用瓶颈分析模式')
-    parser.add_argument('--bottleneck-info', help='瓶颈信息JSON文件路径')
-    parser.add_argument('--time-window', action='store_true', help='启用时间窗口分析')
-    parser.add_argument('--start-time', help='时间窗口开始时间')
-    parser.add_argument('--end-time', help='时间窗口结束时间')
-    parser.add_argument('--bottleneck-time', help='瓶颈检测时间')
-    parser.add_argument('--output-dir', help='输出目录路径')
+                       help='Benchmark mode (default: standard)')
+    parser.add_argument('--bottleneck-mode', action='store_true', help='Enable bottleneck analysis mode')
+    parser.add_argument('--bottleneck-info', help='Bottleneck information JSON file path')
+    parser.add_argument('--time-window', action='store_true', help='Enable time window analysis')
+    parser.add_argument('--start-time', help='Time window start time')
+    parser.add_argument('--end-time', help='Time window end time')
+    parser.add_argument('--bottleneck-time', help='Bottleneck detection time')
+    parser.add_argument('--output-dir', help='Output directory path')
     
     args = parser.parse_args()
     
     try:
-        # 初始化瓶颈分析模式
+        # Initialize bottleneck analysis mode
         bottleneck_mode = None
         if args.bottleneck_mode or args.bottleneck_info:
             bottleneck_info = {}
@@ -885,59 +885,59 @@ def main():
                 try:
                     with open(args.bottleneck_info, 'r') as f:
                         bottleneck_info = json.load(f)
-                    logger.info(f"📊 加载瓶颈信息: {args.bottleneck_info}")
+                    logger.info(f"📊 Loaded bottleneck info: {args.bottleneck_info}")
                 except Exception as e:
-                    logger.error(f"❌ 瓶颈信息文件读取失败: {e}")
+                    logger.error(f"❌ Failed to read bottleneck info file: {e}")
             
             bottleneck_mode = BottleneckAnalysisMode(bottleneck_info)
         
-        # 初始化分析器
+        # Initialize analyzer
         analyzer = ComprehensiveAnalyzer(args.output_dir, args.benchmark_mode, bottleneck_mode)
         
-        # 确定CSV文件
+        # Determine CSV file
         csv_file = args.csv_file or analyzer.csv_file
         if not csv_file or not os.path.exists(csv_file):
-            logger.error("❌ 未找到有效的CSV数据文件")
+            logger.error("❌ Valid CSV data file not found")
             return 1
         
-        logger.info(f"📈 开始综合分析: {csv_file}")
+        logger.info(f"📈 Starting comprehensive analysis: {csv_file}")
         
-        # 读取数据
+        # Read data
         df = pd.read_csv(csv_file)
-        logger.info(f"📊 数据加载完成: {len(df)} 条记录")
+        logger.info(f"📊 Data loaded: {len(df)} records")
         
-        # 时间窗口过滤
+        # Time window filtering
         if args.time_window and args.start_time and args.end_time:
             df = ComprehensiveAnalyzer.filter_data_by_time_window(df, args.start_time, args.end_time)
-            logger.info(f"🕐 时间窗口分析: {args.start_time} 到 {args.end_time}")
+            logger.info(f"🕐 Time window analysis: {args.start_time} to {args.end_time}")
         
-        # 执行分析
+        # Execute analysis
         if bottleneck_mode and bottleneck_mode.enabled:
-            logger.info("🚨 执行瓶颈模式分析")
+            logger.info("🚨 Executing bottleneck mode analysis")
             
-            # 瓶颈相关性分析
+            # Bottleneck correlation analysis
             bottleneck_analysis = analyzer.analyze_bottleneck_correlation(df)
 
-            # 保存瓶颈分析结果
+            # Save bottleneck analysis results
             reports_dir = os.getenv('REPORTS_DIR', os.path.join(analyzer.output_dir, 'current', 'reports'))
             bottleneck_result_file = os.path.join(reports_dir, 'bottleneck_analysis_result.json')
             os.makedirs(os.path.dirname(bottleneck_result_file), exist_ok=True)
             with open(bottleneck_result_file, 'w') as f:
                 json.dump(bottleneck_analysis, f, indent=2, default=str)
-            logger.info(f"📊 瓶颈分析结果已保存: {bottleneck_result_file}")
+            logger.info(f"📊 Bottleneck analysis results saved: {bottleneck_result_file}")
         
-        # 执行标准综合分析
+        # Execute standard comprehensive analysis
         result = analyzer.run_comprehensive_analysis()
         
         if result:
-            logger.info("✅ 综合分析完成")
+            logger.info("✅ Comprehensive analysis completed")
             return 0
         else:
-            logger.error("❌ 综合分析失败")
+            logger.error("❌ Comprehensive analysis failed")
             return 1
             
     except Exception as e:
-        logger.error(f"❌ 综合分析执行失败: {e}")
+        logger.error(f"❌ Comprehensive analysis execution failed: {e}")
         return 1
 
 if __name__ == "__main__":

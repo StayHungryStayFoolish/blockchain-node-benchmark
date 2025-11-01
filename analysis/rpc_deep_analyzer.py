@@ -41,82 +41,82 @@ class RpcAnalysisConfig:
     # Bottleneck classification configuration
     HIGH_CPU_THRESHOLD = int(os.getenv('BOTTLENECK_CPU_THRESHOLD', 85))     # High CPU usage threshold (%)
     HIGH_MEMORY_THRESHOLD = int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', 90))       # High memory usage threshold (%)
-    LOW_CPU_THRESHOLD = 30  # 低CPU使用率阈值(%)
-    RPC_WARNING_LATENCY_THRESHOLD = 20  # RPC延迟警告阈值(ms)
-    HIGH_LATENCY_THRESHOLD = 50  # 高延迟阈值(ms)
-    VERY_HIGH_LATENCY_THRESHOLD = 100  # 极高延迟阈值(ms)
-    SPECIAL_QPS_ANALYSIS_RATIO = 0.75  # 特殊QPS分析点比例（最大QPS的75%）
+    LOW_CPU_THRESHOLD = 30  # Low CPU usage threshold (%)
+    RPC_WARNING_LATENCY_THRESHOLD = 20  # RPC latency warning threshold (ms)
+    HIGH_LATENCY_THRESHOLD = 50  # High latency threshold (ms)
+    VERY_HIGH_LATENCY_THRESHOLD = 100  # Very high latency threshold (ms)
+    SPECIAL_QPS_ANALYSIS_RATIO = 0.75  # Special QPS analysis point ratio (75% of max QPS)
     
-    # 相关性分析配置
-    STRONG_CORRELATION_THRESHOLD = 0.7  # 强相关性阈值
-    MODERATE_CORRELATION_THRESHOLD = 0.5  # 中等相关性阈值
-    WEAK_CORRELATION_THRESHOLD = 0.3  # 弱相关性阈值
-    MIN_SAMPLES_FOR_SIGNIFICANCE = 30  # 统计显著性最小样本数
+    # Correlation analysis configuration
+    STRONG_CORRELATION_THRESHOLD = 0.7  # Strong correlation threshold
+    MODERATE_CORRELATION_THRESHOLD = 0.5  # Moderate correlation threshold
+    WEAK_CORRELATION_THRESHOLD = 0.3  # Weak correlation threshold
+    MIN_SAMPLES_FOR_SIGNIFICANCE = 30  # Minimum samples for statistical significance
     
-    # 高QPS分析配置
-    HIGH_QPS_QUANTILE = 0.8  # 高QPS分位数(前20%)
+    # High QPS analysis configuration
+    HIGH_QPS_QUANTILE = 0.8  # High QPS quantile (top 20%)
 
-# 错误处理装饰器
+# Error handling decorator
 def handle_errors(func):
-    """错误处理装饰器，保证程序不会因为单个功能失败而完全崩溃"""
+    """Error handling decorator to prevent program crash due to single function failure"""
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            logger.error(f"函数 {func.__name__} 执行失败: {str(e)}")
-            logger.error(f"错误详情: {traceback.format_exc()}")
-            # 返回安全的默认值而不是崩溃
+            logger.error(f"Function {func.__name__} execution failed: {str(e)}")
+            logger.error(f"Error details: {traceback.format_exc()}")
+            # Return safe default value instead of crashing
             if 'analyze' in func.__name__:
-                return {}  # 分析函数返回空字典
+                return {}  # Analysis functions return empty dict
             elif 'generate' in func.__name__:
-                return ""  # 生成函数返回空字符串
+                return ""  # Generation functions return empty string
             else:
                 return None
     return wrapper
 
 
 class RpcDeepAnalyzer:
-    """RPC深度分析器 - 基于CSV监控数据进行RPC性能深度分析"""
+    """RPC Deep Analyzer - Deep analysis of RPC performance based on CSV monitoring data"""
 
     def __init__(self, csv_file: Optional[str] = None, config: Optional[RpcAnalysisConfig] = None):
         """
-        初始化RPC深度分析器
+        Initialize RPC Deep Analyzer
         
         Args:
-            csv_file: CSV文件路径（可选）
-            config: 分析配置对象（可选，默认使用RpcAnalysisConfig）
+            csv_file: CSV file path (optional)
+            config: Analysis configuration object (optional, defaults to RpcAnalysisConfig)
         """
         self.csv_file = csv_file
         self.config = config or RpcAnalysisConfig()
-        logger.info(f"🔍 初始化RPC深度分析器，CSV文件: {csv_file}")
+        logger.info(f"🔍 Initializing RPC Deep Analyzer, CSV file: {csv_file}")
 
     @handle_errors
     def analyze_rpc_deep_performance(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
-        执行RPC深度性能分析
+        Execute RPC deep performance analysis
         
         Args:
-            df: 包含监控数据的DataFrame
+            df: DataFrame containing monitoring data
             
         Returns:
-            包含分析结果的字典
+            Dictionary containing analysis results
         """
-        logger.info("🔍 开始RPC深度性能分析")
+        logger.info("🔍 Starting RPC deep performance analysis")
         print("\n🔍 RPC Deep Performance Analysis")
         print("=" * 50)
 
         if df is None or len(df) == 0:
-            logger.warning("❌ RPC深度分析无可用数据")
+            logger.warning("❌ No data available for RPC deep analysis")
             print("❌ No data available for RPC deep analysis")
             return {}
 
-        # 准备数值数据
+        # Prepare numeric data
         numeric_df = self._prepare_numeric_data(df)
         if len(numeric_df) == 0:
             print("❌ No valid numeric QPS data found")
             return {}
 
-        # 执行各项分析
+        # Execute various analyses
         analysis_results = {
             'latency_trend': self._analyze_latency_trends(numeric_df),
             'anomaly_detection': self._detect_latency_anomalies(numeric_df),
@@ -129,10 +129,10 @@ class RpcDeepAnalyzer:
         return analysis_results
 
     def _prepare_numeric_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """准备数值数据，处理混合类型问题"""
+        """Prepare numeric data, handle mixed type issues"""
         print(f"📋 Processing {len(df)} raw data points...")
 
-        # 处理混合类型的current_qps列
+        # Handle mixed type current_qps column
         df_copy = df.copy()
         df_copy['current_qps_str'] = df_copy['current_qps'].astype(str)
         numeric_mask = pd.to_numeric(df_copy['current_qps_str'], errors='coerce').notna()
@@ -141,7 +141,7 @@ class RpcDeepAnalyzer:
         if len(numeric_df) > 0:
             numeric_df['current_qps'] = pd.to_numeric(numeric_df['current_qps_str'])
 
-            # 确保其他数值列也是数值类型
+            # Ensure other numeric columns are also numeric type
             numeric_cols = ['rpc_latency_ms', 'cpu_usage', 'mem_usage']
             for col in numeric_cols:
                 if col in numeric_df.columns:
@@ -151,7 +151,7 @@ class RpcDeepAnalyzer:
         return numeric_df
 
     def _analyze_latency_trends(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """分析延迟趋势"""
+        """Analyze latency trends"""
         latency_stats = df.groupby('current_qps')['rpc_latency_ms'].agg([
             'mean', 'max', 'std', 'count', 'median'
         ]).round(2)
@@ -164,24 +164,24 @@ class RpcDeepAnalyzer:
         }
 
     def _detect_latency_anomalies(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """检测延迟异常 - 使用IQR方法替代2σ规则"""
-        # IQR异常检测方法 (更鲁棒，适合非正态分布)
+        """Detect latency anomalies - Use IQR method instead of 2σ rule"""
+        # IQR anomaly detection method (more robust, suitable for non-normal distribution)
         Q1 = df['rpc_latency_ms'].quantile(0.25)
         Q3 = df['rpc_latency_ms'].quantile(0.75)
         IQR = Q3 - Q1
         
-        # IQR异常检测阈值
+        # IQR anomaly detection threshold
         lower_bound = Q1 - self.config.IQR_MULTIPLIER * IQR
         upper_bound = Q3 + self.config.IQR_MULTIPLIER * IQR
         
-        # 确保下界不为负，上界至少为配置的最小阈值
+        # Ensure lower bound is not negative, upper bound is at least the configured minimum threshold
         lower_bound = max(0, lower_bound)
         upper_bound = max(self.config.MIN_LATENCY_THRESHOLD, upper_bound)
         
-        # 检测异常 (只关注高延迟异常)
+        # Detect anomalies (only focus on high latency anomalies)
         high_latency = df[df['rpc_latency_ms'] > upper_bound]
         
-        # 同时保留2σ方法作为对比
+        # Also keep 2σ method for comparison
         avg_latency = df['rpc_latency_ms'].mean()
         std_latency = df['rpc_latency_ms'].std()
         sigma2_threshold = max(self.config.MIN_LATENCY_THRESHOLD, 
@@ -194,12 +194,12 @@ class RpcDeepAnalyzer:
             'iqr_anomaly_count': len(high_latency),
             'iqr_anomaly_percentage': (len(high_latency) / len(df)) * 100 if len(df) > 0 else 0,
             
-            # 对比2σ方法
+            # Comparison with 2σ method
             'sigma2_threshold': sigma2_threshold,
             'sigma2_anomaly_count': len(sigma2_anomalies),
             'sigma2_anomaly_percentage': (len(sigma2_anomalies) / len(df)) * 100 if len(df) > 0 else 0,
             
-            # 统计信息
+            # Statistical information
             'Q1': Q1,
             'Q3': Q3,
             'IQR': IQR,
@@ -212,12 +212,12 @@ class RpcDeepAnalyzer:
         }
 
         if len(high_latency) > 0:
-            # 记录异常样本 (使用IQR检测结果)
+            # Record anomaly samples (using IQR detection results)
             anomaly_analysis['anomaly_samples'] = high_latency[
                 ['current_qps', 'rpc_latency_ms', 'cpu_usage', 'mem_usage', 'timestamp']
             ].to_dict('records')
 
-            # 分析异常期间的系统状态
+            # Analyze system state during anomalies
             anomaly_analysis['system_state_during_anomalies'] = {
                 'avg_cpu': float(high_latency['cpu_usage'].mean()) if 'cpu_usage' in high_latency.columns else 0.0,
                 'avg_memory': float(high_latency['mem_usage'].mean()) if 'mem_usage' in high_latency.columns else 0.0,
@@ -234,7 +234,7 @@ class RpcDeepAnalyzer:
         return anomaly_analysis
 
     def _analyze_block_height_synchronization(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """分析区块高度同步状态"""
+        """Analyze block height synchronization status"""
         block_height_analysis = {
             'sync_data_available': False,
             'sync_issues_count': 0,
@@ -243,9 +243,9 @@ class RpcDeepAnalyzer:
             'sync_issues_samples': []
         }
 
-        # 处理block_height_diff数据
+        # Process block_height_diff data
         if 'block_height_diff' in df.columns:
-            # 转换为数值并过滤无效数据（现在数据都是数值，不再有'N/A'字符串）
+            # Convert to numeric and filter invalid data (now all data is numeric, no more 'N/A' strings)
             block_height_data = df.copy()
             block_height_data['block_height_diff_numeric'] = pd.to_numeric(df['block_height_diff'], errors='coerce')
             block_height_data = block_height_data.dropna(subset=['block_height_diff_numeric'])
@@ -255,7 +255,7 @@ class RpcDeepAnalyzer:
                     block_height_analysis['avg_block_height_offset'] = block_height_data['block_height_diff_numeric'].mean()
                     block_height_analysis['max_block_height_offset'] = block_height_data['block_height_diff_numeric'].max()
 
-                    # 检查同步问题（偏移 > 配置阈值）
+                    # Check sync issues (offset > configured threshold)
                     sync_issues = block_height_data[block_height_data['block_height_diff_numeric'] > self.config.BLOCK_HEIGHT_SYNC_THRESHOLD]
                     block_height_analysis['sync_issues_count'] = len(sync_issues)
 
@@ -268,7 +268,7 @@ class RpcDeepAnalyzer:
         return block_height_analysis
 
     def _analyze_qps_latency_correlation(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """分析QPS与延迟的相关性"""
+        """Analyze correlation between QPS and latency"""
         correlation = df['current_qps'].corr(df['rpc_latency_ms'])
 
         correlation_analysis = {
@@ -279,7 +279,7 @@ class RpcDeepAnalyzer:
             'statistical_significance': False
         }
 
-        # 确定相关性强度
+        # Determine correlation strength
         abs_correlation = abs(correlation)
         if abs_correlation > self.config.STRONG_CORRELATION_THRESHOLD:
             correlation_analysis['correlation_strength'] = 'strong'
@@ -290,7 +290,7 @@ class RpcDeepAnalyzer:
         else:
             correlation_analysis['correlation_strength'] = 'very_weak'
 
-        # 确定方向和解释
+        # Determine direction and interpretation
         if correlation > self.config.MODERATE_CORRELATION_THRESHOLD:
             correlation_analysis['correlation_direction'] = 'positive'
             correlation_analysis['interpretation'] = '🔍 Strong positive correlation found: latency increases significantly with QPS'
@@ -302,7 +302,7 @@ class RpcDeepAnalyzer:
         else:
             correlation_analysis['interpretation'] = '🔍 Weak correlation: latency may be influenced by other factors'
 
-        # 统计显著性
+        # Statistical significance
         if len(df) > self.config.MIN_SAMPLES_FOR_SIGNIFICANCE and abs_correlation > self.config.WEAK_CORRELATION_THRESHOLD:
             correlation_analysis['statistical_significance'] = True
 
@@ -313,19 +313,19 @@ class RpcDeepAnalyzer:
         return correlation_analysis
 
     def _detect_performance_cliff(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """检测性能悬崖"""
+        """Detect performance cliff"""
         qps_latency_summary = df.groupby('current_qps')['rpc_latency_ms'].agg([
             'mean', 'max', 'count'
         ]).reset_index()
         qps_latency_summary = qps_latency_summary.sort_values('current_qps')
 
-        # 计算延迟增长
+        # Calculate latency increase
         qps_latency_summary['latency_increase'] = qps_latency_summary['mean'].diff()
         qps_latency_summary['latency_increase_percentage'] = (
                 qps_latency_summary['latency_increase'] / qps_latency_summary['mean'].shift(1) * 100
         )
 
-        # 检测悬崖点（延迟增长 > 配置阈值）
+        # Detect cliff points (latency increase > configured threshold)
         cliff_points = qps_latency_summary[
             (qps_latency_summary['latency_increase'] > self.config.CLIFF_THRESHOLD_ABSOLUTE) |
             (qps_latency_summary['latency_increase_percentage'] > self.config.CLIFF_THRESHOLD_PERCENTAGE)
@@ -356,16 +356,16 @@ class RpcDeepAnalyzer:
         return cliff_analysis
 
     def _classify_bottleneck_type(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """瓶颈类型分类"""
+        """Bottleneck type classification"""
         bottleneck_classification = {
             'primary_bottleneck': 'unknown',
-            'bottleneck_confidence': 0.0,  # 使用 float 类型保持一致性
+            'bottleneck_confidence': 0.0,  # Use float type for consistency
             'evidence': [],
             'recommendations': []
         }
 
-        # 分析高QPS阶段的系统状态
-        high_qps_threshold = df['current_qps'].quantile(self.config.HIGH_QPS_QUANTILE)  # 配置的高QPS分位数
+        # Analyze system state during high QPS phase
+        high_qps_threshold = df['current_qps'].quantile(self.config.HIGH_QPS_QUANTILE)  # Configured high QPS quantile
         high_qps_data = df[df['current_qps'] >= high_qps_threshold]
 
         if len(high_qps_data) > 0:
@@ -375,7 +375,7 @@ class RpcDeepAnalyzer:
 
             print(f"\n🎯 Bottleneck type classification:")
 
-            # 动态计算特殊分析QPS点（最大QPS的75%）
+            # Dynamically calculate special analysis QPS point (75% of max QPS)
             qps_special = pd.DataFrame()
             closest_qps = 0
             max_qps = 0
@@ -383,7 +383,7 @@ class RpcDeepAnalyzer:
             if 'current_qps' in df.columns and len(df[df['current_qps'] > 0]) > 0:
                 max_qps = df['current_qps'].max()
                 target_qps = int(max_qps * self.config.SPECIAL_QPS_ANALYSIS_RATIO)
-                # 找到最接近目标QPS的实际测试点
+                # Find the actual test point closest to target QPS
                 closest_qps = df.loc[(df['current_qps'] - target_qps).abs().idxmin(), 'current_qps']
                 qps_special = df[df['current_qps'] == closest_qps]
             
@@ -405,7 +405,7 @@ class RpcDeepAnalyzer:
                     print("  🌐 - Optimize network configuration")
                     print("  ⚙️ - Check RPC connection pool settings")
 
-            # 通用瓶颈分类逻辑
+            # General bottleneck classification logic
             if avg_cpu > self.config.HIGH_CPU_THRESHOLD:
                 bottleneck_classification['primary_bottleneck'] = 'cpu'
                 bottleneck_classification['bottleneck_confidence'] = 0.8
@@ -456,11 +456,11 @@ class RpcDeepAnalyzer:
         return bottleneck_classification
 
     def generate_rpc_deep_analysis_report(self, analysis_results: Dict[str, Any]) -> str:
-        """生成RPC深度分析报告"""
+        """Generate RPC deep analysis report"""
         report = "\n## 🔍 RPC Deep Performance Analysis Report\n"
         report += "=" * 60 + "\n"
 
-        # 延迟趋势
+        # Latency trend
         latency_trend = analysis_results.get('latency_trend', {})
         if latency_trend:
             report += f"""
@@ -476,7 +476,7 @@ class RpcDeepAnalyzer:
                 for qps, stats in latency_by_qps.head(10).iterrows():
                     report += f"- **{qps:,} QPS**: Avg {stats['mean']:.1f}ms, Max {stats['max']:.1f}ms, Samples {stats['count']}\n" if not pd.isna(qps) else f"- **N/A QPS**: Avg {stats['mean']:.1f}ms, Max {stats['max']:.1f}ms, Samples {stats['count']}\n"
 
-        # 异常检测
+        # Anomaly detection
         anomaly = analysis_results.get('anomaly_detection', {})
         if anomaly:
             report += f"""
@@ -497,7 +497,7 @@ class RpcDeepAnalyzer:
 - **Average QPS**: {avg_qps_display}
 """
 
-        # 相关性分析
+        # Correlation analysis
         correlation = analysis_results.get('correlation_analysis', {})
         if correlation:
             report += f"""
@@ -508,7 +508,7 @@ class RpcDeepAnalyzer:
 - **Statistical Significance**: {'Yes' if correlation.get('statistical_significance') else 'No'}
 """
 
-        # 性能悬崖
+        # Performance cliff
         cliff = analysis_results.get('performance_cliff', {})
         if cliff and cliff.get('cliff_points_detected', 0) > 0:
             report += f"""
@@ -520,7 +520,7 @@ class RpcDeepAnalyzer:
             for cliff_point in cliff.get('cliff_details', []):
                 report += f"- **{cliff_point['current_qps']:,} QPS**: Latency spike +{cliff_point['latency_increase']:.1f}ms ({cliff_point.get('latency_increase_percentage', 0):.1f}%)\n" if not pd.isna(cliff_point['current_qps']) else f"- **N/A QPS**: Latency spike +{cliff_point['latency_increase']:.1f}ms ({cliff_point.get('latency_increase_percentage', 0):.1f}%)\n"
 
-        # 瓶颈分类
+        # Bottleneck classification
         bottleneck = analysis_results.get('bottleneck_classification', {})
         if bottleneck:
             report += f"""
@@ -540,9 +540,9 @@ class RpcDeepAnalyzer:
         return report
 
 
-# 使用示例
+# Usage example
 if __name__ == "__main__":
-    print("📋 RPC深度分析器使用示例:")
+    print("📋 RPC Deep Analyzer usage example:")
     print("from rpc_deep_analyzer import RpcDeepAnalyzer")
     print("analyzer = RpcDeepAnalyzer('data.csv')")
     print("results = analyzer.analyze_rpc_deep_performance(df)")

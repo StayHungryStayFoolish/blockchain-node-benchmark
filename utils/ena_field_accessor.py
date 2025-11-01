@@ -1,89 +1,89 @@
-"""ENA字段统一访问接口 - 完全基于配置驱动，无硬编码"""
+"""ENA Field Unified Access Interface - Fully configuration-driven, no hardcoding"""
 
 import os
 import pandas as pd
 from typing import Dict, List, Optional, Any
 
 class ENAFieldAccessor:
-    """ENA字段统一访问接口 - 基于system_config.sh配置，完全配置驱动"""
+    """ENA Field Unified Access Interface - Based on system_config.sh configuration, fully configuration-driven"""
     
-    # 基于AWS官方ENA文档的准确字段配置
+    # Accurate field configuration based on AWS official ENA documentation
     FIELD_CONFIG = {
         'bw_in_allowance_exceeded': {
             'display_name': 'Inbound Bandwidth Allowance Exceeded',
             'type': 'counter',
             'unit': 'packets',
-            'description': '因入站聚合带宽超过实例最大值而排队和/或丢弃的数据包数量',
+            'description': 'Number of packets queued/dropped due to inbound aggregate bandwidth exceeding instance maximum',
             'aws_description': 'Packets queued/dropped due to inbound aggregate bandwidth exceeding instance maximum'
         },
         'bw_out_allowance_exceeded': {
             'display_name': 'Outbound Bandwidth Allowance Exceeded', 
             'type': 'counter',
             'unit': 'packets',
-            'description': '因出站聚合带宽超过实例最大值而排队和/或丢弃的数据包数量',
+            'description': 'Number of packets queued/dropped due to outbound aggregate bandwidth exceeding instance maximum',
             'aws_description': 'Packets queued/dropped due to outbound aggregate bandwidth exceeding instance maximum'
         },
         'pps_allowance_exceeded': {
             'display_name': 'PPS Allowance Exceeded',
             'type': 'counter', 
             'unit': 'packets',
-            'description': '因双向PPS超过实例最大值而排队和/或丢弃的数据包数量',
+            'description': 'Number of packets queued/dropped due to bidirectional PPS exceeding instance maximum',
             'aws_description': 'Packets queued/dropped due to bidirectional PPS exceeding instance maximum'
         },
         'conntrack_allowance_exceeded': {
             'display_name': 'Connection Tracking Allowance Exceeded',
             'type': 'counter',
             'unit': 'events', 
-            'description': '连接跟踪配额超限事件数量',
+            'description': 'Number of connection tracking allowance exceeded events',
             'aws_description': 'Connection tracking allowance exceeded events'
         },
         'linklocal_allowance_exceeded': {
             'display_name': 'Link Local Allowance Exceeded',
             'type': 'counter',
             'unit': 'packets',
-            'description': '因到本地代理服务(DNS/元数据/时间同步)的流量PPS超过网络接口最大值而丢弃的数据包数量',
+            'description': 'Number of packets dropped due to PPS to local proxy services (DNS/metadata/time sync) exceeding network interface maximum',
             'aws_description': 'Packets dropped due to PPS to local proxy services exceeding network interface maximum'
         },
         'conntrack_allowance_available': {
             'display_name': 'Connection Tracking Allowance Available',
             'type': 'gauge',
             'unit': 'connections',
-            'description': '实例在达到连接跟踪配额限制前可以建立的跟踪连接数量 (仅Nitro实例ENA驱动2.8.1+)',
+            'description': 'Number of tracked connections that can be established before hitting connection tracking allowance limit (Nitro instances only, ENA driver 2.8.1+)',
             'aws_description': 'Number of tracked connections that can be established before hitting allowance (Nitro instances only, ENA driver 2.8.1+)'
         }
     }
     
     @classmethod
     def get_configured_ena_fields(cls) -> List[str]:
-        """从环境变量获取ENA字段名配置 - 基于现有system_config.sh配置"""
-        # 优先使用字符串格式的环境变量
+        """Get ENA field name configuration from environment variables - based on existing system_config.sh configuration"""
+        # Prioritize string format environment variable
         ena_fields_str = os.getenv('ENA_ALLOWANCE_FIELDS_STR', '')
         
-        # 如果字符串格式不可用，尝试原始格式
+        # If string format not available, try original format
         if not ena_fields_str:
             ena_fields_str = os.getenv('ENA_ALLOWANCE_FIELDS', '')
         
         if ena_fields_str:
-            # 处理bash数组格式: (field1 field2 field3) 或 field1 field2 field3
+            # Handle bash array format: (field1 field2 field3) or field1 field2 field3
             ena_fields_str = ena_fields_str.strip('()')
             fields = [field.strip('"\'') for field in ena_fields_str.split()]
-            if fields and fields[0]:  # 确保不是空列表
+            if fields and fields[0]:  # Ensure not empty list
                 return fields
         
-        # 如果环境变量不可用，使用标准ENA字段列表作为fallback
-        print("⚠️ 无法从环境变量获取ENA字段配置")
-        print("   诊断信息:")
+        # If environment variable not available, use standard ENA field list as fallback
+        print("⚠️ Unable to get ENA field configuration from environment variables")
+        print("   Diagnostic information:")
         print(f"   - ENA_ALLOWANCE_FIELDS_STR: '{os.getenv('ENA_ALLOWANCE_FIELDS_STR', '')}'")
         print(f"   - ENA_ALLOWANCE_FIELDS: '{os.getenv('ENA_ALLOWANCE_FIELDS', '')}'")
         print(f"   - ENA_MONITOR_ENABLED: {os.getenv('ENA_MONITOR_ENABLED', 'undefined')}")
-        print("   - 使用标准ENA字段列表作为fallback")
+        print("   - Using standard ENA field list as fallback")
         
-        # 返回标准ENA字段列表
+        # Return standard ENA field list
         return list(cls.FIELD_CONFIG.keys())
     
     @classmethod
     def get_available_ena_fields(cls, df: pd.DataFrame) -> List[str]:
-        """获取数据中实际存在的ENA字段 - 配置驱动"""
+        """Get ENA fields actually present in data - configuration-driven"""
         configured_fields = cls.get_configured_ena_fields()
         available_fields = []
         
@@ -95,28 +95,28 @@ class ENAFieldAccessor:
     
     @classmethod
     def analyze_ena_field(cls, df: pd.DataFrame, field_name: str) -> Optional[Dict[str, Any]]:
-        """分析单个ENA字段 - 基于AWS官方定义"""
+        """Analyze single ENA field - based on AWS official definition"""
         try:
-            # 字段存在性检查
+            # Field existence check
             if field_name not in df.columns:
                 return None
                 
-            # 数据有效性检查
+            # Data validity check
             field_data = df[field_name].dropna()
             if len(field_data) == 0:
                 return None
                 
-            # 数据类型检查
+            # Data type check
             if not pd.api.types.is_numeric_dtype(field_data):
-                print(f"⚠️ ENA字段 {field_name} 不是数值类型")
+                print(f"⚠️ ENA field {field_name} is not numeric type")
                 return None
             
-            # 获取字段配置，如果不存在则使用默认配置
+            # Get field configuration, use default configuration if not exists
             field_config = cls.FIELD_CONFIG.get(field_name, {
                 'display_name': field_name.replace('_', ' ').title(),
                 'type': 'counter' if 'exceeded' in field_name else 'gauge',
                 'unit': 'packets' if 'exceeded' in field_name else 'units',
-                'description': f'ENA字段: {field_name}',
+                'description': f'ENA field: {field_name}',
                 'aws_description': f'ENA metric: {field_name}'
             })
             
@@ -130,37 +130,37 @@ class ENAFieldAccessor:
             }
             
             if field_config['type'] == 'counter':
-                # 对于计数器类型，统计累计和峰值
+                # For counter type, calculate cumulative and peak values
                 analysis.update({
                     'total_count': int(field_data.sum()) if not field_data.empty else 0,
                     'max_count': int(field_data.max()) if not field_data.empty else 0,
                     'events_detected': field_data.sum() > 0 if not field_data.empty else False,
-                    'status': '⚠️ 检测到限制事件' if (not field_data.empty and field_data.sum() > 0) else '✅ 无限制事件',
-                    'interpretation': '累计计数器 - 值越高表示限制事件越频繁'
+                    'status': '⚠️ Limitation events detected' if (not field_data.empty and field_data.sum() > 0) else '✅ No limitation events',
+                    'interpretation': 'Cumulative counter - higher values indicate more frequent limitation events'
                 })
             elif field_config['type'] == 'gauge':
-                # 对于仪表类型，统计范围和趋势
+                # For gauge type, calculate range and trend
                 analysis.update({
                     'min_value': int(field_data.min()) if not field_data.empty else 0,
                     'max_value': int(field_data.max()) if not field_data.empty else 0,
                     'avg_value': int(field_data.mean()) if not field_data.empty else 0,
                     'current_value': int(field_data.iloc[-1]) if len(field_data) > 0 else 0,
                     'trend': 'decreasing' if (len(field_data) > 1 and field_data.iloc[-1] < field_data.iloc[0]) else 'stable',
-                    'interpretation': '瞬时值 - 显示当前可用资源量'
+                    'interpretation': 'Instantaneous value - shows current available resource amount'
                 })
                 
             return analysis
             
         except Exception as e:
-            print(f"❌ ENA字段 {field_name} 分析失败: {str(e)}")
+            print(f"❌ ENA field {field_name} analysis failed: {str(e)}")
             return None
     
     @classmethod
     def get_unified_network_thresholds(cls) -> Dict[str, Any]:
-        """获取统一的网络阈值配置"""
+        """Get unified network threshold configuration"""
         return {
             'network_utilization_threshold': int(os.getenv('BOTTLENECK_NETWORK_THRESHOLD', 80)),
             'network_utilization_source': 'internal_config.sh',
-            'ena_allowance_note': 'ENA allowance exceeded事件无预设阈值，任何非零值都表示发生了限制',
-            'aws_recommendation': '监控exceeded类型字段的增长率，available类型字段的下降趋势'
+            'ena_allowance_note': 'ENA allowance exceeded events have no preset threshold, any non-zero value indicates limitation occurred',
+            'aws_recommendation': 'Monitor growth rate of exceeded type fields and downward trend of available type fields'
         }

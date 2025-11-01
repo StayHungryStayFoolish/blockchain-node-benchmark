@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# AWS EBS IOPS/Throughput 处理脚本
-# 用于处理 EBS 性能指标、类型推荐和 io2 吞吐量计算
+# AWS EBS IOPS/Throughput Processing Script
+# Used for processing EBS performance metrics, type recommendations, and io2 throughput calculation
 
-# AWS EBS 吞吐量基准（用于 throughput 转换，保留兼容性）
+# AWS EBS throughput baseline (for throughput conversion, maintain compatibility)
 AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB=${AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB:-128}
 
 if [[ -z "${IO2_THROUGHPUT_RATIO:-}" ]]; then
@@ -14,21 +14,21 @@ if [[ -z "${IO2_MAX_THROUGHPUT:-}" ]]; then
     readonly IO2_MAX_THROUGHPUT=4000
 fi
 
-# 注意: 所有类型（gp3/io2/instance-store）都使用实际 IOPS 和 throughput
-# AWS EBS 按请求次数计数 IOPS，无需基于 I/O 大小进行转换
+# Note: All types (gp3/io2/instance-store) use actual IOPS and throughput
+# AWS EBS counts IOPS by request count, no conversion based on I/O size needed
 
-# 获取 AWS EBS IOPS
-# 参数: actual_iops - 实际 IOPS (r/s + w/s)
-#       actual_avg_io_size_kib - 平均 I/O 大小（保留参数兼容性，未使用）
-# 返回: AWS EBS IOPS（等于实际 IOPS）
-# 说明: AWS EBS 按请求次数计数 IOPS，无需转换
-# 参考: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-io-characteristics.html
+# Get AWS EBS IOPS
+# Parameters: actual_iops - Actual IOPS (r/s + w/s)
+#             actual_avg_io_size_kib - Average I/O size (parameter kept for compatibility, unused)
+# Returns: AWS EBS IOPS (equals actual IOPS)
+# Description: AWS EBS counts IOPS by request count, no conversion needed
+# Reference: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-io-characteristics.html
 convert_to_aws_standard_iops() {
     local actual_iops=$1
-    local actual_avg_io_size_kib=$2  # 保留参数以保持接口兼容
+    local actual_avg_io_size_kib=$2  # Keep parameter to maintain interface compatibility
     
-    # AWS EBS IOPS 按请求次数计数，无需转换
-    # 参考: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-io-characteristics.html
+    # AWS EBS IOPS counts by request count, no conversion needed
+    # Reference: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-io-characteristics.html
     if (( $(awk "BEGIN {print ($actual_iops <= 0) ? 1 : 0}") )); then
         echo "0"
         return
@@ -37,28 +37,28 @@ convert_to_aws_standard_iops() {
     echo "$actual_iops"
 }
 
-# 转换实际throughput为AWS标准throughput
-# 参数: actual_throughput_mibs actual_avg_io_size_kib
-# 返回: AWS标准throughput (MiB/s)
-# Throughput 不需要转换，直接返回实际值
+# Convert actual throughput to AWS standard throughput
+# Parameters: actual_throughput_mibs actual_avg_io_size_kib
+# Returns: AWS standard throughput (MiB/s)
+# Throughput does not need conversion, return actual value directly
 convert_to_aws_standard_throughput() {
     local actual_throughput_mibs="$1"
     local actual_avg_io_size_kib="$2"
     
-    # 输入验证
+    # Input validation
     if [[ -z "$actual_throughput_mibs" ]]; then
-        echo "错误: convert_to_aws_standard_throughput需要throughput参数" >&2
+        echo "Error: convert_to_aws_standard_throughput requires throughput parameter" >&2
         return 1
     fi
     
-    # 🔧 Throughput 不需要按 128 KiB 基准转换，直接返回实际值
-    # AWS EBS Throughput 配置的就是实际 MiB/s，不需要标准化
+    # 🔧 Throughput does not need conversion by 128 KiB baseline, return actual value directly
+    # AWS EBS Throughput configuration is actual MiB/s, no standardization needed
     echo "$actual_throughput_mibs"
 }
 
-# 计算io2 Block Express自动吞吐量
-# 参数: iops
-# 返回: 自动计算的吞吐量 (MiB/s)
+# Calculate io2 Block Express automatic throughput
+# Parameters: iops
+# Returns: Automatically calculated throughput (MiB/s)
 calculate_io2_throughput() {
     local iops=$1
     local calculated_throughput=$(awk "BEGIN {printf \"%.2f\", $iops * $IO2_THROUGHPUT_RATIO}")
@@ -66,9 +66,9 @@ calculate_io2_throughput() {
     echo "$actual_throughput"
 }
 
-# instance-store性能分析 (不进行AWS标准转换)
-# 参数: actual_iops actual_throughput_mibs configured_iops configured_throughput
-# 返回: 性能分析结果
+# instance-store performance analysis (no AWS standard conversion)
+# Parameters: actual_iops actual_throughput_mibs configured_iops configured_throughput
+# Returns: Performance analysis result
 analyze_instance_store_performance() {
     local actual_iops=$1
     local actual_throughput_mibs=$2
@@ -83,33 +83,33 @@ analyze_instance_store_performance() {
     echo "  Reference: https://docs.aws.amazon.com/ec2/latest/instancetypes/so.html"
 }
 
-# 推荐EBS类型 (仅支持gp3, io2, instance-store)
-# 参数: aws_standard_iops actual_throughput_mibs
-# 返回: 推荐的EBS类型
+# Recommend EBS type (only supports gp3, io2, instance-store)
+# Parameters: aws_standard_iops actual_throughput_mibs
+# Returns: Recommended EBS type
 recommend_ebs_type() {
     local aws_standard_iops=$1
     local actual_throughput_mibs=$2
     
-    # 检查gp3是否可满足
+    # Check if gp3 can satisfy
     if (( $(awk "BEGIN {print ($aws_standard_iops <= 80000 && $actual_throughput_mibs <= 2000) ? 1 : 0}") )); then
         echo "gp3"
         return
     fi
     
-    # 检查io2是否可满足
+    # Check if io2 can satisfy
     local io2_throughput=$(calculate_io2_throughput "$aws_standard_iops")
     if (( $(awk "BEGIN {print ($aws_standard_iops <= 256000 && $io2_throughput >= $actual_throughput_mibs) ? 1 : 0}") )); then
         echo "io2"
         return
     fi
     
-    # 如果EBS无法满足，推荐instance-store
+    # If EBS cannot satisfy, recommend instance-store
     echo "instance-store"
 }
 
-# 计算平均I/O大小 (从iostat数据)
-# 参数: r_s w_s rkb_s wkb_s
-# 返回: 加权平均I/O大小 (KiB)
+# Calculate average I/O size (from iostat data)
+# Parameters: r_s w_s rkb_s wkb_s
+# Returns: Weighted average I/O size (KiB)
 calculate_weighted_avg_io_size() {
     local r_s=$1
     local w_s=$2
@@ -128,14 +128,14 @@ calculate_weighted_avg_io_size() {
     echo "$avg_io_kib"
 }
 
-# 检查 ACCOUNTS 设备是否配置
-# 判断标准：3个关键环境变量都必须配置
-# 返回: 0=已配置, 1=未配置
+# Check if ACCOUNTS device is configured
+# Criteria: All 3 key environment variables must be configured
+# Returns: 0=configured, 1=not configured
 is_accounts_configured() {
     [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" && -n "${ACCOUNTS_VOL_MAX_IOPS:-}" ]]
 }
 
-# 导出函数
+# Export functions
 export -f convert_to_aws_standard_iops
 export -f convert_to_aws_standard_throughput
 export -f calculate_io2_throughput
@@ -144,10 +144,10 @@ export -f calculate_weighted_avg_io_size
 export -f analyze_instance_store_performance
 export -f is_accounts_configured
 
-# 如果直接执行此脚本，显示帮助信息
+# If script is executed directly, display help information
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    echo "AWS EBS IOPS/Throughput标准转换脚本"
-    echo "用法示例:"
+    echo "AWS EBS IOPS/Throughput Standard Conversion Script"
+    echo "Usage examples:"
     echo "  source ebs_converter.sh"
     echo "  convert_to_aws_standard_iops 1000 32"
     echo "  convert_to_aws_standard_throughput 100 64"

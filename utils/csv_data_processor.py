@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-简化的CSV数据处理器
-移除字段映射功能，专注于核心数据处理
+Simplified CSV Data Processor
+Removed field mapping functionality, focused on core data processing
 """
 
 import pandas as pd
@@ -13,90 +13,90 @@ import os
 logger = get_logger(__name__)
 
 class CSVDataProcessor:
-    """简化的CSV数据处理器 - 专注于核心数据处理功能"""
+    """Simplified CSV Data Processor - Focused on core data processing functionality"""
     
     def __init__(self):
-        """初始化处理器"""
+        """Initialize processor"""
         self.df = None
         self.csv_file = None
         
     def load_csv_data(self, csv_file: str) -> bool:
         """
-        增强的CSV数据加载，包含完整验证
+        Enhanced CSV data loading with complete validation
         
         Args:
-            csv_file: CSV文件路径
+            csv_file: CSV file path
             
         Returns:
-            bool: 加载是否成功
+            bool: Whether loading was successful
         """
         try:
             if not os.path.exists(csv_file):
-                logger.error(f"❌ CSV文件不存在: {csv_file}")
+                logger.error(f"❌ CSV file does not exist: {csv_file}")
                 return False
             
-            # 检查文件大小
+            # Check file size
             file_size = os.path.getsize(csv_file)
             if file_size == 0:
-                logger.warning(f"⚠️ CSV文件为空: {csv_file}")
+                logger.warning(f"⚠️ CSV file is empty: {csv_file}")
                 return False
             
-            # 检查文件格式 - 读取前几行验证
+            # Check file format - read first few lines for validation
             with open(csv_file, 'r', encoding='utf-8') as f:
                 first_line = f.readline().strip()
                 if not first_line:
-                    logger.error(f"❌ CSV文件无内容: {csv_file}")
+                    logger.error(f"❌ CSV file has no content: {csv_file}")
                     return False
                 
                 if ',' not in first_line:
-                    logger.error(f"❌ CSV文件格式无效，缺少逗号分隔符: {csv_file}")
+                    logger.error(f"❌ CSV file format invalid, missing comma delimiter: {csv_file}")
                     return False
                 
-                # 检查是否有足够的列
+                # Check if there are enough columns
                 column_count = len(first_line.split(','))
                 if column_count < 2:
-                    logger.error(f"❌ CSV文件列数不足: {column_count} 列")
+                    logger.error(f"❌ CSV file has insufficient columns: {column_count} columns")
                     return False
             
-            # 尝试读取CSV
+            # Attempt to read CSV
             self.df = pd.read_csv(csv_file)
             self.csv_file = csv_file
             
-            # 验证数据完整性
+            # Validate data integrity
             if self.df.empty:
-                logger.warning(f"⚠️ CSV数据为空: {csv_file}")
+                logger.warning(f"⚠️ CSV data is empty: {csv_file}")
                 return False
             
             if len(self.df.columns) == 0:
-                logger.error(f"❌ CSV文件无有效列: {csv_file}")
+                logger.error(f"❌ CSV file has no valid columns: {csv_file}")
                 return False
             
-            logger.info(f"✅ 成功加载CSV数据: {len(self.df)} 行, {len(self.df.columns)} 列")
+            logger.info(f"✅ Successfully loaded CSV data: {len(self.df)} rows, {len(self.df.columns)} columns")
             return True
             
         except pd.errors.EmptyDataError:
-            logger.error(f"❌ CSV文件无数据行: {csv_file}")
+            logger.error(f"❌ CSV file has no data rows: {csv_file}")
             return False
         except pd.errors.ParserError as e:
-            logger.error(f"❌ CSV解析错误: {e}")
+            logger.error(f"❌ CSV parsing error: {e}")
             return False
         except UnicodeDecodeError as e:
-            logger.error(f"❌ CSV文件编码错误: {e}")
+            logger.error(f"❌ CSV file encoding error: {e}")
             return False
         except Exception as e:
-            logger.error(f"❌ 加载CSV数据失败: {e}")
+            logger.error(f"❌ Failed to load CSV data: {e}")
             return False
     
     def get_device_columns_safe(self, device_prefix: str, metric_suffix: str) -> List[str]:
         """
-        安全获取设备相关列
+        Safely get device-related columns
         
         Args:
-            device_prefix: 设备前缀 (如 'data', 'accounts')
-            metric_suffix: 指标后缀 (如 'util', 'iops')
+            device_prefix: Device prefix (e.g. 'data', 'accounts')
+            metric_suffix: Metric suffix (e.g. 'util', 'iops')
             
         Returns:
-            List[str]: 匹配的列名列表
+            List[str]: List of matching column names
         """
         if self.df is None:
             return []
@@ -110,25 +110,25 @@ class CSVDataProcessor:
     
     def has_field(self, field_name: str) -> bool:
         """
-        检查字段是否存在
+        Check if field exists
         
         Args:
-            field_name: 字段名
+            field_name: Field name
             
         Returns:
-            bool: 字段是否存在
+            bool: Whether field exists
         """
         return self.df is not None and field_name in self.df.columns
     
     def validate_required_fields(self, required_fields: List[str]) -> Dict[str, bool]:
         """
-        验证必需字段是否存在
+        Validate if required fields exist
         
         Args:
-            required_fields: 必需字段列表
+            required_fields: List of required fields
             
         Returns:
-            Dict[str, bool]: 字段存在性映射
+            Dict[str, bool]: Field existence mapping
         """
         if self.df is None:
             return {field: False for field in required_fields}
@@ -137,10 +137,10 @@ class CSVDataProcessor:
     
     def get_available_fields(self) -> List[str]:
         """
-        获取所有可用字段
+        Get all available fields
         
         Returns:
-            List[str]: 可用字段列表
+            List[str]: List of available fields
         """
         if self.df is None:
             return []
@@ -148,63 +148,63 @@ class CSVDataProcessor:
     
     def clean_data(self) -> bool:
         """
-        清洗数据
+        Clean data
         
         Returns:
-            bool: 清洗是否成功
+            bool: Whether cleaning was successful
         """
         if self.df is None:
             return False
         
         try:
-            # 1. 处理数值字段的数据类型
+            # 1. Handle data types for numeric fields
             numeric_keywords = ['cpu', 'mem', 'usage', 'percent', 'util', 'iops', 'throughput', 'mbps', 'gbps']
             
             for col in self.df.columns:
                 if any(keyword in col.lower() for keyword in numeric_keywords):
-                    # 转换为数值类型，无法转换的设为NaN
+                    # Convert to numeric type, set unconvertible values to NaN
                     self.df[col] = pd.to_numeric(self.df[col], errors='coerce')
                 elif 'util' in col.lower():
-                    # 利用率字段特殊处理
+                    # Special handling for utilization fields
                     self.df[col] = pd.to_numeric(self.df[col], errors='coerce')
-                    # 确保利用率在0-100范围内
+                    # Ensure utilization is within 0-100 range
                     self.df[col] = self.df[col].clip(0, 100)
                 elif any(keyword in col.lower() for keyword in ['await', 'latency', 'delay']):
-                    # 延迟字段处理
+                    # Latency field handling
                     self.df[col] = pd.to_numeric(self.df[col], errors='coerce')
                 elif any(keyword in col.lower() for keyword in ['iops', 'throughput', '_s', 'mbps', 'gbps']):
-                    # 性能指标字段处理
+                    # Performance metric field handling
                     self.df[col] = pd.to_numeric(self.df[col], errors='coerce')
             
-            # 2. 处理时间戳字段
+            # 2. Handle timestamp fields
             timestamp_cols = [col for col in self.df.columns if 'timestamp' in col.lower()]
             for col in timestamp_cols:
                 try:
                     self.df[col] = pd.to_datetime(self.df[col])
                 except:
-                    logger.warning(f"⚠️ 无法转换时间戳字段: {col}")
+                    logger.warning(f"⚠️ Unable to convert timestamp field: {col}")
             
-            # 3. 移除完全为空的列
+            # 3. Remove completely empty columns
             self.df = self.df.dropna(axis=1, how='all')
             
-            # 4. 基本数据验证
+            # 4. Basic data validation
             if len(self.df) == 0:
-                logger.warning("⚠️ 数据清洗后没有剩余数据")
+                logger.warning("⚠️ No data remaining after cleaning")
                 return False
             
-            logger.info(f"✅ 数据清洗完成: {len(self.df)} 行, {len(self.df.columns)} 列")
+            logger.info(f"✅ Data cleaning completed: {len(self.df)} rows, {len(self.df.columns)} columns")
             return True
             
         except Exception as e:
-            logger.error(f"❌ 数据清洗失败: {e}")
+            logger.error(f"❌ Data cleaning failed: {e}")
             return False
     
     def get_summary_info(self) -> Dict:
         """
-        获取数据摘要信息
+        Get data summary information
         
         Returns:
-            Dict: 数据摘要
+            Dict: Data summary
         """
         if self.df is None:
             return {}
@@ -220,7 +220,7 @@ class CSVDataProcessor:
                 'null_counts': self.df.isnull().sum().to_dict()
             }
             
-            # 添加数值字段的基本统计
+            # Add basic statistics for numeric fields
             numeric_cols = self.df.select_dtypes(include=[np.number]).columns
             if len(numeric_cols) > 0:
                 summary['numeric_summary'] = self.df[numeric_cols].describe().to_dict()
@@ -228,18 +228,18 @@ class CSVDataProcessor:
             return summary
             
         except Exception as e:
-            logger.error(f"❌ 获取摘要信息失败: {e}")
+            logger.error(f"❌ Failed to get summary information: {e}")
             return {}
 
 def load_csv_with_processor(csv_file: str) -> CSVDataProcessor:
     """
-    便捷函数：加载CSV文件并返回处理器实例
+    Convenience function: Load CSV file and return processor instance
     
     Args:
-        csv_file: CSV文件路径
+        csv_file: CSV file path
         
     Returns:
-        CSVDataProcessor: 处理器实例
+        CSVDataProcessor: Processor instance
     """
     processor = CSVDataProcessor()
     if processor.load_csv_data(csv_file):
@@ -247,11 +247,11 @@ def load_csv_with_processor(csv_file: str) -> CSVDataProcessor:
     return processor
 
 if __name__ == "__main__":
-    # 测试代码
+    # Test code
     processor = CSVDataProcessor()
-    print("✅ 简化的CSV数据处理器初始化成功")
-    print("主要功能:")
-    print("  - load_csv_data(): 加载CSV数据")
-    print("  - get_device_columns_safe(): 安全获取设备字段")
-    print("  - clean_data(): 数据清洗")
-    print("  - get_summary_info(): 获取数据摘要")
+    print("✅ Simplified CSV data processor initialized successfully")
+    print("Main functions:")
+    print("  - load_csv_data(): Load CSV data")
+    print("  - get_device_columns_safe(): Safely get device fields")
+    print("  - clean_data(): Data cleaning")
+    print("  - get_summary_info(): Get data summary")

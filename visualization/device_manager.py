@@ -1,6 +1,6 @@
 """
-设备管理器 - 统一的设备字段映射和配置管理
-支持32张图表的所有字段需求，整合ACCOUNTS判断逻辑
+Device Manager - Unified device field mapping and configuration management
+Supports all field requirements for 32 charts, integrates ACCOUNTS detection logic
 """
 
 import pandas as pd
@@ -9,16 +9,16 @@ import os
 from typing import Dict, List, Optional, Any
 
 class DeviceManager:
-    """统一设备管理器 - 支持32张图表的字段映射和设备检测"""
+    """Unified device manager - supports field mapping and device detection for 32 charts"""
     
     def __init__(self, df: pd.DataFrame):
         self.df = df
         self._device_cache = {}
         self._field_cache = {}
         
-        # 字段映射模式 - 支持所有32张图表的字段
+        # Field mapping patterns - support all 32 charts' fields
         self.patterns = {
-            # EBS DATA字段
+            # EBS DATA fields
             'data_total_iops': r'data_.*_total_iops',
             'data_util': r'data_.*_util',
             'data_avg_await': r'data_.*_avg_await',
@@ -33,7 +33,7 @@ class DeviceManager:
             'data_r_await': r'data_.*_r_await',
             'data_w_await': r'data_.*_w_await',
             
-            # EBS ACCOUNTS字段
+            # EBS ACCOUNTS fields
             'accounts_total_iops': r'accounts_.*_total_iops',
             'accounts_util': r'accounts_.*_util',
             'accounts_avg_await': r'accounts_.*_avg_await',
@@ -48,7 +48,7 @@ class DeviceManager:
             'accounts_r_await': r'accounts_.*_r_await',
             'accounts_w_await': r'accounts_.*_w_await',
             
-            # CPU字段
+            # CPU fields
             'cpu_usage': r'cpu_usage',
             'cpu_usr': r'cpu_usr',
             'cpu_sys': r'cpu_sys',
@@ -56,12 +56,12 @@ class DeviceManager:
             'cpu_soft': r'cpu_soft',
             'cpu_idle': r'cpu_idle',
             
-            # 内存字段
+            # Memory fields
             'mem_used': r'mem_used',
             'mem_total': r'mem_total',
             'mem_usage': r'mem_usage',
             
-            # 网络字段
+            # Network fields
             'net_rx_mbps': r'net_rx_mbps',
             'net_tx_mbps': r'net_tx_mbps',
             'net_total_mbps': r'net_total_mbps',
@@ -72,7 +72,7 @@ class DeviceManager:
             'net_tx_pps': r'net_tx_pps',
             'net_total_pps': r'net_total_pps',
             
-            # ENA字段
+            # ENA fields
             'bw_in_allowance_exceeded': r'bw_in_allowance_exceeded',
             'bw_out_allowance_exceeded': r'bw_out_allowance_exceeded',
             'pps_allowance_exceeded': r'pps_allowance_exceeded',
@@ -84,22 +84,22 @@ class DeviceManager:
             'ena_conntrack_allowance_available': r'ena_conntrack_allowance_available',
             'ena_conntrack_allowance_exceeded': r'ena_conntrack_allowance_exceeded',
             
-            # 监控开销字段 - 使用正确的字段名
-            'monitoring_cpu_percent': r'monitoring_cpu',  # 实际字段名
-            'monitoring_mem_percent': r'monitoring_memory_percent',  # 实际字段名
+            # Monitoring overhead fields - use correct field names
+            'monitoring_cpu_percent': r'monitoring_cpu',  # Actual field name
+            'monitoring_mem_percent': r'monitoring_memory_percent',  # Actual field name
             'monitoring_iops_per_sec': r'monitoring_iops.*sec',
             'monitoring_throughput_mibs_per_sec': r'monitoring_throughput.*sec',
             
-            # QPS字段
-            'qps_actual': r'current_qps',  # 映射到实际存在的字段
-            'qps_target': r'current_qps',  # 映射到实际存在的字段
+            # QPS fields
+            'qps_actual': r'current_qps',  # Map to actual existing field
+            'qps_target': r'current_qps',  # Map to actual existing field
             
-            # 区块链字段
-            'block_height': r'local_block_height',  # 映射到实际字段
-            'data_loss_blocks': r'data_loss',  # 修复映射
+            # Blockchain fields
+            'block_height': r'local_block_height',  # Map to actual field
+            'data_loss_blocks': r'data_loss',  # Fix mapping
             'conntrack_allowance_available': r'conntrack_allowance_available',
             
-            # 区块链字段
+            # Blockchain fields
             'local_block_height': r'local_block_height',
             'mainnet_block_height': r'mainnet_block_height',
             'block_height_diff': r'block_height_diff',
@@ -107,25 +107,25 @@ class DeviceManager:
             'mainnet_health': r'mainnet_health',
             'data_loss': r'data_loss',
             
-            # QPS性能字段
+            # QPS performance fields
             'current_qps': r'current_qps',
             'rpc_latency_ms': r'rpc_latency_ms',
             'qps_data_available': r'qps_data_available',
             
-            # 扩展字段映射 - 解决21个问题的字段需求
-            # 读写分离字段 - 解决问题10,11,12的EBS设备信息
+            # Extended field mapping - solve field requirements for 21 issues
+            # Read/write separation fields - solve EBS device info for issues 10,11,12
             'data_read_iops': r'data_.*_r_s',
             'data_write_iops': r'data_.*_w_s', 
             'accounts_read_iops': r'accounts_.*_r_s',
             'accounts_write_iops': r'accounts_.*_w_s',
             
-            # 读写延迟字段
+            # Read/write latency fields
             'data_read_latency': r'data_.*_r_await',
             'data_write_latency': r'data_.*_w_await',
             'accounts_read_latency': r'accounts_.*_r_await', 
             'accounts_write_latency': r'accounts_.*_w_await',
             
-            # 读写吞吐量字段
+            # Read/write throughput fields
             'data_read_throughput': r'data_.*_rkb_s',
             'data_write_throughput': r'data_.*_wkb_s',
             'accounts_read_throughput': r'accounts_.*_rkb_s',
@@ -133,17 +133,17 @@ class DeviceManager:
         }
     
     def get_mapped_field(self, field_name):
-        """获取映射后的字段名 - 使用patterns进行精确匹配"""
-        # 使用缓存提高性能
+        """Get mapped field name - use patterns for precise matching"""
+        # Use cache for performance
         if field_name in self._field_cache:
             return self._field_cache[field_name]
         
-        # 直接字段匹配
+        # Direct field matching
         if field_name in self.df.columns:
             self._field_cache[field_name] = field_name
             return field_name
         
-        # 使用patterns进行正则匹配
+        # Use patterns for regex matching
         if field_name in self.patterns:
             pattern = self.patterns[field_name]
             for col in self.df.columns:
@@ -151,7 +151,7 @@ class DeviceManager:
                     self._field_cache[field_name] = col
                     return col
         
-        # 兜底：简单字符串匹配
+        # Fallback: simple string matching
         for col in self.df.columns:
             if field_name in col or col.endswith(field_name.split('_')[-1]):
                 self._field_cache[field_name] = col
@@ -162,54 +162,54 @@ class DeviceManager:
     
     @staticmethod
     def is_accounts_configured(df=None):
-        """统一的ACCOUNTS设备配置检测方法
+        """Unified ACCOUNTS device configuration detection method
         
-        判断逻辑（配置驱动为主，数据验证为辅）：
-        1. 首要条件：检查环境变量是否配置（判断 ACCOUNTS 设备是否存在）
-        2. 次要条件（可选）：如果提供了 df，额外验证数据列是否存在
+        Detection logic (configuration-driven first, data validation second):
+        1. Primary condition: Check if environment variables are configured (determine if ACCOUNTS device exists)
+        2. Secondary condition (optional): If df is provided, additionally validate data columns exist
         
         Args:
-            df: 可选的 DataFrame，如果提供则额外验证数据列
+            df: Optional DataFrame, if provided will additionally validate data columns
         
         Returns:
-            bool: ACCOUNTS 设备是否配置
+            bool: Whether ACCOUNTS device is configured
         """
-        # 首要条件：检查环境变量（配置驱动）
+        # Primary condition: Check environment variables (configuration-driven)
         accounts_device = os.getenv('ACCOUNTS_DEVICE', '').strip()
         accounts_vol_type = os.getenv('ACCOUNTS_VOL_TYPE', '').strip()
         accounts_max_iops = os.getenv('ACCOUNTS_VOL_MAX_IOPS', '').strip()
         
         env_configured = bool(accounts_device and accounts_vol_type and accounts_max_iops)
         
-        # 如果环境变量未配置，直接返回 False
+        # If environment variables not configured, return False directly
         if not env_configured:
-            # 兜底：如果提供了 df，检查数据列（用于读取历史数据场景）
+            # Fallback: If df provided, check data columns (for reading historical data scenario)
             if df is not None:
                 accounts_cols = [col for col in df.columns if col.startswith('accounts_')]
                 return len(accounts_cols) > 0
             return False
         
-        # 环境变量已配置，可选：验证数据列
+        # Environment variables configured, optional: validate data columns
         if df is not None:
             accounts_cols = [col for col in df.columns if col.startswith('accounts_')]
             if len(accounts_cols) == 0:
-                # 环境变量配置了，但数据中没有 accounts_ 列（异常情况）
+                # Environment variables configured, but no accounts_ columns in data (abnormal situation)
                 return False
         
         return True
     
     def _check_device_data_exists(self, logical_name: str) -> bool:
-        """检查设备数据列是否存在"""
+        """Check if device data columns exist"""
         if self.df is None:
             return False
         
-        # 检查设备相关列是否存在
+        # Check if device-related columns exist
         device_cols = [col for col in self.df.columns if col.startswith(f'{logical_name}_')]
         has_data = len(device_cols) > 0
         
         if has_data:
-            # 进一步检查是否有有效数据（非全零）
-            for col in device_cols[:3]:  # 检查前3列即可
+            # Further check if there's valid data (not all zeros)
+            for col in device_cols[:3]:  # Check first 3 columns is enough
                 if col in self.df.columns:
                     non_zero_count = (self.df[col] != 0).sum()
                     if non_zero_count > 0:
@@ -218,7 +218,7 @@ class DeviceManager:
         return False
     
     def get_device_info_text(self):
-        """获取设备信息文本 - 用于图表标题和说明"""
+        """Get device info text - for chart titles and descriptions"""
         accounts_configured = self.is_accounts_configured()
         
         if accounts_configured:
@@ -237,18 +237,18 @@ class DeviceManager:
             }
     
     def create_chart_title(self, base_title):
-        """创建包含设备信息的图表标题"""
+        """Create chart title with device info"""
         device_info = self.get_device_info_text()
         return f"{base_title} - {device_info['title_suffix']}"
     
     def get_threshold_values(self):
-        """从配置文件获取阈值配置"""
-        # 基础阈值配置
+        """Get threshold configuration from config file"""
+        # Base threshold configuration
         base_thresholds = {
             'data_baseline_iops': int(float(os.getenv('DATA_VOL_MAX_IOPS', '20000'))),
             'data_baseline_throughput': int(float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700'))),
             
-            # 瓶颈阈值
+            # Bottleneck thresholds
             'cpu_threshold': float(os.getenv('BOTTLENECK_CPU_THRESHOLD', '85')),
             'memory_threshold': float(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', '90')),
             'ebs_util_threshold': float(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90')),
@@ -256,12 +256,12 @@ class DeviceManager:
             'ebs_iops_threshold': float(os.getenv('BOTTLENECK_EBS_IOPS_THRESHOLD', '90')),
             'ebs_throughput_threshold': float(os.getenv('BOTTLENECK_EBS_THROUGHPUT_THRESHOLD', '90')),
             
-            # 计算警告级别 (阈值的80%和40%)
+            # Calculate warning levels (80% and 40% of thresholds)
             'ebs_util_warning': float(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90')) * 0.8,  # 72%
             'ebs_latency_warning': float(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50')) * 0.4,  # 20ms
         }
         
-        # 如果ACCOUNTS设备配置了，添加ACCOUNTS基准值
+        # If ACCOUNTS device configured, add ACCOUNTS baseline values
         if self.is_accounts_configured():
             base_thresholds.update({
                 'accounts_baseline_iops': int(float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))),
@@ -271,7 +271,7 @@ class DeviceManager:
         return base_thresholds
     
     def get_baseline_values(self):
-        """获取基准值配置 - 用于计算利用率"""
+        """Get baseline configuration - for calculating utilization"""
         thresholds = self.get_threshold_values()
         
         return {
@@ -282,39 +282,39 @@ class DeviceManager:
         }
     
     def get_qps_display_value(self):
-        """获取正确的QPS显示值"""
+        """Get correct QPS display value"""
         current_qps_field = self.get_mapped_field('current_qps')
         
         if current_qps_field and current_qps_field in self.df.columns:
-            # 使用实际QPS值，不是目标值
-            actual_qps = self.df[current_qps_field].iloc[-1]  # 最后一次记录
+            # Use actual QPS value, not target value
+            actual_qps = self.df[current_qps_field].iloc[-1]  # Last record
             return actual_qps
         
         return None
     
     def get_visualization_thresholds(self):
-        """获取可视化阈值配置 - 整合自performance_visualizer.py"""
-        # 获取基础阈值
+        """Get visualization threshold configuration - integrated from performance_visualizer.py"""
+        # Get base thresholds
         thresholds = self.get_threshold_values()
         
-        # 计算可视化专用阈值
+        # Calculate visualization-specific thresholds
         ebs_latency_threshold = int(thresholds['ebs_latency_threshold'])
         ebs_util_threshold = int(thresholds['ebs_util_threshold'])
         
         return {
-            'warning': int(thresholds['cpu_threshold']),                     # CPU阈值 (%)
-            'critical': ebs_util_threshold,                                  # EBS利用率阈值 (%)
-            'io_warning': int(ebs_latency_threshold * 0.4),                 # I/O延迟警告: 50ms * 0.4 = 20ms
-            'io_critical': ebs_latency_threshold,                           # I/O延迟临界: 50ms
-            'memory': int(thresholds['memory_threshold']),                  # 内存阈值 (%)
-            'network': int(os.getenv('BOTTLENECK_NETWORK_THRESHOLD', '80')) # 网络阈值 (%)
+            'warning': int(thresholds['cpu_threshold']),                     # CPU threshold (%)
+            'critical': ebs_util_threshold,                                  # EBS utilization threshold (%)
+            'io_warning': int(ebs_latency_threshold * 0.4),                 # I/O latency warning: 50ms * 0.4 = 20ms
+            'io_critical': ebs_latency_threshold,                           # I/O latency critical: 50ms
+            'memory': int(thresholds['memory_threshold']),                  # Memory threshold (%)
+            'network': int(os.getenv('BOTTLENECK_NETWORK_THRESHOLD', '80')) # Network threshold (%)
         }
     
     def format_summary_text(self, device_info, data_stats, accounts_stats=None):
-        """统一的文本格式化函数 - 整合自performance_visualizer.py"""
+        """Unified text formatting function - integrated from performance_visualizer.py"""
         lines = [f"Analysis Summary ({device_info}):", ""]
         
-        # DATA设备统计
+        # DATA device statistics
         lines.extend([
             "DATA Device:",
             f"  Mean: {data_stats['mean']:.2f}{data_stats['unit']}",
@@ -323,7 +323,7 @@ class DeviceManager:
             ""
         ])
         
-        # ACCOUNTS设备统计
+        # ACCOUNTS device statistics
         if accounts_stats:
             lines.extend([
                 "ACCOUNTS Device:",
@@ -336,46 +336,46 @@ class DeviceManager:
         
         return "\n".join(lines)
     
-    # === 从EBS Generator提取的字段管理方法 ===
+    # === Field management methods extracted from EBS Generator ===
     
     def build_field_mapping(self):
-        """构建EBS字段名称映射 - 支持ACCOUNTS设备可选性"""
+        """Build EBS field name mapping - supports ACCOUNTS device optionality"""
         mapping = {}
         
-        # 完整的字段后缀列表 - 基于实际CSV数据结构
+        # Complete field suffix list - based on actual CSV data structure
         all_suffixes = [
-            # AWS和基础字段
+            # AWS and base fields
             'aws_standard_iops', 'aws_standard_throughput_mibs', 'util', 'aqu_sz',
-            # IOPS相关字段 (r_s对应read_iops, w_s对应write_iops)
+            # IOPS-related fields (r_s corresponds to read_iops, w_s corresponds to write_iops)
             'r_s', 'w_s', 'total_iops',
-            # 延迟相关字段
+            # Latency-related fields
             'r_await', 'w_await', 'avg_await',
-            # 吞吐量相关字段
+            # Throughput-related fields
             'read_throughput_mibs', 'write_throughput_mibs', 'total_throughput_mibs'
         ]
         
-        # 检查设备可用性
+        # Check device availability
         available_devices = []
         
-        # DATA设备 - 必须存在
+        # DATA device - must exist
         data_fields = [col for col in self.df.columns if col.startswith('data_')]
         if data_fields:
             available_devices.append('data')
         
-        # ACCOUNTS设备 - 可选存在
+        # ACCOUNTS device - optional
         accounts_fields = [col for col in self.df.columns if col.startswith('accounts_')]
         if accounts_fields:
             available_devices.append('accounts')
         
-        # 只为可用设备构建映射
+        # Build mapping only for available devices
         for device in available_devices:
             for suffix in all_suffixes:
                 expected_field = f'{device}_{suffix}'
                 actual_field = self.find_field_by_pattern(f'{device}_.*_{suffix}')
-                if actual_field:  # 只映射实际存在的字段
+                if actual_field:  # Only map actually existing fields
                     mapping[expected_field] = actual_field
         
-        # 特殊映射：将常用的简化字段名映射到实际字段
+        # Special mapping: map commonly used simplified field names to actual fields
         if 'data' in available_devices:
             mapping.update({
                 'data_read_iops': self.find_field_by_pattern(r'data_.*_r_s'),
@@ -391,26 +391,26 @@ class DeviceManager:
         return mapping
     
     def find_field_by_pattern(self, pattern):
-        """根据模式查找实际字段名"""
+        """Find actual field name by pattern"""
         for col in self.df.columns:
             if re.match(pattern, col):
                 return col
         return None
     
     def get_field_data(self, field_name):
-        """安全获取字段数据 - 使用映射后的字段名"""
+        """Safely get field data - use mapped field name"""
         mapped_field = self.get_mapped_field(field_name)
         if mapped_field and mapped_field in self.df.columns:
             return self.df[mapped_field]
         return None
     
     def has_field(self, field_name):
-        """检查字段是否存在 - 使用映射后的字段名"""
+        """Check if field exists - use mapped field name"""
         mapped_field = self.get_mapped_field(field_name)
         return mapped_field and mapped_field in self.df.columns
     
     def get_device_label(self, device_name, metric_type):
-        """获取设备标签 - 解决问题8,10,11,12的设备信息缺失"""
+        """Get device label - solve device info missing for issues 8,10,11,12"""
         device_map = {
             'data': 'DATA Device',
             'accounts': 'ACCOUNTS Device'
@@ -430,26 +430,26 @@ class DeviceManager:
         return f"{device_label} {metric_label}"
     
     def get_qps_actual_value(self):
-        """获取实际QPS值 - 解决问题3的QPS显示错误"""
+        """Get actual QPS value - solve QPS display error for issue 3"""
         current_qps_field = self.get_mapped_field('current_qps')
         
         if current_qps_field and current_qps_field in self.df.columns:
-            # 获取最后一次有效记录的QPS值
+            # Get QPS value from last valid record
             qps_data = self.df[current_qps_field].dropna()
             if len(qps_data) > 0:
-                return qps_data.iloc[-1]  # 最后一次记录
+                return qps_data.iloc[-1]  # Last record
         
         return None
     
     def check_data_availability(self, field_list):
-        """检查数据可用性 - 解决问题14,15,16的数据缺失"""
+        """Check data availability - solve data missing for issues 14,15,16"""
         available_fields = {}
         missing_fields = []
         
         for field in field_list:
             mapped_field = self.get_mapped_field(field)
             if mapped_field and mapped_field in self.df.columns:
-                # 检查是否有有效数据
+                # Check if there's valid data
                 data = self.df[mapped_field].dropna()
                 if len(data) > 0 and not (data == 0).all():
                     available_fields[field] = mapped_field
@@ -461,27 +461,27 @@ class DeviceManager:
         return available_fields, missing_fields
     
     def get_memory_fields(self):
-        """获取内存相关字段 - 解决问题15的memory数据缺失"""
+        """Get memory-related fields - solve memory data missing for issue 15"""
         memory_fields = ['mem_used', 'mem_total', 'mem_usage']
         return self.check_data_availability(memory_fields)
     
     def get_monitoring_fields(self):
-        """获取监控开销字段 - 解决问题14,15的监控数据缺失"""
+        """Get monitoring overhead fields - solve monitoring data missing for issues 14,15"""
         monitoring_fields = ['monitoring_iops_per_sec', 'monitoring_throughput_mibs_per_sec']
         return self.check_data_availability(monitoring_fields)
     
     def create_device_aware_title(self, base_title):
-        """创建设备感知的标题 - 统一标题格式"""
+        """Create device-aware title - unified title format"""
         device_info = self.get_device_info_text()
         return f"{base_title} - {device_info['title_suffix']}"
     
     def get_ebs_device_data(self, device_name, metric_type):
-        """获取EBS设备数据 - 统一EBS数据获取"""
+        """Get EBS device data - unified EBS data retrieval"""
         field_name = f"{device_name}_{metric_type}"
         return self.get_field_data(field_name)
     
     def validate_ebs_configuration(self):
-        """验证EBS配置完整性 - 解决问题8的配置硬编码"""
+        """Validate EBS configuration integrity - solve configuration hardcoding for issue 8"""
         validation_result = {
             'data_configured': False,
             'accounts_configured': False,
@@ -489,22 +489,22 @@ class DeviceManager:
             'config_issues': []
         }
         
-        # 检查DATA设备
+        # Check DATA device
         data_fields = ['data_aws_standard_iops', 'data_util', 'data_avg_await']
         data_available, data_missing = self.check_data_availability(data_fields)
         validation_result['data_configured'] = len(data_available) > 0
         validation_result['missing_fields'].extend(data_missing)
         
-        # 检查ACCOUNTS设备
+        # Check ACCOUNTS device
         if self.is_accounts_configured():
             accounts_fields = ['accounts_aws_standard_iops', 'accounts_util', 'accounts_avg_await']
             accounts_available, accounts_missing = self.check_data_availability(accounts_fields)
             validation_result['accounts_configured'] = len(accounts_available) > 0
             validation_result['missing_fields'].extend(accounts_missing)
         
-        # 检查配置一致性
+        # Check configuration consistency
         thresholds = self.get_threshold_values()
-        if thresholds['data_baseline_iops'] == 20000:  # 默认值，可能是硬编码
+        if thresholds['data_baseline_iops'] == 20000:  # Default value, may be hardcoded
             validation_result['config_issues'].append('DATA baseline IOPS may be hardcoded')
         
         return validation_result

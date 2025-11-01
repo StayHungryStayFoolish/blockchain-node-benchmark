@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-EBS专用图表生成器 - 完全独立的EBS性能分析模块
-基于单一职责原则和模块化设计
+EBS Dedicated Chart Generator - Fully independent EBS performance analysis module
+Based on single responsibility principle and modular design
 """
 
 import pandas as pd
@@ -24,7 +24,7 @@ from visualization.chart_style_config import UnifiedChartStyle, load_framework_c
 from visualization.device_manager import DeviceManager
 
 class EBSChartGenerator:
-    # 统一的EBS图表文件命名规范
+    # Unified EBS chart file naming convention
     CHART_FILES = {
         'capacity': 'ebs_aws_capacity_planning.png',
         'performance': 'ebs_iostat_performance.png',
@@ -36,9 +36,9 @@ class EBSChartGenerator:
     }
     
     def __init__(self, data_source, output_dir=None):
-        """智能构造函数 - 支持DataFrame和CSV路径"""
+        """Smart constructor - supports DataFrame and CSV path"""
         
-        # 加载框架配置
+        # Load framework configuration
         load_framework_config()
         
         if output_dir is None:
@@ -46,31 +46,31 @@ class EBSChartGenerator:
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
         
-        # 智能识别输入类型
+        # Intelligently identify input type
         if isinstance(data_source, str):
-            # CSV文件路径 - 兼容performance_visualizer.py调用
+            # CSV file path - compatible with performance_visualizer.py call
             self.df = pd.read_csv(data_source)
             self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         else:
-            # DataFrame对象 - 兼容report_generator.py调用
+            # DataFrame object - compatible with report_generator.py call
             self.df = data_source
-            # 确保timestamp是datetime类型
+            # Ensure timestamp is datetime type
             if 'timestamp' in self.df.columns:
                 self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         
-        # AWS基准值配置 - 使用DeviceManager统一读取（修复问题8）
+        # AWS baseline configuration - use DeviceManager unified reading (fix issue 8)
         temp_device_manager = DeviceManager(self.df) if hasattr(self, 'df') and self.df is not None else None
         if temp_device_manager:
             thresholds = temp_device_manager.get_threshold_values()
             self.data_baseline_iops = thresholds['data_baseline_iops']
             self.data_baseline_throughput = thresholds['data_baseline_throughput']
             
-            # 只有在ACCOUNTS配置时才获取ACCOUNTS阈值
+            # Only get ACCOUNTS thresholds when ACCOUNTS is configured
             if 'accounts_baseline_iops' in thresholds:
                 self.accounts_baseline_iops = thresholds['accounts_baseline_iops']
                 self.accounts_baseline_throughput = thresholds['accounts_baseline_throughput']
             else:
-                # ACCOUNTS未配置时使用环境变量默认值
+                # Use environment variable defaults when ACCOUNTS not configured
                 self.accounts_baseline_iops = float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))
                 self.accounts_baseline_throughput = float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))
             
@@ -79,7 +79,7 @@ class EBSChartGenerator:
             self.ebs_iops_threshold = thresholds['ebs_iops_threshold']
             self.ebs_throughput_threshold = thresholds['ebs_throughput_threshold']
         else:
-            # 回退到环境变量（保持兼容性）
+            # Fallback to environment variables (maintain compatibility)
             self.data_baseline_iops = float(os.getenv('DATA_VOL_MAX_IOPS', '20000'))
             self.data_baseline_throughput = float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700'))
             self.accounts_baseline_iops = float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))
@@ -89,27 +89,27 @@ class EBSChartGenerator:
             self.ebs_iops_threshold = float(os.getenv('BOTTLENECK_EBS_IOPS_THRESHOLD', '90'))
             self.ebs_throughput_threshold = float(os.getenv('BOTTLENECK_EBS_THROUGHPUT_THRESHOLD', '90'))
         
-        # 添加框架统一方法
+        # Add framework unified methods
         self._init_framework_methods()
         
-        # 应用统一样式配置
+        # Apply unified style configuration
         try:
             UnifiedChartStyle.setup_matplotlib()
         except ImportError:
             pass
     
     def _init_framework_methods(self):
-        """初始化框架统一方法"""
-        # 使用DeviceManager统一管理字段映射
+        """Initialize framework unified methods"""
+        # Use DeviceManager for unified field mapping management
         self.device_manager = DeviceManager(self.df)
         self.field_mapping = self.device_manager.build_field_mapping()
         
-        # 🔧 修复: 动态重新计算 aws_standard_iops（修正旧数据）
+        # 🔧 Fix: Dynamically recalculate aws_standard_iops (correct old data)
         self._recalculate_aws_standard_metrics()
     
     def _recalculate_aws_standard_metrics(self):
-        """重新计算AWS标准指标（修正旧的线性放大逻辑）"""
-        # 修正 DATA 设备的 aws_standard_iops
+        """Recalculate AWS standard metrics (correct old linear scaling logic)"""
+        # Correct DATA device's aws_standard_iops
         data_total_iops_field = self.get_mapped_field('data_total_iops')
         data_rkb_field = self.get_mapped_field('data_rkb_s')
         data_wkb_field = self.get_mapped_field('data_wkb_s')
@@ -118,21 +118,21 @@ class EBSChartGenerator:
         data_aws_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
         
         if all([data_total_iops_field, data_rkb_field, data_wkb_field, data_aws_iops_field]):
-            # 计算平均 IO 大小
+            # Calculate average IO size
             total_throughput_kbs = self.df[data_rkb_field] + self.df[data_wkb_field]
             avg_io_kib = total_throughput_kbs / self.df[data_total_iops_field].replace(0, 1)
             
-            # 应用修正后的转换逻辑: 当 avg_io > 16 KiB 时不放大
+            # Apply corrected conversion logic: no scaling when avg_io > 16 KiB
             self.df[data_aws_iops_field] = self.df[data_total_iops_field].where(
                 avg_io_kib > 16,
                 self.df[data_total_iops_field] * (avg_io_kib / 16)
             )
             
-            # Throughput 不需要转换
+            # Throughput doesn't need conversion
             if data_throughput_field and data_aws_throughput_field:
                 self.df[data_aws_throughput_field] = self.df[data_throughput_field]
         
-        # 修正 ACCOUNTS 设备的 aws_standard_iops
+        # Correct ACCOUNTS device's aws_standard_iops
         if self.device_manager.is_accounts_configured():
             accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
             accounts_rkb_field = self.get_mapped_field('accounts_rkb_s')
@@ -154,36 +154,36 @@ class EBSChartGenerator:
                     self.df[accounts_aws_throughput_field] = self.df[accounts_throughput_field]
     
     def get_mapped_field(self, field_name):
-        """获取映射后的实际字段名 - 委托给DeviceManager"""
+        """Get mapped actual field name - delegate to DeviceManager"""
         return self.device_manager.get_mapped_field(field_name)
     
     def get_field_data(self, field_name):
-        """安全获取字段数据 - 委托给DeviceManager"""
+        """Safely get field data - delegate to DeviceManager"""
         return self.device_manager.get_field_data(field_name)
     
     def has_field(self, field_name):
-        """检查字段是否存在 - 委托给DeviceManager"""
+        """Check if field exists - delegate to DeviceManager"""
         return self.device_manager.has_field(field_name)
     
     def validate_data_completeness(self):
-        """EBS数据完整性验证"""
+        """EBS data integrity validation"""
         required_columns = [
             'data_aws_standard_iops', 'data_aws_standard_throughput_mibs',
             'data_util', 'data_aqu_sz'
         ]
         missing_columns = [col for col in required_columns if self.get_mapped_field(col) not in self.df.columns]
         if missing_columns:
-            print(f"⚠️ WARNING: 缺失EBS数据列: {missing_columns}")
+            print(f"⚠️ WARNING: Missing EBS data columns: {missing_columns}")
             return False
         return True
     
     def generate_all_ebs_charts(self):
-        """生成所有EBS图表 - 统一入口"""
+        """Generate all EBS charts - unified entry point"""
         try:
-            # 🎨 重构：应用统一样式配置
+            # 🎨 Refactor: Apply unified style configuration
             unified_style = UnifiedChartStyle()
             unified_style.setup_matplotlib()
-            print("✅ 统一样式已应用到EBS图表")
+            print("✅ Unified style applied to EBS charts")
             
             if not self.validate_data_completeness():
                 print("⚠️ EBS data validation failed, skipping EBS charts")
@@ -206,7 +206,7 @@ class EBSChartGenerator:
             return []
     
     def _has_ebs_data(self):
-        """检查EBS数据可用性 - 使用字段映射"""
+        """Check EBS data availability - use field mapping"""
         required = ['data_total_iops', 'data_util', 'data_aqu_sz']
         for field in required:
             mapped_field = self.get_mapped_field(field)
@@ -215,21 +215,21 @@ class EBSChartGenerator:
         return True
     
     def _create_aws_capacity_analysis(self):
-        """AWS容量规划分析 - 多维度专业分析（3×2对称布局）"""
+        """AWS capacity planning analysis - multi-dimensional professional analysis (3×2 symmetric layout)"""
         fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
         fig.suptitle('AWS EBS Capacity Planning Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
-        # 检查设备配置
+        # Check device configuration
         accounts_configured = self.device_manager.is_accounts_configured()
         
-        # 1. 实际IOPS利用率分析 - 用于容量规划决策
+        # 1. Actual IOPS utilization analysis - for capacity planning decisions
         data_total_iops_field = self.get_mapped_field('data_total_iops')
         if data_total_iops_field and data_total_iops_field in self.df.columns:
-            # 使用实际IOPS（非AWS标准转换）计算利用率
+            # Use actual IOPS (not AWS standard conversion) to calculate utilization
             utilization = (self.df[data_total_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
             ax1.plot(self.df['timestamp'], utilization, label='DATA Actual IOPS Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             
-            # ACCOUNTS设备IOPS利用率
+            # ACCOUNTS device IOPS utilization
             if accounts_configured:
                 accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
                 if accounts_total_iops_field and accounts_total_iops_field in self.df.columns:
@@ -245,14 +245,14 @@ class EBSChartGenerator:
             ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
             ax1.grid(True, alpha=0.3)
         
-        # 2. 实际Throughput利用率分析 - 用于容量规划决策
+        # 2. Actual Throughput utilization analysis - for capacity planning decisions
         data_total_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
         if data_total_throughput_field and data_total_throughput_field in self.df.columns:
-            # 使用实际Throughput（非AWS标准转换）计算利用率
+            # Use actual Throughput (not AWS standard conversion) to calculate utilization
             throughput_util = (self.df[data_total_throughput_field] / self.data_baseline_throughput * 100).clip(lower=0)
             ax2.plot(self.df['timestamp'], throughput_util, label='DATA Actual Throughput Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
             
-            # ACCOUNTS设备Throughput利用率
+            # ACCOUNTS device Throughput utilization
             if accounts_configured:
                 accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
                 if accounts_total_throughput_field and accounts_total_throughput_field in self.df.columns:
@@ -268,13 +268,13 @@ class EBSChartGenerator:
             ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
             ax2.grid(True, alpha=0.3)
         
-        # 3. IOPS容量规划预测（基于趋势分析）- 使用实际IOPS
+        # 3. IOPS capacity planning forecast (based on trend analysis) - using actual IOPS
         if data_total_iops_field and len(self.df) > 10:
-            # DATA设备IOPS趋势
+            # DATA device IOPS trend
             iops_values = self.df[data_total_iops_field].rolling(window=10).mean()
             time_numeric = np.arange(len(iops_values))
             
-            # 简单线性回归预测
+            # Simple linear regression forecast
             valid_mask = ~np.isnan(iops_values)
             if valid_mask.sum() > 5:
                 coeffs = np.polyfit(time_numeric[valid_mask], iops_values[valid_mask], 1)
@@ -285,7 +285,7 @@ class EBSChartGenerator:
                 ax3.axhline(y=self.data_baseline_iops, color=UnifiedChartStyle.COLORS["warning"], linestyle=':', alpha=0.7, 
                            label=f'DATA Baseline: {self.data_baseline_iops}')
                 
-                # ACCOUNTS设备IOPS趋势
+                # ACCOUNTS device IOPS trend
                 if accounts_configured:
                     accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
                     if accounts_total_iops_field and accounts_total_iops_field in self.df.columns:
@@ -305,13 +305,13 @@ class EBSChartGenerator:
                 ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"], ncol=2)
                 ax3.grid(True, alpha=0.3)
         
-        # 4. Throughput容量规划预测（基于趋势分析）- 使用实际Throughput
+        # 4. Throughput capacity planning forecast (based on trend analysis) - using actual Throughput
         if data_total_throughput_field and len(self.df) > 10:
-            # DATA设备Throughput趋势
+            # DATA device Throughput trend
             throughput_values = self.df[data_total_throughput_field].rolling(window=10).mean()
             time_numeric = np.arange(len(throughput_values))
             
-            # 简单线性回归预测
+            # Simple linear regression forecast
             valid_mask = ~np.isnan(throughput_values)
             if valid_mask.sum() > 5:
                 coeffs = np.polyfit(time_numeric[valid_mask], throughput_values[valid_mask], 1)
@@ -322,7 +322,7 @@ class EBSChartGenerator:
                 ax4.axhline(y=self.data_baseline_throughput, color=UnifiedChartStyle.COLORS["warning"], linestyle=':', alpha=0.7, 
                            label=f'DATA Baseline: {self.data_baseline_throughput} MiB/s')
                 
-                # ACCOUNTS设备Throughput趋势
+                # ACCOUNTS device Throughput trend
                 if accounts_configured:
                     accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
                     if accounts_total_throughput_field and accounts_total_throughput_field in self.df.columns:
@@ -342,14 +342,14 @@ class EBSChartGenerator:
                 ax4.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"], ncol=2)
                 ax4.grid(True, alpha=0.3)
         
-        # 5. IOPS容量利用率分布分析 - 支持双设备
+        # 5. IOPS capacity utilization distribution analysis - supports dual devices
         if data_total_iops_field:
             data_utilization = (self.df[data_total_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
             ax5.hist(data_utilization, bins=20, alpha=0.7, color='skyblue', edgecolor='black', label='DATA Device')
             ax5.axvline(x=data_utilization.mean(), color=UnifiedChartStyle.COLORS["data_primary"], linestyle='--', 
                        label=f'DATA Mean: {data_utilization.mean():.1f}%')
             
-            # ACCOUNTS设备利用率分布
+            # ACCOUNTS device utilization distribution
             if accounts_configured:
                 accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
                 if accounts_total_iops_field and accounts_total_iops_field in self.df.columns:
@@ -366,14 +366,14 @@ class EBSChartGenerator:
             ax5.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
             ax5.grid(True, alpha=0.3)
         
-        # 6. Throughput容量利用率分布分析 - 支持双设备
+        # 6. Throughput capacity utilization distribution analysis - supports dual devices
         if data_total_throughput_field:
             data_tp_utilization = (self.df[data_total_throughput_field] / self.data_baseline_throughput * 100).clip(lower=0)
             ax6.hist(data_tp_utilization, bins=20, alpha=0.7, color='lightgreen', edgecolor='black', label='DATA Device')
             ax6.axvline(x=data_tp_utilization.mean(), color=UnifiedChartStyle.COLORS["success"], linestyle='--', 
                        label=f'DATA Mean: {data_tp_utilization.mean():.1f}%')
             
-            # ACCOUNTS设备Throughput利用率分布
+            # ACCOUNTS device Throughput utilization distribution
             if accounts_configured:
                 accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
                 if accounts_total_throughput_field and accounts_total_throughput_field in self.df.columns:
@@ -390,7 +390,7 @@ class EBSChartGenerator:
             ax6.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
             ax6.grid(True, alpha=0.3)
         
-        # 统一时间轴格式（子图1-4有时间序列）- 智能格式
+        # Unified time axis format (subplots 1-4 have time series) - intelligent formatting
         if 'timestamp' in self.df.columns:
             UnifiedChartStyle.format_time_axis_unified([ax1, ax2, ax3, ax4], self.df['timestamp'])
         
@@ -401,18 +401,18 @@ class EBSChartGenerator:
         return chart_path
     
     def _create_iostat_performance_analysis(self):
-        """iostat性能分析 - 多维度专业分析"""
+        """iostat performance analysis - multi-dimensional professional analysis"""
         
-        # 检查设备配置
+        # Check device configuration
         accounts_configured = self.device_manager.is_accounts_configured()
         
-        # 使用框架统一标题函数
+        # Use framework unified title function
         title = create_chart_title('EBS iostat Performance Analysis', accounts_configured)
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
-        # 1. IOPS性能分析（读写分离）- 支持双设备
+        # 1. IOPS performance analysis (read/write breakdown) - supports dual devices
         data_read_iops_field = self.get_mapped_field('data_read_iops')
         data_write_iops_field = self.get_mapped_field('data_write_iops')
         if data_read_iops_field and data_write_iops_field and data_read_iops_field in self.df.columns and data_write_iops_field in self.df.columns:
@@ -421,7 +421,7 @@ class EBSChartGenerator:
             ax1.plot(self.df['timestamp'], self.df[data_write_iops_field], 
                     label='DATA Write IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["critical"], alpha=0.8)
             
-            # ACCOUNTS设备IOPS
+            # ACCOUNTS device IOPS
             if accounts_configured:
                 accounts_read_iops_field = self.get_mapped_field('accounts_read_iops')
                 accounts_write_iops_field = self.get_mapped_field('accounts_write_iops')
@@ -441,7 +441,7 @@ class EBSChartGenerator:
                 ax1.plot(self.df['timestamp'], self.df[data_total_iops_field], 
                         label='DATA Total IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
                 
-                # ACCOUNTS设备总IOPS
+                # ACCOUNTS device total IOPS
                 if accounts_configured:
                     accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
                     if accounts_total_iops_field and accounts_total_iops_field in self.df.columns:
@@ -453,7 +453,7 @@ class EBSChartGenerator:
             ax1.legend()
             ax1.grid(True, alpha=0.3)
         
-        # 2. Throughput性能分析（读写分离）- 支持双设备
+        # 2. Throughput performance analysis (read/write breakdown) - supports dual devices
         data_read_tp_field = self.get_mapped_field('data_read_throughput_mibs')
         data_write_tp_field = self.get_mapped_field('data_write_throughput_mibs')
         if data_read_tp_field and data_write_tp_field and data_read_tp_field in self.df.columns and data_write_tp_field in self.df.columns:
@@ -462,7 +462,7 @@ class EBSChartGenerator:
             ax2.plot(self.df['timestamp'], self.df[data_write_tp_field], 
                     label='DATA Write Throughput', linewidth=2, color=UnifiedChartStyle.COLORS["critical"], alpha=0.8)
             
-            # ACCOUNTS设备Throughput
+            # ACCOUNTS device Throughput
             if accounts_configured:
                 accounts_read_tp_field = self.get_mapped_field('accounts_read_throughput_mibs')
                 accounts_write_tp_field = self.get_mapped_field('accounts_write_throughput_mibs')
@@ -474,23 +474,23 @@ class EBSChartGenerator:
             
             ax2.set_title('Throughput Performance (Read/Write Breakdown)')
             ax2.set_ylabel('Throughput (MiB/s)')
-            # 修复图例重叠 - 使用更好的位置和较小字体
+            # Fix legend overlap - use better position and smaller font
             ax2.legend(loc='upper left', fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"], ncol=2)
             ax2.grid(True, alpha=0.3)
         
-        # 3. 设备利用率和队列深度分析 - 支持双设备
+        # 3. Device utilization and queue depth analysis - supports dual devices
         data_util_field = self.get_mapped_field('data_util')
         data_aqu_field = self.get_mapped_field('data_aqu_sz')
         if data_util_field and data_aqu_field and data_util_field in self.df.columns and data_aqu_field in self.df.columns:
             ax3_twin = ax3.twinx()
             
-            # DATA设备利用率和队列深度
+            # DATA device utilization and queue depth
             ax3.plot(self.df['timestamp'], self.df[data_util_field], 
                     label='DATA Device Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             ax3_twin.plot(self.df['timestamp'], self.df[data_aqu_field], 
                          label='DATA Queue Depth', linewidth=2, color='lightblue')
             
-            # ACCOUNTS设备利用率和队列深度
+            # ACCOUNTS device utilization and queue depth
             if accounts_configured:
                 accounts_util_field = self.get_mapped_field('accounts_util')
                 accounts_aqu_field = self.get_mapped_field('accounts_aqu_sz')
@@ -510,23 +510,23 @@ class EBSChartGenerator:
             
             ax3.set_title('Device Utilization vs Queue Depth')
             
-            # 合并图例 - 使用紧凑布局
+            # Merge legends - use compact layout
             lines1, labels1 = ax3.get_legend_handles_labels()
             lines2, labels2 = ax3_twin.get_legend_handles_labels()
             ax3.legend(lines1 + lines2, labels1 + labels2, loc='upper left', fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
             ax3.grid(True, alpha=0.3)
         
-        # 4. 延迟分析（读写分离）- 支持双设备
+        # 4. Latency analysis (read/write breakdown) - supports dual devices
         data_r_await_field = self.get_mapped_field('data_r_await')
         data_w_await_field = self.get_mapped_field('data_w_await')
         if data_r_await_field and data_w_await_field and data_r_await_field in self.df.columns and data_w_await_field in self.df.columns:
-            # DATA设备延迟
+            # DATA device latency
             ax4.plot(self.df['timestamp'], self.df[data_r_await_field], 
                     label='DATA Read Latency', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"], alpha=0.8)
             ax4.plot(self.df['timestamp'], self.df[data_w_await_field], 
                     label='DATA Write Latency', linewidth=2, color=UnifiedChartStyle.COLORS["critical"], alpha=0.8)
             
-            # ACCOUNTS设备延迟
+            # ACCOUNTS device latency
             if accounts_configured:
                 accounts_r_await_field = self.get_mapped_field('accounts_r_await')
                 accounts_w_await_field = self.get_mapped_field('accounts_w_await')
@@ -536,7 +536,7 @@ class EBSChartGenerator:
                     ax4.plot(self.df['timestamp'], self.df[accounts_w_await_field], 
                             label='ACCOUNTS Write Latency', linewidth=2, color='purple', alpha=0.8)
             
-            # 平均延迟线
+            # Average latency line
             data_avg_await_field = self.get_mapped_field('data_avg_await')
             if data_avg_await_field and data_avg_await_field in self.df.columns:
                 ax4.plot(self.df['timestamp'], self.df[data_avg_await_field], 
@@ -552,7 +552,7 @@ class EBSChartGenerator:
                        label=f'Latency Threshold: {self.ebs_latency_threshold}ms')
             ax4.set_title('I/O Latency Analysis (Read/Write Breakdown)')
             ax4.set_ylabel('Latency (ms)')
-            # 使用紧凑图例布局
+            # Use compact legend layout
             ax4.legend(loc='upper left', fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"], ncol=2)
             ax4.grid(True, alpha=0.3)
             ax4.grid(True, alpha=0.3)
@@ -564,21 +564,21 @@ class EBSChartGenerator:
         return chart_path
     
     def _create_bottleneck_correlation_analysis(self):
-        """瓶颈关联分析 - 多维度专业分析"""
+        """Bottleneck correlation analysis - multi-dimensional professional analysis"""
         
-        # 检查设备配置
+        # Check device configuration
         accounts_configured = self.device_manager.is_accounts_configured()
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle('EBS Bottleneck Correlation Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
-        # 1. 实际利用率 vs 设备利用率关联 - 支持双设备
+        # 1. Actual utilization vs device utilization correlation - supports dual devices
         data_iops_field = self.get_mapped_field('data_total_iops')
         data_util_field = self.get_mapped_field('data_util')
         if data_iops_field and data_iops_field in self.df.columns and data_util_field and data_util_field in self.df.columns:
             actual_iops_util = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
             
-            # DATA设备散点图
+            # DATA device scatter plot
             data_avg_await_field = self.get_mapped_field('data_avg_await')
             if data_avg_await_field and data_avg_await_field in self.df.columns:
                 scatter = ax1.scatter(actual_iops_util, self.df[data_util_field], 
@@ -588,7 +588,7 @@ class EBSChartGenerator:
             else:
                 ax1.scatter(actual_iops_util, self.df[data_util_field], alpha=0.6, s=30, label='DATA Device')
             
-            # ACCOUNTS设备散点图
+            # ACCOUNTS device scatter plot
             if accounts_configured:
                 accounts_iops_field = self.get_mapped_field('accounts_total_iops')
                 accounts_util_field = self.get_mapped_field('accounts_util')
@@ -607,11 +607,11 @@ class EBSChartGenerator:
             ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax1.grid(True, alpha=0.3)
         
-        # 2. 队列深度 vs 延迟关联分析 - 支持双设备
+        # 2. Queue depth vs latency correlation analysis - supports dual devices
         data_aqu_field = self.get_mapped_field('data_aqu_sz')
         data_avg_await_field = self.get_mapped_field('data_avg_await')
         if data_aqu_field and data_avg_await_field and data_aqu_field in self.df.columns and data_avg_await_field in self.df.columns:
-            # DATA设备队列深度相关性
+            # DATA device queue depth correlation
             if data_util_field and data_util_field in self.df.columns:
                 scatter = ax2.scatter(self.df[data_aqu_field], self.df[data_avg_await_field], 
                                     c=self.df[data_util_field], cmap='viridis', 
@@ -620,7 +620,7 @@ class EBSChartGenerator:
             else:
                 ax2.scatter(self.df[data_aqu_field], self.df[data_avg_await_field], alpha=0.6, s=30, label='DATA Device')
             
-            # ACCOUNTS设备队列深度相关性
+            # ACCOUNTS device queue depth correlation
             if accounts_configured:
                 accounts_aqu_field = self.get_mapped_field('accounts_aqu_sz')
                 accounts_avg_await_field = self.get_mapped_field('accounts_avg_await')
@@ -636,11 +636,11 @@ class EBSChartGenerator:
             ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax2.grid(True, alpha=0.3)
         
-        # 3. IOPS vs Throughput效率分析 - 支持双设备
+        # 3. IOPS vs Throughput efficiency analysis - supports dual devices
         data_total_iops_field = self.get_mapped_field('data_total_iops')
         data_total_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
         if data_total_iops_field and data_total_throughput_field and data_total_iops_field in self.df.columns and data_total_throughput_field in self.df.columns:
-            # DATA设备效率分析
+            # DATA device efficiency analysis
             efficiency = np.where(self.df[data_total_iops_field] > 0, 
                                  self.df[data_total_throughput_field] * 1024 / self.df[data_total_iops_field], 
                                  0)
@@ -649,7 +649,7 @@ class EBSChartGenerator:
                                 c=efficiency, cmap='plasma', alpha=0.6, s=30, label='DATA Device')
             plt.colorbar(scatter, ax=ax3, label='KiB per IOPS')
             
-            # ACCOUNTS设备效率分析
+            # ACCOUNTS device efficiency analysis
             if accounts_configured:
                 accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
                 accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
@@ -663,22 +663,22 @@ class EBSChartGenerator:
             ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax3.grid(True, alpha=0.3)
         
-        # 4. 多维度瓶颈热力图
+        # 4. Multi-dimensional bottleneck heatmap
         data_util_field = self.get_mapped_field('data_util')
         data_avg_await_field = self.get_mapped_field('data_avg_await')
         data_aqu_field = self.get_mapped_field('data_aqu_sz')
         
         if (data_util_field and data_avg_await_field and data_aqu_field and 
             all(field in self.df.columns for field in [data_util_field, data_avg_await_field, data_aqu_field])):
-            # 创建瓶颈评分矩阵
+            # Create bottleneck scoring matrix
             util_score = (self.df[data_util_field] / 100).clip(0, 1)
             latency_score = (self.df[data_avg_await_field] / self.ebs_latency_threshold).clip(0, 2)
-            queue_score = (self.df[data_aqu_field] / 10).clip(0, 1)  # 假设队列深度10为高值
+            queue_score = (self.df[data_aqu_field] / 10).clip(0, 1)  # Assume queue depth 10 as high value
             
-            # 综合瓶颈评分
+            # Composite bottleneck score
             bottleneck_score = (util_score + latency_score + queue_score) / 3
             
-            # 时间序列热力图
+            # Time series heatmap
             time_hours = self.df['timestamp'].dt.hour if hasattr(self.df['timestamp'], 'dt') else range(len(self.df))
             
             ax4.scatter(time_hours, bottleneck_score, c=bottleneck_score, 
@@ -698,23 +698,23 @@ class EBSChartGenerator:
         return chart_path
     
     def generate_ebs_performance_overview(self):
-        """EBS性能概览图表 - 支持DATA和ACCOUNTS双设备动态显示"""
+        """EBS performance overview chart - supports DATA and ACCOUNTS dual device dynamic display"""
         
-        # 设备配置检测 - 使用统一方法
+        # Device configuration detection - use unified method
         data_configured = True
         accounts_configured = self.device_manager.is_accounts_configured()
         
         if not data_configured:
-            print("❌ DATA设备数据未找到")
+            print("❌ DATA device data not found")
             return None
         
-        # 动态标题
+        # Dynamic title
         title = 'EBS Performance Overview - DATA & ACCOUNTS Devices' if accounts_configured else 'EBS Performance Overview - DATA Device Only'
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
-        # 1. AWS标准IOPS vs基准线（带利用率区间）
+        # 1. AWS standard IOPS vs baseline (with utilization zones)
         data_iops_field = self.get_mapped_field('data_aws_standard_iops')
         if data_iops_field and data_iops_field in self.df.columns:
             ax1.plot(self.df['timestamp'], self.df[data_iops_field], 
@@ -722,7 +722,7 @@ class EBSChartGenerator:
             ax1.axhline(y=self.data_baseline_iops, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7, 
                        label=f'DATA Baseline: {self.data_baseline_iops}')
             
-            # ACCOUNTS设备数据叠加
+            # ACCOUNTS device data overlay
             if accounts_configured:
                 accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
                 if accounts_iops_field and accounts_iops_field in self.df.columns:
@@ -736,7 +736,7 @@ class EBSChartGenerator:
             ax1.legend()
             ax1.grid(True, alpha=0.3)
         
-        # 2. AWS标准Throughput vs基准线
+        # 2. AWS standard Throughput vs baseline
         data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
         if data_throughput_field and data_throughput_field in self.df.columns:
             ax2.plot(self.df['timestamp'], self.df[data_throughput_field], 
@@ -744,7 +744,7 @@ class EBSChartGenerator:
             ax2.axhline(y=self.data_baseline_throughput, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7, 
                        label=f'DATA Baseline: {self.data_baseline_throughput} MiB/s')
             
-            # ACCOUNTS设备数据叠加
+            # ACCOUNTS device data overlay
             if accounts_configured:
                 accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
                 if accounts_throughput_field and accounts_throughput_field in self.df.columns:
@@ -758,7 +758,7 @@ class EBSChartGenerator:
             ax2.legend()
             ax2.grid(True, alpha=0.3)
         
-        # 3. 设备利用率对比
+        # 3. Device utilization comparison
         data_util_field = self.get_mapped_field('data_util')
         if data_util_field and data_util_field in self.df.columns:
             ax3.plot(self.df['timestamp'], self.df[data_util_field], 
@@ -777,7 +777,7 @@ class EBSChartGenerator:
             ax3.legend()
             ax3.grid(True, alpha=0.3)
         
-        # 4. 性能摘要 - 使用文本换行处理
+        # 4. Performance summary - use text wrapping
         ax4.axis('off')
         summary_lines = ["EBS Performance Summary:", ""]
         
@@ -804,7 +804,7 @@ class EBSChartGenerator:
                     f"  Baseline: {self.accounts_baseline_iops}"
                 ])
         
-        # 使用换行处理避免文本重叠
+        # Use line wrapping to avoid text overlap
         summary_text = "\n".join(summary_lines)
         ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes, fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"], 
                 verticalalignment='top', fontfamily='monospace',
@@ -821,15 +821,15 @@ class EBSChartGenerator:
         return chart_path
         
     def _is_accounts_configured(self):
-        """统一的ACCOUNTS设备检测逻辑"""
-        # 检查数据列是否存在（最可靠的方法）
+        """Unified ACCOUNTS device detection logic"""
+        # Check if data columns exist (most reliable method)
         accounts_cols = [col for col in self.df.columns if col.startswith('accounts_')]
         return len(accounts_cols) > 0
     
     def generate_ebs_bottleneck_analysis(self):
         """EBS Bottleneck Analysis Chart - Dual Device Support"""
         
-        # Device configuration detection - 使用统一方法
+        # Device configuration detection - use unified method
         data_configured = True
         accounts_configured = self.device_manager.is_accounts_configured()
         
@@ -969,7 +969,7 @@ class EBSChartGenerator:
     def generate_ebs_aws_standard_comparison(self):
         """EBS AWS Standard Comparison Chart - Dual Device Support"""
         
-        # Device configuration detection - 使用统一方法
+        # Device configuration detection - use unified method
         accounts_configured = self.device_manager.is_accounts_configured()
         
         # Dynamic title
@@ -978,7 +978,7 @@ class EBSChartGenerator:
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
-        # 1. IOPS对比分析 - 支持双设备
+        # 1. IOPS comparison analysis - supports dual devices
         data_iops_field = self.get_mapped_field('data_aws_standard_iops')
         data_total_iops_field = self.get_mapped_field('data_total_iops')
         if data_iops_field and data_total_iops_field and data_iops_field in self.df.columns and data_total_iops_field in self.df.columns:
@@ -987,7 +987,7 @@ class EBSChartGenerator:
             ax1.plot(self.df['timestamp'], self.df[data_iops_field], 
                     label='DATA AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             
-            # ACCOUNTS设备IOPS对比
+            # ACCOUNTS device IOPS comparison
             if accounts_configured:
                 accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
                 accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
@@ -1009,7 +1009,7 @@ class EBSChartGenerator:
             ax1.grid(True, alpha=0.3)
             UnifiedChartStyle.format_time_axis(ax1, self.df['timestamp'])
         
-        # 2. Throughput对比分析 - 支持双设备
+        # 2. Throughput comparison analysis - supports dual devices
         data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
         data_total_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
         if data_throughput_field and data_total_throughput_field and data_throughput_field in self.df.columns and data_total_throughput_field in self.df.columns:
@@ -1018,7 +1018,7 @@ class EBSChartGenerator:
             ax2.plot(self.df['timestamp'], self.df[data_throughput_field], 
                     label='DATA AWS Standard Throughput', linewidth=2, linestyle='-', color=UnifiedChartStyle.COLORS["data_primary"])
             
-            # ACCOUNTS设备Throughput对比
+            # ACCOUNTS device Throughput comparison
             if accounts_configured:
                 accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
                 accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
@@ -1098,7 +1098,7 @@ class EBSChartGenerator:
                 ""
             ])
         
-        # 基准线利用率对比
+        # Baseline utilization comparison
         data_iops_field = self.get_mapped_field('data_aws_standard_iops')
         if data_iops_field and data_iops_field in self.df.columns:
             aws_utilization = (self.df[data_iops_field] / self.data_baseline_iops * 100).mean()
@@ -1125,7 +1125,7 @@ class EBSChartGenerator:
     def generate_ebs_time_series(self):
         """EBS Time Series Analysis Chart - Dual Device Support"""
         
-        # Device configuration detection - 使用统一方法
+        # Device configuration detection - use unified method
         data_configured = True
         accounts_configured = self.device_manager.is_accounts_configured()
         
@@ -1139,13 +1139,13 @@ class EBSChartGenerator:
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
-        # 1. 多指标时间序列（标准化显示）
+        # 1. Multi-metric time series (normalized display)
         data_iops_field = self.get_mapped_field('data_aws_standard_iops')
         data_util_field = self.get_mapped_field('data_util')
         data_avg_await_field = self.get_mapped_field('data_avg_await')
         
         if data_iops_field and data_util_field and data_avg_await_field and all(self.get_mapped_field(f) in self.df.columns for f in ['data_aws_standard_iops', 'data_util', 'data_avg_await']):
-            # 标准化数据到0-100范围便于比较
+            # Normalize data to 0-100 range for comparison
             iops_normalized = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
             util_normalized = self.df[data_util_field]
             latency_normalized = (self.df[data_avg_await_field] / self.ebs_latency_threshold * 100).clip(0, 200)
@@ -1163,10 +1163,10 @@ class EBSChartGenerator:
             ax1.legend()
             ax1.grid(True, alpha=0.3)
         
-        # 2. 滑动平均趋势分析
+        # 2. Moving average trend analysis
         data_iops_field = self.get_mapped_field('data_aws_standard_iops')
         if data_iops_field and data_iops_field in self.df.columns:
-            window_size = min(20, len(self.df) // 5)  # 动态窗口大小
+            window_size = min(20, len(self.df) // 5)  # Dynamic window size
             if window_size > 1:
                 rolling_mean = self.df[data_iops_field].rolling(window=window_size).mean()
                 rolling_std = self.df[data_iops_field].rolling(window=window_size).std()
@@ -1176,7 +1176,7 @@ class EBSChartGenerator:
                 ax2.plot(self.df['timestamp'], rolling_mean, 
                         label=f'{window_size}-point Moving Average', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
                 
-                # 添加置信区间
+                # Add confidence interval
                 ax2.fill_between(self.df['timestamp'], 
                                rolling_mean - rolling_std, 
                                rolling_mean + rolling_std,
@@ -1189,9 +1189,9 @@ class EBSChartGenerator:
                 ax2.legend()
                 ax2.grid(True, alpha=0.3)
         
-        # 3. 性能模式识别（峰值、低谷分析）
+        # 3. Performance pattern recognition (peak and valley analysis)
         if data_iops_field and len(self.df) > 10:
-            # 识别峰值和低谷
+            # Identify peaks and valleys
             try:
                 peaks, _ = find_peaks(self.df[data_iops_field], 
                                     height=self.df[data_iops_field].mean(),
@@ -1219,7 +1219,7 @@ class EBSChartGenerator:
                 ax3.grid(True, alpha=0.3)
                 
             except ImportError:
-                # 如果没有scipy，使用简单的峰值检测
+                # If scipy not available, use simple peak detection
                 mean_val = self.df[data_iops_field].mean()
                 std_val = self.df[data_iops_field].std()
                 
@@ -1248,7 +1248,7 @@ class EBSChartGenerator:
                 ax3.legend()
                 ax3.grid(True, alpha=0.3)
         
-        # 4. 时间序列统计摘要
+        # 4. Time series statistical summary
         ax4.axis('off')
         timeseries_text = "Time Series Analysis Summary:\n\n"
         
@@ -1289,7 +1289,7 @@ class EBSChartGenerator:
         return chart_path
     
     def validate_ebs_integration(self):
-        """验证EBS功能完全分离后的集成正确性"""
+        """Validate EBS integration correctness after complete separation"""
         validation_results = {
             'data_completeness': self.validate_data_completeness(),
             'chart_files_defined': len(self.CHART_FILES) == 7,

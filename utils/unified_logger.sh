@@ -1,38 +1,38 @@
 #!/bin/bash
 # =====================================================================
-# 统一日志管理器 - Unified Logger
+# Unified Logger Manager - Unified Logger
 # =====================================================================
-# 提供统一的日志配置、格式化、轮转和管理功能
-# 解决项目中日志配置不统一的问题
+# Provides unified logging configuration, formatting, rotation, and management functionality
+# Solves inconsistent logging configuration issues in the project
 # =====================================================================
 
-# 防止重复加载 - 但在子进程中需要重新加载函数定义
+# Prevent duplicate loading - but function definitions need to be reloaded in subprocesses
 if [[ "${UNIFIED_LOGGER_LOADED:-false}" == "true" ]] && [[ "$(type -t init_logger)" == "function" ]]; then
     return 0
 fi
 
-# 引入配置
+# Import configuration
 source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh"
 
 # =====================================================================
-# 日志配置常量
+# Logging configuration constants
 # =====================================================================
 
-# 日志级别定义
+# Log level definitions
 readonly LOG_LEVEL_DEBUG=0
 readonly LOG_LEVEL_INFO=1
 readonly LOG_LEVEL_WARN=2
 readonly LOG_LEVEL_ERROR=3
 readonly LOG_LEVEL_FATAL=4
 
-# 日志级别名称映射
+# Log level name mapping
 LOG_LEVEL_NAMES_0="DEBUG"
 LOG_LEVEL_NAMES_1="INFO"
 LOG_LEVEL_NAMES_2="WARN"
 LOG_LEVEL_NAMES_3="ERROR"
 LOG_LEVEL_NAMES_4="FATAL"
 
-# 颜色定义
+# Color definitions
 readonly COLOR_RESET='\033[0m'
 readonly COLOR_RED='\033[0;31m'
 readonly COLOR_GREEN='\033[0;32m'
@@ -42,50 +42,50 @@ readonly COLOR_PURPLE='\033[0;35m'
 readonly COLOR_CYAN='\033[0;36m'
 readonly COLOR_WHITE='\033[0;37m'
 
-# 日志级别颜色映射
-LOG_LEVEL_COLORS_0="\033[0;36m"    # 青色 - DEBUG
-LOG_LEVEL_COLORS_1="\033[0;32m"    # 绿色 - INFO
-LOG_LEVEL_COLORS_2="\033[0;33m"    # 黄色 - WARN
-LOG_LEVEL_COLORS_3="\033[0;31m"    # 红色 - ERROR
-LOG_LEVEL_COLORS_4="\033[0;35m"    # 紫色 - FATAL
+# Log level color mapping
+LOG_LEVEL_COLORS_0="\033[0;36m"    # Cyan - DEBUG
+LOG_LEVEL_COLORS_1="\033[0;32m"    # Green - INFO
+LOG_LEVEL_COLORS_2="\033[0;33m"    # Yellow - WARN
+LOG_LEVEL_COLORS_3="\033[0;31m"    # Red - ERROR
+LOG_LEVEL_COLORS_4="\033[0;35m"    # Purple - FATAL
 
-# 默认配置
+# Default configuration
 DEFAULT_LOG_LEVEL=${LOG_LEVEL:-$LOG_LEVEL_INFO}
 DEFAULT_LOG_FORMAT="${LOG_FORMAT:-"[%timestamp%] [%level%] [%component%] %message%"}"
 DEFAULT_MAX_LOG_SIZE="${MAX_LOG_SIZE:-10M}"
 DEFAULT_MAX_LOG_FILES="${MAX_LOG_FILES:-5}"
 
 # =====================================================================
-# 日志管理器类
+# Logger manager class
 # =====================================================================
 
-# 组件日志文件映射表（替代全局LOGGER_FILE）
+# Component log file mapping table (replaces global LOGGER_FILE)
 declare -A COMPONENT_LOG_FILES
 
-# 初始化日志管理器
+# Initialize logger manager
 init_logger() {
     local component="$1"
     local log_level="${2:-$DEFAULT_LOG_LEVEL}"
     local log_file="${3:-}"
     
-    # 使用组件级映射，完全移除全局变量
+    # Use component-level mapping, completely remove global variables
     if [[ -n "$log_file" ]]; then
         COMPONENT_LOG_FILES["$component"]="$log_file"
-        # 确保日志目录存在
+        # Ensure log directory exists
         mkdir -p "$(dirname "$log_file")" 2>/dev/null
     fi
     
-    # 设置组件特定的环境变量（仅进程内部）
+    # Set component-specific environment variables (process internal only)
     export LOGGER_COMPONENT="$component"
     export LOGGER_LEVEL="$log_level"
     export LOGGER_INITIALIZED="true"
     
-    # 输出初始化信息
+    # Output initialization information
     local level_name=$(get_log_level_name "$log_level")
     echo "Logger initialized for component: $component (level: $level_name)"
 }
 
-# 生成标准化日志文件路径
+# Generate standardized log file path
 get_log_file_path() {
     local component="$1"
     local log_type="${2:-general}"
@@ -94,7 +94,7 @@ get_log_file_path() {
     echo "${LOGS_DIR}/${component}_${log_type}_${timestamp}.log"
 }
 
-# 获取日志级别名称
+# Get log level name
 get_log_level_name() {
     local level="$1"
     case "$level" in
@@ -107,7 +107,7 @@ get_log_level_name() {
     esac
 }
 
-# 获取日志级别颜色 (兼容函数)
+# Get log level color (compatibility function)
 get_log_level_color() {
     local level="$1"
     case "$level" in
@@ -120,7 +120,7 @@ get_log_level_color() {
     esac
 }
 
-# 格式化日志消息
+# Format log message
 format_log_message() {
     local level="$1"
     local component="$2"
@@ -138,39 +138,39 @@ format_log_message() {
     echo "$formatted_message"
 }
 
-# 写入日志
+# Write log
 write_log() {
     local level="$1"
     local message="$2"
     local component="${LOGGER_COMPONENT:-unknown}"
     local current_level="${LOGGER_LEVEL:-$DEFAULT_LOG_LEVEL}"
     
-    # 检查日志级别
+    # Check log level
     if [[ $level -lt $current_level ]]; then
         return 0
     fi
     
-    # 格式化消息
+    # Format message
     local formatted_message=$(format_log_message "$level" "$component" "$message")
     
-    # 控制台输出（带颜色）- 重定向到stderr避免污染stdout
+    # Console output (with color) - redirect to stderr to avoid polluting stdout
     local color=$(get_log_level_color "$level")
     echo -e "${color}${formatted_message}${COLOR_RESET}" >&2
     
-    # 文件输出（无颜色）
+    # File output (no color)
     local component="${LOGGER_COMPONENT:-unknown}"
     local log_file="${COMPONENT_LOG_FILES[$component]:-}"
     
     if [[ -n "$log_file" ]]; then
         echo "$formatted_message" >> "$log_file"
         
-        # 检查日志轮转
+        # Check log rotation
         check_log_rotation "$log_file"
     fi
 }
 
 # =====================================================================
-# 日志级别函数
+# Log level functions
 # =====================================================================
 
 log_debug() {
@@ -194,10 +194,10 @@ log_fatal() {
 }
 
 # =====================================================================
-# 特殊日志函数
+# Special log functions
 # =====================================================================
 
-# 性能日志
+# Performance log
 log_performance() {
     local metric="$1"
     local value="$2"
@@ -209,7 +209,7 @@ log_performance() {
     log_info "$perf_message"
 }
 
-# 瓶颈日志
+# Bottleneck log
 log_bottleneck() {
     local bottleneck_type="$1"
     local severity="$2"
@@ -218,7 +218,7 @@ log_bottleneck() {
     log_warn "BOTTLENECK: $bottleneck_type (severity: $severity) - $details"
 }
 
-# 错误追踪日志
+# Error trace log
 log_error_trace() {
     local error_message="$1"
     local function_name="${2:-unknown}"
@@ -228,10 +228,10 @@ log_error_trace() {
 }
 
 # =====================================================================
-# 日志轮转管理
+# Log rotation management
 # =====================================================================
 
-# 检查并执行日志轮转
+# Check and execute log rotation
 check_log_rotation() {
     local log_file="$1"
     
@@ -239,7 +239,7 @@ check_log_rotation() {
         return 0
     fi
     
-    # 检查文件大小
+    # Check file size
     local file_size=$(stat -c%s "$log_file" 2>/dev/null || echo "0")
     local max_size_bytes=$(convert_size_to_bytes "$DEFAULT_MAX_LOG_SIZE")
     
@@ -248,7 +248,7 @@ check_log_rotation() {
     fi
 }
 
-# 转换大小单位到字节
+# Convert size unit to bytes
 convert_size_to_bytes() {
     local size_str="$1"
     local size_num=$(echo "$size_str" | sed 's/[^0-9]//g')
@@ -262,30 +262,30 @@ convert_size_to_bytes() {
     esac
 }
 
-# 执行日志轮转
+# Execute log rotation
 rotate_log_file() {
     local log_file="$1"
     local base_name="${log_file%.*}"
     local extension="${log_file##*.}"
     
-    # 轮转现有文件
+    # Rotate existing files
     for ((i=$DEFAULT_MAX_LOG_FILES; i>1; i--)); do
         local old_file="${base_name}.${i}.${extension}"
         local new_file="${base_name}.$((i+1)).${extension}"
         [[ -f "$old_file" ]] && mv "$old_file" "$new_file"
     done
     
-    # 移动当前文件
+    # Move current file
     mv "$log_file" "${base_name}.1.${extension}"
     
     log_info "Log rotated: $log_file"
 }
 
 # =====================================================================
-# 日志查询和分析
+# Log query and analysis
 # =====================================================================
 
-# 查询日志
+# Query logs
 query_logs() {
     local component="$1"
     local level="${2:-}"
@@ -295,101 +295,101 @@ query_logs() {
     
     local log_pattern="${LOGS_DIR}/${component}_*.log"
     
-    # 构建grep命令
+    # Build grep command
     local grep_cmd="grep"
     [[ -n "$level" ]] && grep_cmd="$grep_cmd -E '\\[$level\\]'"
     [[ -n "$pattern" ]] && grep_cmd="$grep_cmd -E '$pattern'"
     
-    # 执行查询
+    # Execute query
     find "${LOGS_DIR}" -name "${component}_*.log" -exec $grep_cmd {} \; 2>/dev/null | sort
 }
 
-# 生成日志统计
+# Generate log statistics
 generate_log_stats() {
     local component="$1"
     local log_file="${2:-$(get_log_file_path "$component")}"
     
     if [[ ! -f "$log_file" ]]; then
-        echo "日志文件不存在: $log_file"
+        echo "Log file does not exist: $log_file"
         return 1
     fi
     
-    echo "📊 日志统计报告: $component"
+    echo "📊 Log Statistics Report: $component"
     echo "================================"
-    echo "文件: $log_file"
-    echo "总行数: $(wc -l < "$log_file")"
+    echo "File: $log_file"
+    echo "Total lines: $(wc -l < "$log_file")"
     echo ""
-    echo "按级别统计:"
+    echo "Statistics by level:"
     for level in 0 1 2 3 4; do
         local level_name=$(get_log_level_name "$level")
         local count=$(grep -c "\\[$level_name\\]" "$log_file" 2>/dev/null || echo "0")
         echo "  $level_name: $count"
     done
     echo ""
-    echo "最近10条日志:"
+    echo "Last 10 log entries:"
     tail -10 "$log_file"
 }
 
 # =====================================================================
-# 工具函数
+# Utility functions
 # =====================================================================
 
-# 显示使用帮助
+# Show usage help
 show_logger_help() {
     cat << EOF
-📋 统一日志管理器使用说明
+📋 Unified Logger Manager Usage Guide
 ============================
 
-初始化日志器:
+Initialize logger:
   init_logger <component> [log_level] [log_file]
 
-日志级别函数:
-  log_debug <message>     - 调试信息
-  log_info <message>      - 一般信息  
-  log_warn <message>      - 警告信息
-  log_error <message>     - 错误信息
-  log_fatal <message>     - 致命错误
+Log level functions:
+  log_debug <message>     - Debug information
+  log_info <message>      - General information  
+  log_warn <message>      - Warning information
+  log_error <message>     - Error information
+  log_fatal <message>     - Fatal error
 
-特殊日志函数:
+Special log functions:
   log_performance <metric> <value> [unit]
   log_bottleneck <type> <severity> <details>
   log_error_trace <message> [function] [line]
 
-日志查询:
+Log query:
   query_logs <component> [level] [start_time] [end_time] [pattern]
   generate_log_stats <component> [log_file]
 
-配置环境变量:
-  LOG_LEVEL=<0-4>         - 设置日志级别
-  LOG_FORMAT=<format>     - 设置日志格式
-  MAX_LOG_SIZE=<size>     - 设置最大日志文件大小
-  MAX_LOG_FILES=<count>   - 设置保留的日志文件数量
+Configuration environment variables:
+  LOG_LEVEL=<0-4>         - Set log level
+  LOG_FORMAT=<format>     - Set log format
+  MAX_LOG_SIZE=<size>     - Set maximum log file size
+  MAX_LOG_FILES=<count>   - Set number of log files to keep
 
-示例:
+Example:
   source utils/unified_logger.sh
-  init_logger "qps_analyzer" $LOG_LEVEL_INFO "\${LOGS_DIR}/qps_analyzer.log"
-  log_info "QPS分析开始"
+  init_logger "qps_analyzer" \$LOG_LEVEL_INFO "\${LOGS_DIR}/qps_analyzer.log"
+  log_info "QPS analysis started"
   log_performance "max_qps" "1500" "req/s"
-  log_warn "检测到性能瓶颈"
+  log_warn "Performance bottleneck detected"
 EOF
 }
 
 # =====================================================================
-# 主函数 - 用于测试
+# Main function - for testing
 # =====================================================================
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "${1:-help}" in
         "test")
-            echo "🧪 测试统一日志管理器..."
+            echo "🧪 Testing unified logger manager..."
             init_logger "test_component" $LOG_LEVEL_DEBUG "/tmp/test_logger.log"
-            log_debug "这是调试信息"
-            log_info "这是一般信息"
-            log_warn "这是警告信息"
-            log_error "这是错误信息"
+            log_debug "This is debug information"
+            log_info "This is general information"
+            log_warn "This is warning information"
+            log_error "This is error information"
             log_performance "test_metric" "100" "ms"
-            log_bottleneck "CPU" "HIGH" "CPU使用率超过90%"
-            echo "✅ 测试完成，查看日志文件: /tmp/test_logger.log"
+            log_bottleneck "CPU" "HIGH" "CPU usage exceeds 90%"
+            echo "✅ Testing completed, check log file: /tmp/test_logger.log"
             ;;
         "help"|*)
             show_logger_help
@@ -397,6 +397,6 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     esac
 fi
 
-# 标记已加载，防止重复加载
+# Mark as loaded to prevent duplicate loading
 UNIFIED_LOGGER_LOADED=true
 export UNIFIED_LOGGER_LOADED
