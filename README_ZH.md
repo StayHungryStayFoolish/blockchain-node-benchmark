@@ -11,21 +11,37 @@
 
 ## 🎯 核心特性
 
-- **多模式 QPS 测试**：快速（15+分钟）、标准（90+分钟）和密集（8+小时）测试模式
-- **实时性能监控**：73-79 项性能指标，包括 CPU、内存、EBS、网络、ENA
+- **[多模式 QPS 测试](#-测试模式)**：快速（15+分钟）、标准（90+分钟）和密集（8+小时）测试模式
+- **跨平台兼容性**：支持 8 个主流区块链节点（Solana、Ethereum、BSC、Base、Polygon、Scroll、Starknet、Sui）在 AWS、其他云、IDC 或本地 Linux 环境运行
+- **真实交易数据测试**：从区块链节点获取活跃账户地址，使用 single 或 mixed RPC 方法生成测试目标
+- **[多层次性能监控](#-监控指标)**：专业监控系统，4 个专业化数据流
+  - 统一指标（79 个字段）：CPU、内存、EBS、网络、ENA、区块高度、QPS
+  - 监控开销跟踪（20 个字段）：自我监控和影响分析
+  - ENA 深度监控（15 个字段）：AWS 专属网络性能分析
+  - 区块链健康跟踪（7 个字段）：节点同步状态和数据丢失检测
 - **双重瓶颈监测机制**：
-  - **即时监测**：测试过程中实时检测瓶颈，双重验证（资源 + 节点健康）避免误判
-  - **离线分析**：时间窗口聚焦（瓶颈前后30秒），深度根因分析
-- **智能瓶颈检测**：6 维度瓶颈检测，采用科学评估算法
-- **专业可视化**：32 张专业图表和全面的 HTML 报告
-- **AWS 深度集成**：EBS 性能基线、ENA 网络监控、EC2 实例优化
-- **区块链节点专业化**：区块高度监控、验证器日志分析、RPC 性能分析
+  - **即时监测**：8 维度监控，5 种场景判断逻辑避免误判
+    - 资源瓶颈 + 节点健康 → 误报（重置计数器）
+    - RPC 性能违规（成功率 < 95% 或 延迟 > 1000ms）→ 真实瓶颈（必要条件）
+    - 任意瓶颈 + 节点不健康 → 真实瓶颈（连续 3 次）
+    - 仅节点持续不健康 → 节点故障（立即停止）
+    - 全部正常 → 继续测试
+  - **离线分析**：测试完成后的多维度深度分析
+    - 时间窗口分析（瓶颈前后 ±30 秒）聚焦根因调查
+    - 性能悬崖分析识别 QPS 降级模式
+    - EBS 性能深度剖析与 AWS 基线对比
+    - CPU-EBS 关联分析识别资源瓶颈
+    - RPC 方法性能剖析和优化建议
+- **AWS 深度集成**：EBS 性能基线、ENA 网络监控
+- **专业可视化**：[32 张专业图表](#-生成的报告)和[全面的 HTML 报告](./docs/image/performance_report_zh_20251030_171541.html)
 
 
 
 ## ⚡ 快速配置
 
-**在运行框架之前**，您必须在 `config/config_loader.sh` 和 `config/user_loader.sh` 中配置以下参数：
+**在运行框架之前**，您必须配置以下参数：
+
+### 必需配置（在 `config/config_loader.sh` 中）
 
 ```bash
 # 1. RPC 端点（必需）
@@ -34,22 +50,41 @@ LOCAL_RPC_URL="http://localhost:8899"  # 您的区块链节点 RPC 端点
 # 2. 区块链类型（必需）
 BLOCKCHAIN_NODE="Solana"  # 支持：Solana、Ethereum、BSC、Base、Polygon、Scroll、Starknet、Sui
 
-# 3. EBS 设备配置（必需）
+# 3. 区块链进程名称（监控必需）
+BLOCKCHAIN_PROCESS_NAMES=(
+    "agave-validator"    # 您实际的区块链节点进程名称
+    "solana-validator"   # 添加所有可能的进程名称
+    "validator"
+)
+# 使用以下命令检查您的进程名称：ps aux | grep -i validator
+```
+
+### EBS 配置（在 `config/user_config.sh` 中）
+
+```bash
+# 4. DATA 设备配置（必需）
 LEDGER_DEVICE="nvme1n1"              # DATA 设备名称（使用 'lsblk' 检查）
+DATA_VOL_TYPE="io2"                  # 选项："gp3" | "io2" | "instance-store"
 DATA_VOL_MAX_IOPS="30000"            # 您的 EBS 卷预配置的 IOPS
-DATA_VOL_MAX_THROUGHPUT="4000"      # 您的 EBS 卷吞吐量（MiB/s）
+DATA_VOL_MAX_THROUGHPUT="700"        # 您的 EBS 卷吞吐量（MiB/s）
 
-# 4. ACCOUNTS 设备（可选，但建议配置以进行完整监控）
+# 5. ACCOUNTS 设备（可选，但建议配置以进行完整监控）
 ACCOUNTS_DEVICE="nvme2n1"            # ACCOUNTS 设备名称
-ACCOUNTS_VOL_MAX_IOPS="30000"       # ACCOUNTS 卷的 IOPS
-ACCOUNTS_VOL_MAX_THROUGHPUT="4000"  # ACCOUNTS 卷的吞吐量（MiB/s）
+ACCOUNTS_VOL_TYPE="io2"              # 选项："gp3" | "io2" | "instance-store"
+ACCOUNTS_VOL_MAX_IOPS="30000"        # ACCOUNTS 卷的 IOPS
+ACCOUNTS_VOL_MAX_THROUGHPUT="700"    # ACCOUNTS 卷的吞吐量（MiB/s）
 
-# 5. 网络配置（AWS 环境必需）
-NETWORK_MAX_BANDWIDTH_GBPS=25       # 您的实例网络带宽（Gbps）
+# 6. 网络配置（AWS 环境必需）
+NETWORK_MAX_BANDWIDTH_GBPS=25        # 您的实例网络带宽（Gbps）
 ```
 
 **快速配置检查：**
 ```bash
+# 验证您的区块链进程名称
+ps aux | grep -i validator
+ps aux | grep -i agave
+ps aux | grep -i solana
+
 # 验证您的 EBS 设备
 lsblk
 
@@ -61,6 +96,10 @@ lsblk
 # 检查您的实例网络带宽：
 # EC2 → 实例类型 → 搜索您的实例类型 → 网络
 ```
+
+**配置文件位置：**
+- `config/config_loader.sh` - RPC 端点、区块链类型、进程名称
+- `config/user_config.sh` - EBS 设备、网络带宽、监控间隔
 
 **注意**：如果您没有正确配置这些参数，框架将使用默认值，这可能与您的实际硬件不匹配，导致性能分析不准确。
 
@@ -168,7 +207,7 @@ blockchain-node-benchmark/
 
 ### 核心文档
 
-#### [架构概览](./docs/architecture-overview.md)
+#### [架构概览](./docs/architecture-overview-zh.md)
 - 4 层模块化架构设计
 - 组件交互和数据流
 - 32 张专业图表详解
@@ -181,19 +220,19 @@ blockchain-node-benchmark/
 - 数据流架构和文件命名约定
 - 测试结果的 JSON 格式规范
 
-#### [配置指南](./docs/configuration-guide.md)
+#### [配置指南](./docs/configuration-guide-zh.md)
 - 4 层配置系统（用户/系统/内部/动态）
 - EBS 卷配置（gp3/io2/instance-store）
 - 网络和 ENA 设置
 - 区块链特定参数
 
-#### [监控机制](./docs/monitoring-mechanism.md)
+#### [监控机制](./docs/monitoring-mechanism-zh.md)
 - 双层监控架构
 - 79 项性能指标收集（已更新）
 - 自我监控和开销分析
 - AWS 标准转换公式
 
-#### [区块链测试特性](./docs/blockchain-testing-features.md)
+#### [区块链测试特性](./docs/blockchain-testing-features-zh.md)
 - 单一 vs 混合 RPC 测试模式
 - 多区块链支持（Solana/Ethereum/BSC/Base/Polygon/Scroll/Starknet/Sui）
 - RPC 方法配置
@@ -203,44 +242,52 @@ blockchain-node-benchmark/
 
 ## ⚙️ 配置
 
-### 基本配置（`config/config_loader.sh`）
+### 基本配置
 
+**RPC 和区块链设置**（`config/config_loader.sh`）：
 ```bash
-# 基本设置
 LOCAL_RPC_URL="http://localhost:8899"
 BLOCKCHAIN_NODE="Solana"
+BLOCKCHAIN_PROCESS_NAMES=(
+    "agave-validator"
+    "solana-validator"
+    "validator"
+)
+```
 
-# EBS 设备配置
-LEDGER_DEVICE="nvme1n1"      # DATA 设备（必需）
-ACCOUNTS_DEVICE="nvme2n1"    # ACCOUNTS 设备（可选）
+**EBS 设备配置**（`config/user_config.sh`）：
+```bash
+# DATA 设备（必需）
+LEDGER_DEVICE="nvme1n1"
+DATA_VOL_TYPE="io2"                  # io2/gp3/instance-store
+DATA_VOL_MAX_IOPS="30000"
+DATA_VOL_MAX_THROUGHPUT="700"        # MiB/s
 
-# DATA 卷配置（必需）
-DATA_VOL_TYPE="io2"          # io2/gp3/instance-store
-DATA_VOL_MAX_IOPS="30000"    # 最大 IOPS
-DATA_VOL_MAX_THROUGHPUT="700" # 最大吞吐量（MiB/s）
-
-# ACCOUNTS 卷配置（可选）
-ACCOUNTS_VOL_TYPE="io2"      # io2/gp3/instance-store
-ACCOUNTS_VOL_MAX_IOPS="30000" # 最大 IOPS
-ACCOUNTS_VOL_MAX_THROUGHPUT="500" # 最大吞吐量（MiB/s）
+# ACCOUNTS 设备（可选）
+ACCOUNTS_DEVICE="nvme2n1"
+ACCOUNTS_VOL_TYPE="io2"              # io2/gp3/instance-store
+ACCOUNTS_VOL_MAX_IOPS="30000"
+ACCOUNTS_VOL_MAX_THROUGHPUT="700"    # MiB/s
 
 # 网络配置
-NETWORK_MAX_BANDWIDTH_GBPS=25 # 网络带宽（Gbps）
+NETWORK_MAX_BANDWIDTH_GBPS=25        # Gbps
 ```
 
 **注意：** ACCOUNTS 设备是可选的。如果未配置，框架将仅监控 DATA 设备。
 
 ### 高级配置
 
+**瓶颈检测阈值**（`config/internal_config.sh`）：
 ```bash
-# 瓶颈检测阈值
 BOTTLENECK_CPU_THRESHOLD=85
 BOTTLENECK_MEMORY_THRESHOLD=90
 BOTTLENECK_EBS_UTIL_THRESHOLD=90
 BOTTLENECK_EBS_LATENCY_THRESHOLD=50
 NETWORK_UTILIZATION_THRESHOLD=80
+```
 
-# 监控间隔
+**监控间隔**（`config/user_config.sh`）：
+```bash
 MONITOR_INTERVAL=5              # 默认监控间隔（秒）
 HIGH_FREQ_INTERVAL=1            # 高频监控间隔
 ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
@@ -250,33 +297,66 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 
 ## 📊 测试模式
 
-| 模式 | 持续时间 | QPS 范围 | 步长 | 使用场景 |
-|------|----------|----------|------|----------|
-| **快速** | 15+ 分钟 | 1000-3000 | 500 QPS | 基本性能验证 |
-| **标准** | 90+ 分钟 | 1000-5000 | 500 QPS | 全面性能评估 |
-| **密集** | 最多 8 小时 | 1000-无限制 | 250 QPS | 智能瓶颈检测 |
+| 模式 | 持续时间 | QPS 范围      | 步长 | 使用场景 |
+|------|----------|-------------|------|----------|
+| **快速** | 15+ 分钟 | 1000-3000   | 500 QPS | 基本性能验证 |
+| **标准** | 90+ 分钟 | 20000-50000 | 500 QPS | 全面性能评估 |
+| **密集** | 最多 8 小时 | 50000-无限制   | 250 QPS | 智能瓶颈检测 |
 
 
 
 ## 🔍 监控指标
 
 ### 系统指标（共 73-79 项）
+- **时间戳**：统一时间戳（1 个字段）
 - **CPU**：使用率、I/O 等待、系统调用（6 个字段）
 - **内存**：使用率、可用内存、缓存（3 个字段）
-- **EBS 存储**：IOPS、吞吐量、延迟、利用率（2 个设备共 42 个字段）
+- **EBS 存储**：IOPS、吞吐量、延迟、利用率（每设备 21 个字段，2 个设备共 42 个字段）
 - **网络**：带宽利用率、PPS、连接数（10 个字段）
-- **ENA 网络**：配额超限、带宽限制（6 个字段，条件性）
+- **ENA 网络**：配额超限、带宽限制（6 个字段，仅 AWS）
 - **监控开销**：系统影响指标（2 个字段）
 - **区块高度**：本地 vs 主网同步状态（6 个字段）
 - **QPS 性能**：当前 QPS、延迟、可用性（3 个字段）
 
-### 瓶颈检测（6 个维度）
-1. **CPU 瓶颈**：阈值 85%，权重 25%
-2. **内存瓶颈**：阈值 90%，权重 20%
-3. **EBS 瓶颈**：IOPS/延迟/利用率，权重 30%
-4. **网络瓶颈**：带宽/PPS 利用率，权重 15%
-5. **ENA 瓶颈**：配额限制，权重 5%
-6. **RPC 瓶颈**：延迟/错误率，权重 5%
+**总计**：79 个字段（AWS 环境含 ENA）或 73 个字段（非 AWS 环境不含 ENA）
+
+### 详细监控数据文件
+
+框架生成多个专业化 CSV 文件用于细粒度分析：
+
+**1. 性能指标** (`performance_YYYYMMDD_HHMMSS.csv` - 79 个字段)
+- 统一的性能数据，整合所有系统指标
+- 可配置间隔的实时采集（默认 5 秒）
+- 用于综合性能分析和关联研究
+
+**2. 监控开销** (`monitoring_overhead_YYYYMMDD_HHMMSS.csv` - 20 个字段)
+- 监控系统资源消耗（CPU、内存、进程数）
+- 区块链节点资源消耗
+- 系统级资源统计（核心数、内存、磁盘、缓存、缓冲区）
+- 用于监控影响分析和开销优化
+
+**3. ENA 网络详情** (`ena_network_YYYYMMDD_HHMMSS.csv` - 15 个字段，仅 AWS)
+- 网络接口统计（rx/tx 字节数、数据包数）
+- ENA 配额跟踪（带宽入/出、PPS、连接跟踪、本地链路）
+- 网络限制状态（network_limited、pps_limited、bandwidth_limited）
+- 用于 AWS ENA 特定瓶颈检测和网络性能分析
+
+**4. 区块高度监控** (`block_height_monitor_YYYYMMDD_HHMMSS.csv` - 7 个字段)
+- 本地和主网区块高度跟踪
+- 区块高度差异和同步状态
+- 节点健康指标（local_health、mainnet_health）
+- 数据丢失检测标志
+- 用于区块链节点同步分析和健康监控
+
+### 瓶颈检测（8 个维度）
+1. **CPU 瓶颈**：阈值 85%
+2. **内存瓶颈**：阈值 90%
+3. **EBS 瓶颈**：IOPS/吞吐量/利用率 > 90% 基线
+4. **网络瓶颈**：带宽/PPS 利用率 > 80%
+5. **ENA 瓶颈**：配额限制超限
+6. **RPC 成功率**：< 95%（必要条件）
+7. **RPC 延迟**：P99 > 1000ms（必要条件）
+8. **RPC 错误率**：> 5%
 
 
 
@@ -336,13 +416,14 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 32. `qps_performance_analysis.png` - QPS 性能分析
 
 ### HTML 报告章节
-- **执行摘要**：测试概览和关键发现
-- **性能分析**：详细的性能指标分析
-- **瓶颈分析**：瓶颈检测结果和优化建议
-- **图表库**：所有 32 张专业可视化图表
-- **EBS 分析**：存储性能深度分析
-- **ENA 分析**：网络性能分析（AWS 环境）
-- **区块链节点分析**：区块链特定指标分析
+- **系统级瓶颈分析**：瓶颈检测结果和优化建议
+- **性能摘要**：测试概览和关键性能指标
+- **配置状态检查**：系统配置验证
+- **区块链节点同步分析**：区块高度监控和同步状态
+- **EBS 性能分析结果**：存储性能深度分析与 AWS 基线对比
+- **性能图表库**：所有 32 张专业可视化图表按类别组织
+- **监控开销分析**：监控系统影响的综合分析
+- **CPU-EBS 关联分析**：资源关联和瓶颈识别
 
 
 
@@ -433,8 +514,10 @@ chmod +x monitoring/monitoring_coordinator.sh
 - **监控日志**：`unified_monitor.log` - 系统监控数据
 - **瓶颈检测**：`bottleneck_detector.log` - 瓶颈检测事件
 - **EBS分析**：`ebs_bottleneck_detector.log` - EBS性能分析
-- **性能数据**：`performance_YYYYMMDD_HHMMSS.csv` - 原始性能指标
-- **监控开销**：`monitoring_overhead_YYYYMMDD_HHMMSS.csv` - 监控系统开销
+- **性能数据**：`performance_YYYYMMDD_HHMMSS.csv` - 原始性能指标（79 个字段）
+- **监控开销**：`monitoring_overhead_YYYYMMDD_HHMMSS.csv` - 监控系统开销（20 个字段）
+- **ENA 网络**：`ena_network_YYYYMMDD_HHMMSS.csv` - ENA 网络详细指标（15 个字段，仅 AWS）
+- **区块高度监控**：`block_height_monitor_YYYYMMDD_HHMMSS.csv` - 区块高度同步跟踪（7 个字段）
 
 ### 查看测试进度
 

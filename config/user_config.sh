@@ -47,15 +47,15 @@ QUICK_QPS_STEP=500
 QUICK_DURATION=60   # Test 1 minute per QPS level (avoid resource issues from long-running tests)
 
 # Standard benchmark mode (standard performance testing)
-STANDARD_INITIAL_QPS=1000
-STANDARD_MAX_QPS=5000
+STANDARD_INITIAL_QPS=2000
+STANDARD_MAX_QPS=50000
 STANDARD_QPS_STEP=500
 STANDARD_DURATION=600
 
 # Intensive benchmark mode (automatically find system bottlenecks)
 INTENSIVE_INITIAL_QPS=50000
 INTENSIVE_MAX_QPS=9999999      # No practical upper limit, until bottleneck detected
-INTENSIVE_QPS_STEP=500
+INTENSIVE_QPS_STEP=250
 INTENSIVE_DURATION=600
 INTENSIVE_AUTO_STOP=true      # Enable automatic bottleneck detection stop
 

@@ -469,6 +469,67 @@ RPC_MODE="mixed"
 
 详见 [区块链测试特性](./blockchain-testing-features-zh.md)。
 
+### 跨平台兼容性
+
+框架设计为可在多个平台上运行，并自动适配：
+
+**支持的平台：**
+- ✅ **AWS 云**：完整功能支持，包括 ENA 网络监控
+- ✅ **其他云**：禁用 ENA 监控
+- ✅ **IDC（数据中心）**：本地基础设施
+- ✅ **本地 Linux**：开发和测试环境
+
+**支持的区块链节点：**
+- Solana
+- Ethereum
+- BSC（币安智能链）
+- Base
+- Polygon
+- Scroll
+- Starknet
+- Sui
+
+**平台自动检测：**
+
+框架自动检测部署平台：
+
+```bash
+# 自动平台检测（在 config_loader.sh 中）
+detect_deployment_platform() {
+    if [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]; then
+        # 尝试 AWS 元数据服务
+        if curl -s -m 3 http://169.254.169.254/latest/meta-data/instance-id &>/dev/null; then
+            DEPLOYMENT_PLATFORM="aws"
+            ENA_MONITOR_ENABLED=true
+        else
+            DEPLOYMENT_PLATFORM="other"
+            ENA_MONITOR_ENABLED=false
+        fi
+    fi
+}
+```
+
+**平台特定功能：**
+
+| 功能 | AWS | 其他云 | IDC | 本地 Linux |
+|------|-----|--------|-----|-----------|
+| EBS 监控 | ✅ | ✅ | ✅ | ✅ |
+| ENA 监控 | ✅ | ❌ | ❌ | ❌ |
+| AWS 基线对比 | ✅ | ❌ | ❌ | ❌ |
+| 区块高度监控 | ✅ | ✅ | ✅ | ✅ |
+| QPS 测试 | ✅ | ✅ | ✅ | ✅ |
+| 性能分析 | ✅ | ✅ | ✅ | ✅ |
+
+**配置覆盖：**
+
+如果自动检测失败，您可以手动指定平台：
+
+```bash
+# 在 user_config.sh 或环境变量中
+export DEPLOYMENT_PLATFORM="aws"    # 强制 AWS 模式
+export DEPLOYMENT_PLATFORM="other"  # 强制非 AWS 模式
+```
+
 ### 区块链特定配置
 
 ```bash

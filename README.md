@@ -11,21 +11,37 @@ A professional multi blockchain node performance benchmarking framework with com
 
 ## 🎯 Key Features
 
-- **Multi-Mode QPS Testing**: Quick (15+min), Standard (90+min), and Intensive (8+hr) testing modes
-- **Real-Time Performance Monitoring**: 73-79 performance metrics including CPU, Memory, EBS, Network, ENA
+- **[Multi-Mode QPS Testing](#-testing-modes)**: Quick (15+min), Standard (90+min), and Intensive (8+hr) testing modes
+- **Cross-Platform Compatibility**: Supports 8 mainstream blockchain nodes (Solana, Ethereum, BSC, Base, Polygon, Scroll, Starknet, Sui) on AWS, other clouds, IDC, or local Linux environments
+- **Real Transaction Data Testing**: Fetches active accounts from your blockchain node and generates test targets using single or mixed RPC methods
+- **[Multi-Layered Performance Monitoring](#-monitoring-metrics)**: Professional monitoring system with 4 specialized data streams
+  - Unified metrics (79 fields): CPU, Memory, EBS, Network, ENA, Block Height, QPS
+  - Monitoring overhead tracking (20 fields): Self-monitoring and impact analysis
+  - ENA deep monitoring (15 fields): AWS-specific network performance analysis
+  - Blockchain health tracking (7 fields): Node sync status and data loss detection
 - **Dual Bottleneck Monitoring Mechanism**:
-  - **Real-time Detection**: Detect bottlenecks during testing with dual verification (resource + node health) to avoid false positives
-  - **Offline Analysis**: Time window focus (±30 seconds around bottleneck) for deep root cause analysis
-- **Intelligent Bottleneck Detection**: 6-dimensional bottleneck detection with scientific evaluation algorithms
-- **Professional Visualization**: 32 professional charts and comprehensive HTML reports
-- **AWS Deep Integration**: EBS performance baselines, ENA network monitoring, EC2 instance optimization
-- **Blockchain Node Specialization**: Block height monitoring, validator log analysis, RPC performance analysis
+  - **Real-time Detection**: 8-dimensional monitoring with 5-scenario judgment logic to avoid false positives
+    - Resource bottleneck + Node healthy → False positive (reset counter)
+    - RPC performance violation (success rate < 95% OR latency > 1000ms) → True bottleneck (necessary condition)
+    - Any bottleneck + Node unhealthy → True bottleneck (3 consecutive times)
+    - Node persistently unhealthy alone → Node failure (stop immediately)
+    - All normal → Continue testing
+  - **Offline Analysis**: Multi-dimensional deep analysis after test completion
+    - Time window analysis (±30 seconds around bottleneck) for focused root cause investigation
+    - Performance cliff analysis to identify QPS degradation patterns
+    - EBS performance deep dive with AWS baseline comparison
+    - CPU-EBS correlation analysis for resource bottleneck identification
+    - RPC method performance profiling and optimization recommendations
+- **AWS Deep Integration**: EBS performance baselines, ENA network monitoring
+- **Professional Visualization**: [32 professional charts](#-generated-reports) and [comprehensive HTML reports](./docs/image/performance_report_en_20251030_171541.html)
 
 
 
 ## ⚡ Quick Configuration
 
-**Before running the framework**, you must configure the following parameters in `config/config_loader.sh` and `config/user_loader.sh`:
+**Before running the framework**, you must configure the following parameters:
+
+### Required Configuration (in `config/config_loader.sh`)
 
 ```bash
 # 1. RPC Endpoint (Required)
@@ -34,22 +50,41 @@ LOCAL_RPC_URL="http://localhost:8899"  # Your blockchain node RPC endpoint
 # 2. Blockchain Type (Required)
 BLOCKCHAIN_NODE="Solana"  # Supported: Solana, Ethereum, BSC, Base, Polygon, Scroll, Starknet, Sui
 
-# 3. EBS Device Configuration (Required)
+# 3. Blockchain Process Names (Required for monitoring)
+BLOCKCHAIN_PROCESS_NAMES=(
+    "agave-validator"    # Your actual blockchain node process name
+    "solana-validator"   # Add all possible process names
+    "validator"
+)
+# Check your process name with: ps aux | grep -i validator
+```
+
+### EBS Configuration (in `config/user_config.sh`)
+
+```bash
+# 4. DATA Device Configuration (Required)
 LEDGER_DEVICE="nvme1n1"              # DATA device name (check with 'lsblk')
+DATA_VOL_TYPE="io2"                  # Options: "gp3" | "io2" | "instance-store"
 DATA_VOL_MAX_IOPS="30000"            # Your EBS volume's provisioned IOPS
-DATA_VOL_MAX_THROUGHPUT="4000"      # Your EBS volume's throughput (MiB/s)
+DATA_VOL_MAX_THROUGHPUT="700"        # Your EBS volume's throughput (MiB/s)
 
-# 4. ACCOUNTS Device (Optional, but recommended for complete monitoring)
+# 5. ACCOUNTS Device (Optional, but recommended for complete monitoring)
 ACCOUNTS_DEVICE="nvme2n1"            # ACCOUNTS device name
-ACCOUNTS_VOL_MAX_IOPS="30000"       # ACCOUNTS volume's provisioned IOPS
-ACCOUNTS_VOL_MAX_THROUGHPUT="4000"  # ACCOUNTS volume's throughput (MiB/s)
+ACCOUNTS_VOL_TYPE="io2"              # Options: "gp3" | "io2" | "instance-store"
+ACCOUNTS_VOL_MAX_IOPS="30000"        # ACCOUNTS volume's provisioned IOPS
+ACCOUNTS_VOL_MAX_THROUGHPUT="700"    # ACCOUNTS volume's throughput (MiB/s)
 
-# 5. Network Configuration (Required for AWS environments)
-NETWORK_MAX_BANDWIDTH_GBPS=25       # Your instance's network bandwidth (Gbps)
+# 6. Network Configuration (Required for AWS environments)
+NETWORK_MAX_BANDWIDTH_GBPS=25        # Your instance's network bandwidth (Gbps)
 ```
 
 **Quick Configuration Check:**
 ```bash
+# Verify your blockchain process name
+ps aux | grep -i validator
+ps aux | grep -i agave
+ps aux | grep -i solana
+
 # Verify your EBS devices
 lsblk
 
@@ -61,6 +96,10 @@ lsblk
 # Check your instance network bandwidth:
 # EC2 → Instance Types → Search your instance type → Networking
 ```
+
+**Configuration File Locations:**
+- `config/config_loader.sh` - RPC endpoint, blockchain type, process names
+- `config/user_config.sh` - EBS devices, network bandwidth, monitoring intervals
 
 **Note**: If you don't configure these parameters correctly, the framework will use default values which may not match your actual hardware, leading to inaccurate performance analysis.
 
@@ -203,44 +242,52 @@ Comprehensive documentation is available in the `docs/` directory:
 
 ## ⚙️ Configuration
 
-### Basic Configuration (`config/config_loader.sh`)
+### Basic Configuration
 
+**RPC and Blockchain Settings** (`config/config_loader.sh`):
 ```bash
-# Basic settings
 LOCAL_RPC_URL="http://localhost:8899"
 BLOCKCHAIN_NODE="Solana"
+BLOCKCHAIN_PROCESS_NAMES=(
+    "agave-validator"
+    "solana-validator"
+    "validator"
+)
+```
 
-# EBS device configuration
-LEDGER_DEVICE="nvme1n1"      # DATA device (required)
-ACCOUNTS_DEVICE="nvme2n1"    # ACCOUNTS device (optional)
+**EBS Device Configuration** (`config/user_config.sh`):
+```bash
+# DATA device (required)
+LEDGER_DEVICE="nvme1n1"
+DATA_VOL_TYPE="io2"                  # io2/gp3/instance-store
+DATA_VOL_MAX_IOPS="30000"
+DATA_VOL_MAX_THROUGHPUT="700"        # MiB/s
 
-# DATA volume configuration (required)
-DATA_VOL_TYPE="io2"          # io2/gp3/instance-store
-DATA_VOL_MAX_IOPS="30000"    # Maximum IOPS
-DATA_VOL_MAX_THROUGHPUT="700" # Maximum throughput (MiB/s)
-
-# ACCOUNTS volume configuration (optional)
-ACCOUNTS_VOL_TYPE="io2"      # io2/gp3/instance-store
-ACCOUNTS_VOL_MAX_IOPS="30000" # Maximum IOPS
-ACCOUNTS_VOL_MAX_THROUGHPUT="500" # Maximum throughput (MiB/s)
+# ACCOUNTS device (optional)
+ACCOUNTS_DEVICE="nvme2n1"
+ACCOUNTS_VOL_TYPE="io2"              # io2/gp3/instance-store
+ACCOUNTS_VOL_MAX_IOPS="30000"
+ACCOUNTS_VOL_MAX_THROUGHPUT="700"    # MiB/s
 
 # Network configuration
-NETWORK_MAX_BANDWIDTH_GBPS=25 # Network bandwidth (Gbps)
+NETWORK_MAX_BANDWIDTH_GBPS=25        # Gbps
 ```
 
 **Note:** ACCOUNTS device is optional. If not configured, the framework will only monitor the DATA device.
 
 ### Advanced Configuration
 
+**Bottleneck Detection Thresholds** (`config/internal_config.sh`):
 ```bash
-# Bottleneck detection thresholds
 BOTTLENECK_CPU_THRESHOLD=85
 BOTTLENECK_MEMORY_THRESHOLD=90
 BOTTLENECK_EBS_UTIL_THRESHOLD=90
 BOTTLENECK_EBS_LATENCY_THRESHOLD=50
 NETWORK_UTILIZATION_THRESHOLD=80
+```
 
-# Monitoring intervals
+**Monitoring Intervals** (`config/user_config.sh`):
+```bash
 MONITOR_INTERVAL=5              # Default monitoring interval (seconds)
 HIGH_FREQ_INTERVAL=1            # High-frequency monitoring interval
 ULTRA_HIGH_FREQ_INTERVAL=0.5    # Ultra-high-frequency monitoring interval
@@ -250,33 +297,66 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # Ultra-high-frequency monitoring interval
 
 ## 📊 Testing Modes
 
-| Mode | Duration      | QPS Range | Step Size | Use Case |
-|------|---------------|-----------|-----------|----------|
-| **Quick** | 15+ minutes   | 1000-3000 | 500 QPS | Basic performance verification |
-| **Standard** | 90+ minutes   | 1000-5000 | 500 QPS | Comprehensive performance evaluation |
-| **Intensive** | Up to 8 hours | 1000-unlimited | 250 QPS | Intelligent bottleneck detection |
+| Mode | Duration      | QPS Range       | Step Size | Use Case |
+|------|---------------|-----------------|-----------|----------|
+| **Quick** | 15+ minutes   | 1000-3000       | 500 QPS | Basic performance verification |
+| **Standard** | 90+ minutes   | 20000-50000     | 500 QPS | Comprehensive performance evaluation |
+| **Intensive** | Up to 8 hours | 50000-unlimited | 250 QPS | Intelligent bottleneck detection |
 
 
 
 ## 🔍 Monitoring Metrics
 
 ### System Metrics (73-79 total)
+- **Timestamp**: Unified timestamp (1 field)
 - **CPU**: Usage, I/O wait, system calls (6 fields)
 - **Memory**: Usage, available memory, cache (3 fields)
-- **EBS Storage**: IOPS, throughput, latency, utilization (42 fields for 2 devices)
+- **EBS Storage**: IOPS, throughput, latency, utilization (21 fields per device, 42 fields for 2 devices)
 - **Network**: Bandwidth utilization, PPS, connections (10 fields)
-- **ENA Network**: Allowance exceeded, bandwidth limits (6 fields, conditional)
+- **ENA Network**: Allowance exceeded, bandwidth limits (6 fields, AWS only)
 - **Monitoring Overhead**: System impact metrics (2 fields)
 - **Block Height**: Local vs mainnet sync status (6 fields)
 - **QPS Performance**: Current QPS, latency, availability (3 fields)
 
-### Bottleneck Detection (6 Dimensions)
-1. **CPU Bottleneck**: Threshold 85%, Weight 25%
-2. **Memory Bottleneck**: Threshold 90%, Weight 20%
-3. **EBS Bottleneck**: IOPS/Latency/Utilization, Weight 30%
-4. **Network Bottleneck**: Bandwidth/PPS utilization, Weight 15%
-5. **ENA Bottleneck**: Allowance limits, Weight 5%
-6. **RPC Bottleneck**: Latency/Error rate, Weight 5%
+**Total**: 79 fields (with ENA on AWS) or 73 fields (without ENA on non-AWS)
+
+### Detailed Monitoring Data Files
+
+The framework generates multiple specialized CSV files for fine-grained analysis:
+
+**1. Performance Metrics** (`performance_YYYYMMDD_HHMMSS.csv` - 79 fields)
+- Unified performance data combining all system metrics
+- Real-time collection at configurable intervals (default 5s)
+- Used for comprehensive performance analysis and correlation studies
+
+**2. Monitoring Overhead** (`monitoring_overhead_YYYYMMDD_HHMMSS.csv` - 20 fields)
+- Monitoring system resource consumption (CPU, memory, process count)
+- Blockchain node resource consumption
+- System-level resource statistics (cores, memory, disk, cache, buffers)
+- Used for monitoring impact analysis and overhead optimization
+
+**3. ENA Network Details** (`ena_network_YYYYMMDD_HHMMSS.csv` - 15 fields, AWS only)
+- Network interface statistics (rx/tx bytes, packets)
+- ENA allowance tracking (bandwidth in/out, PPS, connection tracking, link-local)
+- Network limitation status (network_limited, pps_limited, bandwidth_limited)
+- Used for AWS ENA-specific bottleneck detection and network performance analysis
+
+**4. Block Height Monitor** (`block_height_monitor_YYYYMMDD_HHMMSS.csv` - 7 fields)
+- Local and mainnet block height tracking
+- Block height difference and sync status
+- Node health indicators (local_health, mainnet_health)
+- Data loss detection flag
+- Used for blockchain node sync analysis and health monitoring
+
+### Bottleneck Detection (8 Dimensions)
+1. **CPU Bottleneck**: Threshold 85%
+2. **Memory Bottleneck**: Threshold 90%
+3. **EBS Bottleneck**: IOPS/Throughput/Utilization > 90% baseline
+4. **Network Bottleneck**: Bandwidth/PPS utilization > 80%
+5. **ENA Bottleneck**: Allowance limits exceeded
+6. **RPC Success Rate**: < 95% (Necessary Condition)
+7. **RPC Latency**: P99 > 1000ms (Necessary Condition)
+8. **RPC Error Rate**: > 5%
 
 
 
@@ -336,13 +416,14 @@ View complete sample reports generated from real test data (Standard mode, 90+ m
 32. `qps_performance_analysis.png` - QPS Performance Analysis
 
 ### HTML Report Sections
-- **Executive Summary**: Test overview and key findings
-- **Performance Analysis**: Detailed performance metrics analysis
-- **Bottleneck Analysis**: Bottleneck detection results and optimization recommendations
-- **Chart Gallery**: All 32 professional visualization charts
-- **EBS Analysis**: Storage performance deep dive
-- **ENA Analysis**: Network performance analysis (AWS environments)
-- **Blockchain Node Analysis**: Blockchain-specific metrics analysis
+- **System-Level Bottleneck Analysis**: Bottleneck detection results and optimization recommendations
+- **Performance Summary**: Test overview and key performance metrics
+- **Configuration Status Check**: System configuration validation
+- **Blockchain Node Sync Analysis**: Block height monitoring and sync status
+- **EBS Performance Analysis Results**: Storage performance deep dive with AWS baseline comparison
+- **Performance Chart Gallery**: All 32 professional visualization charts organized by category
+- **Monitoring Overhead Analysis**: Comprehensive monitoring system impact analysis
+- **CPU-EBS Correlation Analysis**: Resource correlation and bottleneck identification
 
 
 
@@ -433,8 +514,10 @@ All logs are stored in `blockchain-node-benchmark-result/current/logs/`:
 - **Monitoring Log**: `unified_monitor.log` - System monitoring data
 - **Bottleneck Detection**: `bottleneck_detector.log` - Bottleneck detection events
 - **EBS Analysis**: `ebs_bottleneck_detector.log` - EBS performance analysis
-- **Performance Data**: `performance_YYYYMMDD_HHMMSS.csv` - Raw performance metrics
-- **Monitoring Overhead**: `monitoring_overhead_YYYYMMDD_HHMMSS.csv` - Monitoring system overhead
+- **Performance Data**: `performance_YYYYMMDD_HHMMSS.csv` - Raw performance metrics (79 fields)
+- **Monitoring Overhead**: `monitoring_overhead_YYYYMMDD_HHMMSS.csv` - Monitoring system overhead (20 fields)
+- **ENA Network**: `ena_network_YYYYMMDD_HHMMSS.csv` - ENA network detailed metrics (15 fields, AWS only)
+- **Block Height Monitor**: `block_height_monitor_YYYYMMDD_HHMMSS.csv` - Block height sync tracking (7 fields)
 
 ### Viewing Test Progress
 

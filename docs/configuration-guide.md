@@ -460,6 +460,67 @@ RPC_MODE="mixed"
 
 See [Blockchain Testing Features](./blockchain-testing-features.md) for details.
 
+### Cross-Platform Compatibility
+
+The framework is designed to run on multiple platforms with automatic adaptation:
+
+**Supported Platforms:**
+- ✅ **AWS Cloud**: Full feature support including ENA network monitoring
+- ✅ **Other Clouds**: ENA monitoring disabled
+- ✅ **IDC (Data Centers)**: On-premises infrastructure
+- ✅ **Local Linux**: Development and testing environments
+
+**Supported Blockchain Nodes:**
+- Solana
+- Ethereum
+- BSC (Binance Smart Chain)
+- Base
+- Polygon
+- Scroll
+- Starknet
+- Sui
+
+**Platform Auto-Detection:**
+
+The framework automatically detects the deployment platform:
+
+```bash
+# Automatic platform detection (in config_loader.sh)
+detect_deployment_platform() {
+    if [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]; then
+        # Try AWS metadata service
+        if curl -s -m 3 http://169.254.169.254/latest/meta-data/instance-id &>/dev/null; then
+            DEPLOYMENT_PLATFORM="aws"
+            ENA_MONITOR_ENABLED=true
+        else
+            DEPLOYMENT_PLATFORM="other"
+            ENA_MONITOR_ENABLED=false
+        fi
+    fi
+}
+```
+
+**Platform-Specific Features:**
+
+| Feature | AWS | Other Clouds | IDC | Local Linux |
+|---------|-----|--------------|-----|-------------|
+| EBS Monitoring | ✅ | ✅ | ✅ | ✅ |
+| ENA Monitoring | ✅ | ❌ | ❌ | ❌ |
+| AWS Baseline Comparison | ✅ | ❌ | ❌ | ❌ |
+| Block Height Monitoring | ✅ | ✅ | ✅ | ✅ |
+| QPS Testing | ✅ | ✅ | ✅ | ✅ |
+| Performance Analysis | ✅ | ✅ | ✅ | ✅ |
+
+**Configuration Override:**
+
+You can manually specify the platform if auto-detection fails:
+
+```bash
+# In user_config.sh or environment variable
+export DEPLOYMENT_PLATFORM="aws"    # Force AWS mode
+export DEPLOYMENT_PLATFORM="other"  # Force non-AWS mode
+```
+
 ### Blockchain-Specific Configuration
 
 ```bash
