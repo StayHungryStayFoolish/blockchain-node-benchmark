@@ -1,21 +1,21 @@
 #!/bin/bash
 
 # =====================================================================
-# QPS测试归档工具 - 按执行次数归档测试数据
+# QPS Test Archiver - Archive test data by execution count
 # =====================================================================
 
-# 安全加载配置文件，避免readonly变量冲突
+# Safely load configuration file, avoiding readonly variable conflicts
 if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
-    echo "警告: 配置文件加载失败，使用默认配置"
+    echo "Warning: Configuration file loading failed, using default configuration"
     DATA_DIR=${DATA_DIR:-"/tmp/blockchain-node-benchmark"}
 fi
 
-# 全局变量
+# Global variables
 ARCHIVES_DIR="${DATA_DIR}/archives"
 CURRENT_TEST_DIR="${DATA_DIR}/current"
 TEST_HISTORY_FILE="${DATA_DIR}/test_history.json"
 
-# 获取下一个运行编号
+# Get next run number
 get_next_run_number() {
     if [[ -f "$TEST_HISTORY_FILE" ]]; then
         local total_tests=$(jq -r '.total_tests // 0' "$TEST_HISTORY_FILE")
@@ -25,39 +25,39 @@ get_next_run_number() {
     fi
 }
 
-# 复制共享内存统计文件到归档
+# Copy shared memory statistics files to archive
 copy_shared_memory_stats() {
     local archive_path="$1"
     local stats_dir="$archive_path/stats"
     mkdir -p "$stats_dir"
     
-    # 复制data_loss_stats.json到归档
+    # Copy data_loss_stats.json to archive
     if [[ -f "$MEMORY_SHARE_DIR/data_loss_stats.json" ]]; then
         cp "$MEMORY_SHARE_DIR/data_loss_stats.json" "$stats_dir/"
-        echo "✅ data_loss_stats.json已归档到: $stats_dir/"
+        echo "✅ data_loss_stats.json archived to: $stats_dir/"
     else
-        echo "⚠️ data_loss_stats.json文件不存在，跳过归档"
+        echo "⚠️ data_loss_stats.json file does not exist, skipping archive"
     fi
     
-    # 复制其他重要统计文件
+    # Copy other important statistics files
     if [[ -f "$MEMORY_SHARE_DIR/bottleneck_status.json" ]]; then
         cp "$MEMORY_SHARE_DIR/bottleneck_status.json" "$stats_dir/"
-        echo "✅ bottleneck_status.json已归档到: $stats_dir/"
+        echo "✅ bottleneck_status.json archived to: $stats_dir/"
     fi
     
-    # 复制qps_status.json到归档（系统级瓶颈检测数据）
+    # Copy qps_status.json to archive (system-level bottleneck detection data)
     if [[ -f "$MEMORY_SHARE_DIR/qps_status.json" ]]; then
         cp "$MEMORY_SHARE_DIR/qps_status.json" "$stats_dir/"
-        echo "✅ qps_status.json已归档到: $stats_dir/"
+        echo "✅ qps_status.json archived to: $stats_dir/"
     fi
 }
 
-# 自动检测瓶颈信息 (开发环境优化版)
+# Auto-detect bottleneck information (development environment optimized version)
 auto_detect_bottlenecks() {
     local bottleneck_file="${MEMORY_SHARE_DIR}/bottleneck_status.json"
     
     if [[ -f "$bottleneck_file" ]]; then
-        # 验证JSON格式
+        # Validate JSON format
         if ! jq empty "$bottleneck_file" 2>/dev/null; then
             echo "none|none|false"
             return
@@ -65,7 +65,7 @@ auto_detect_bottlenecks() {
         
         local detected=$(jq -r '.bottleneck_detected' "$bottleneck_file" 2>/dev/null || echo "false")
         if [[ "$detected" == "true" ]]; then
-            # 直接使用新格式 (无需向后兼容)
+            # Directly use new format (no backward compatibility needed)
             local types_array=$(jq -r '.bottleneck_types[]?' "$bottleneck_file" 2>/dev/null)
             local values_array=$(jq -r '.bottleneck_values[]?' "$bottleneck_file" 2>/dev/null)
             
@@ -84,7 +84,7 @@ auto_detect_bottlenecks() {
     fi
 }
 
-# 生成测试摘要
+# Generate test summary
 generate_test_summary() {
     local run_id="$1"
     local benchmark_mode="$2"
@@ -92,7 +92,7 @@ generate_test_summary() {
     local start_time="$4"
     local end_time="$5"
     
-    # 自动检测瓶颈信息
+    # Auto-detect bottleneck information
     local bottleneck_info=$(auto_detect_bottlenecks)
     local bottleneck_types=$(echo "$bottleneck_info" | cut -d'|' -f1)
     local bottleneck_values=$(echo "$bottleneck_info" | cut -d'|' -f2)
@@ -101,7 +101,7 @@ generate_test_summary() {
     local archive_path="${ARCHIVES_DIR}/${run_id}"
     local summary_file="${archive_path}/test_summary.json"
     
-    # 计算测试时长
+    # Calculate test duration
     local duration_minutes=0
     if [[ -n "$start_time" && -n "$end_time" ]]; then
         local start_epoch=$(date -d "$start_time" +%s 2>/dev/null || echo 0)
@@ -111,18 +111,18 @@ generate_test_summary() {
         fi
     fi
     
-    # 计算数据大小
+    # Calculate data size
     local logs_mb=$(du -sm "${archive_path}/logs" 2>/dev/null | cut -f1 || echo 0)
     local reports_mb=$(du -sm "${archive_path}/reports" 2>/dev/null | cut -f1 || echo 0)
     local vegeta_mb=$(du -sm "${archive_path}/vegeta_results" 2>/dev/null | cut -f1 || echo 0)
     local total_mb=$((logs_mb + reports_mb + vegeta_mb))
     
-    # 生成优化的JSON摘要 (开发环境版)
+    # Generate optimized JSON summary (development environment version)
     local bottleneck_types_json=""
     local bottleneck_values_json=""
     
     if [[ "$bottleneck_detected" == "true" && "$bottleneck_types" != "none" ]]; then
-        # 转换为JSON数组格式
+        # Convert to JSON array format
         bottleneck_types_json=$(echo "[$bottleneck_types]" | sed 's/,/","/g' | sed 's/\[/["/' | sed 's/\]/"]/')
         bottleneck_values_json=$(echo "[$bottleneck_values]" | sed 's/,/","/g' | sed 's/\[/["/' | sed 's/\]/"]/')
     else
@@ -158,17 +158,17 @@ generate_test_summary() {
 }
 EOF
     
-    echo "✅ 测试摘要已生成: $summary_file"
+    echo "✅ Test summary generated: $summary_file"
 }
 
-# 更新测试历史索引
+# Update test history index
 update_test_history() {
     local run_id="$1"
     local benchmark_mode="$2"
     local max_qps="$3"
     local status="$4"
     
-    # 如果历史文件不存在，创建初始结构
+    # If history file does not exist, create initial structure
     if [[ ! -f "$TEST_HISTORY_FILE" ]]; then
         cat > "$TEST_HISTORY_FILE" << EOF
 {
@@ -179,7 +179,7 @@ update_test_history() {
 EOF
     fi
     
-    # 添加新测试记录
+    # Add new test record
     local temp_file=$(mktemp)
     jq --arg run_id "$run_id" \
        --arg benchmark_mode "$benchmark_mode" \
@@ -195,233 +195,233 @@ EOF
           "archived_at": now | strftime("%Y-%m-%d %H:%M:%S")
         }]' "$TEST_HISTORY_FILE" > "$temp_file" && mv "$temp_file" "$TEST_HISTORY_FILE"
     
-    echo "✅ 测试历史已更新: $TEST_HISTORY_FILE"
+    echo "✅ Test history updated: $TEST_HISTORY_FILE"
 }
 
-# 自动归档当前测试
+# Auto-archive current test
 archive_current_test() {
     local benchmark_mode="$1"
     local max_qps="$2"
     local start_time="$3"
     local end_time="$4"
     
-    echo "🗂️  开始归档当前测试数据..."
+    echo "🗂️  Starting to archive current test data..."
     
-    # 检查当前测试目录是否存在数据
+    # Check if current test directory has data
     if [[ ! -d "$CURRENT_TEST_DIR" ]] || [[ -z "$(ls -A "$CURRENT_TEST_DIR" 2>/dev/null)" ]]; then
-        echo "⚠️  当前测试目录为空，无需归档"
+        echo "⚠️  Current test directory is empty, no need to archive"
         return 1
     fi
     
-    # 生成运行ID
+    # Generate run ID
     local timestamp=${SESSION_TIMESTAMP}
     local run_number=$(get_next_run_number)
     local run_id="run_${run_number}_${timestamp}"
     
-    # 自动检测瓶颈信息用于显示
+    # Auto-detect bottleneck information for display
     local bottleneck_info=$(auto_detect_bottlenecks)
     local bottleneck_types=$(echo "$bottleneck_info" | cut -d'|' -f1)
     local bottleneck_detected=$(echo "$bottleneck_info" | cut -d'|' -f3)
     
-    echo "📋 归档信息:"
-    echo "   运行ID: $run_id"
-    echo "   基准测试模式: $benchmark_mode"
-    echo "   最大QPS: $max_qps"
-    echo "   瓶颈检测: $bottleneck_detected"
+    echo "📋 Archive information:"
+    echo "   Run ID: $run_id"
+    echo "   Benchmark mode: $benchmark_mode"
+    echo "   Max QPS: $max_qps"
+    echo "   Bottleneck detected: $bottleneck_detected"
     if [[ "$bottleneck_detected" == "true" ]]; then
-        echo "   瓶颈类型: $bottleneck_types"
+        echo "   Bottleneck types: $bottleneck_types"
     fi
     
-    # 创建归档目录
+    # Create archive directory
     local archive_path="${ARCHIVES_DIR}/${run_id}"
     mkdir -p "$archive_path"
     
-    # 复制共享内存中的重要统计文件
+    # Copy important statistics files from shared memory
     copy_shared_memory_stats "$archive_path"
     
-    # 移动当前测试数据到归档
+    # Move current test data to archive
     if mv "$CURRENT_TEST_DIR"/* "$archive_path/" 2>/dev/null; then
-        echo "✅ 测试数据已移动到归档目录"
+        echo "✅ Test data moved to archive directory"
     else
-        echo "❌ 移动测试数据失败"
+        echo "❌ Failed to move test data"
         return 1
     fi
     
-    # 生成测试摘要
+    # Generate test summary
     generate_test_summary "$run_id" "$benchmark_mode" "$max_qps" "$start_time" "$end_time"
     
-    # 确定测试状态
+    # Determine test status
     local status="completed_successfully"
     if [[ "$bottleneck_detected" == "true" ]]; then
         status="completed_with_bottleneck"
     fi
     
-    # 更新测试历史索引
+    # Update test history index
     update_test_history "$run_id" "$benchmark_mode" "$max_qps" "$status"
     
-    # 清理已归档的共享内存文件
+    # Clean up archived shared memory files
     if [[ -n "${MEMORY_SHARE_DIR:-}" ]] && [[ -d "$MEMORY_SHARE_DIR" ]]; then
-        echo "🧹 清理共享内存已归档文件..."
+        echo "🧹 Cleaning up archived shared memory files..."
         rm -f "$MEMORY_SHARE_DIR"/bottleneck_status.json 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/qps_status.json 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/data_loss_stats.json 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/event_notification.json 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/*.flag 2>/dev/null || true
-        echo "✅ 共享内存已归档文件已清理"
+        echo "✅ Archived shared memory files cleaned up"
     fi
     
-    echo "🎉 测试归档完成: $run_id"
-    echo "📊 数据大小: $(du -sh "$archive_path" | cut -f1)"
+    echo "🎉 Test archiving completed: $run_id"
+    echo "📊 Data size: $(du -sh "$archive_path" | cut -f1)"
     
     return 0
 }
 
-# 列出历史测试
+# List test history
 list_test_history() {
-    echo "📊 QPS测试历史记录"
+    echo "📊 QPS Test History"
     echo "=================="
     
     if [[ -f "$TEST_HISTORY_FILE" ]]; then
         local total_tests=$(jq -r '.total_tests' "$TEST_HISTORY_FILE")
         local latest_run=$(jq -r '.latest_run' "$TEST_HISTORY_FILE")
         
-        echo "总测试次数: $total_tests"
-        echo "最新测试: $latest_run"
+        echo "Total tests: $total_tests"
+        echo "Latest test: $latest_run"
         echo ""
-        echo "历史测试列表:"
+        echo "Historical test list:"
         
-        jq -r '.tests[] | "🔹 \(.run_id) | 模式: \(.benchmark_mode) | 最大QPS: \(.max_qps) | 状态: \(.status) | 时间: \(.archived_at)"' "$TEST_HISTORY_FILE"
+        jq -r '.tests[] | "🔹 \(.run_id) | Mode: \(.benchmark_mode) | Max QPS: \(.max_qps) | Status: \(.status) | Time: \(.archived_at)"' "$TEST_HISTORY_FILE"
     else
-        echo "暂无测试历史记录"
+        echo "No test history available"
     fi
 }
 
-# 比较测试结果
+# Compare test results
 compare_tests() {
     local run1="$1"
     local run2="$2"
     
     if [[ -z "$run1" || -z "$run2" ]]; then
-        echo "❌ 错误: 请提供两个测试ID进行比较"
-        echo "💡 用法: $0 --compare <run_id_1> <run_id_2>"
-        echo "🔍 使用 --list 查看可用的测试ID"
+        echo "❌ Error: Please provide two test IDs for comparison"
+        echo "💡 Usage: $0 --compare <run_id_1> <run_id_2>"
+        echo "🔍 Use --list to view available test IDs"
         return 1
     fi
     
-    echo "📈 测试对比: $run1 vs $run2"
+    echo "📈 Test comparison: $run1 vs $run2"
     echo "=========================="
     
     local summary1="${ARCHIVES_DIR}/${run1}/test_summary.json"
     local summary2="${ARCHIVES_DIR}/${run2}/test_summary.json"
     
     if [[ ! -f "$summary1" ]]; then
-        echo "❌ 错误: 测试 '$run1' 的摘要文件不存在"
-        echo "💡 文件路径: $summary1"
-        echo "🔍 使用 --list 查看可用的测试ID"
+        echo "❌ Error: Summary file for test '$run1' does not exist"
+        echo "💡 File path: $summary1"
+        echo "🔍 Use --list to view available test IDs"
         return 1
     fi
     
     if [[ ! -f "$summary2" ]]; then
-        echo "❌ 错误: 测试 '$run2' 的摘要文件不存在"
-        echo "💡 文件路径: $summary2"
-        echo "🔍 使用 --list 查看可用的测试ID"
+        echo "❌ Error: Summary file for test '$run2' does not exist"
+        echo "💡 File path: $summary2"
+        echo "🔍 Use --list to view available test IDs"
         return 1
     fi
     
-    # 验证JSON文件格式
+    # Validate JSON file format
     if ! jq empty "$summary1" 2>/dev/null; then
-        echo "❌ 错误: 测试 '$run1' 的摘要文件格式无效"
-        echo "💡 文件可能已损坏，请检查: $summary1"
+        echo "❌ Error: Summary file format for test '$run1' is invalid"
+        echo "💡 File may be corrupted, please check: $summary1"
         return 1
     fi
     
     if ! jq empty "$summary2" 2>/dev/null; then
-        echo "❌ 错误: 测试 '$run2' 的摘要文件格式无效"
-        echo "💡 文件可能已损坏，请检查: $summary2"
+        echo "❌ Error: Summary file format for test '$run2' is invalid"
+        echo "💡 File may be corrupted, please check: $summary2"
         return 1
     fi
     
-    echo "📊 性能对比:"
-    printf "%-30s %-15s %-15s\n" "指标" "$run1" "$run2"
+    echo "📊 Performance comparison:"
+    printf "%-30s %-15s %-15s\n" "Metric" "$run1" "$run2"
     echo "------------------------------------------------------------"
-    printf "%-30s %-15s %-15s\n" "最大QPS" \
+    printf "%-30s %-15s %-15s\n" "Max QPS" \
         "$(jq -r '.max_successful_qps' "$summary1")" \
         "$(jq -r '.max_successful_qps' "$summary2")"
-    printf "%-30s %-15s %-15s\n" "测试时长(分钟)" \
+    printf "%-30s %-15s %-15s\n" "Duration (minutes)" \
         "$(jq -r '.duration_minutes' "$summary1")" \
         "$(jq -r '.duration_minutes' "$summary2")"
-    printf "%-30s %-15s %-15s\n" "瓶颈类型" \
+    printf "%-30s %-15s %-15s\n" "Bottleneck type" \
         "$(jq -r '.bottleneck_summary // "none"' "$summary1")" \
         "$(jq -r '.bottleneck_summary // "none"' "$summary2")"
-    printf "%-30s %-15s %-15s\n" "数据大小(MB)" \
+    printf "%-30s %-15s %-15s\n" "Data size (MB)" \
         "$(jq -r '.data_size.total_mb' "$summary1")" \
         "$(jq -r '.data_size.total_mb' "$summary2")"
     
     echo ""
-    echo "📅 时间对比:"
+    echo "📅 Time comparison:"
     echo "  $run1: $(jq -r '.start_time' "$summary1") - $(jq -r '.end_time' "$summary1")"
     echo "  $run2: $(jq -r '.start_time' "$summary2") - $(jq -r '.end_time' "$summary2")"
 }
 
-# 清理旧测试数据
+# Clean up old test data
 cleanup_old_tests() {
     local keep_count=${1:-10}
     
-    # 验证保留数量参数
+    # Validate keep count parameter
     if ! [[ "$keep_count" =~ ^[0-9]+$ ]] || [[ "$keep_count" -eq 0 ]]; then
-        echo "❌ 错误: 保留数量必须是正整数，当前值: '$keep_count'"
-        echo "💡 示例: cleanup_old_tests 5"
+        echo "❌ Error: Keep count must be a positive integer, current value: '$keep_count'"
+        echo "💡 Example: cleanup_old_tests 5"
         return 1
     fi
     
-    echo "🗑️  清理旧测试数据，保留最近 $keep_count 次测试"
+    echo "🗑️  Cleaning up old test data, keeping the most recent $keep_count tests"
     
     if [[ ! -d "$ARCHIVES_DIR" ]]; then
-        echo "ℹ️  归档目录不存在，无需清理"
-        echo "💡 目录路径: $ARCHIVES_DIR"
+        echo "ℹ️  Archive directory does not exist, no cleanup needed"
+        echo "💡 Directory path: $ARCHIVES_DIR"
         return 0
     fi
     
-    # 检查目录权限
+    # Check directory permissions
     if [[ ! -w "$ARCHIVES_DIR" ]]; then
-        echo "❌ 错误: 没有归档目录的写权限"
-        echo "💡 目录路径: $ARCHIVES_DIR"
-        echo "🔧 请检查目录权限或以适当用户身份运行"
+        echo "❌ Error: No write permission for archive directory"
+        echo "💡 Directory path: $ARCHIVES_DIR"
+        echo "🔧 Please check directory permissions or run as appropriate user"
         return 1
     fi
     
-    # 获取所有测试目录，按时间排序
+    # Get all test directories, sorted by time
     local test_dirs=($(ls -1t "$ARCHIVES_DIR" | grep "^run_"))
     local total_tests=${#test_dirs[@]}
     
     if [[ $total_tests -le $keep_count ]]; then
-        echo "当前测试数量($total_tests)不超过保留数量($keep_count)，无需清理"
+        echo "Current test count ($total_tests) does not exceed keep count ($keep_count), no cleanup needed"
         return 0
     fi
     
-    echo "发现 $total_tests 个测试，将删除最旧的 $((total_tests - keep_count)) 个"
+    echo "Found $total_tests tests, will delete the oldest $((total_tests - keep_count))"
     
-    # 删除超出保留数量的旧测试
+    # Delete old tests exceeding keep count
     for ((i=$keep_count; i<$total_tests; i++)); do
         local old_test="${test_dirs[$i]}"
         local old_path="${ARCHIVES_DIR}/${old_test}"
         local size=$(du -sh "$old_path" | cut -f1)
         
-        echo "删除: $old_test (大小: $size)"
+        echo "Deleting: $old_test (size: $size)"
         rm -rf "$old_path"
     done
     
-    # 重建测试历史索引
+    # Rebuild test history index
     rebuild_test_history
     
-    echo "✅ 清理完成"
+    echo "✅ Cleanup completed"
 }
 
-# 重建测试历史索引
+# Rebuild test history index
 rebuild_test_history() {
-    echo "🔄 重建测试历史索引..."
+    echo "🔄 Rebuilding test history index..."
     
-    # 创建新的历史文件
+    # Create new history file
     cat > "$TEST_HISTORY_FILE" << EOF
 {
   "total_tests": 0,
@@ -430,7 +430,7 @@ rebuild_test_history() {
 }
 EOF
     
-    # 扫描归档目录中的所有测试
+    # Scan all tests in archive directory
     if [[ -d "$ARCHIVES_DIR" ]]; then
         local test_dirs=($(ls -1t "$ARCHIVES_DIR" | grep "^run_"))
         
@@ -452,73 +452,73 @@ EOF
         done
     fi
     
-    echo "✅ 测试历史索引重建完成"
+    echo "✅ Test history index rebuild completed"
 }
 
-# 显示帮助信息
+# Display help information
 show_help() {
     cat << 'EOF'
-📦 基准测试归档工具 - 开发环境优化版
+📦 Benchmark Test Archiver - Development Environment Optimized Version
 
-用法:
-  $0 <操作> [选项]
+Usage:
+  $0 <operation> [options]
 
-操作:
-  --archive                    归档当前测试数据
-    --benchmark-mode <mode>    基准测试模式 (必需)
-                              支持: quick, standard, intensive
-    --max-qps <qps>           最大成功QPS (必需，正整数)
-    --start-time <time>       测试开始时间 (可选)
-                              格式: 'YYYY-MM-DD HH:MM:SS'
-    --end-time <time>         测试结束时间 (可选)
-                              格式: 'YYYY-MM-DD HH:MM:SS'
-    注: 瓶颈信息将自动从系统检测结果中提取
+Operations:
+  --archive                    Archive current test data
+    --benchmark-mode <mode>    Benchmark mode (required)
+                              Supported: quick, standard, intensive
+    --max-qps <qps>           Maximum successful QPS (required, positive integer)
+    --start-time <time>       Test start time (optional)
+                              Format: 'YYYY-MM-DD HH:MM:SS'
+    --end-time <time>         Test end time (optional)
+                              Format: 'YYYY-MM-DD HH:MM:SS'
+    Note: Bottleneck information will be automatically extracted from system detection results
 
-  --list                       列出测试历史记录
-  
-  --compare <run1> <run2>      比较两次测试结果
-                              run1, run2: 测试运行ID
-                              使用 --list 查看可用的测试ID
-  
-  --cleanup [--keep <count>]   清理旧测试数据
-                              count: 保留的测试数量 (默认: 10)
-                              必须是正整数
-  
-  --rebuild-history           重建测试历史索引
-  
-  --help                      显示此帮助信息
+  --list                       List test history
 
-示例:
-  # 归档测试 (基本用法)
+  --compare <run1> <run2>      Compare two test results
+                              run1, run2: Test run IDs
+                              Use --list to view available test IDs
+
+  --cleanup [--keep <count>]   Clean up old test data
+                              count: Number of tests to keep (default: 10)
+                              Must be a positive integer
+
+  --rebuild-history           Rebuild test history index
+
+  --help                      Display this help information
+
+Examples:
+  # Archive test (basic usage)
   $0 --archive --benchmark-mode standard --max-qps 2500
-  
-  # 归档测试 (完整信息)
+
+  # Archive test (complete information)
   $0 --archive --benchmark-mode intensive --max-qps 3500 \
      --start-time "2025-01-01 10:00:00" --end-time "2025-01-01 12:00:00"
-  
-  # 列出历史测试
+
+  # List historical tests
   $0 --list
   
-  # 比较两次测试
+  # Compare two tests
   $0 --compare run_001_20250101_100000 run_002_20250101_110000
   
-  # 清理旧测试，保留最近5次
+  # Clean up old tests, keep the most recent 5
   $0 --cleanup --keep 5
 
-注意事项:
-  • 所有时间格式使用: 'YYYY-MM-DD HH:MM:SS'
-  • QPS值必须是正整数
-  • 瓶颈信息自动检测，无需手动指定
-  • 在开发环境中，错误处理更加严格和友好
+Notes:
+  • All time formats use: 'YYYY-MM-DD HH:MM:SS'
+  • QPS value must be a positive integer
+  • Bottleneck information is automatically detected, no manual specification needed
+  • In development environment, error handling is more strict and friendly
 
-错误处理:
-  • 参数验证: 严格验证所有参数的格式和有效性
-  • 友好提示: 提供具体的错误信息和使用建议
-  • 快速帮助: 错误时显示相关的使用提示
+Error handling:
+  • Parameter validation: Strictly validate format and validity of all parameters
+  • Friendly prompts: Provide specific error messages and usage suggestions
+  • Quick help: Display relevant usage tips on errors
 EOF
 }
 
-# 主函数
+# Main function
 main() {
     case "$1" in
         --archive)
@@ -532,39 +532,39 @@ main() {
                 case "$1" in
                     --benchmark-mode) 
                         if [[ -z "$2" ]]; then
-                            echo "❌ 错误: --benchmark-mode 参数值不能为空"
-                            echo "💡 支持的模式: quick, standard, intensive"
+                            echo "❌ Error: --benchmark-mode parameter value cannot be empty"
+                            echo "💡 Supported modes: quick, standard, intensive"
                             exit 1
                         fi
                         if [[ "$2" != "quick" && "$2" != "standard" && "$2" != "intensive" ]]; then
-                            echo "❌ 错误: 无效的基准测试模式 '$2'"
-                            echo "💡 支持的模式: quick, standard, intensive"
+                            echo "❌ Error: Invalid benchmark mode '$2'"
+                            echo "💡 Supported modes: quick, standard, intensive"
                             exit 1
                         fi
                         mode="$2"; shift 2 ;;
                     --max-qps) 
                         if [[ -z "$2" ]]; then
-                            echo "❌ 错误: --max-qps 参数值不能为空"
-                            echo "💡 示例: --max-qps 2500"
+                            echo "❌ Error: --max-qps parameter value cannot be empty"
+                            echo "💡 Example: --max-qps 2500"
                             exit 1
                         fi
                         if ! [[ "$2" =~ ^[0-9]+$ ]] || [[ "$2" -eq 0 ]]; then
-                            echo "❌ 错误: --max-qps 必须是正整数，当前值: '$2'"
-                            echo "💡 示例: --max-qps 2500"
+                            echo "❌ Error: --max-qps must be a positive integer, current value: '$2'"
+                            echo "💡 Example: --max-qps 2500"
                             exit 1
                         fi
                         max_qps="$2"; shift 2 ;;
                     --start-time) 
                         if [[ -z "$2" ]]; then
-                            echo "❌ 错误: --start-time 参数值不能为空"
-                            echo "💡 格式: 'YYYY-MM-DD HH:MM:SS'"
+                            echo "❌ Error: --start-time parameter value cannot be empty"
+                            echo "💡 Format: 'YYYY-MM-DD HH:MM:SS'"
                             exit 1
                         fi
                         start_time="$2"; shift 2 ;;
                     --end-time) 
                         if [[ -z "$2" ]]; then
-                            echo "❌ 错误: --end-time 参数值不能为空"
-                            echo "💡 格式: 'YYYY-MM-DD HH:MM:SS'"
+                            echo "❌ Error: --end-time parameter value cannot be empty"
+                            echo "💡 Format: 'YYYY-MM-DD HH:MM:SS'"
                             exit 1
                         fi
                         end_time="$2"; shift 2 ;;
@@ -572,35 +572,35 @@ main() {
                         show_help
                         exit 0 ;;
                     -*) 
-                        echo "❌ 错误: 未知参数 '$1'"
+                        echo "❌ Error: Unknown parameter '$1'"
                         echo ""
-                        echo "💡 支持的参数:"
-                        echo "   --benchmark-mode <mode>  基准测试模式 (quick/standard/intensive)"
-                        echo "   --max-qps <qps>         最大成功QPS (正整数)"
-                        echo "   --start-time <time>     测试开始时间"
-                        echo "   --end-time <time>       测试结束时间"
-                        echo "   --help                  显示完整帮助信息"
+                        echo "💡 Supported parameters:"
+                        echo "   --benchmark-mode <mode>  Benchmark mode (quick/standard/intensive)"
+                        echo "   --max-qps <qps>         Maximum successful QPS (positive integer)"
+                        echo "   --start-time <time>     Test start time"
+                        echo "   --end-time <time>       Test end time"
+                        echo "   --help                  Display complete help information"
                         echo ""
-                        echo "🔍 使用 --help 查看完整使用说明"
+                        echo "🔍 Use --help to view complete usage instructions"
                         exit 1 ;;
                     *) 
-                        echo "❌ 错误: 无效参数 '$1'"
-                        echo "💡 提示: 参数必须以 -- 开头"
-                        echo "🔍 使用 --help 查看支持的参数"
+                        echo "❌ Error: Invalid parameter '$1'"
+                        echo "💡 Tip: Parameters must start with --"
+                        echo "🔍 Use --help to view supported parameters"
                         exit 1 ;;
                 esac
             done
             
-            # 验证必需参数
+            # Validate required parameters
             if [[ -z "$mode" ]]; then
-                echo "❌ 错误: 缺少必需参数 --benchmark-mode"
-                echo "💡 示例: --benchmark-mode standard"
+                echo "❌ Error: Missing required parameter --benchmark-mode"
+                echo "💡 Example: --benchmark-mode standard"
                 exit 1
             fi
             
             if [[ -z "$max_qps" ]]; then
-                echo "❌ 错误: 缺少必需参数 --max-qps"
-                echo "💡 示例: --max-qps 2500"
+                echo "❌ Error: Missing required parameter --max-qps"
+                echo "💡 Example: --max-qps 2500"
                 exit 1
             fi
             
@@ -611,37 +611,37 @@ main() {
             ;;
         --compare)
             if [[ $# -lt 3 ]]; then
-                echo "❌ 错误: --compare 需要两个测试ID参数"
-                echo "💡 用法: --compare <run_id1> <run_id2>"
-                echo "🔍 使用 --list 查看可用的测试ID"
+                echo "❌ Error: --compare requires two test ID parameters"
+                echo "💡 Usage: --compare <run_id1> <run_id2>"
+                echo "🔍 Use --list to view available test IDs"
                 exit 1
             fi
             local run1="$2"
             local run2="$3"
             if [[ -z "$run1" || -z "$run2" ]]; then
-                echo "❌ 错误: 测试ID不能为空"
-                echo "💡 用法: --compare run_001_20250101_120000 run_002_20250101_130000"
+                echo "❌ Error: Test ID cannot be empty"
+                echo "💡 Usage: --compare run_001_20250101_120000 run_002_20250101_130000"
                 exit 1
             fi
             compare_tests "$run1" "$run2"
             ;;
         --cleanup)
-            local keep_count=10  # 默认保留10次
+            local keep_count=10  # Default keep 10 tests
             if [[ -n "$2" && "$2" == "--keep" ]]; then
                 if [[ -z "$3" ]]; then
-                    echo "❌ 错误: --keep 参数需要指定保留数量"
-                    echo "💡 用法: --cleanup --keep 5"
+                    echo "❌ Error: --keep parameter requires specifying keep count"
+                    echo "💡 Usage: --cleanup --keep 5"
                     exit 1
                 fi
                 if ! [[ "$3" =~ ^[0-9]+$ ]] || [[ "$3" -eq 0 ]]; then
-                    echo "❌ 错误: 保留数量必须是正整数，当前值: '$3'"
-                    echo "💡 用法: --cleanup --keep 5"
+                    echo "❌ Error: Keep count must be a positive integer, current value: '$3'"
+                    echo "💡 Usage: --cleanup --keep 5"
                     exit 1
                 fi
                 keep_count="$3"
             elif [[ -n "$2" ]]; then
-                echo "❌ 错误: --cleanup 的无效参数 '$2'"
-                echo "💡 用法: --cleanup [--keep <count>]"
+                echo "❌ Error: Invalid parameter for --cleanup '$2'"
+                echo "💡 Usage: --cleanup [--keep <count>]"
                 exit 1
             fi
             cleanup_old_tests "$keep_count"
@@ -653,37 +653,37 @@ main() {
             show_help
             ;;
         "")
-            echo "❌ 错误: 缺少操作参数"
+            echo "❌ Error: Missing operation parameter"
             echo ""
-            echo "💡 可用操作:"
-            echo "   --archive                    归档当前测试"
-            echo "   --list                       列出测试历史"
-            echo "   --compare <run1> <run2>      比较两次测试"
-            echo "   --cleanup [--keep <count>]   清理旧测试"
-            echo "   --rebuild-history            重建测试历史"
-            echo "   --help                       显示帮助"
+            echo "💡 Available operations:"
+            echo "   --archive                    Archive current test"
+            echo "   --list                       List test history"
+            echo "   --compare <run1> <run2>      Compare two tests"
+            echo "   --cleanup [--keep <count>]   Clean up old tests"
+            echo "   --rebuild-history            Rebuild test history"
+            echo "   --help                       Display help"
             echo ""
-            echo "🔍 使用 --help 查看详细说明"
+            echo "🔍 Use --help to view detailed instructions"
             exit 1
             ;;
         *)
-            echo "❌ 错误: 未知操作 '$1'"
+            echo "❌ Error: Unknown operation '$1'"
             echo ""
-            echo "💡 可用操作:"
-            echo "   --archive                    归档当前测试"
-            echo "   --list                       列出测试历史"
-            echo "   --compare <run1> <run2>      比较两次测试"
-            echo "   --cleanup [--keep <count>]   清理旧测试"
-            echo "   --rebuild-history            重建测试历史"
-            echo "   --help                       显示帮助"
+            echo "💡 Available operations:"
+            echo "   --archive                    Archive current test"
+            echo "   --list                       List test history"
+            echo "   --compare <run1> <run2>      Compare two tests"
+            echo "   --cleanup [--keep <count>]   Clean up old tests"
+            echo "   --rebuild-history            Rebuild test history"
+            echo "   --help                       Display help"
             echo ""
-            echo "🔍 使用 --help 查看详细说明"
+            echo "🔍 Use --help to view detailed instructions"
             exit 1
             ;;
     esac
 }
 
-# 如果直接执行此脚本
+# If directly executing this script
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi

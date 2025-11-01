@@ -1,25 +1,25 @@
 #!/bin/bash
 # =====================================================================
-# Blockchain Node Benchmark Framework - 统一配置加载器
+# Blockchain Node Benchmark Framework - Unified Configuration Loader
 # =====================================================================
-# 功能: 按顺序加载所有配置层并执行动态配置检测
-# =====================================================================
-
-# =====================================================================
-# 用户配置变量 - 用户只需要配置这些变量
+# Function: Load all configuration layers in order and perform dynamic configuration detection
 # =====================================================================
 
-# ----- 基础配置 -----
+# =====================================================================
+# User Configuration Variables - Users only need to configure these variables
+# =====================================================================
+
+# ----- Basic Configuration -----
 # Blockchain Node Local RPC Endpoint
 LOCAL_RPC_URL="${LOCAL_RPC_URL:-http://localhost:8899}"
 
-# ----- 区块链节点配置 -----
+# ----- Blockchain Node Configuration -----
 BLOCKCHAIN_NODE="${BLOCKCHAIN_NODE:-solana}"
 
-# 强制确保 BLOCKCHAIN_NODE 是小写
+# Force ensure BLOCKCHAIN_NODE is lowercase
 BLOCKCHAIN_NODE=$(echo "$BLOCKCHAIN_NODE" | tr '[:upper:]' '[:lower:]')
 
-# 区块链节点运行进程名称
+# Blockchain node running process names
 BLOCKCHAIN_PROCESS_NAMES=(
     "blockchain"
     "validator"
@@ -27,122 +27,122 @@ BLOCKCHAIN_PROCESS_NAMES=(
     "node.service"
 )
 
-# 账户和目标文件配置
-ACCOUNT_COUNT=1000                                                    # 默认账户数量
+# Account and target file configuration
+ACCOUNT_COUNT=1000                                                    # Default account count
 
-# ----- 账户获取工具配置 -----
-# 账户获取工具的详细配置参数
-ACCOUNT_MAX_SIGNATURES=50000                                          # 最大签名数量
-ACCOUNT_TX_BATCH_SIZE=100                                             # 交易批处理大小
-ACCOUNT_SEMAPHORE_LIMIT=10                                            # 并发限制
+# ----- Account Fetching Tool Configuration -----
+# Detailed configuration parameters for account fetching tool
+ACCOUNT_MAX_SIGNATURES=50000                                          # Maximum signature count
+ACCOUNT_TX_BATCH_SIZE=100                                             # Transaction batch size
+ACCOUNT_SEMAPHORE_LIMIT=10                                            # Concurrency limit
 
-# ----- RPC模式配置 -----
-RPC_MODE="${RPC_MODE:-single}"      # RPC模式: single/mixed (默认single)
-
-# =====================================================================
-# 用户配置变量 - 用户只需要配置以上这些变量
-# =====================================================================
-
+# ----- RPC Mode Configuration -----
+RPC_MODE="${RPC_MODE:-single}"      # RPC mode: single/mixed (default single)
 
 # =====================================================================
-# 高性能配置缓存机制 - 防止重复加载和JSON解析
+# User Configuration Variables - Users only need to configure the above variables
 # =====================================================================
-# 直接加载配置
-echo "🔧 开始加载配置..." >&2
 
-# 检查配置是否已加载，避免重复输出
+
+# =====================================================================
+# High-Performance Configuration Caching Mechanism - Prevent repeated loading and JSON parsing
+# =====================================================================
+# Load configuration directly
+echo "🔧 Starting configuration loading..." >&2
+
+# Check if configuration is already loaded, avoid duplicate output
 if [[ "${CONFIG_ALREADY_LOADED:-}" == "true" && "${FORCE_CONFIG_RELOAD:-}" != "true" ]]; then
     return 0
 fi
 
-# 获取配置目录
+# Get configuration directory
 CONFIG_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
-# 按顺序加载配置层
-echo "🔧 加载分层配置..." >&2
+# Load configuration layers in order
+echo "🔧 Loading layered configuration..." >&2
 
-# 1. 加载用户配置层
+# 1. Load user configuration layer
 if [[ -f "${CONFIG_DIR}/user_config.sh" ]]; then
     source "${CONFIG_DIR}/user_config.sh"
-    echo "✅ 用户配置层加载完成" >&2
+    echo "✅ User configuration layer loaded" >&2
 else
-    echo "❌ 用户配置层文件不存在: ${CONFIG_DIR}/user_config.sh" >&2
+    echo "❌ User configuration layer file does not exist: ${CONFIG_DIR}/user_config.sh" >&2
     exit 1
 fi
 
-# 2. 加载系统配置层
+# 2. Load system configuration layer
 if [[ -f "${CONFIG_DIR}/system_config.sh" ]]; then
     source "${CONFIG_DIR}/system_config.sh"
-    echo "✅ 系统配置层加载完成" >&2
+    echo "✅ System configuration layer loaded" >&2
 else
-    echo "❌ 系统配置层文件不存在: ${CONFIG_DIR}/system_config.sh" >&2
+    echo "❌ System configuration layer file does not exist: ${CONFIG_DIR}/system_config.sh" >&2
     exit 1
 fi
 
-# 3. 加载内部配置层
+# 3. Load internal configuration layer
 if [[ -f "${CONFIG_DIR}/internal_config.sh" ]]; then
     source "${CONFIG_DIR}/internal_config.sh"
-    echo "✅ 内部配置层加载完成" >&2
+    echo "✅ Internal configuration layer loaded" >&2
 else
-    echo "❌ 内部配置层文件不存在: ${CONFIG_DIR}/internal_config.sh" >&2
+    echo "❌ Internal configuration layer file does not exist: ${CONFIG_DIR}/internal_config.sh" >&2
     exit 1
 fi
 
 # =====================================================================
-# 动态配置检测和计算
+# Dynamic Configuration Detection and Calculation
 # =====================================================================
 
-# ----- 自动计算的网络配置 -----
-# 自动转换为Mbps (用于内部计算，用户无需修改)
+# ----- Automatically Calculated Network Configuration -----
+# Automatically convert to Mbps (for internal calculation, users do not need to modify)
 NETWORK_MAX_BANDWIDTH_MBPS=$((NETWORK_MAX_BANDWIDTH_GBPS * 1000))
 
-# ----- 部署平台检测函数 -----
-# 自动检测部署平台并调整ENA监控配置
+# ----- Deployment Platform Detection Function -----
+# Automatically detect deployment platform and adjust ENA monitoring configuration
 detect_deployment_platform() {
     if [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]; then
-        echo "🔍 自动检测部署平台..." >&2
+        echo "🔍 Auto-detecting deployment platform..." >&2
         
-        # 检测是否在AWS环境 (通过AWS元数据服务)
+        # Check if in AWS environment (via AWS metadata service)
         if curl -s --max-time 3 --connect-timeout 2 "${AWS_METADATA_ENDPOINT}/${AWS_METADATA_API_VERSION}/meta-data/instance-id" >/dev/null 2>&1; then
             DEPLOYMENT_PLATFORM="aws"
             ENA_MONITOR_ENABLED=true
-            echo "✅ 检测到AWS环境，启用ENA监控" >&2
+            echo "✅ AWS environment detected, ENA monitoring enabled" >&2
         else
             DEPLOYMENT_PLATFORM="other"
             ENA_MONITOR_ENABLED=false
-            echo "ℹ️  检测到非AWS环境 (IDC/其他云)，禁用ENA监控" >&2
+            echo "ℹ️  Non-AWS environment detected (IDC/other cloud), ENA monitoring disabled" >&2
         fi
     else
-        echo "🔧 使用手动配置的部署平台: $DEPLOYMENT_PLATFORM" >&2
+        echo "🔧 Using manually configured deployment platform: $DEPLOYMENT_PLATFORM" >&2
         case "$DEPLOYMENT_PLATFORM" in
             "aws")
                 ENA_MONITOR_ENABLED=true
-                echo "✅ AWS环境，启用ENA监控" >&2
+                echo "✅ AWS environment, ENA monitoring enabled" >&2
                 ;;
             "other"|"idc")
                 ENA_MONITOR_ENABLED=false
-                echo "ℹ️  非AWS环境，禁用ENA监控" >&2
+                echo "ℹ️  Non-AWS environment, ENA monitoring disabled" >&2
                 ;;
             *)
-                echo "⚠️  未知部署平台: $DEPLOYMENT_PLATFORM，禁用ENA监控" >&2
+                echo "⚠️  Unknown deployment platform: $DEPLOYMENT_PLATFORM, ENA monitoring disabled" >&2
                 ENA_MONITOR_ENABLED=false
                 ;;
         esac
     fi
     
-    # 输出最终配置
-    echo "📊 部署平台配置:" >&2
-    echo "   平台类型: $DEPLOYMENT_PLATFORM" >&2
-    echo "   ENA监控: $ENA_MONITOR_ENABLED" >&2
+    # Output final configuration
+    echo "📊 Deployment platform configuration:" >&2
+    echo "   Platform type: $DEPLOYMENT_PLATFORM" >&2
+    echo "   ENA monitoring: $ENA_MONITOR_ENABLED" >&2
     
-    # 标记平台检测已完成并导出到子进程
+    # Mark platform detection as completed and export to subprocesses
     DEPLOYMENT_PLATFORM_DETECTED=true
 }
 
-# ----- 网络接口检测函数 -----
-# 自动检测ENA网络接口
+# ----- Network Interface Detection Function -----
+# Automatically detect ENA network interface
 detect_network_interface() {
-    # 优先检测ENA接口
+    # Prioritize detecting ENA interfaces
     local ena_interfaces
     if command -v ip >/dev/null 2>&1; then
         ena_interfaces=($(ip link show 2>/dev/null | grep -E "^[0-9]+: (eth|ens|enp)" | grep "state UP" | cut -d: -f2 | tr -d ' '))
@@ -150,13 +150,13 @@ detect_network_interface() {
         ena_interfaces=()
     fi
     
-    # 如果找到ENA接口，优先使用第一个
+    # If ENA interface found, prioritize using the first one
     if [[ ${#ena_interfaces[@]} -gt 0 ]]; then
         NETWORK_INTERFACE="${ena_interfaces[0]}"
         return 0
     fi
     
-    # 如果没有找到ENA接口，使用传统方法检测
+    # If no ENA interface found, use traditional detection method
     local interface=""
     if command -v ip >/dev/null 2>&1; then
         interface=$(ip route 2>/dev/null | grep default | awk '{print $5}' | head -1)
@@ -166,77 +166,77 @@ detect_network_interface() {
         interface=$(netstat -rn 2>/dev/null | grep default | awk '{print $6}' | head -1)
     fi
     
-    # 如果仍然没有找到，使用系统默认
+    # If still not found, use system default
     if [[ -z "$interface" ]]; then
-        interface="eth0"  # Linux默认
+        interface="eth0"  # Linux default
     fi
     
     NETWORK_INTERFACE="$interface"
 }
 
-# ----- 路径检测和配置函数 -----
-ACCOUNT_OUTPUT_FILE="active_accounts.txt"                             # 输出文件名
+# ----- Path Detection and Configuration Function -----
+ACCOUNT_OUTPUT_FILE="active_accounts.txt"                             # Output filename
 
-# 检测部署环境并设置路径
+# Detect deployment environment and set paths
 detect_deployment_paths() {
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local framework_dir="$(dirname "$script_dir")"
     local deployment_dir="$(dirname "$framework_dir")"
     
-    echo "   框架目录: $framework_dir" >&2
-    echo "   部署目录: $deployment_dir" >&2
+    echo "   Framework directory: $framework_dir" >&2
+    echo "   Deployment directory: $deployment_dir" >&2
     
-    # 设置内存共享目录 (独立于数据目录，保持系统级路径)
-    # Linux 生产环境 - 使用系统 tmpfs
+    # Set memory sharing directory (independent of data directory, maintain system-level path)
+    # Linux production environment - use system tmpfs
     BASE_MEMORY_DIR="/dev/shm/blockchain-node-benchmark"
-    echo "🐧 Linux生产环境" >&2
+    echo "🐧 Linux production environment" >&2
     
-    # 标准化路径配置
+    # Standardized path configuration
     BASE_FRAMEWORK_DIR="$framework_dir"
     BASE_DATA_DIR="${BLOCKCHAIN_BENCHMARK_DATA_DIR:-${deployment_dir}/blockchain-node-benchmark-result}"
     
-    # 验证和修复路径设置
+    # Validate and fix path settings
     if [[ -z "$BASE_DATA_DIR" || "$BASE_DATA_DIR" == "/blockchain-node-benchmark-result" ]]; then
-        echo "⚠️ 数据目录路径异常，使用默认路径" >&2
+        echo "⚠️ Data directory path abnormal, using default path" >&2
         BASE_DATA_DIR="${HOME}/blockchain-node-benchmark-result"
     fi
 
-    echo "   数据目录: $BASE_DATA_DIR" >&2
+    echo "   Data directory: $BASE_DATA_DIR" >&2
     
-    # 支持环境变量覆盖
+    # Support environment variable override
     if [[ -n "${BLOCKCHAIN_BENCHMARK_DATA_DIR:-}" ]]; then
-        echo "   (使用环境变量: BLOCKCHAIN_BENCHMARK_DATA_DIR)" >&2
+        echo "   (Using environment variable: BLOCKCHAIN_BENCHMARK_DATA_DIR)" >&2
     fi
     
-    # 设置目录结构 - 基于新的标准化路径
-    # 主数据目录 (QPS测试专属)
+    # Set directory structure - based on new standardized paths
+    # Main data directory (QPS test exclusive)
     DATA_DIR="${BASE_DATA_DIR}"
-    # 当前测试数据目录
+    # Current test data directory
     CURRENT_TEST_DIR="${DATA_DIR}/current"
-    # 日志目录 (性能监控数据)
+    # Log directory (performance monitoring data)
     LOGS_DIR="${CURRENT_TEST_DIR}/logs"
-    # 报告目录 (分析报告和图表)
+    # Report directory (analysis reports and charts)
     REPORTS_DIR="${CURRENT_TEST_DIR}/reports"
-    # Vegeta 结果目录 (压测原始数据)
+    # Vegeta results directory (stress test raw data)
     VEGETA_RESULTS_DIR="${CURRENT_TEST_DIR}/vegeta_results"
-    # 临时文件目录 (运行时临时数据)
+    # Temporary file directory (runtime temporary data)
     TMP_DIR="${CURRENT_TEST_DIR}/tmp"
-    # 归档目录 (历史测试数据)
+    # Archive directory (historical test data)
     ARCHIVES_DIR="${DATA_DIR}/archives"
-    # 错误处理和日志目录
+    # Error handling and log directories
     ERROR_LOG_DIR="${CURRENT_TEST_DIR}/${ERROR_LOG_SUBDIR}"
     PYTHON_ERROR_LOG_DIR="${CURRENT_TEST_DIR}/${PYTHON_ERROR_LOG_SUBDIR}"
     
-    # 内存共享目录 (独立于数据目录，使用系统级路径)
+    # Memory sharing directory (independent of data directory, use system-level path)
     MEMORY_SHARE_DIR="${BASE_MEMORY_DIR}"
     
-    # 生成统一的会话时间戳（确保所有进程使用相同的时间戳）
+    # Generate unified session timestamp (ensure all processes use the same timestamp)
     if [[ -z "${SESSION_TIMESTAMP:-}" ]]; then
         SESSION_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
         export SESSION_TIMESTAMP
     fi
     
-    # 设置动态路径变量（使用统一的会话时间戳）
+    # Set dynamic path variables (using unified session timestamp)
     BLOCK_HEIGHT_CACHE_FILE="${MEMORY_SHARE_DIR}/block_height_monitor_cache.json"
     BLOCK_HEIGHT_DATA_FILE="${LOGS_DIR}/block_height_monitor_${SESSION_TIMESTAMP}.csv"
     ACCOUNTS_OUTPUT_FILE="${TMP_DIR}/${ACCOUNT_OUTPUT_FILE}"
@@ -245,89 +245,89 @@ detect_deployment_paths() {
     QPS_STATUS_FILE="${MEMORY_SHARE_DIR}/qps_status.json"
     TEST_SESSION_DIR="${TMP_DIR}/session_${SESSION_TIMESTAMP}"
     
-    # 设置监控开销优化相关的日志文件路径（使用统一时间戳）
+    # Set monitoring overhead optimization related log file paths (using unified timestamp)
     MONITORING_OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_${SESSION_TIMESTAMP}.csv"
     PERFORMANCE_LOG="${LOGS_DIR}/monitoring_performance_${SESSION_TIMESTAMP}.log"
     ERROR_LOG="${LOGS_DIR}/monitoring_errors_${SESSION_TIMESTAMP}.log"
     
-    # 临时文件模式 (用于清理)
+    # Temporary file pattern (for cleanup)
     TEMP_FILE_PATTERN="${TMP_DIR}/${TEMP_FILE_PREFIX}-*"
     
-    # 输出最终配置
-    echo "📋 路径配置完成:" >&2
-    echo "   框架目录: $BASE_FRAMEWORK_DIR" >&2
-    echo "   数据目录: $BASE_DATA_DIR" >&2
-    echo "   内存共享: $MEMORY_SHARE_DIR" >&2
+    # Output final configuration
+    echo "📋 Path configuration completed:" >&2
+    echo "   Framework directory: $BASE_FRAMEWORK_DIR" >&2
+    echo "   Data directory: $BASE_DATA_DIR" >&2
+    echo "   Memory sharing: $MEMORY_SHARE_DIR" >&2
     
-    # 标记路径检测已完成并导出到子进程
+    # Mark path detection as completed and export to subprocesses
     DEPLOYMENT_PATHS_DETECTED=true
     export DEPLOYMENT_PATHS_DETECTED
 }
 
-# ----- 目录创建函数 -----
-# 安全创建目录函数
+# ----- Directory Creation Function -----
+# Safely create directories function
 create_directories_safely() {
     local dirs=("$@")
     local created_dirs=()
     local failed_dirs=()
     
-    echo "🔧 正在创建必要的目录..." >&2
+    echo "🔧 Creating necessary directories..." >&2
     
     for dir in "${dirs[@]}"; do
         if [[ ! -d "$dir" ]]; then
             if mkdir -p "$dir" 2>/dev/null; then
-                echo "✅ 创建目录: $dir" >&2
+                echo "✅ Created directory: $dir" >&2
                 created_dirs+=("$dir")
                 chmod 755 "$dir" 2>/dev/null || true
             else
-                echo "❌ 无法创建目录: $dir" >&2
+                echo "❌ Unable to create directory: $dir" >&2
                 failed_dirs+=("$dir")
             fi
         else
-            echo "✅ 目录已存在: $dir" >&2
+            echo "✅ Directory already exists: $dir" >&2
         fi
     done
     
-    # 标记目录创建已完成并导出到子进程
+    # Mark directory creation as completed and export to subprocesses
     DIRECTORIES_CREATED=true
     export DIRECTORIES_CREATED
     
-    # 返回结果摘要
+    # Return result summary
     if [[ ${#failed_dirs[@]} -gt 0 ]]; then
-        echo "⚠️  部分目录创建失败: ${failed_dirs[*]}" >&2
+        echo "⚠️  Some directories failed to create: ${failed_dirs[*]}" >&2
         return 1
     else
-        echo "✅ 所有目录创建成功" >&2
+        echo "✅ All directories created successfully" >&2
         return 0
     fi
 }
 
 # =====================================================================
-# 执行动态配置检测
+# Execute Dynamic Configuration Detection
 # =====================================================================
 
-# 执行部署平台检测
+# Execute deployment platform detection
 detect_deployment_platform
 
-# 执行网络接口检测
+# Execute network interface detection
 detect_network_interface
 
-# 执行路径检测和配置
+# Execute path detection and configuration
 detect_deployment_paths
 
-# 创建必要的目录
+# Create necessary directories
 create_directories_safely "$DATA_DIR" "$CURRENT_TEST_DIR" "$LOGS_DIR" "$REPORTS_DIR" "$VEGETA_RESULTS_DIR" "$TMP_DIR" "$ARCHIVES_DIR" "$ERROR_LOG_DIR" "$PYTHON_ERROR_LOG_DIR" "$MEMORY_SHARE_DIR"
 
 # =====================================================================
-# 配置 Blockchain Node & On-chain Active Addresses
+# Configure Blockchain Node & On-chain Active Addresses
 # =====================================================================
-# 用户配置变量已移动到文件开头
+# User configuration variables have been moved to the beginning of the file
 
 # =====================================================================
-# 统一区块链配置 - 集成所有8个区块链的完整配置
+# Unified Blockchain Configuration - Integrate complete configuration for all 8 blockchains
 # =====================================================================
-# ----- 多链主网端点动态配置 -----
-# 根据BLOCKCHAIN_NODE动态设置MAINNET_RPC_URL
+# ----- Multi-chain Mainnet Endpoint Dynamic Configuration -----
+# Dynamically set MAINNET_RPC_URL based on BLOCKCHAIN_NODE
 case "${BLOCKCHAIN_NODE,,}" in
     solana)
         MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
@@ -354,7 +354,7 @@ case "${BLOCKCHAIN_NODE,,}" in
         MAINNET_RPC_URL="https://fullnode.mainnet.sui.io:443"
         ;;
     *)
-        echo "⚠️ 警告: 未知的区块链类型 '${BLOCKCHAIN_NODE}'，使用默认Solana端点" >&2
+        echo "⚠️ Warning: Unknown blockchain type '${BLOCKCHAIN_NODE}', using default Solana endpoint" >&2
         MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
         ;;
 esac
@@ -608,166 +608,166 @@ EOF
 )
 
 # =====================================================================
-# 自动配置生成函数
+# Automatic Configuration Generation Functions
 # =====================================================================
 
-# 验证BLOCKCHAIN_NODE值的有效性
+# Validate BLOCKCHAIN_NODE value validity
 validate_blockchain_node() {
     local blockchain_node="$1"
     local blockchain_node_lower
     blockchain_node_lower=$(echo "$blockchain_node" | tr '[:upper:]' '[:lower:]')
-    # 支持的区块链列表
+    # Supported blockchain list
     local supported_blockchains=("solana" "ethereum" "bsc" "base" "scroll" "polygon" "starknet" "sui")
-    # 检查是否在支持列表中
+    # Check if in supported list
     for supported in "${supported_blockchains[@]}"; do
         if [[ "$blockchain_node_lower" == "$supported" ]]; then
-            return 0  # 有效
+            return 0  # Valid
         fi
     done
-    # 无效的区块链类型
-    echo "❌ 错误: 不支持的区块链类型 '$blockchain_node'" >&2
-    echo "📋 支持的区块链类型:" >&2
+    # Invalid blockchain type
+    echo "❌ Error: Unsupported blockchain type '$blockchain_node'" >&2
+    echo "📋 Supported blockchain types:" >&2
     printf "   - %s\n" "${supported_blockchains[@]}" >&2
-    echo "💡 提示: 请检查BLOCKCHAIN_NODE环境变量的值" >&2
-    return 1  # 无效
+    echo "💡 Tip: Please check the value of BLOCKCHAIN_NODE environment variable" >&2
+    return 1  # Invalid
 }
 
-# 配置一致性验证函数
+# Configuration consistency validation function
 validate_config_consistency() {
     local blockchain_node_lower
     blockchain_node_lower=$(echo "${BLOCKCHAIN_NODE:-solana}" | tr '[:upper:]' '[:lower:]')
     local rpc_mode_lower
     rpc_mode_lower=$(echo "${RPC_MODE:-single}" | tr '[:upper:]' '[:lower:]')
 
-    # 验证CHAIN_CONFIG和CURRENT_RPC_METHODS_STRING的一致性
+    # Validate consistency between CHAIN_CONFIG and CURRENT_RPC_METHODS_STRING
     if [[ -n "$CHAIN_CONFIG" && "$CHAIN_CONFIG" != "null" ]]; then
         local expected_method
         expected_method=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"")
 
         if [[ -n "$expected_method" && "$expected_method" != "null" ]]; then
             if [[ "$CURRENT_RPC_METHODS_STRING" != "$expected_method" ]]; then
-                echo "⚠️ 配置不一致检测: 期望 '$expected_method', 实际 '$CURRENT_RPC_METHODS_STRING'" >&2
-                echo "🔧 自动修复配置不一致..." >&2
+                echo "⚠️ Configuration inconsistency detected: Expected '$expected_method', Actual '$CURRENT_RPC_METHODS_STRING'" >&2
+                echo "🔧 Auto-fixing configuration inconsistency..." >&2
                 CURRENT_RPC_METHODS_STRING="$expected_method"
 
-                # 更新缓存
+                # Update cache
                 local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower}_${rpc_mode_lower}"
                 export "$rpc_cache_var_name"="$CURRENT_RPC_METHODS_STRING"
 
-                echo "✅ 配置一致性已修复" >&2
+                echo "✅ Configuration consistency fixed" >&2
             fi
         fi
     fi
 }
 
-# 基于BLOCKCHAIN_NODE自动生成配置
+# Automatically generate configuration based on BLOCKCHAIN_NODE
 generate_auto_config() {
-    # 清理所有配置缓存，确保环境干净，避免不同区块链配置冲突
+    # Clear all configuration cache, ensure clean environment, avoid conflicts between different blockchain configurations
     clear_config_cache
     
     local blockchain_node="${BLOCKCHAIN_NODE:-solana}"
     local blockchain_node_lower
-    # 验证BLOCKCHAIN_NODE值
+    # Validate BLOCKCHAIN_NODE value
     if ! validate_blockchain_node "$blockchain_node"; then
-        # 配置错误，直接退出
+        # Configuration error, exit directly
         exit 1
     fi
     blockchain_node_lower=$(echo "$blockchain_node" | tr '[:upper:]' '[:lower:]')
-    echo "🎯 开始自动配置生成..." >&2
-    echo "   BLOCKCHAIN_NODE原值: ${BLOCKCHAIN_NODE}" >&2
-    echo "   目标区块链: $blockchain_node_lower" >&2
+    echo "🎯 Starting automatic configuration generation..." >&2
+    echo "   BLOCKCHAIN_NODE original value: ${BLOCKCHAIN_NODE}" >&2
+    echo "   Target blockchain: $blockchain_node_lower" >&2
     
-    # 性能优化：使用缓存的JSON解析结果
+    # Performance optimization: Use cached JSON parsing results
     local cache_var_name="CACHED_CHAIN_CONFIG_${blockchain_node_lower}"
     local cached_config="${!cache_var_name:-}"
     
     if [[ -n "$cached_config" ]]; then
-        # 使用缓存的配置
+        # Use cached configuration
         CHAIN_CONFIG="$cached_config"
 
     else
         local jq_query=".blockchains.\"$blockchain_node_lower\""
         CHAIN_CONFIG=$(echo "$UNIFIED_BLOCKCHAIN_CONFIG" | jq -c "$jq_query")
-        # 缓存解析结果
+        # Cache parsing result
         if [[ "$CHAIN_CONFIG" != "null" && -n "$CHAIN_CONFIG" ]]; then
             export "$cache_var_name"="$CHAIN_CONFIG"
         fi
     fi
     
-    # 验证配置是否正确加载
+    # Validate if configuration loaded correctly
     if [[ "$CHAIN_CONFIG" == "null" || -z "$CHAIN_CONFIG" ]]; then
-        echo "❌ 错误: 无法加载 $blockchain_node_lower 的配置" >&2
-        echo "   这表示UNIFIED_BLOCKCHAIN_CONFIG中缺少该区块链的配置" >&2
-        echo "   请检查配置文件的完整性" >&2
+        echo "❌ Error: Unable to load configuration for $blockchain_node_lower" >&2
+        echo "   This indicates missing configuration for this blockchain in UNIFIED_BLOCKCHAIN_CONFIG" >&2
+        echo "   Please check configuration file integrity" >&2
         exit 1
     fi
     
-    # 从CHAIN_CONFIG中获取RPC方法 - 修复缓存逻辑
+    # Get RPC methods from CHAIN_CONFIG - Fix caching logic
     local rpc_mode_lower
     rpc_mode_lower=$(echo "${RPC_MODE:-single}" | tr '[:upper:]' '[:lower:]')
     
-    # 性能优化：使用缓存的RPC方法解析结果
+    # Performance optimization: Use cached RPC method parsing results
     local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower}_${rpc_mode_lower}"
     local cached_rpc_methods="${!rpc_cache_var_name:-}"
     
     if [[ -n "$cached_rpc_methods" ]]; then
-        # 使用缓存的RPC方法
+        # Use cached RPC methods
         CURRENT_RPC_METHODS_STRING="$cached_rpc_methods"
     else
-        # 重新计算并缓存
+        # Recalculate and cache
         CURRENT_RPC_METHODS_STRING=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"")
-        # 缓存RPC方法解析结果
+        # Cache RPC method parsing result
         if [[ "$CURRENT_RPC_METHODS_STRING" != "null" && -n "$CURRENT_RPC_METHODS_STRING" ]]; then
             export "$rpc_cache_var_name"="$CURRENT_RPC_METHODS_STRING"
         fi
     fi
-    # 直接使用配置，框架配置是完整的
-    # 无需验证和回退机制
-    # 框架配置是完整的，直接使用
+    # Use configuration directly, framework configuration is complete
+    # No need for validation and fallback mechanism
+    # Framework configuration is complete, use directly
     
-    # 转换为数组
+    # Convert to array
     IFS=',' read -ra CURRENT_RPC_METHODS_ARRAY <<< "$CURRENT_RPC_METHODS_STRING"
     
-    # 配置一致性验证（混合方案的安全检查）
+    # Configuration consistency validation (safety check for hybrid solution)
     validate_config_consistency
     
-    echo "🎯 自动配置完成:" >&2
-    echo "   区块链: $blockchain_node_lower" >&2
-    echo "   RPC方法: $CURRENT_RPC_METHODS_STRING" >&2
-    echo "   方法数量: ${#CURRENT_RPC_METHODS_ARRAY[@]}" >&2
+    echo "🎯 Automatic configuration completed:" >&2
+    echo "   Blockchain: $blockchain_node_lower" >&2
+    echo "   RPC methods: $CURRENT_RPC_METHODS_STRING" >&2
+    echo "   Method count: ${#CURRENT_RPC_METHODS_ARRAY[@]}" >&2
 }
 
-# 清理过期缓存函数
+# Clear expired cache function
 clear_config_cache() {
     local cache_pattern="${1:-CACHED_}"
     
-    # 清理缓存变量
+    # Clear cache variables
     for var in $(compgen -v | grep "^${cache_pattern}" 2>/dev/null || true); do
         unset "$var" 2>/dev/null || true
     done
     
-    # 清理部署路径检测变量
+    # Clear deployment path detection variables
     unset DEPLOYMENT_PATHS_DETECTED 2>/dev/null || true
     
-    echo "🧹 配置缓存已清理完成" >&2
+    echo "🧹 Configuration cache cleared" >&2
 }
 
 # =====================================================================
-# 自动配置生成函数
+# Automatic Configuration Generation Functions
 # =====================================================================
 
-# 重新设计的RPC方法获取函数
+# Redesigned RPC method retrieval function
 get_current_rpc_methods() {
     local rpc_mode_lower
     rpc_mode_lower=$(echo "${RPC_MODE}" | tr '[:upper:]' '[:lower:]')
     
-    # 从CHAIN_CONFIG的rpc_methods字段中获取对应模式的方法
+    # Get corresponding mode methods from CHAIN_CONFIG's rpc_methods field
     local methods_string
     methods_string=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"")
     
-    # 直接使用配置，框架配置是完整的
+    # Use configuration directly, framework configuration is complete
     
-    # 框架配置是完整的，直接使用
+    # Framework configuration is complete, use directly
     
     echo "$methods_string"
 }
@@ -776,7 +776,7 @@ get_param_format_from_json() {
     local method="$1"
     local format
     
-    # 性能优化：使用缓存的参数格式
+    # Performance optimization: Use cached parameter format
     local param_cache_var_name="CACHED_PARAM_FORMAT_${method}"
     local cached_format="${!param_cache_var_name:-}"
     
@@ -788,23 +788,23 @@ get_param_format_from_json() {
     format=$(echo "$CHAIN_CONFIG" | jq -r ".param_formats.\"$method\"")
     
     if [[ "$format" == "null" || -z "$format" ]]; then
-        format="single_address"  # 默认格式
+        format="single_address"  # Default format
     fi
     
     export "$param_cache_var_name"="$format"
     echo "$format"
 }
 
-# 验证关键变量是否正确设置
+# Validate if key variables are correctly set
 if [[ -z "$ACCOUNTS_OUTPUT_FILE" ]]; then
-    echo "⚠️ 警告: ACCOUNTS_OUTPUT_FILE 未正确设置" >&2
+    echo "⚠️ Warning: ACCOUNTS_OUTPUT_FILE not correctly set" >&2
 fi
 if [[ -z "$LOCAL_RPC_URL" ]]; then
-    echo "⚠️ 警告: LOCAL_RPC_URL 未正确设置" >&2
+    echo "⚠️ Warning: LOCAL_RPC_URL not correctly set" >&2
 fi
 
-# 执行自动配置生成
-echo "调用generate_auto_config前: BLOCKCHAIN_NODE=$BLOCKCHAIN_NODE" >&2
+# Execute automatic configuration generation
+echo "Before calling generate_auto_config: BLOCKCHAIN_NODE=$BLOCKCHAIN_NODE" >&2
 generate_auto_config
 
 export -f get_current_rpc_methods get_param_format_from_json clear_config_cache generate_auto_config validate_config_consistency
@@ -825,13 +825,13 @@ export NETWORK_INTERFACE BASE_MEMORY_DIR
 export BASE_FRAMEWORK_DIR BASE_DATA_DIR
 export BLOCKCHAIN_PROCESS_NAMES_STR="${BLOCKCHAIN_PROCESS_NAMES[*]}"
 
-# ENA字段配置 - 支持开发环境测试
+# ENA field configuration - Support development environment testing
 export ENA_ALLOWANCE_FIELDS=${ENA_ALLOWANCE_FIELDS:-"bw_in_allowance_exceeded,bw_out_allowance_exceeded,pps_allowance_exceeded,conntrack_allowance_exceeded,linklocal_allowance_exceeded,conntrack_allowance_available"}
 
 export CONFIG_ALREADY_LOADED="true"
 
-echo "🔧 RPC方法配置完成:" >&2
-echo "   区块链类型: $BLOCKCHAIN_NODE" >&2
-echo "   RPC模式: $RPC_MODE" >&2
-echo "   当前方法: $CURRENT_RPC_METHODS_STRING" >&2
-echo "🎉 分层配置加载完成！" >&2
+echo "🔧 RPC method configuration completed:" >&2
+echo "   Blockchain type: $BLOCKCHAIN_NODE" >&2
+echo "   RPC mode: $RPC_MODE" >&2
+echo "   Current methods: $CURRENT_RPC_METHODS_STRING" >&2
+echo "🎉 Layered configuration loading completed!" >&2
