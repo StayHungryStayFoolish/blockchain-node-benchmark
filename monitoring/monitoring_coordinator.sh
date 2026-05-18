@@ -33,6 +33,7 @@ declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
     ["block_height"]="block_height_monitor.sh"
     ["ena_network"]="ena_network_monitor.sh"
+    ["network"]="network_monitor.sh"             # Y+ architecture (replaces ena_network for non-AWS)
     ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
     ["iostat"]="iostat_collector.sh"  # Managed by unified_monitor.sh
 )
@@ -149,6 +150,18 @@ start_monitor() {
                 return 0
             fi
             ;;
+        "network")
+            # Y+ architecture network monitor (replaces ena_network for non-AWS)
+            # Skip if legacy ena_network is enabled — avoids duplicate NIC sampling
+            if [[ "${ENA_MONITOR_ENABLED:-false}" == "true" ]]; then
+                echo "⚠️  Legacy ENA monitor is enabled, skipping Y+ network task to avoid duplicate NIC sampling"
+                return 0
+            fi
+            (
+                unset LOGGER_COMPONENT
+                cd "${script_dir}" && ./"${script_name}" start 0 "$MONITOR_INTERVAL"
+            ) &
+            ;;
         "ebs_bottleneck")
             # QPS test mode: no duration passed, run indefinitely
             # Set correct working directory and environment variables to ensure subprocess can load dependencies correctly
@@ -215,7 +228,7 @@ start_all_monitors() {
     echo "🚀 Starting all monitoring tasks (monitoring interval: ${MONITOR_INTERVAL} seconds)"
     
     # Start monitoring tasks by priority - start all necessary monitoring scripts
-    local monitors_to_start=("unified" "ena_network" "block_height" "ebs_bottleneck")
+    local monitors_to_start=("unified" "ena_network" "network" "block_height" "ebs_bottleneck")
     
     for monitor in "${monitors_to_start[@]}"; do
         start_monitor "$monitor"
@@ -405,6 +418,7 @@ cleanup_coordinator() {
     echo "🔍 Cleaning up possible orphan processes..."
     pkill -f "ebs_bottleneck_detector" 2>/dev/null || true
     pkill -f "ena_network_monitor" 2>/dev/null || true
+    pkill -f "^.*network_monitor.sh" 2>/dev/null || true  # Y+ architecture
     pkill -f "block_height_monitor" 2>/dev/null || true
     pkill -f "tail.*performance_latest.csv" 2>/dev/null || true
 

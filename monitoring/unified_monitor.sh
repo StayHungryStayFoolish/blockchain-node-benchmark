@@ -1403,7 +1403,7 @@ recover_process_discovery() {
     # Check process name configuration - use standardized array access
     if [[ -z "$MONITORING_PROCESS_NAMES_STR" ]]; then
         log_warn "Monitoring process name configuration is empty, using default configuration"
-        export MONITORING_PROCESS_NAMES_STR="iostat mpstat sar vmstat netstat unified_monitor bottleneck_detector ena_network_monitor block_height_monitor performance_visualizer overhead_monitor adaptive_frequency error_recovery report_generator"
+        export MONITORING_PROCESS_NAMES_STR="iostat mpstat sar vmstat netstat unified_monitor bottleneck_detector ena_network_monitor network_monitor block_height_monitor performance_visualizer overhead_monitor adaptive_frequency error_recovery report_generator"
     fi
 
     # Check if pgrep command is available

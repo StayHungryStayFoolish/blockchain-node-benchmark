@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Hermes Agent runtime state
+.hermes/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# analysis-notes/ process artifacts (one-shot intermediates, not for repo)
+analysis-notes/autopilot-logs/
+analysis-notes/file-notes/
+analysis-notes/docs-notes/
+analysis-notes/call-chains/
+analysis-notes/retrofill2-input/
+analysis-notes/STATUS/
+analysis-notes/STATUS
+analysis-notes/*.sh
+analysis-notes/*.py
+analysis-notes/worker-prompt-*.md
+analysis-notes/COVERAGE_AUDIT.json

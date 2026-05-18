@@ -69,6 +69,7 @@ MONITORING_PROCESS_NAMES=(
     "unified_monitor"
     "bottleneck_detector"
     "ena_network_monitor"
+    "network_monitor"
     "block_height_monitor"
     "performance_visualizer"
     "report_generator"

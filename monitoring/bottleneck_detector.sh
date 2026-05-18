@@ -1030,6 +1030,8 @@ detect_bottleneck() {
     fi
     
     # Detect ENA network limit bottleneck
+    # TODO(Y+): once network_monitor.sh CSV is wired into bottleneck logic,
+    # add platform-aware check_network_bottleneck call here
     if check_ena_network_bottleneck "$performance_csv"; then
         bottleneck_detected=true
         bottleneck_types+=("ENA_Network_Limit")
