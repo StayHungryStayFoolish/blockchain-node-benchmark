@@ -417,11 +417,15 @@ utils/disk/cgroup_disk_collector.sh    # 内容合并进 monitoring/cgroup_colle
 ### S3: cgroup 采集器 (4h)
 1. 写 `monitoring/cgroup_collector.py` (4 mode 自动探测)
 2. 实现 io.stat 解析 (rbytes/wbytes/rios/wios/dbytes/dios)
-3. 实现 memory.stat 解析 (anon/file/kernel)
-4. 实现 cpu.stat 解析 (usage_usec/throttled_usec)
-5. fail-soft：cgroup v1 → 走 /sys/fs/cgroup/{blkio,memory,cpu}/
-6. 单元测试：cgroup v1 + v2 各跑一次
-7. 验收：cloudtop io.stat 输出与 iostat 总量误差 <5%
+3. 实现 memory.stat 解析 (anon/file/kernel/slab/sock/swap)
+4. 实现 cpu.stat 解析 (usage_usec/throttled_usec/nr_periods/nr_throttled)
+5. fail-soft：cgroup v1 → 走 `<root>/{blkio,memory,cpu,cpuacct}/<path>/`，4 mode = {v2, v1, unmounted, unresolved}
+6. 单元测试：cgroup v1 + v2 各跑一次（synthetic 临时目录 + parser 单测）
+7. 验收：4 mode 全覆盖 + cloudtop 真实 `--debug` 输出非零 + meta_source ∈ {v2,v1,unmounted,unresolved} + 19 字段 schema 不变
+
+**⚠️ §S3.7 验收 "iostat 误差 <5%" 的设计假设是错的**（v1.3 plan 笔误）。iostat 显示 block-layer 物理 IO（merge/queued 之后），cgroup io.stat 是 bio-layer 累计（merge 之前，含 page cache writeback 多次计数）。实测 cloudtop sda kB_wrtn=258GB vs cgroup root wbytes=792GB，差 ~3x 属正常。两者**语义不同**，不能直接比对。
+**⚠️ 坑 #7 cgroup v2 root io.stat 数据可见性**：非 root 用户的 user.slice 子 scope 不暴露 io.stat（叶子 scope only），所以默认 `TARGET_CGROUP=$(resolve self)` 时 IO 字段会全是 0；要取真实数据必须 `TARGET_CGROUP=/`（root）或 systemd unit scope（如 `/system.slice/geth.service`）。S6 业务集成阶段会按链 systemd unit 配置正确 TARGET_CGROUP。
+**⚠️ 坑 #8 cgroup v2 io.stat 包含 discard bytes**：collector 单独输出 `cgroup_io_dbytes/dios` 字段方便排查 TRIM/discard 流量（NVMe SSD 上常见）。
 
 ### S4: K8s DaemonSet manifest (2h)
 1. 写 `deploy/k8s/01-04-*.yaml`
