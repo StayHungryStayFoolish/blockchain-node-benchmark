@@ -396,10 +396,16 @@ utils/disk/cgroup_disk_collector.sh    # 内容合并进 monitoring/cgroup_colle
 ## §5. 阶段拆分 (S1-S12)
 
 ### S1: 回滚 + 安全网 (0.5h)
-1. `git revert e62cf60..8ee32ba` (revert 昨晚 3 commit)
-2. tag `pre-stage1-redesign` 留新回滚点
-3. 验证 `git log --oneline -5` 显示干净
-4. 跑一次 `bash -x monitoring/unified_monitor.sh --dry-run` 确认基线
+1. `git revert --no-commit e62cf60^..8ee32ba` (闭区间，含起点；revert 昨晚 2 commit：CP-3 feat + docs)
+2. `git commit -m "revert: CP-3 disk Y+ (parallel-entry trap)"` 单合并 commit
+3. tag `pre-stage2-redesign` 留新回滚点（v1.3 plan 已 tag 为 `pre-stage1-redesign-v1.3`，本 tag 表示"S1 已完成，从 baseline 重启 S2"）
+4. 验证 `git log --oneline -5` 显示干净 + `ls monitoring/disk_*.sh monitoring/disk/` 应为 No such file
+5. `bash -n monitoring/unified_monitor.sh && bash -n monitoring/iostat_collector.sh && bash -n config/config_loader.sh` 三项语法健全
+6. `grep -rn "disk_monitor.sh\|disk_unified_entry.sh\|monitoring/disk/" .` 应 0 命中（无死引用）
+
+**⚠️ 坑 #1 git rev-range 闭/开区间**：`git revert A..B` 是**开区间**（不含 A 自身），如果想 revert A 到 B 之间的所有 commit（含两端），必须用 `A^..B`（A 的 parent 到 B）。曾经按 `e62cf60..8ee32ba` 跑只 revert 了 docs commit。
+**⚠️ 坑 #2 `git reset --hard` 审批拦截**：cloudtop 上 `git reset --hard` 会被 user-approval 拦截；要 abort 进行中的 revert/cherry-pick 用 `git revert --abort` / `git cherry-pick --abort` 替代。
+**⚠️ 坑 #3 `unified_monitor.sh --dry-run`**：baseline 不支持该 flag。dry-run 用 `bash -n` 做语法验证；运行时验证需要在 S2+ 加入 detector 后才能跑（cloudtop 上 sudo 不可用，跑 iostat/sar 受限）。
 
 ### S2: 部署模式 detector + HOST_PROC env (3h)
 1. 写 `config/deployment_mode_detector.sh` (6 步瀑布)

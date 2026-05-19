@@ -88,6 +88,34 @@ else
     exit 1
 fi
 
+# 4. Load deployment-mode detector (v1.3 plan §S2)
+# Detects runtime environment (VM / Docker / K8s), orthogonal to
+# DEPLOYMENT_PLATFORM (cloud provider). Together they form (platform, mode)
+# matrix used by cloud_variants/ and k8s_paths.sh.
+if [[ -f "${CONFIG_DIR}/deployment_mode_detector.sh" ]]; then
+    source "${CONFIG_DIR}/deployment_mode_detector.sh"
+    echo "✅ Deployment mode detector loaded" >&2
+else
+    echo "⚠️  Deployment mode detector not found: ${CONFIG_DIR}/deployment_mode_detector.sh — falling back to vm_bare assumption" >&2
+    DEPLOYMENT_MODE="vm_bare"
+    DEPLOYMENT_MODE_DETECTED=true
+    DEPLOYMENT_MODE_SOURCE="missing_detector_fallback"
+    export DEPLOYMENT_MODE DEPLOYMENT_MODE_DETECTED DEPLOYMENT_MODE_SOURCE
+fi
+
+# 5. Load K8s/container path templates (HOST_PROC / HOST_SYS / cgroup paths)
+# Depends on DEPLOYMENT_MODE being set (above).
+if [[ -f "${CONFIG_DIR}/k8s_paths.sh" ]]; then
+    source "${CONFIG_DIR}/k8s_paths.sh"
+    echo "✅ K8s paths template loaded" >&2
+else
+    echo "⚠️  K8s paths template not found: ${CONFIG_DIR}/k8s_paths.sh — using local /proc /sys" >&2
+    HOST_PROC="${HOST_PROC:-/proc}"
+    HOST_SYS="${HOST_SYS:-/sys}"
+    HOST_ROOT="${HOST_ROOT:-/}"
+    export HOST_PROC HOST_SYS HOST_ROOT
+fi
+
 # =====================================================================
 # Dynamic Configuration Detection and Calculation
 # =====================================================================
@@ -306,8 +334,20 @@ create_directories_safely() {
 # Execute Dynamic Configuration Detection
 # =====================================================================
 
-# Execute deployment platform detection
+# Execute deployment platform detection (cloud provider: aws / gcp / other)
 detect_deployment_platform
+
+# Execute deployment mode detection (runtime: VM / Docker / K8s) — v1.3 §S2
+# Orthogonal axis to deployment_platform; together → (platform, mode) matrix.
+if declare -F detect_deployment_mode >/dev/null 2>&1; then
+    detect_deployment_mode
+fi
+
+# Resolve K8s/container paths (HOST_PROC / HOST_SYS / cgroup paths) — v1.3 §S2
+# Must run after detect_deployment_mode (depends on DEPLOYMENT_MODE).
+if declare -F resolve_k8s_paths >/dev/null 2>&1; then
+    resolve_k8s_paths
+fi
 
 # Execute network interface detection
 detect_network_interface
@@ -813,6 +853,11 @@ export ACCOUNTS_OUTPUT_FILE SINGLE_METHOD_TARGETS_FILE MIXED_METHOD_TARGETS_FILE
 export LOCAL_RPC_URL MAINNET_RPC_URL BLOCKCHAIN_NODE BLOCKCHAIN_PROCESS_NAMES RPC_MODE
 export ACCOUNT_COUNT ACCOUNT_OUTPUT_FILE ACCOUNT_MAX_SIGNATURES ACCOUNT_TX_BATCH_SIZE ACCOUNT_SEMAPHORE_LIMIT
 export CHAIN_CONFIG DEPLOYMENT_PLATFORM_DETECTED
+# v1.3 §S2: deployment mode + K8s/container paths (export for child monitor processes)
+export DEPLOYMENT_MODE DEPLOYMENT_MODE_DETECTED DEPLOYMENT_MODE_SOURCE
+export HOST_PROC HOST_SYS HOST_ROOT CGROUP_VERSION CGROUP_ROOT
+# CGROUP_V1_* only set when cgroup v1, but export unconditionally — harmless if empty
+export CGROUP_V1_BLKIO_PATH CGROUP_V1_MEMORY_PATH CGROUP_V1_CPU_PATH
 export CURRENT_RPC_METHODS_STRING
 
 export DATA_DIR CURRENT_TEST_DIR LOGS_DIR REPORTS_DIR VEGETA_RESULTS_DIR TMP_DIR ARCHIVES_DIR
