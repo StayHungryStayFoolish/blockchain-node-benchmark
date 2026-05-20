@@ -1,17 +1,26 @@
 # Disk & Network Pipeline Redesign — Master Plan
 
-**版本**: v1.3  
-**日期**: 2026-05-19  
+**版本**: v1.4  
+**日期**: 2026-05-20  
 **作者**: Hermes Agent (with lelandgong)  
 **适用范围**: blockchain-node-benchmark 全部 8 链 (Solana / Ethereum / Bitcoin / Sui / Aptos / Bsc / Base / Starknet)  
 **目标平台**: AWS EC2 + GCP Compute Engine + EKS + GKE (含 Autopilot/Fargate)  
 **Baseline commit**: `15441ad` (Stage 1-3 Y+ NIC abstraction)  
 **回滚点**: `e843571` / tag `pre-stage1-business-code`  
-**预估工时**: 60h (S1 revert 0.5h + S2-S7 重做 20.5h + S8 chain-as-plugin 7h + S9 L7 监控 10h + S10 权重 schema 4h + **S11 RPC 参数扩展 6h** + **S12 fixtures + sampler + safety 12h**)  
-**验收**: cloudtop 90% + kind v1 (1.30) 5% + kind v2 (1.35) 5%
+**预估工时**: 75h (S0 端到端基础设施 4h + S1 revert 0.5h + S2-S7 重做 20.5h + S5.5 L3 补做 3h + S8 chain-as-plugin 7h + S9 L7 监控 10h + S10 权重 schema 4h + S11 RPC 参数扩展 6h + S12 fixtures + sampler + safety 12h + SE 端到端总验收+真集群 8h)  
+**验收**: cloudtop 80% + GCE vm_systemd 10% + GKE k8s_gke 10%
 
 **Changelog**:
-- **v1.3 (2026-05-19)**: 用户 YYY 确认后，新增三大章节（基于 3 subagent 并行调研报告 04/05/06）：
+- **v1.4 (2026-05-20)**: 用户反向压测暴露 S2-S5 完工报告全部缺 L3 端到端验证。新增：
+  - **§A.5 端到端冒烟铁律**：3 层验证（L1 单元 + L2 集成 + L3 端到端）强制全覆盖，"L1+L2 全过" 不再算完工。完工定义重写
+  - **S0 新阶段** (4h)：baseline 现状审计 + `tools/mock_blockchain_node.py` 8 链 mock + `tools/single_disk_workload_profile.sh` 单磁盘 workload + `tools/e2e_smoke.sh` 一键端到端
+  - **S5.5 新阶段** (3h)：补做 S2-S5 已完工模块的 L3 端到端验证（用 S0 工具）
+  - **SE 新阶段** (8h)：cloudtop 完整 e2e + 8 链对称回归 + GCE vm_systemd + GKE k8s_gke 真集群批量验收 + AWS/GCP 对比报告
+  - **1+1 磁盘配置铁律**：`DATA_VOL_DEVICE` 必选 + `ACCOUNTS_VOL_DEVICE` 可选；所有新代码必须正确处理可选磁盘缺失分支；cloudtop 单 root 盘场景是默认 e2e 验证场景
+  - **RPC method 维度铁律**：S9 才正式做，但 S0 就要在 mock 节点 + HTML 模板留占位
+  - 工时 60h → 75h（+15h：S0 4h + S5.5 3h + SE 8h）
+  - **追溯**：S2/S3/S4/S5 当前 commit (fc07f8b/962b9e3/2720086/79bd5f3) **只满足 L1+L2**，按新定义未完工；S5.5 阶段补做后才算真完工
+- v1.3 (2026-05-19): 用户 YYY 确认后，新增三大章节（基于 3 subagent 并行调研报告 04/05/06）：
   - §20 RPC 参数构造扩展（chain-as-plugin 友好）— 15 个新 `param_format`（EVM 10 + Solana 3 + Starknet 2），复用 baseline `case` 分派模式与 `param_formats` JSON 映射，**增量扩展不重写**
   - §21 Fixtures 池规范 — `fixtures/`（入 repo baseline，单文件 ≤50 KB / 目录 ≤200 KB / 全链 ≤1 MB）+ `fixtures.d/`（gitignored 大池，5–50 MB）双层架构 + manifest.json + 漂移容忍矩阵 + 8 链池规模表
   - §22 采样器与安全护栏 — 4 种 sampler（uniform / weighted / sequential / hot_cold_mix，默认 `hot_ratio=0.2`）+ 22 项 `safety_max_*` 默认值（含 `eth_getLogs.max_block_range=1024` / `getProgramAccounts.requireFilters=true` / `debug_trace*.enabled=false` 等）+ `--unsafe-allow` CLI flag
@@ -86,6 +95,93 @@ declare -p MY_ARRAY     # 输出: not found
 - 任何未来新增的 `config/*.sh`
 
 所以前置为 §A，**优先级高于所有阶段**。
+
+---
+
+## §A.5 端到端冒烟铁律 (用户反向压测教训, 2026-05-20)
+
+**触发场景**：用户问 "你写完 S5 模块跑过单元测试，但你跑过整框架端到端
+冒烟么？mock 节点呢？图表 HTML 呢？磁盘配置呢？" — 答案是**全部没跑过**。
+我把"S2-S5 模块单元测试 88 项全过"误报成"S2-S5 完工"，**严重违反 USER
+profile 铁律：全绿 ≠ 主流程能跑**。
+
+### A.5.1 三层验证全部必须覆盖
+
+每一阶段 S<N> 收尾**必须**同时满足下面 3 层验证，**缺一层即视为该阶段
+未完成**，不得记 commit 为"feat(S<N>) done"。
+
+| 层 | 含义 | 工具 | 失败示例（已踩过的坑） |
+|---|---|---|---|
+| L1 单元测试 | 我新写的模块函数级断言 | pytest / unittest / bash test | S2 14/14 全过，但只测正路径，没测 `set -u` 失败路径 → BUG-A/B 漏抓 |
+| L2 模块集成 | 新模块互相 import / source 不断链 | smoke 脚本 | S2-S5 模块互引用全过 |
+| L3 端到端冒烟 | **整框架从 main_pipeline 入口跑到 HTML 报告产出**，含 mock 节点 + 真采集 + 真渲染 | `tools/e2e_smoke.sh` (待建) | **尚未实施**，S2-S5 完工报告里完全缺这一层 |
+
+L3 失败示例（容易踩的）：
+- 我改了 cgroup_collector 输出 19 字段，但 `monitoring/data_aggregator.sh`
+  里写死了"21 字段"导致下游崩 → L1/L2 抓不到，L3 立刻爆
+- 我引入 `HOST_PROC` env，但 baseline 主入口 `main_pipeline.sh` 没 source
+  我的 `k8s_paths.sh` → cgroup_collector 用默认值看似没事，但 K8s 部署
+  下采到的是 cloudtop 自己的数据 → L1/L2 全过，L3 数据错
+- 我加了 RPC method 监控，但 HTML 模板没改，图表里啥都没显示 → L1/L2 全过，
+  L3 一打开 HTML 立刻发现少了
+
+### A.5.2 端到端冒烟必备工具链
+
+下列工具是 L3 验证的**前置依赖**，必须在 S0 阶段一次性建好：
+
+1. **`tools/mock_blockchain_node.py`** — stdlib-only 假节点
+   - HTTP JSON-RPC server (`eth_blockNumber`, `eth_getBlockByNumber`,
+     `getSlot`, `getBlock`, `getAccountInfo` 等 8 链核心 method)
+   - WebSocket subscription server（`newHeads` / `logs` / `slotNotification`）
+   - 可配置 QPS / 延迟分布 / 错误注入率
+   - 输出 access log 给框架的负载追踪
+
+2. **`tools/single_disk_workload_profile.sh`** — cloudtop 单磁盘 workload
+   - 把 `DATA_VOL_DEVICE=/dev/sda` 配成必选磁盘
+   - 把 `ACCOUNTS_VOL_DEVICE=` 留空（验证可选磁盘缺失分支）
+   - 用 `dd` / `fio` 在 root 磁盘上跑读写 workload
+   - cloudtop 安全护栏：限制写量 ≤ 1GB、限制并发避免 OOM
+
+3. **`tools/e2e_smoke.sh`** — 一键端到端
+   - 启 mock 节点 → 启监控 → 跑 60s workload → 停 → 触发分析 → 出 HTML+图表
+   - 验证产物：
+     - CSV 行数 ≥ 50（说明采集器跑起来了）
+     - HTML 文件存在且 > 10KB
+     - HTML 含关键章节：iostat / cgroup / RPC method / bottleneck / 8 chain
+     - 图表 PNG 数量 ≥ 预期最低值
+
+### A.5.3 磁盘配置 1+1 必须正确处理
+
+cloudtop 只有 1 块 root 磁盘（`/dev/sda`），框架定义：
+
+- `DATA_VOL_DEVICE` — **必选**，挂数据/accounts/ledger
+- `ACCOUNTS_VOL_DEVICE` — **可选**，挂 accounts（如果跟 data 分盘）
+
+**所有新写代码必须正确处理**：
+- 可选磁盘缺失时不能 crash（cgroup_collector / iostat parser / 分析层）
+- HTML 报告里"第二块磁盘"章节自动隐藏（不是显示空表）
+- mock workload 在 cloudtop 单磁盘场景下能正常出报告
+
+每阶段验收命令必须包含一次 "单磁盘模式 e2e 冒烟"，详见 §6 各阶段加列。
+
+### A.5.4 RPC method 维度图表是 S9 交付物，但 S0 就要占位
+
+`S9` 才正式做 RPC method 级监控。但 **S0 建 mock 节点 + e2e_smoke 时就要**：
+- mock 节点 access log 按 method 分桶统计
+- HTML 模板预留 "RPC Method Breakdown" 章节占位（S9 前显示 "pending"）
+- 这样 S9 真正写完时只需填数据，不需要改模板
+
+否则 S9 完工时会发现"模板没坑"，又是一次返工。
+
+### A.5.5 完工定义重写
+
+旧定义（错的）：S<N> 单元测试全过 = 完工 ✓
+新定义（强制）：S<N> 完工 = L1 单元 + L2 集成 + L3 端到端冒烟全过 + 单磁盘场景
+              报告产出 + HTML 关键章节齐 + 跟该阶段相关的 RPC/磁盘/网络
+              维度数据真出现在图表里。
+
+**追溯**：S2 / S3 / S4 / S5 当前**只满足 L1+L2**，未做 L3。已记入 §S5.5
+"补做 L3" 任务（见 §5 阶段拆分新增 SE 阶段）。
 
 ---
 
@@ -395,6 +491,70 @@ utils/disk/cgroup_disk_collector.sh    # 内容合并进 monitoring/cgroup_colle
 
 ## §5. 阶段拆分 (S1-S12)
 
+### S0: 端到端冒烟基础设施 + baseline 现状审计 (4h) — 新增 2026-05-20
+
+**触发场景**：用户反向压测 "你跑过端到端么？mock 节点呢？图表 HTML 呢？
+单磁盘配置处理了么？" 暴露出 S2-S5 完工报告全部缺 L3 端到端验证。
+本阶段建立 §A.5 铁律所需的全部前置工具，**优先级高于继续推进 S6**。
+
+#### S0.1 baseline 现状审计 (1h)
+1. 找出主入口脚本 (`main_pipeline.sh` / `monitoring_coordinator.sh` /
+   `unified_monitor.sh`)，画出端到端调用链
+2. 找出磁盘配置变量定义 (`DATA_VOL_DEVICE` / `ACCOUNTS_VOL_DEVICE`
+   或类似名)，确认 "1 必选 + 1 可选" 在 baseline 怎么实现
+3. 找出现有 HTML/图表生成代码 (`analyzer/` 或 `reporter/`)，列出当前
+   报告含哪些章节、各章节数据来源、有无 RPC method 维度占位
+4. 找出 baseline 既有的 mock/test 工具 (如有)，看能否复用
+5. **交付：`analysis-notes/baseline-current-state.md`** — 主入口路径、
+   磁盘配置规则、HTML 章节清单、mock 工具盘点
+
+#### S0.2 mock 区块链节点 (1.5h)
+1. 写 `tools/mock_blockchain_node.py` (stdlib only, 无 PyPI 依赖)
+   - HTTP JSON-RPC server 监听可配置端口
+   - 支持 8 链核心 method：
+     - EVM 系：`eth_blockNumber`, `eth_getBlockByNumber`,
+       `eth_getTransactionReceipt`, `eth_call`
+     - Solana：`getSlot`, `getBlock`, `getAccountInfo`, `getSignaturesForAddress`
+     - Sui/Aptos/Starknet 占位（先返回静态 JSON 不深做）
+   - WebSocket 订阅 server (`newHeads` / `logs` / `slotNotification`)
+   - 配置项：QPS、p50/p99 延迟、错误注入率、按 method 不同延迟分布
+   - access log 输出 `(ts, method, latency_ms, status)` JSON 行
+2. 写 `tests/test_mock_blockchain_node.py` — 启 mock + 用 curl 各 method
+   各打 10 次，验证响应格式 + 延迟分布
+
+#### S0.3 单磁盘 workload + e2e 冒烟 (1.5h)
+1. 写 `tools/single_disk_workload_profile.sh`
+   - 默认 `DATA_VOL_DEVICE=/dev/sda` (cloudtop root)
+   - 默认 `ACCOUNTS_VOL_DEVICE=""` (验可选磁盘缺失分支)
+   - 用 `dd if=/dev/zero of=/tmp/bench_data bs=1M count=512`
+     +  `dd if=/tmp/bench_data of=/dev/null bs=1M` 做读写
+   - 护栏：总写量上限 1GB、并发上限 4、可用空间 < 5GB 时 abort
+2. 写 `tools/e2e_smoke.sh` 一键编排
+   - 步骤：启 mock 节点 → 启 baseline 主入口监控 → 跑 60s workload →
+     停监控 → 触发分析 → 出 HTML+图表
+   - 产物断言：
+     - `ls *.csv | wc -l ≥ 1` 且每个 CSV 行数 ≥ 50
+     - HTML 文件存在且 > 10KB
+     - HTML 含字符串 "iostat" / "cgroup" / "bottleneck"
+     - HTML 含 "RPC Method Breakdown" 章节占位（S9 前显示 pending）
+     - PNG 图表数 ≥ baseline 既有数（S0.1 测出来）
+   - **不强制 S9 前 RPC method 章节有数据**，但必须有占位
+
+#### S0 验收
+```bash
+# 1. baseline 现状已审计
+ls analysis-notes/baseline-current-state.md
+
+# 2. mock 节点能起、能响应
+bash tools/e2e_smoke.sh --mock-only-test
+
+# 3. 单磁盘 e2e 完整跑
+bash tools/e2e_smoke.sh
+# 期望：60s 内出 HTML，含所有强制章节，无 crash，无 "second disk" 错误
+```
+
+---
+
 ### S1: 回滚 + 安全网 (0.5h)
 1. `git revert --no-commit e62cf60^..8ee32ba` (闭区间，含起点；revert 昨晚 2 commit：CP-3 feat + docs)
 2. `git commit -m "revert: CP-3 disk Y+ (parallel-entry trap)"` 单合并 commit
@@ -438,6 +598,33 @@ utils/disk/cgroup_disk_collector.sh    # 内容合并进 monitoring/cgroup_colle
 2. 集成 kubelet /stats/summary (K1)
 3. 集成 /api/v1/pods (K3) RPC endpoint discovery
 4. 验收：kind 内跑 RPC mock，能正确归因 IOPS 到 Pod
+
+### S5.5: 补做 S2-S5 的 L3 端到端验收 (3h) — 新增 2026-05-20
+
+**触发场景**：S2/S3/S4/S5 当前**只完成 L1 (单元) + L2 (集成)**，
+违反 §A.5 完工定义。本阶段补做 L3，依赖 S0 已建好的 e2e_smoke 工具。
+
+1. **跑 S0 的 e2e_smoke**，验证 S2 detector / S3 cgroup_collector 输出真的
+   被 baseline 主入口消费：
+   - cgroup_collector 19 字段 CSV 真接入 HTML 报告
+   - HOST_PROC env 真在 mock K8s 模式下被识别
+2. **单磁盘场景验证**：cloudtop root 磁盘当 `DATA_VOL_DEVICE`、
+   `ACCOUNTS_VOL_DEVICE` 留空，跑完整流程不 crash
+3. **S4 K8s manifest 真集群验证（推到 GCE 批量阶段）**：本步骤在 cloudtop
+   只能跑 mock e2e，真 K8s apply 在 SE 阶段批量做
+4. **S5 Pod→device 映射真集群验证（同上推 SE）**
+5. **回归 88 项断言** + 新增 e2e smoke 断言全过
+
+#### S5.5 验收
+```bash
+# L3 e2e 必须过
+bash tools/e2e_smoke.sh
+# 期望：HTML 含 cgroup 19 字段数据、含 iostat 数据、单磁盘场景无 crash
+
+# L1 + L2 回归不退化
+bash tests/run_all_s2_s5.sh
+# 期望：8/8 测试文件全过
+```
 
 ### S6: 瓶颈归因 + 8 链业务集成 (4h)
 1. 实现 ENA allowance / gVNIC dropped → Pod 归因 (基于流量比例)
@@ -518,8 +705,63 @@ utils/disk/cgroup_disk_collector.sh    # 内容合并进 monitoring/cgroup_colle
 - **S11 必须在 S12 之前完成**：S12 的 sampler + safety 依赖 S11 落定的 `param_format` 列表
 - **S11/S12 必须在 S8 之后**：依赖 chain-as-plugin schema 已升级到位
 
----
+### SE: 端到端总验收 + GCE/GKE 真集群批量验收 (8h) — 新增 2026-05-20
 
+**触发场景**：所有 S<N> 完工后，必须有一个集中的"真集群批量验证"阶段
+把所有 cloudtop 上无法验证的项目一次性在 GCE/GKE 跑完。USER profile
+铁律 "cloudtop 先把所有能本地验证的全部验完，再上 GCE/GKE 真集群验收
+(一次性批量,省 GKE 资源)" 的落地点。
+
+#### SE.1 cloudtop 完整 e2e + 8 链对称回归 (2h)
+1. 跑 `tools/e2e_smoke.sh` 8 链各一次（mock 节点切换链类型），全过
+2. 跑 `tools/e2e_smoke.sh --single-disk` 单磁盘场景，全过
+3. 跑 `tools/e2e_smoke.sh --mixed-workload` 混合权重场景，全过
+4. 跑全部历史回归测试 (`bash tests/run_all_*.sh`)，无 regression
+5. 检查 HTML 关键章节 8 链对称（每条链都出现在报告里）
+6. 检查 AWS vs GCP 字段对称（同一条 metric 在两边都有图，无单边缺失）
+
+#### SE.2 GCE 部署 + vm_systemd 模式真验收 (2h)
+1. `gcloud compute ssh instance-20260429-041108 --project=claude-ttft-test
+   --zone=us-central1-f --tunnel-through-iap`
+2. rsync 整仓库到 GCE
+3. GCE 上跑 `tools/e2e_smoke.sh`，验 vm_systemd 模式
+4. 验证 gVNIC 探测真触发（cloudtop 是 virtio_net，GCE 才有 gVNIC）
+5. 验证 Local SSD 上限判定（如果 GCE 挂了 Local SSD）
+6. 把 GCE 上生成的 HTML scp 回 cloudtop 人工 review
+
+#### SE.3 GKE 部署 + k8s_gke 模式真验收 (3h)
+1. GCE 上 `gcloud container clusters create bench-gke --num-nodes=2 ...`
+2. apply S4 的 DaemonSet manifest，验证：
+   - Pod 起来无 CrashLoopBackOff
+   - `kubectl logs <pod>` 看到 cgroup 19 字段 CSV 输出
+   - DEPLOYMENT_MODE 真识别成 `k8s_gke`
+3. 在 GKE 内启 mock 节点 Pod，跑 e2e 端到端
+4. 验证 S5 Pod→Device 3 跳映射真在 GKE 里跑通
+5. 验证 RPC method 维度数据真出现在 HTML 报告里（S9 交付物的真集群验证）
+6. 跑完销毁集群：`gcloud container clusters delete bench-gke -q`
+
+#### SE.4 AWS/GCP 对比报告 (1h)
+1. 写 `analysis-notes/se-acceptance-report.md`：
+   - cloudtop / GCE / GKE 三处分别的 HTML 截图（关键章节）
+   - AWS 与 GCP 同 metric 对比表（确认无单边缺失）
+   - 已知盲区清单（哪些项目当前还没验，原因+缓解）
+2. 把 SE 阶段所有产物归档到 `analysis-notes/se-artifacts/`
+
+#### SE 验收
+```bash
+# 1. cloudtop 完整回归
+bash tools/e2e_smoke.sh --all-chains --single-disk
+bash tests/run_all_*.sh
+
+# 2. GCE/GKE 真集群验收报告存在
+ls analysis-notes/se-acceptance-report.md
+ls analysis-notes/se-artifacts/
+
+# 3. 已知盲区清单不为空（诚实分层）
+grep -c "盲区" analysis-notes/se-acceptance-report.md
+```
+
+---
 
 ## §6. 各阶段验收命令
 
