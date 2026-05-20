@@ -39,7 +39,7 @@
 # =====================================================================
 
 # Ensure deployment mode was detected
-if [[ -z "${DEPLOYMENT_MODE_DETECTED}" ]]; then
+if [[ -z "${DEPLOYMENT_MODE_DETECTED:-}" ]]; then
     echo "⚠️  k8s_paths.sh sourced before deployment_mode_detector.sh — " \
          "DEPLOYMENT_MODE not set. Assuming vm_bare." >&2
     DEPLOYMENT_MODE="${DEPLOYMENT_MODE:-vm_bare}"

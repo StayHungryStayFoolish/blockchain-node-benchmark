@@ -50,7 +50,7 @@ DEPLOYMENT_MODE_BUSINESS_UNITS=(
 
 detect_deployment_mode() {
     # Idempotency guard
-    if [[ "$DEPLOYMENT_MODE_DETECTED" == "true" && "$DEPLOYMENT_MODE" != "auto" ]]; then
+    if [[ "${DEPLOYMENT_MODE_DETECTED:-}" == "true" && "${DEPLOYMENT_MODE:-auto}" != "auto" ]]; then
         echo "🔧 Deployment mode already detected: $DEPLOYMENT_MODE (source=$DEPLOYMENT_MODE_SOURCE)" >&2
         return 0
     fi
