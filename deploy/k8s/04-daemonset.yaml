@@ -1,0 +1,160 @@
+# Blockchain Node Benchmark — DaemonSet (1 collector pod per node)
+# ====================================================================
+# v1.3 plan §S4: runs monitoring/cgroup_collector.py on every node.
+# Mounts host /proc /sys /dev under /host/* (node_exporter convention).
+#
+# Design notes:
+#  - hostPID: true allows the pod to read /proc/<pid>/cgroup for host PIDs,
+#    needed when TARGET_CGROUP resolves to a specific node-level workload.
+#  - hostNetwork: false — we don't bind any ports; talk to apiserver via
+#    in-cluster DNS. Keeping the pod off host net avoids NodeLocal DNS
+#    conflicts.
+#  - privileged: required for reading some cgroupfs files (specifically
+#    blkio.* counters on locked-down distros). For paranoid environments,
+#    swap to capability-based (CAP_SYS_PTRACE + CAP_DAC_READ_SEARCH) but
+#    cgroup v1 blkio still needs privileged on EKS Bottlerocket.
+#  - Probes: liveness uses --header (no IO), readiness uses --data (real
+#    collector exec) — separates "collector binary alive" from "collector
+#    can read /host counters".
+#
+# Image convention: we expect the operator to publish a slim Python image
+# containing this repo at /opt/blockchain-bench. The DaemonSet just sets
+# the cmd; no build args / Dockerfile lives in this manifest. For local
+# kind testing the same image can be loaded with `kind load docker-image`.
+# ====================================================================
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: blockchain-bench-collector
+  namespace: blockchain-bench
+  labels:
+    app.kubernetes.io/name: blockchain-node-benchmark
+    app.kubernetes.io/component: collector
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: blockchain-node-benchmark
+      app.kubernetes.io/component: collector
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: blockchain-node-benchmark
+        app.kubernetes.io/component: collector
+    spec:
+      serviceAccountName: blockchain-bench-monitor
+      hostPID: true
+      hostNetwork: false
+      # Tolerate ALL taints — monitoring must run on every node, even
+      # control-plane and tainted GPU nodes.
+      tolerations:
+        - operator: Exists
+      # Schedule on Linux nodes only (no Windows nodes).
+      nodeSelector:
+        kubernetes.io/os: linux
+      # Run on host PID namespace so /proc resolution works for host PIDs.
+      # Image expectation: minimal Python 3.10+ with this repo at
+      # /opt/blockchain-bench. Replace the tag in your environment.
+      containers:
+        - name: cgroup-collector
+          image: blockchain-node-benchmark/collector:v1.3
+          imagePullPolicy: IfNotPresent
+          # If container crashes during startup, capture last 80 lines of
+          # stderr in PodStatus so `kubectl get pod -o yaml` shows the
+          # crash reason even when `kubectl logs` returns nothing.
+          terminationMessagePolicy: FallbackToLogsOnError
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              # Source S2 detector/path layer first (sets HOST_PROC/CGROUP_*)
+              source /opt/blockchain-bench/config/config_loader.sh
+              # Loop forever; framework's main pipeline can later pipe these
+              # CSV rows to its unified data store. For now stdout is fine.
+              python3 /opt/blockchain-bench/monitoring/cgroup_collector.py --header
+              while true; do
+                python3 /opt/blockchain-bench/monitoring/cgroup_collector.py --data
+                sleep "${COLLECTION_INTERVAL_SEC:-5}"
+              done
+          envFrom:
+            - configMapRef:
+                name: blockchain-bench-config
+          securityContext:
+            # Need privileged for cgroup v1 blkio reads on Bottlerocket.
+            # On modern v2-only clusters you can drop privileged and use
+            # readOnlyRootFilesystem + the capabilities listed below.
+            privileged: true
+            readOnlyRootFilesystem: false
+            # Defense in depth even with privileged: only ask for what we need.
+            capabilities:
+              add:
+                - SYS_PTRACE          # read /proc/<host pid>/cgroup
+                - DAC_READ_SEARCH     # read locked-down cgroupfs files
+          volumeMounts:
+            - name: hostproc
+              mountPath: /host/proc
+              readOnly: true
+            - name: hostsys
+              mountPath: /host/sys
+              readOnly: true
+            - name: hostdev
+              mountPath: /host/dev
+              readOnly: true
+            - name: hostroot
+              mountPath: /host
+              readOnly: true
+              mountPropagation: HostToContainer
+          # Liveness: lightweight — verify the collector binary still
+          # runs and emits a 19-field header without touching /host.
+          livenessProbe:
+            exec:
+              command:
+                - python3
+                - /opt/blockchain-bench/monitoring/cgroup_collector.py
+                - --header
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness: real collector exec; verifies /host mount and
+          # cgroupfs detection actually work.
+          readinessProbe:
+            exec:
+              command:
+                - python3
+                - /opt/blockchain-bench/monitoring/cgroup_collector.py
+                - --data
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            # Collector is tiny; cap requests/limits to be a good citizen
+            # on nodes already running blockchain workloads.
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+      volumes:
+        - name: hostproc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: hostsys
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: hostdev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: hostroot
+          hostPath:
+            path: /
+            type: Directory

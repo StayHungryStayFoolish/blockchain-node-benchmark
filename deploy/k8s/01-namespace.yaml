@@ -1,0 +1,18 @@
+# Blockchain Node Benchmark — Kubernetes Namespace
+# ====================================================================
+# v1.3 plan §S4: dedicated namespace for the benchmark DaemonSet.
+# Isolated from application workloads so RBAC scope is minimal.
+# ====================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: blockchain-bench
+  labels:
+    app.kubernetes.io/name: blockchain-node-benchmark
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/managed-by: hand
+    # Pod Security Standards: privileged required because we mount /proc,
+    # /sys, /dev and read host counters. We do NOT need NET_ADMIN.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
