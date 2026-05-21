@@ -1,15 +1,3 @@
-> **⚠️ v1.4.1 OUT-OF-SCOPE 标注 (2026-05-20)**
->
-> 本文件 **Aptos** 相关部分已标记 OUT-OF-SCOPE,原因:Aptos 不在 baseline 真 8 链清单
-> (真 8 链见 `config/config_loader.sh:660` + plan §A.5.6)。
->
-> - **Solana / Sui 内容**:仍然有效,适用于真 8 链中的 solana / sui
-> - **Aptos 内容**:仅作存档参考,baseline 不支持
-> - **替代物**:无 — 真 8 链不含 Aptos,如需新增见 §18 chain-as-plugin 流程
-> - **原文件已归档**:`_archive_v1.4/02-solana-sui-aptos-rpc-resource.md`
-
----
-
 # Solana / Sui / Aptos RPC 方法资源消耗研究
 
 > 收集日期：2026-05-19  来源：subagent 实证 8 次 web_search

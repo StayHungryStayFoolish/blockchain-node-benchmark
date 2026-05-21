@@ -1,14 +1,3 @@
-> **⚠️ v1.4.1 OUT-OF-SCOPE 标注 (2026-05-20)**
->
-> 本文件 **Bitcoin** 相关部分已标记 OUT-OF-SCOPE,原因:Bitcoin 不在 baseline 真 8 链清单。
->
-> - **Starknet 内容**:仍然有效,适用于真 8 链中的 starknet
-> - **Bitcoin 内容**:仅作存档参考,baseline 不支持
-> - **新增**:`03-evm-l2-rpc-resource.md` 覆盖真 8 链遗漏的 Scroll/Polygon
-> - **原文件已归档**:`_archive_v1.4/03-bitcoin-starknet-rpc-resource.md`
-
----
-
 # Bitcoin Core 与 Starknet RPC 方法资源消耗调研
 
 > 收集日期：2026-05-19  来源：subagent 实证 8 次 web_search

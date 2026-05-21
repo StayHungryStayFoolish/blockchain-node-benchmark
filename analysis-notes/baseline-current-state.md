@@ -288,3 +288,81 @@ S2 已正确接入(`config_loader.sh` L342/L348 调用 detector 和 resolve_k8s_
 - [ ] `config/internal_config.sh` 和 `system_config.sh` 内容
 
 不阻塞 S0.2 / S0.3,在 S5.5 跑 e2e 暴露真空白后再补。
+
+
+---
+
+## §6. 真 8 链清单 (S0.2 实测, 2026-05-20)
+
+**重大事实校正**:plan v1.3/v1.4 误将 8 链清单写为 "Bitcoin + Aptos",
+S0.2 mock smoke 验证暴露真相 — baseline 真 8 链 **不含 Bitcoin/Aptos**,而是 **Scroll/Polygon**。
+
+### §6.1 真 8 链定义来源(双重交叉验证)
+
+| 来源 | 路径 | 内容 |
+|------|------|------|
+| #1 配置数组 | `config/config_loader.sh:660` | `supported_blockchains=("solana" "ethereum" "bsc" "base" "scroll" "polygon" "starknet" "sui")` |
+| #2 mock handler | `tools/mock_rpc_server.py:387` | `CHAIN_HANDLERS = {"solana": handle_solana, "ethereum": handle_evm, "bsc": handle_evm, ...}` |
+| #3 JSON 配置 | `config_loader.sh:402-660` `UNIFIED_BLOCKCHAIN_CONFIG` | 8 条 blockchain 子对象,带 chain_type / params / methods / rpc_methods |
+
+### §6.2 真 8 链 ↔ handler 映射
+
+| # | 链 | chain_type | handler | LOC |
+|---|----|-----------|---------|-----|
+| 1 | Solana | solana | `handle_solana` | 74 行 |
+| 2 | Ethereum | ethereum | `handle_evm` (共用) | 215 行 |
+| 3 | BSC | bsc | `handle_evm` (共用) | (同上) |
+| 4 | Base | base | `handle_evm` (共用) | (同上) |
+| 5 | Scroll | scroll | `handle_evm` (共用) | (同上) |
+| 6 | Polygon | polygon | `handle_evm` (共用) | (同上) |
+| 7 | Starknet | starknet | `handle_starknet` (8 method) | ~50 行 |
+| 8 | Sui | sui | `handle_sui` (7 method) | ~45 行 |
+
+**架构判断**:5 个 EVM 兼容链(ethereum/bsc/base/scroll/polygon)共用一个 `handle_evm`,
+是合理的 DRY 设计,baseline 已经做对了。
+
+### §6.3 S0.2 mock smoke 实测结果
+
+脚本:`tests/smoke_mock_rpc_8chains.sh` (1940 bytes)
+
+```
+✓ solana port=18800 getSlot → 1779352278
+✓ ethereum port=18801 eth_blockNumber → 0x8d6903c
+✓ bsc port=18802 eth_blockNumber → 0x8d6903c
+✓ base port=18803 eth_blockNumber → 0x8d6903c
+✓ scroll port=18804 eth_blockNumber → 0x8d6903c
+✓ polygon port=18805 eth_blockNumber → 0x8d6903c
+✓ starknet port=18806 starknet_blockNumber → 148279356
+✓ sui port=18807 sui_getLatestCheckpointSequenceNumber → 148279356
+Summary: 8 passed, 0 failed
+```
+
+**结论**:baseline mock 完整覆盖真 8 链,S0.2 任务 **0 代码工作量**,
+仅需 plan 文档校正(已完成,v1.4 → v1.4.1)。
+
+### §6.4 后续阶段影响
+
+| 阶段 | 影响 | 行动 |
+|------|------|------|
+| S5 K8s | 无 | K8s 监控与链类型无关 |
+| S6 瓶颈归因 | 表面 | 8 链 binary 探测列表要去掉 bitcoin-core / aptos-node,加上 reth / bor / heimdall |
+| S8 chain-as-plugin | 中等 | 文件树规划要把 aptos.json / bitcoin.json 改为 scroll.json / polygon.json |
+| S9 RPC method 监控 | 大 | 5 EVM 共用 handle_evm 意味着 per-method exporter 在 ethereum/bsc/base/scroll/polygon 上是同一份 |
+| S10 mixed 权重 | 大 | 8 链权重表要按真 8 链填,EVM 5 链可共享一份默认值 |
+| S11 RPC 参数 | 中等 | 5 EVM 共享 `address_latest` 参数构造器,Solana/Starknet/Sui 各自独立 |
+| S12 fixtures | 中等 | 5 EVM 共享 `addresses_*.txt`/`tx_hashes.txt` 池,Sui/Starknet 各自池 |
+
+### §6.5 plan v1.4.1 文档校正清单(已落地)
+
+- §A.5.6 新增"真 8 链清单铁律"节(本表的 plan 内副本)
+- 头部 `适用范围` 改为真 8 链 + 注明来源
+- §11 binary 表删 Aptos/Bitcoin 行,加 Scroll/Polygon
+- §17 RPC method 章节给 Aptos/Bitcoin 加 `~~OUT-OF-SCOPE~~`
+- §18 chain-as-plugin 文件树 aptos.json / bitcoin.json → scroll.json / polygon.json
+- §19 / §20 / §21 / §22 引用 Sui/Aptos/Bitcoin 处统一标 OUT-OF-SCOPE
+- `research_notes/02-solana-sui-aptos*.md` 顶部加 OUT-OF-SCOPE banner,Aptos 部分标注
+- `research_notes/03-bitcoin-starknet*.md` 顶部加 OUT-OF-SCOPE banner,Bitcoin 部分标注
+- 新增 `research_notes/03b-evm-l2-rpc-resource.md` 覆盖 Scroll/Polygon
+- 原 02/03 文件归档至 `research_notes/_archive_v1.4/`
+
+**对应 commit**:`docs(plan): v1.4.1 — correct 8-chain truth (Scroll/Polygon, not Bitcoin/Aptos)`
