@@ -1916,7 +1916,7 @@ build_ena_header() {
     echo "$header"
 }
 
-# Generate complete CSV header - support conditional ENA fields
+# Generate complete CSV header - support conditional ENA fields + cgroup fields
 generate_csv_header() {
     local basic_header="timestamp,cpu_usage,cpu_usr,cpu_sys,cpu_iowait,cpu_soft,cpu_idle,mem_used,mem_total,mem_usage"
     local device_header=$(generate_all_devices_header)
@@ -1924,15 +1924,58 @@ generate_csv_header() {
     local overhead_header="monitoring_iops_per_sec,monitoring_throughput_mibs_per_sec"
     local block_height_header="local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss"
     local qps_header="current_qps,rpc_latency_ms,qps_data_available"
+    local cgroup_header=$(get_cgroup_header)
 
     # Configuration-driven ENA header generation
     if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
         local ena_header=$(build_ena_header)
-        echo "$basic_header,$device_header,$network_header,$ena_header,$overhead_header,$block_height_header,$qps_header"
+        echo "$basic_header,$device_header,$network_header,$ena_header,$overhead_header,$block_height_header,$qps_header,$cgroup_header"
     else
-        echo "$basic_header,$device_header,$network_header,$overhead_header,$block_height_header,$qps_header"
+        echo "$basic_header,$device_header,$network_header,$overhead_header,$block_height_header,$qps_header,$cgroup_header"
     fi
 }
+
+# v1.4.5 Step 3: cgroup_collector.py wrapper integration
+# Returns cgroup CSV header (19 fields) or empty placeholder when collector
+# unavailable or disabled. Fail-soft per §A.5 ironclad rule: if cgroup is
+# unreadable, we emit "NA" rows rather than abort the entire monitor.
+#
+# Set CGROUP_COLLECTOR_ENABLED=false in user_config.sh / env to disable.
+# Defaults: enabled in K8s modes, optional in VM modes (still emits zeros
+# for schema stability — pipelines expect a fixed column count).
+get_cgroup_header() {
+    if [[ "${CGROUP_COLLECTOR_ENABLED:-true}" != "true" ]]; then
+        # Emit 19 zero-named placeholder fields to keep schema stable
+        echo "cgroup_io_rbytes,cgroup_io_wbytes,cgroup_io_rios,cgroup_io_wios,cgroup_io_dbytes,cgroup_io_dios,cgroup_mem_anon,cgroup_mem_file,cgroup_mem_kernel,cgroup_mem_slab,cgroup_mem_sock,cgroup_mem_swap,cgroup_cpu_usage_usec,cgroup_cpu_user_usec,cgroup_cpu_system_usec,cgroup_cpu_nr_periods,cgroup_cpu_nr_throttled,cgroup_cpu_throttled_usec,cgroup_meta_source"
+        return 0
+    fi
+    local collector="$(dirname "${BASH_SOURCE[0]}")/cgroup_collector.py"
+    if [[ ! -f "$collector" ]]; then
+        log_warn "cgroup_collector.py not found at $collector — emitting placeholder header"
+        echo "cgroup_io_rbytes,cgroup_io_wbytes,cgroup_io_rios,cgroup_io_wios,cgroup_io_dbytes,cgroup_io_dios,cgroup_mem_anon,cgroup_mem_file,cgroup_mem_kernel,cgroup_mem_slab,cgroup_mem_sock,cgroup_mem_swap,cgroup_cpu_usage_usec,cgroup_cpu_user_usec,cgroup_cpu_system_usec,cgroup_cpu_nr_periods,cgroup_cpu_nr_throttled,cgroup_cpu_throttled_usec,cgroup_meta_source"
+        return 0
+    fi
+    python3 "$collector" --header 2>/dev/null || \
+        echo "cgroup_io_rbytes,cgroup_io_wbytes,cgroup_io_rios,cgroup_io_wios,cgroup_io_dbytes,cgroup_io_dios,cgroup_mem_anon,cgroup_mem_file,cgroup_mem_kernel,cgroup_mem_slab,cgroup_mem_sock,cgroup_mem_swap,cgroup_cpu_usage_usec,cgroup_cpu_user_usec,cgroup_cpu_system_usec,cgroup_cpu_nr_periods,cgroup_cpu_nr_throttled,cgroup_cpu_throttled_usec,cgroup_meta_source"
+}
+
+# v1.4.5 Step 3: companion data getter — 19 numeric/NA fields per row.
+# Fail-soft: if collector errors, emit 18 zeros + meta_source="NA" so
+# downstream CSV reader never has a missing-column row.
+get_cgroup_data() {
+    if [[ "${CGROUP_COLLECTOR_ENABLED:-true}" != "true" ]]; then
+        echo "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,disabled"
+        return 0
+    fi
+    local collector="$(dirname "${BASH_SOURCE[0]}")/cgroup_collector.py"
+    if [[ ! -f "$collector" ]]; then
+        echo "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,unavailable"
+        return 0
+    fi
+    python3 "$collector" --data 2>/dev/null || \
+        echo "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,error"
+}
+
 
 # Generate JSON format monitoring data - atomic write version
 generate_json_metrics() {
@@ -2012,6 +2055,8 @@ log_performance_data() {
     local device_data=$(get_all_devices_data)
     local network_data=$(get_network_data)
     local overhead_data=$(get_monitoring_overhead)
+    # v1.4.5 Step 3: cgroup_collector integration (fail-soft 19 fields)
+    local cgroup_data=$(get_cgroup_data)
 
     # Collect current QPS test data
     local current_qps=0
@@ -2086,14 +2131,14 @@ except:
         rpc_latency_ms=$(echo "$rpc_latency_ms" | tr -d '\n\r' | head -c 20)
         qps_data_available=$(echo "$qps_data_available" | tr -d '\n\r' | head -c 10)
         
-        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available"
+        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available,$cgroup_data"
     else
         # Clean newlines and special characters from all variables
         current_qps=$(echo "$current_qps" | tr -d '\n\r' | head -c 20)
         rpc_latency_ms=$(echo "$rpc_latency_ms" | tr -d '\n\r' | head -c 20)
         qps_data_available=$(echo "$qps_data_available" | tr -d '\n\r' | head -c 10)
         
-        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available"
+        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available,$cgroup_data"
     fi
     
     # Final data line validation
