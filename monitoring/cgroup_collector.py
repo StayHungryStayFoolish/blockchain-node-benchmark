@@ -258,7 +258,10 @@ def collect_v2(cgroup_root: str, target_path: str) -> Dict[str, int]:
     out["cgroup_mem_kernel"] = mem.get("kernel", mem.get("kernel_stack", 0))
     out["cgroup_mem_slab"] = mem.get("slab", 0)
     out["cgroup_mem_sock"] = mem.get("sock", 0)
-    out["cgroup_mem_swap"] = mem.get("swapcached", 0)
+    # NOTE: cgroup v2 memory.stat key is "swap" (current swap in bytes),
+    # NOT "swapcached" (which is swap-backed page cache, different metric).
+    # See kernel Documentation/admin-guide/cgroup-v2.rst "memory.stat".
+    out["cgroup_mem_swap"] = mem.get("swap", 0)
 
     # CPU
     cpu = _parse_kv_lines(_safe_read(base / "cpu.stat"))
@@ -376,18 +379,22 @@ def collect() -> Dict[str, object]:
         cg_ver, cg_root = _detect_cgroup_version_fallback(host_paths["HOST_SYS"])
         host_paths["CGROUP_VERSION"] = cg_ver
         host_paths["CGROUP_ROOT"] = cg_root
-        # Populate v1 sub-paths if needed
-        if cg_ver == "v1" and cg_root:
-            for ctrl, key in (("blkio", "CGROUP_V1_BLKIO_PATH"),
-                              ("memory", "CGROUP_V1_MEMORY_PATH")):
-                if not host_paths[key]:
-                    host_paths[key] = f"{cg_root}/{ctrl}"
-            if not host_paths["CGROUP_V1_CPU_PATH"]:
-                cand1 = Path(f"{cg_root}/cpu,cpuacct")
-                cand2 = Path(f"{cg_root}/cpu")
-                host_paths["CGROUP_V1_CPU_PATH"] = (
-                    str(cand1) if cand1.is_dir() else str(cand2)
-                )
+
+    # Populate v1 sub-paths if cg_ver=="v1" (regardless of auto-detect or explicit).
+    # Previously this block was nested inside the `auto` branch, so a user who
+    # explicitly set CGROUP_VERSION=v1 with empty CGROUP_V1_*_PATH got all-zero
+    # IO/MEM/CPU output. Now it runs unconditionally for v1.
+    if cg_ver == "v1" and cg_root:
+        for ctrl, key in (("blkio", "CGROUP_V1_BLKIO_PATH"),
+                          ("memory", "CGROUP_V1_MEMORY_PATH")):
+            if not host_paths[key]:
+                host_paths[key] = f"{cg_root}/{ctrl}"
+        if not host_paths["CGROUP_V1_CPU_PATH"]:
+            cand1 = Path(f"{cg_root}/cpu,cpuacct")
+            cand2 = Path(f"{cg_root}/cpu")
+            host_paths["CGROUP_V1_CPU_PATH"] = (
+                str(cand1) if cand1.is_dir() else str(cand2)
+            )
 
     # Mode C: unmounted
     if cg_ver == "unknown" or not cg_root:

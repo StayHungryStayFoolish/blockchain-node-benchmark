@@ -54,17 +54,24 @@ import json
 import os
 import ssl
 import sys
+import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from urllib import request as urlrequest
 from urllib import error as urlerror
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 
 DEFAULT_API_SERVER = "https://kubernetes.default.svc"
 DEFAULT_TOKEN_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 DEFAULT_CA_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 DEFAULT_TIMEOUT_SEC = 10
+# SA tokens are rotated by kubelet ~hourly (TokenRequest projected tokens).
+# Re-read from disk if the cached token is older than this.
+TOKEN_REFRESH_SEC = 300
+# Retry transient failures (5xx, network errors). 429 also retried (rate limit).
+RETRY_MAX_ATTEMPTS = 3
+RETRY_BACKOFF_BASE_SEC = 0.5  # 0.5s, 1.0s, 2.0s
 
 
 class K8sApiError(Exception):
@@ -82,8 +89,28 @@ def _env(name: str, default: str = "") -> str:
     return v if v else default
 
 
+def _resolve_default_api_server() -> str:
+    """Prefer kubelet-injected env vars over DNS name.
+
+    kubelet sets KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT on every
+    pod automatically (cf. kubernetes.io/docs/concepts/services-networking/
+    connect-applications-service/#discovering-services). These are the
+    *authoritative* source — DNS resolution of kubernetes.default.svc adds
+    a coredns hop and fails on clusters with custom DNS configs.
+    """
+    host = os.environ.get("KUBERNETES_SERVICE_HOST", "")
+    port = os.environ.get("KUBERNETES_SERVICE_PORT_HTTPS",
+                          os.environ.get("KUBERNETES_SERVICE_PORT", "443"))
+    if host:
+        # IPv6 literals must be bracketed
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        return f"https://{host}:{port}"
+    return DEFAULT_API_SERVER
+
+
 class K8sApiClient:
-    """Stateless HTTP client. Re-reads env on each instantiation."""
+    """Stateless HTTP client with token auto-refresh and retry."""
 
     def __init__(
         self,
@@ -94,18 +121,30 @@ class K8sApiClient:
         insecure_tls: Optional[bool] = None,
         timeout: float = DEFAULT_TIMEOUT_SEC,
     ):
-        self.api_server = (
-            api_server or _env("K8S_API_SERVER", DEFAULT_API_SERVER)
-        ).rstrip("/")
+        # K8S_API_SERVER env overrides everything; else use kubelet-injected
+        # KUBERNETES_SERVICE_HOST/PORT; else fall back to DNS name.
+        if api_server is not None:
+            resolved = api_server
+        elif _env("K8S_API_SERVER"):
+            resolved = _env("K8S_API_SERVER")
+        else:
+            resolved = _resolve_default_api_server()
+        self.api_server = resolved.rstrip("/")
         self.token_file = token_file or _env("K8S_TOKEN_FILE", DEFAULT_TOKEN_FILE)
         self.ca_file = ca_file or _env("K8S_CA_FILE", DEFAULT_CA_FILE)
-        # Token can be passed in, set via env, or read from file
+        # Token sources, in priority order:
+        #   1. explicit `token` arg → static, never refreshed
+        #   2. K8S_TOKEN env → static, never refreshed
+        #   3. token_file → refreshed on TTL or file mtime change
+        self._static_token: Optional[str] = None
         if token is not None:
-            self._token = token
+            self._static_token = token
         elif _env("K8S_TOKEN"):
-            self._token = _env("K8S_TOKEN")
-        else:
-            self._token = self._read_token_file()
+            self._static_token = _env("K8S_TOKEN")
+        # File-token cache (used only if _static_token is None)
+        self._cached_token: str = ""
+        self._cached_token_mtime: float = 0.0
+        self._cached_token_at: float = 0.0
         # TLS
         if insecure_tls is not None:
             self._insecure = insecure_tls
@@ -117,15 +156,38 @@ class K8sApiClient:
     # Token + TLS context
     # -----------------------------------------------------------------
 
-    def _read_token_file(self) -> str:
-        """Read SA token from disk. Returns empty string if file missing."""
+    def _current_token(self) -> str:
+        """Return the bearer token, re-reading from disk if rotated.
+
+        Why this matters: projected SA tokens (the default since K8s 1.21)
+        are rotated by kubelet hourly. If we cache the token at __init__
+        time and the DaemonSet runs for >1h, every API call starts failing
+        with 401 Unauthorized. Re-reading is cheap (small file, page cache).
+        """
+        if self._static_token is not None:
+            return self._static_token
+        now = time.time()
+        # Fast path: TTL not exceeded → return cache
+        if (now - self._cached_token_at) < TOKEN_REFRESH_SEC and self._cached_token:
+            return self._cached_token
+        # Slow path: check file mtime; only re-read if changed or first time
         p = Path(self.token_file)
         if not p.is_file():
+            self._cached_token = ""
+            self._cached_token_at = now
             return ""
         try:
-            return p.read_text(encoding="utf-8").strip()
+            mtime = p.stat().st_mtime
         except OSError:
-            return ""
+            return self._cached_token  # stat failed, keep stale token
+        if mtime != self._cached_token_mtime or not self._cached_token:
+            try:
+                self._cached_token = p.read_text(encoding="utf-8").strip()
+                self._cached_token_mtime = mtime
+            except OSError:
+                pass  # keep stale token rather than blanking auth
+        self._cached_token_at = now
+        return self._cached_token
 
     def _make_ssl_context(self) -> ssl.SSLContext:
         if self._insecure:
@@ -140,18 +202,42 @@ class K8sApiClient:
         return ssl.create_default_context()
 
     # -----------------------------------------------------------------
-    # Core HTTP GET
+    # Core HTTP GET (with retry)
     # -----------------------------------------------------------------
 
-    def _get(self, path: str) -> Dict[str, Any]:
-        """GET <api_server><path>. Returns parsed JSON dict.
+    def _get(self, path: str, query: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        """GET <api_server><path>?<query>. Returns parsed JSON dict.
 
-        Raises K8sApiError on non-2xx or network failure.
+        Retries on transient failures (HTTP 5xx, 429, network errors) with
+        exponential backoff. Raises K8sApiError after RETRY_MAX_ATTEMPTS or
+        on 4xx (non-429) immediately.
         """
+        if query:
+            path = f"{path}?{urlencode(query)}"
         url = f"{self.api_server}{path}"
+        last_err: Optional[K8sApiError] = None
+        for attempt in range(RETRY_MAX_ATTEMPTS):
+            try:
+                return self._do_get(url)
+            except K8sApiError as e:
+                last_err = e
+                # 4xx except 429 → permanent, don't retry
+                if 400 <= e.status < 500 and e.status != 429:
+                    raise
+                # 5xx, 429, or network (status=0) → backoff and retry
+                if attempt < RETRY_MAX_ATTEMPTS - 1:
+                    time.sleep(RETRY_BACKOFF_BASE_SEC * (2 ** attempt))
+                    continue
+        # Exhausted retries
+        assert last_err is not None
+        raise last_err
+
+    def _do_get(self, url: str) -> Dict[str, Any]:
+        """Single GET, no retry. Used by _get()."""
         req = urlrequest.Request(url, method="GET")
-        if self._token:
-            req.add_header("Authorization", f"Bearer {self._token}")
+        token = self._current_token()
+        if token:
+            req.add_header("Authorization", f"Bearer {token}")
         req.add_header("Accept", "application/json")
         ctx = self._make_ssl_context() if url.startswith("https") else None
         try:
@@ -173,8 +259,35 @@ class K8sApiClient:
     # Object accessors (typed wrappers)
     # -----------------------------------------------------------------
 
-    def list_namespaced_pods(self, namespace: str) -> Dict[str, Any]:
-        return self._get(f"/api/v1/namespaces/{quote(namespace)}/pods")
+    def list_namespaced_pods(
+        self,
+        namespace: str,
+        node_name: Optional[str] = None,
+        label_selector: Optional[str] = None,
+        field_selector: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """List pods in a namespace, optionally filtered by node/label/field.
+
+        node_name is the most common DaemonSet filter — translates to
+        fieldSelector=spec.nodeName=<node>, which the apiserver pushes down
+        to etcd. On 100+ node clusters, omitting this means every DaemonSet
+        pod pulls the whole namespace Pod list = O(N²) cluster-wide traffic.
+        """
+        params: Dict[str, str] = {}
+        # Combine node_name shortcut with explicit field_selector
+        fs_parts = []
+        if node_name:
+            fs_parts.append(f"spec.nodeName={node_name}")
+        if field_selector:
+            fs_parts.append(field_selector)
+        if fs_parts:
+            params["fieldSelector"] = ",".join(fs_parts)
+        if label_selector:
+            params["labelSelector"] = label_selector
+        return self._get(
+            f"/api/v1/namespaces/{quote(namespace)}/pods",
+            query=params if params else None,
+        )
 
     def get_pod(self, namespace: str, name: str) -> Dict[str, Any]:
         return self._get(

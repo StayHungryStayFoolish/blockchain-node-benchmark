@@ -125,13 +125,16 @@ def _extract_ebs_csi(pv_spec: Dict[str, Any], host_root: str) -> Tuple[str, str]
     handle = csi.get("volumeHandle", "")
     if not handle:
         return "?", "csi"
-    # EBS NVMe naming
+    # EBS NVMe naming: nvme-Amazon_Elastic_Block_Store_vol<hexid>
+    # (NVMe instances strip the dash from vol-xxx → volxxx)
     by_id = (Path(host_root) / "dev/disk/by-id"
              / f"nvme-Amazon_Elastic_Block_Store_{handle.replace('-', '')}")
     if by_id.exists():
         return _resolve_by_id(by_id), "csi"
-    # Fall back: try /dev/xvd* alias (xen-virtualized older instances)
-    return "?", "csi"
+    # Fall back: xen-virtualized older instances expose /dev/xvd*; udev does
+    # not create a stable by-id link, so we just return the volumeHandle so
+    # caller can try a downstream lookup against EC2 BlockDeviceMappings.
+    return f"{handle}@xen", "csi"
 
 
 def _extract_azure_csi(pv_spec: Dict[str, Any], host_root: str) -> Tuple[str, str]:
@@ -157,13 +160,53 @@ _CSI_EXTRACTORS = {
 
 
 def _extract_generic_csi(pv_spec: Dict[str, Any], host_root: str) -> Tuple[str, str]:
-    """Fallback for unrecognized CSI drivers: return volumeHandle unresolved."""
-    handle = pv_spec.get("csi", {}).get("volumeHandle", "")
-    return ("?" if not handle else handle), "csi"
+    """Fallback for unrecognized CSI drivers.
+
+    Returns ("?", "csi") with the volumeHandle preserved separately by the
+    caller. We do NOT return the raw volumeHandle as `device` — that would
+    pollute downstream iostat lookups, which expect bare device names like
+    "sda" or "nvme0n1". Caller surfaces the handle via VolumeMapping for
+    diagnostics; an unresolved generic CSI driver must be handled by adding
+    a new entry to _CSI_EXTRACTORS.
+    """
+    return "?", "csi"
+
+
+def _strip_partition_suffix(name: str) -> str:
+    """Strip trailing partition number from a device name.
+
+      sda1     → sda
+      sda10    → sda
+      nvme0n1p1 → nvme0n1   (NVMe uses 'p<N>' partition suffix)
+      nvme0n1p15 → nvme0n1
+      xvda1    → xvda
+      vda1     → vda
+
+    The "name" we care about is the WHOLE-disk device that iostat reports
+    against (cgroup io.stat also reports against the whole disk). Returning
+    a partition name (e.g. 'sda1') causes 0-byte counters because iostat
+    never accumulates against the partition.
+    """
+    if not name:
+        return name
+    # NVMe: nvme<ctrl>n<ns>p<part> → keep up to nsX
+    # Match e.g. 'nvme0n1p1' → split on 'p' before digits at end
+    import re
+    nvme_m = re.match(r"^(nvme\d+n\d+)p\d+$", name)
+    if nvme_m:
+        return nvme_m.group(1)
+    # SCSI/SATA/virtio: trailing digits are partition
+    scsi_m = re.match(r"^([a-z]+)\d+$", name)
+    if scsi_m:
+        return scsi_m.group(1)
+    return name
 
 
 def _resolve_by_id(by_id_path: Path) -> str:
     """Resolve /dev/disk/by-id/... symlink to a device name (e.g. 'sda').
+
+    Strips trailing partition suffix so the result aligns with what iostat
+    and cgroup io.stat report against (whole-disk device, not partition).
 
     Returns "?" if the link doesn't exist or can't be resolved.
     """
@@ -171,9 +214,10 @@ def _resolve_by_id(by_id_path: Path) -> str:
         return "?"
     try:
         target = by_id_path.resolve(strict=False)
-        # Strip /dev/ prefix and any trailing partition number
         name = target.name
-        return name if name else "?"
+        if not name:
+            return "?"
+        return _strip_partition_suffix(name)
     except OSError:
         return "?"
 
@@ -203,10 +247,21 @@ def _resolve_pv_device(pv: Dict[str, Any], host_root: str) -> Tuple[str, str, st
             return _resolve_by_id(by_id), "gcePersistentDisk", disk_name, ""
         return "?", "gcePersistentDisk", "", ""
 
-    # Legacy AWS EBS
+    # Legacy AWS EBS (pre-CSI in-tree provisioner)
+    # awsElasticBlockStore.volumeID format: aws://AZ/vol-xxxx or just vol-xxxx
     if "awsElasticBlockStore" in spec:
-        vol_id = spec["awsElasticBlockStore"].get("volumeID", "")
-        return "?", "awsElasticBlockStore", vol_id, ""
+        vol_id_raw = spec["awsElasticBlockStore"].get("volumeID", "")
+        # Strip aws://az/ prefix if present
+        vol_id = vol_id_raw.rsplit("/", 1)[-1] if vol_id_raw else ""
+        if vol_id and vol_id.startswith("vol-"):
+            # Same NVMe by-id convention as ebs.csi.aws.com
+            by_id = (Path(host_root) / "dev/disk/by-id"
+                     / f"nvme-Amazon_Elastic_Block_Store_{vol_id.replace('-', '')}")
+            if by_id.exists():
+                return _resolve_by_id(by_id), "awsElasticBlockStore", vol_id_raw, ""
+            # Xen-virtualized fall-through (no stable by-id link)
+            return f"{vol_id}@xen", "awsElasticBlockStore", vol_id_raw, ""
+        return "?", "awsElasticBlockStore", vol_id_raw, ""
 
     # hostPath (direct host directory)
     if "hostPath" in spec:
@@ -219,6 +274,68 @@ def _resolve_pv_device(pv: Dict[str, Any], host_root: str) -> Tuple[str, str, st
         return path, "local", "", ""
 
     return "?", "unknown", "", ""
+
+
+# ---------------------------------------------------------------------
+# Kubelet mount fallback — last-resort device resolution
+# ---------------------------------------------------------------------
+
+
+def _resolve_via_kubelet_mounts(
+    pv_name: str,
+    pod_uid: str,
+    host_root: str,
+) -> Optional[str]:
+    """Last-resort: scan /proc/mounts for the kubelet PV mount line.
+
+    When CSI extraction fails (unknown driver, missing by-id link, xen
+    instance), the volume is still mounted somewhere — kubelet mounts
+    every PV under:
+
+      <host_root>/var/lib/kubelet/pods/<pod_uid>/volumes/<plugin>/<pv_name>/mount
+
+    or for CSI plugins:
+
+      <host_root>/var/lib/kubelet/pods/<pod_uid>/volumes/kubernetes.io~csi/<pv_name>/mount
+
+    /proc/mounts shows the source device for each mountpoint. We grep for
+    the pv_name (or pod_uid) and extract the device.
+
+    Returns the whole-disk device name (e.g. "nvme0n1") or None if no
+    mount line is found.
+    """
+    if not pv_name and not pod_uid:
+        return None
+    mounts_path = Path(host_root) / "proc/mounts"
+    if not mounts_path.is_file():
+        # Try without host_root prefix (we may already be inside the host PID ns)
+        mounts_path = Path("/proc/mounts")
+        if not mounts_path.is_file():
+            return None
+    try:
+        text = mounts_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    # Look for a mount line whose mountpoint contains both pod_uid and pv_name
+    # (more specific than just pv_name, which could match across pods after
+    # a Pod restart that re-binds the same PVC).
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        source, mountpoint, _fstype = parts[0], parts[1], parts[2]
+        # Must be a /dev/ block device source — skip tmpfs, overlay, nfs etc.
+        if not source.startswith("/dev/"):
+            continue
+        # Match by pv_name (kubelet path convention) — robust across plugins
+        if pv_name and pv_name in mountpoint:
+            dev_name = source.rsplit("/", 1)[-1]
+            return _strip_partition_suffix(dev_name)
+        if pod_uid and pod_uid in mountpoint and "/volumes/" in mountpoint:
+            dev_name = source.rsplit("/", 1)[-1]
+            return _strip_partition_suffix(dev_name)
+    return None
 
 
 # ---------------------------------------------------------------------
@@ -241,7 +358,9 @@ def map_pod_volumes(
         return m
 
     spec = pod.get("spec", {})
+    meta = pod.get("metadata", {})
     node = spec.get("nodeName", "?")
+    pod_uid = meta.get("uid", "")
     mapping = PodMapping(namespace=namespace, pod_name=pod_name, node_name=node)
 
     for vol in spec.get("volumes", []):
@@ -263,6 +382,19 @@ def map_pod_volumes(
                     continue
                 pv = client.get_pv(pv_name)
                 device, kind, handle, driver = _resolve_pv_device(pv, host_root)
+                # Fallback: if CSI/legacy extraction gave us "?" or a tagged
+                # placeholder like "vol-xxx@xen", try /proc/mounts via pv_name
+                # + pod uid. This rescues unknown CSI drivers and xen EBS.
+                if device == "?" or "@" in device:
+                    fallback = _resolve_via_kubelet_mounts(
+                        pv_name, pod_uid, host_root,
+                    )
+                    if fallback:
+                        device = fallback
+                        if kind == "csi":
+                            kind = "csi+mount-fallback"
+                        else:
+                            kind = f"{kind}+mount-fallback"
                 mapping.volumes.append(VolumeMapping(
                     logical_name=logical, device=device, pv_name=pv_name,
                     pvc_name=pvc_name, volume_handle=handle,

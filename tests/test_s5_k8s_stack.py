@@ -168,7 +168,9 @@ class TestK8sApiClient(unittest.TestCase):
         os.environ["K8S_TOKEN"] = "env-token-zzz"
         try:
             c = K8sApiClient(api_server=self.url)
-            self.assertEqual(c._token, "env-token-zzz")
+            # v1.4.4: token storage refactored to lazy reread (rotation-safe).
+            # Public accessor is _current_token().
+            self.assertEqual(c._current_token(), "env-token-zzz")
         finally:
             del os.environ["K8S_TOKEN"]
 
@@ -179,13 +181,13 @@ class TestK8sApiClient(unittest.TestCase):
             path = f.name
         try:
             c = K8sApiClient(api_server=self.url, token_file=path)
-            self.assertEqual(c._token, "file-token-yyy")
+            self.assertEqual(c._current_token(), "file-token-yyy")
         finally:
             os.unlink(path)
 
     def test_missing_token_file_returns_empty(self):
         c = K8sApiClient(api_server=self.url, token_file="/nonexistent/file")
-        self.assertEqual(c._token, "")
+        self.assertEqual(c._current_token(), "")
 
 
 # =====================================================================
@@ -222,12 +224,21 @@ class TestCSIExtractors(unittest.TestCase):
         self.assertEqual(kind, "csi")
 
     def test_generic_csi_falls_back_to_volume_handle(self):
+        """v1.4.4 behavior change: generic CSI returns "?" (not raw handle).
+
+        Old behavior leaked the volumeHandle as `device`, which polluted
+        downstream iostat lookups (handles like "vol-xxx" or
+        "projects/.../disks/X" are NOT block-device names). The volumeHandle
+        is preserved separately on the VolumeMapping for diagnostics; an
+        unrecognized CSI driver must be added to _CSI_EXTRACTORS to actually
+        resolve it. See pod_device_mapper.py docstring on _extract_generic_csi.
+        """
         spec = {"csi": {
             "driver": "unknown.csi.example.com",
             "volumeHandle": "opaque-handle-string",
         }}
         dev, kind = _extract_generic_csi(spec, "/nonexistent")
-        self.assertEqual(dev, "opaque-handle-string")
+        self.assertEqual(dev, "?")
         self.assertEqual(kind, "csi")
 
     def test_generic_csi_empty_handle_returns_question(self):

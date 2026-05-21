@@ -157,7 +157,7 @@ def handle_solana(method: str, params: List[Any]) -> Any:
                 "blockTime": int(time.time()) - i,
                 "confirmationStatus": "finalized",
             }
-            for i in range(min(10, len(params) and 10 or 10))
+            for i in range(10)
         ]
     if method == "getTransaction":
         return {
@@ -176,18 +176,32 @@ def handle_solana(method: str, params: List[Any]) -> Any:
         return {"identity": _fake_pubkey("mock-node-identity")}
     if method == "getGenesisHash":
         return _fake_pubkey("genesis")
-    # default: empty object so the caller doesn't crash
-    return {}
+    # Unknown method → None (signals "method not handled" to caller, matches
+    # handle_evm behavior). Was previously `return {}` which the caller could
+    # not distinguish from a legitimate empty-object response.
+    return None
 
 
 # ── EVM (ethereum, bsc, base, polygon, scroll) ──
 
-def handle_evm(method: str, params: List[Any]) -> Any:
+# Real mainnet chain IDs (used for eth_chainId). Source: chainlist.org.
+EVM_CHAIN_IDS = {
+    "ethereum": "0x1",         # 1
+    "bsc":      "0x38",        # 56  (BNB Smart Chain)
+    "base":     "0x2105",      # 8453 (Base mainnet)
+    "scroll":   "0x82750",     # 534352 (Scroll mainnet)
+    "polygon":  "0x89",        # 137 (Polygon PoS)
+}
+
+
+def handle_evm(method: str, params: List[Any], chain: str = "ethereum") -> Any:
     block = _bump_block()
     if method == "eth_blockNumber":
         return hex(block)
     if method == "eth_chainId":
-        return "0x1"
+        # Real chain IDs per EVM L1/L2 — production callers (web3 clients,
+        # MetaMask, etc.) reject txs if the chainId doesn't match the network.
+        return EVM_CHAIN_IDS.get(chain, "0x1")
     if method == "eth_getBalance":
         return "0xde0b6b3a7640000"  # 1 ETH (10^18 wei)
     if method == "eth_getTransactionCount":
@@ -337,7 +351,8 @@ def handle_starknet(method: str, params: List[Any]) -> Any:
         }
     if method == "starknet_syncing":
         return False
-    return {}
+    # Unknown method → None (signals "method not handled") — see handle_evm.
+    return None
 
 
 # ── Sui ──
@@ -377,7 +392,8 @@ def handle_sui(method: str, params: List[Any]) -> Any:
         return {"data": [], "hasNextPage": False, "nextCursor": None}
     if method == "sui_getChainIdentifier":
         return "35834a8a"  # mock mainnet
-    return {}
+    # Unknown method → None (signals "method not handled") — see handle_evm.
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -402,7 +418,12 @@ def dispatch(chain: str, method: str, params: List[Any]) -> Tuple[Any, Optional[
     if handler is None:
         return None, {"code": -32601, "message": f"Chain '{chain}' not supported"}
     try:
-        result = handler(method, params)
+        # handle_evm accepts chain= kwarg for eth_chainId differentiation;
+        # other handlers don't, so we sniff signature with a fallback.
+        if handler is handle_evm:
+            result = handler(method, params, chain)
+        else:
+            result = handler(method, params)
         if result is None:
             return None, {"code": -32601, "message": f"Method '{method}' not implemented for chain '{chain}'"}
         return result, None
