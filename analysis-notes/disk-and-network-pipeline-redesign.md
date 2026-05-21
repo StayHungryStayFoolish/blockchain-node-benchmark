@@ -152,10 +152,12 @@ L3 失败示例（容易踩的）：
 
 ### A.5.3 磁盘配置 1+1 必须正确处理
 
-cloudtop 只有 1 块 root 磁盘（`/dev/sda`），框架定义：
+cloudtop 只有 1 块 root 磁盘（`/dev/sda`），框架定义（**真实变量名,来自 `config/user_config.sh` 实测**）：
 
-- `DATA_VOL_DEVICE` — **必选**，挂数据/accounts/ledger
-- `ACCOUNTS_VOL_DEVICE` — **可选**，挂 accounts（如果跟 data 分盘）
+- `LEDGER_DEVICE` — **必选**,默认 `nvme1n1`,挂数据/ledger
+- `ACCOUNTS_DEVICE` — **可选**,默认 `nvme2n1`,挂 accounts(如果跟 ledger 分盘)
+- 配套元数据:`DATA_VOL_TYPE/SIZE/MAX_IOPS/MAX_THROUGHPUT`(LEDGER 元数据,**变量名前缀 `DATA_` 但其实关联 `LEDGER_DEVICE`,baseline 历史命名遗留**)
+- 配套元数据:`ACCOUNTS_VOL_TYPE/SIZE/MAX_IOPS/MAX_THROUGHPUT`(ACCOUNTS 元数据)
 
 **所有新写代码必须正确处理**：
 - 可选磁盘缺失时不能 crash（cgroup_collector / iostat parser / 分析层）
@@ -524,8 +526,8 @@ utils/disk/cgroup_disk_collector.sh    # 内容合并进 monitoring/cgroup_colle
 
 #### S0.3 单磁盘 workload + e2e 冒烟 (1.5h)
 1. 写 `tools/single_disk_workload_profile.sh`
-   - 默认 `DATA_VOL_DEVICE=/dev/sda` (cloudtop root)
-   - 默认 `ACCOUNTS_VOL_DEVICE=""` (验可选磁盘缺失分支)
+   - 默认 `LEDGER_DEVICE="sda"` (cloudtop root,**不带 /dev/ 前缀,与 baseline `user_config.sh` 一致**)
+   - 默认 `ACCOUNTS_DEVICE=""` (验可选磁盘缺失分支)
    - 用 `dd if=/dev/zero of=/tmp/bench_data bs=1M count=512`
      +  `dd if=/tmp/bench_data of=/dev/null bs=1M` 做读写
    - 护栏：总写量上限 1GB、并发上限 4、可用空间 < 5GB 时 abort
