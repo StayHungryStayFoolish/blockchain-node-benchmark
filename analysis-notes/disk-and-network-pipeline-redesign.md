@@ -1,6 +1,6 @@
 # Disk & Network Pipeline Redesign — Master Plan
 
-**版本**: v1.4.2  
+**版本**: v1.4.3  
 **日期**: 2026-05-20  
 **作者**: Hermes Agent (with lelandgong)  
 **适用范围**: blockchain-node-benchmark 全部 8 链 (Solana / Ethereum / Bsc / Base / Scroll / Polygon / Starknet / Sui) — **真相来源:`config/config_loader.sh:660 supported_blockchains` + `tools/mock_rpc_server.py:387 CHAIN_HANDLERS`**  
@@ -854,6 +854,30 @@ kubectl apply -f tools/mock_rpc_server.yaml
 kubectl exec -it bnb-collector-xxx -- python3 monitoring/pod_device_mapper.py
 # 期望输出: Pod=mock-solana-0 PVC=data-0 Device=/dev/nvme1n1 IOPS=12345
 ```
+
+### S6.5 已知设计边界(v1.4.3 落盘,owner: 自己,deferred 而非 bug)
+
+下列为**显式设计取舍**,不是缺陷,**不进入 S6 修复范围**。Plan 在此明文记录以避免后续误判为遗漏。
+
+#### Issue #2: deployment_mode_detector 不支持 raw process 探测
+
+- **场景**:用户直接 `./solana-validator &` 起进程(非 systemd 管理、非容器、非 K8s)
+- **当前行为**:detector waterfall 走到 Step 5 默认值 → `DEPLOYMENT_MODE=vm_bare`
+- **下游影响**:**零功能影响**。`config/k8s_paths.sh:52` case 分支把 `vm_bare|vm_systemd|*` 合并为同一路径策略(都用 `/proc`+`/sys`)。仅 telemetry 标签错误(本应是 vm_systemd-like 的运行模式标成 vm_bare)
+- **不修原因**:
+  1. baseline plan §S2-S3 文档**零处**要求 raw process 探测
+  2. 修复成本 2-3h(需要 pgrep + 13 binary 探测 + 误抓护栏)
+  3. 收益仅"标签更准",无业务功能修复
+  4. 已有工作绕过:用户可手动 `export DEPLOYMENT_MODE=vm_systemd`
+- **触发条件升级为 bug**:当某下游模块开始**真正按 vm_bare vs vm_systemd 走不同代码路径**时(目前 cgroup_collector 不区分),Issue #2 应立即升级为 P1 bug
+- **代码内注释**:`config/deployment_mode_detector.sh` Step 4 块头已附 known limitation 注释
+
+#### v1.4.3 已修(Issue #1):systemctl regex 多实例支持
+
+- **背景**:v1.3 fc07f8b 引入的 `^\s*${unit}(\.service|@)` 漏检 `solana-validator-mainnet.service` 类多实例命名
+- **修复**:v1.4.3 改为 `^\s*${unit}([-@]|\.service)`(`-` 加入字符类)
+- **护栏**:`tests/test_systemd_unit_regex.sh` 19-case 真值表防回归(标准/template/suffix/anti-collision/noise/trap 6 类场景)
+- **Ownership**:自己(fc07f8b S2 引入 + f7b8340 v1.4.2 改 array + 本次 v1.4.3 修 regex)
 
 ### S6 验收
 ```bash

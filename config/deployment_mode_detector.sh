@@ -106,11 +106,35 @@ detect_deployment_mode() {
     fi
 
     # Step 4: VM with systemd (look for business units we care about)
+    #
+    # Regex anatomy (v1.4.3, was v1.3 fc07f8b):
+    #   ^\s*${unit}([-@]|\.service)
+    #
+    #   ^\s*           — systemctl list-units indents each row with 2 spaces
+    #   ${unit}        — literal binary name, regex-escaped by shell
+    #   ([-@]|\.service) — next char MUST be one of:
+    #     -            → suffix variant: solana-validator-mainnet.service,
+    #                                    geth-1.service, bor-validator.service
+    #                    (covers ops conventions like <binary>-<env>.service)
+    #     @            → systemd template instance: solana-validator@mainnet.service
+    #     \.service    → bare unit: geth.service
+    #
+    # Anti-collision: requiring the trailing class means `geth` will NOT
+    #   match lines starting with `bsc-geth` or `scroll-geth` (those have
+    #   their own array entries). See tests/test_deployment_mode_detector.sh
+    #   for the full 19-case matrix.
+    #
+    # Known limitation (Issue #2, plan §S6.5 deferred):
+    #   This step only detects systemd-managed binaries. Raw process
+    #   invocation (`./solana-validator &`) falls through to vm_bare. Users
+    #   running unmanaged processes must manually `export DEPLOYMENT_MODE=vm_systemd`.
+    #   Downstream impact is zero (k8s_paths.sh treats vm_bare and vm_systemd
+    #   identically — both resolve to /proc and /sys), only telemetry label.
     if command -v systemctl >/dev/null 2>&1; then
         for unit in "${DEPLOYMENT_MODE_BUSINESS_UNITS[@]}"; do
             # systemctl list-units exits 0 even when no match; check output
             if systemctl list-units --all --no-legend --no-pager 2>/dev/null \
-                    | grep -qE "^\s*${unit}(\\.service|@)" ; then
+                    | grep -qE "^\s*${unit}([-@]|\.service)" ; then
                 DEPLOYMENT_MODE="vm_systemd"
                 DEPLOYMENT_MODE_SOURCE="systemd:${unit}"
                 echo "✅ VM + systemd environment detected (unit=$unit)" >&2
