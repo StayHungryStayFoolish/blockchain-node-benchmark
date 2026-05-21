@@ -900,6 +900,55 @@ kubectl exec -it bnb-collector-xxx -- python3 monitoring/pod_device_mapper.py
 
 **Ownership 自审**:12 bug 全部为 S2-S5 阶段我本人引入或维护的代码,无一推后到 SE/大集群/未来阶段,符合"自留债必须自己修"原则。
 
+#### v1.4.5 已修(Round-05 深度审计 + AP5 协议落地):honest-self-check 铁律 + 并行入口陷阱根治
+
+**触发**:用户(2026-05-21)第二轮反向压测,要求"100% 代码逐行覆盖率分析",并强调"自检时需要诚实,基于事实自检并回答自己的问题,而不是假装诚实"。
+
+**新落地 skill** (2 个):
+- `software-development/honest-self-check-no-fake-evidence` — 5 类反模式 (AP1-AP5) + 5 道证据门 (E1-E5) + 3 反检测题 + AP5 静态扫描伪 bug 专章 5 步协议
+- `software-development/decision-with-tradeoffs` — 决策必须附结构化对比表 + 明确推荐 + 反转条件
+
+**Round-05 审计执行**(详见 `analysis-notes/round-05-deep-audit.md`):
+
+1. **5 subagent 并行 read-only 初查** (11 个 issue,~10 min)
+2. **parent AP5 复验** (5 个 FALSE_POSITIVE + 4 个 TRUE_BUG + 1 PARTIAL + 1 UNVERIFIED,~30 min)
+3. **误报率 ~45% (5/11)** 验证 AP5 Step 1-5 协议必要性 — subagent 看 1 行就报 P1 是高频幻觉
+
+**v1.4.5 修复矩阵** (4 真 bug 全修):
+
+| 模块 | bug | 修复要点 | 护栏 |
+|------|-----|----------|------|
+| `config/deployment_mode_detector.sh:137` | P1: systemctl regex `\s*` 不匹配 `●` 前缀 → failed unit 漏判 | `^\s*` → `^[[:space:]●○]*` | `test_systemd_unit_regex.sh` 补 `●` prefix case |
+| `deploy/k8s/02-serviceaccount-rbac.yaml` | P2 latent: RBAC 缺 `endpoints` verb,`list_namespaced_endpoints` 调用 403 | resources 加 `endpoints` | `test_k8s_manifests.py` 加 RBAC 完整性断言 |
+| `monitoring/unified_monitor.sh` + `monitoring/monitoring_coordinator.sh` | P0 架构: cgroup_collector / pod_device_mapper / kubelet_stats_client 0 production caller | unified_monitor.sh L204 加 cgroup_collector.py dispatch + monitoring_coordinator.sh 加 K8s 模式 S5 三件套注册 | `test_cgroup_in_unified_csv.sh` + `test_s5_coordinator_integration.py` |
+| `tools/mock_rpc_server.py:259` | P2 latent: `eth_getBlockByHash` 递归调 `handle_evm` 不传 chain → 跨链 chainId 返 0x1 | 补 `chain=chain` 参数透传 | `test_mock_rpc_server_v144_fixes.py` 加 multi-chain block-hash test |
+
+**新增工具链** (S0 阶段 — 之前 plan 列了但未交付):
+- `tools/single_disk_workload_profile.sh` — 单磁盘 workload 生成器(`dd` + 护栏)
+- `tools/e2e_smoke.sh` — 一键 e2e (mock 节点 + 主入口监控 + 分析 + HTML 出图)
+
+**新增 CI guard** (S7 阶段 — 之前 plan 列了但未交付):
+- `ci/check_parallel_entry.sh` — grep 主链路 source 链,防 cgroup_collector 类并行入口陷阱回归
+- 已加 pre-commit hook
+
+**5 FALSE_POSITIVE 防误修记录**(避免后续 audit 重复报):
+- `deployment_mode_detector.sh:64` echo set -u — L63 guard 保证执行路径上 `DEPLOYMENT_MODE_SOURCE` 已 export
+- `k8s_api_client.py` socket.timeout 未重试 — `socket.timeout` 是 `URLError` 子类,L255 已捕获 wrap 为 K8sApiError(status=0) 触发 retry
+- `04-daemonset.yaml` 未调 detect_deployment_mode — L75 `source config_loader.sh` 触发 L342-349 自动 detect
+- (其余 2 FP 见 round-05 报告 §3)
+
+**验收**:
+- `134+新测 全过` (新增 `test_systemd_unit_regex.sh::test_failed_unit_circle_prefix`, `test_cgroup_in_unified_csv.sh`, `test_s5_coordinator_integration.py`)
+- `tools/e2e_smoke.sh` 跑通(mock + 单磁盘 workload + HTML 出图)
+- `ci/check_parallel_entry.sh` PASS
+
+**Ownership 自审**:4 真 bug 全部为 S2-S5 阶段引入,Round-04 至 Round-05 间存在的"主管线未接"问题在 v1.4.4 没发现是因为没跑 caller trace,**v1.4.5 通过 AP5 Step 4 (grep 函数 caller) 强制护栏**。
+
+**Lesson Learned** (写入 commit message):
+- AP5 协议从本轮起对所有 audit / subagent 报告强制启用
+- subagent 给的 bug claim 必须复验至少 1 条,发现 1 个 FP 就复验全部
+- 并行入口陷阱不能只靠 plan §S7 "记得做",必须有 CI guard 强制
+
 ### S6 验收
 ```bash
 # 8 链 mock 全跑
