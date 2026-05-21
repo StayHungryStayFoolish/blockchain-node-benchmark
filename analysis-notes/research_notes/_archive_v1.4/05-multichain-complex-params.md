@@ -1,24 +1,4 @@
-> **⚠️ v1.4.2 OUT-OF-SCOPE 标注 (2026-05-20)**
->
-> 本文件原标题 "Solana / Sui / Aptos / Starknet" 误将 Aptos 列入。
-> baseline 真 8 链不含 Aptos(真相见 `config/config_loader.sh:660` + plan §A.5.6)。
->
-> - **Solana / Sui / Starknet 内容**:仍然有效,适用于真 8 链中对应非 EVM 链
-> - **Aptos 整章 §3 (L207-251) / Aptos build_aptos_request (L368-380)**:OUT-OF-SCOPE,
->   仅作存档参考,baseline 不实现
-> - **APTOS_* 环境变量 (L420-424) / Aptos 风险表行 (L449-452) / Aptos 文档引用 (L488-490)**:同上
-> - **原文件已归档**:`_archive_v1.4/05-multichain-complex-params.md`
->
-> 真 8 链非 EVM 部分总览:
-> - Solana(handle_solana,74 LOC)→ getProgramAccounts / getMultipleAccounts 等复杂参数
-> - Sui(handle_sui,7 method)→ suix_getOwnedObjects / queryTransactionBlocks 等
-> - Starknet(handle_starknet,8 method)→ starknet_getEvents / getStorageAt 等
->
-> EVM 5 链(ethereum/bsc/base/scroll/polygon)复杂参数见 `04-evm-complex-params.md`。
-
----
-
-# 多链 RPC 复杂参数研究报告 (Solana / Sui / Starknet)
+# 多链 RPC 复杂参数研究报告 (Solana / Sui / Aptos / Starknet)
 
 > 为 blockchain-node-benchmark v1.3 的 `target_generator.sh` 提供四链生产级压测参数模板, 并给出 `param_format` case-dispatch 扩展建议与 node-killer 防护清单。所有 JSON 样例均来自各链官方 / 主流厂商文档。
 
@@ -224,7 +204,7 @@
 
 ---
 
-## ~~3. Aptos — Top 8 REST 端点~~ [**OUT-OF-SCOPE v1.4.2 — Aptos 不在 baseline 真 8 链**]
+## 3. Aptos — Top 8 REST 端点
 
 Aptos 的"RPC"实际上是 REST + JSON. 端点遵循 `/v1/...` 路径。
 
@@ -385,7 +365,7 @@ build_sui_params() {
   esac
 }
 
-# --- ~~Aptos (REST: 输出 method + path + body 三元组)~~ [OUT-OF-SCOPE v1.4.2] ---
+# --- Aptos (REST: 输出 method + path + body 三元组) ---
 build_aptos_request() {
   local ep="$1" addr="$2"
   case "$ep" in
@@ -437,11 +417,11 @@ SUI_QUERYEVENTS_REQUIRE_FILTER=true
 SUI_GETOWNED_REQUIRE_FILTER=true
 SUI_GETOWNED_ENABLED=false
 
-# ~~Aptos~~ [OUT-OF-SCOPE v1.4.2 — Aptos 不在 baseline]
-# APTOS_RESOURCES_LIMIT_DEFAULT=25
-# APTOS_RESOURCES_SAFETY_MAX_LIMIT=200
-# APTOS_BLOCKS_WITH_TX_DIST="false:80,true:20"
-# APTOS_VIEW_HISTORICAL_LEDGER_ENABLED=false
+# Aptos
+APTOS_RESOURCES_LIMIT_DEFAULT=25
+APTOS_RESOURCES_SAFETY_MAX_LIMIT=200
+APTOS_BLOCKS_WITH_TX_DIST="false:80,true:20"
+APTOS_VIEW_HISTORICAL_LEDGER_ENABLED=false
 
 # Starknet
 STARKNET_GETEVENTS_CHUNK_SIZE_MAX=100
@@ -505,9 +485,9 @@ guard_method() {
 ### Sui
 - Sui JSON-RPC 总览: https://docs.sui.io/sui-api-ref
 
-### ~~Aptos~~ [OUT-OF-SCOPE v1.4.2]
-- ~~Fullnode REST API: https://aptos.dev/en/build/apis/fullnode-rest-api~~
-- ~~OpenAPI 参考: https://aptos.dev/en/build/apis/fullnode-rest-api-reference~~
+### Aptos
+- Fullnode REST API: https://aptos.dev/en/build/apis/fullnode-rest-api
+- OpenAPI 参考: https://aptos.dev/en/build/apis/fullnode-rest-api-reference
 
 ### Starknet
 - JSON-RPC 规范: https://github.com/starkware-libs/starknet-specs

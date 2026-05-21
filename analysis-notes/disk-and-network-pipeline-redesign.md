@@ -1,6 +1,6 @@
 # Disk & Network Pipeline Redesign — Master Plan
 
-**版本**: v1.4.1  
+**版本**: v1.4.2  
 **日期**: 2026-05-20  
 **作者**: Hermes Agent (with lelandgong)  
 **适用范围**: blockchain-node-benchmark 全部 8 链 (Solana / Ethereum / Bsc / Base / Scroll / Polygon / Starknet / Sui) — **真相来源:`config/config_loader.sh:660 supported_blockchains` + `tools/mock_rpc_server.py:387 CHAIN_HANDLERS`**  
@@ -1710,11 +1710,11 @@ if awk "BEGIN { exit !($diff > 0.01) }"; then
 fi
 ```
 
-### §19.3 8 链默认权重（基于 research_notes/）
+### §19.3 真 8 链默认权重（v1.4.2 校正,基于 research_notes/）
 
-来源：`analysis-notes/research_notes/01-evm-rpc-resource.md` Cloudflare 排序 + reddit 经验值
+来源：`analysis-notes/research_notes/01-evm-rpc-resource.md` Cloudflare 排序 + reddit 经验值 + 03b-evm-l2-rpc-resource(v1.4.2 新增 Scroll/Polygon)
 
-#### Ethereum / BSC / Base (EVM 同源)
+#### Ethereum / BSC / Base / Scroll / Polygon (EVM 5 链同源,共用 handle_evm)
 ```json
 "mixed": {
   "eth_call": 0.45,
@@ -1729,6 +1729,11 @@ fi
 ```
 依据：Cloudflare ETH Gateway Top 10 排序 + Infura 用户自报"eth_call 占大头"。
 覆盖了从轻量 (eth_blockNumber/eth_chainId) 到重量 (eth_getLogs) 的资源分布。
+
+**v1.4.2 真 8 链校正说明**:
+- 5 EVM 链(ethereum/bsc/base/scroll/polygon)在 `mock_rpc_server.py:387` 共用 `handle_evm` handler,
+  默认权重也共用本表(各链可在 `chains/<chain>.json` 单独覆盖,如 Polygon 高 TPS 场景可上调 eth_getLogs 权重)
+- Scroll/Polygon 详细 RPC 特性见 `research_notes/03b-evm-l2-rpc-resource.md`
 
 #### Solana (来源 02-solana-sui-aptos-rpc-resource.md)
 ```json
@@ -2230,9 +2235,9 @@ tools/build_fixtures.sh                    # NEW, 统筹入口
 | `getSignaturesForAddress.max_limit` | 1000 | Solana 官方上限 |
 | `getMultipleAccounts.max_batch_size` | 100 | Solana 官方硬限 |
 | `simulateTransaction.enabled` | **false** | 每次重放一笔交易 |
-| ~~`scantxoutset.enabled`~~ | ~~**false**~~ | ~~Bitcoin Core 锁 UTXO 集数十秒~~ **[OUT-OF-SCOPE — Bitcoin 不在 baseline 真 8 链]** |
-| `dumptxoutset.enabled` | false | 几分钟级 |
-| `gettxoutsetinfo.enabled` | false | 全 UTXO 扫描分钟级 |
+| ~~`scantxoutset.enabled`~~ | ~~**false**~~ | ~~Bitcoin Core 锁 UTXO 集数十秒~~ **[OUT-OF-SCOPE v1.4.2 — Bitcoin 不在 baseline 真 8 链]** |
+| ~~`dumptxoutset.enabled`~~ | ~~false~~ | ~~几分钟级~~ **[OUT-OF-SCOPE v1.4.2 — Bitcoin 不在 baseline]** |
+| ~~`gettxoutsetinfo.enabled`~~ | ~~false~~ | ~~全 UTXO 扫描分钟级~~ **[OUT-OF-SCOPE v1.4.2 — Bitcoin 不在 baseline]** |
 | `starknet_getEvents.chunk_size_max` | 100 | Infura/Alchemy/Nethermind 强制 |
 | `starknet_getEvents.block_range_max` | 10 000 | killer 阈值 |
 | `starknet_getEvents.require_address_or_key` | **true** | 全空 filter 是 killer |

@@ -63,14 +63,29 @@
 
 **Solana 基线合计 ≈ 15–20 KB**。
 
-### 2.3 Bitcoin / UTXO 链
+### ~~2.3 Bitcoin / UTXO 链~~ [**OUT-OF-SCOPE v1.4.2 — Bitcoin 不在 baseline 真 8 链**]
+
+| ~~文件~~ | ~~基线~~ | ~~用户池~~ |
+|---|---|---|
+| ~~`block_hashes.txt`~~ | ~~50~~ | ~~5 000–50 000~~ |
+| ~~`block_heights.json`~~ | ~~区段 + 20~~ | ~~区段 + 1 000~~ |
+| ~~`tx_ids.txt`~~ | ~~100~~ | ~~5 000–50 000~~ |
+| ~~`addresses.txt` (谨慎用)~~ | ~~20~~ | ~~500–5 000~~ |
+
+### 2.3b Sui (取代 Bitcoin 位置 — Sui 是真 8 链)
 
 | 文件 | 基线 | 用户池 |
 |---|---|---|
-| `block_hashes.txt` | 50 | 5 000–50 000 |
-| `block_heights.json` | 区段 + 20 | 区段 + 1 000 |
-| `tx_ids.txt` | 100 | 5 000–50 000 |
-| `addresses.txt` (谨慎用) | 20 | 500–5 000 |
+| `object_pool.txt` | 50 | 2 000–10 000 |
+| `tx_digests.txt` | 100 | 5 000–50 000 |
+| `package_ids.json` | 10 | 100–500 |
+
+### 2.3c Starknet (取代 Bitcoin 位置 — Starknet 是真 8 链)
+
+| 文件 | 基线 | 用户池 |
+|---|---|---|
+| `contract_pool.txt` | 10 | 200–2 000 |
+| `event_keys.txt` | 5 | 50–200 |
 
 ### 2.4 容量决策矩阵
 
@@ -353,4 +368,4 @@
 - xk6-ethereum: https://github.com/distribworks/xk6-ethereum
 - wrk Lua: https://github.com/wg/wrk/blob/master/SCRIPTING
 - vegeta: https://github.com/tsenart/vegeta#-targets
-- Bitcoin Core scantxoutset: https://developer.bitcoin.org/reference/rpc/scantxoutset.html
+- ~~Bitcoin Core scantxoutset: https://developer.bitcoin.org/reference/rpc/scantxoutset.html~~ [OUT-OF-SCOPE v1.4.2 — Bitcoin 不在 baseline]

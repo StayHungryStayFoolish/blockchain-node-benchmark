@@ -34,18 +34,28 @@
 # Default: auto-detect unless user override
 DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-"auto"}
 
-# Business systemd units we recognize (8-chain symmetric; extend in
-# config/chain_*.json as new chains land)
+# Business systemd units we recognize (v1.4.2: real 8-chain truth from
+# config/config_loader.sh:660 supported_blockchains array, NOT v1.3 wrong list)
+# True 8 chains: solana / ethereum / bsc / base / scroll / polygon / starknet / sui
+# (Bitcoin/Aptos removed — never in baseline, see plan §A.5.6)
 DEPLOYMENT_MODE_BUSINESS_UNITS=(
-    "geth"          # Ethereum / BSC / Base (geth fork)
-    "reth"          # Ethereum alt client
-    "erigon"        # Ethereum alt client
-    "solana-validator"   # Solana
-    "agave-validator"    # Solana (post-Agave fork)
-    "sui-node"      # Sui
-    "aptos-node"    # Aptos
-    "bitcoind"      # Bitcoin
-    "starknet-node" # Starknet (Pathfinder / Juno)
+    # Solana
+    "solana-validator"
+    "agave-validator"        # Solana post-Agave fork
+    # EVM family (5 chains share clients: ethereum/bsc/base/scroll/polygon)
+    "geth"                   # Ethereum / Base / generic EVM
+    "reth"                   # Ethereum / Scroll (Rust client)
+    "erigon"                 # Ethereum archive
+    "bsc-geth"               # BSC official fork
+    "bor"                    # Polygon execution layer
+    "heimdall"               # Polygon consensus layer
+    "scroll-geth"            # Scroll legacy l2geth fork
+    # Starknet (Pathfinder / Juno)
+    "pathfinder"
+    "juno"
+    "starknet-node"          # generic
+    # Sui
+    "sui-node"
 )
 
 detect_deployment_mode() {
