@@ -1,6 +1,6 @@
 # Disk & Network Pipeline Redesign — Master Plan
 
-**版本**: v1.4.3  
+**版本**: v1.4.4  
 **日期**: 2026-05-20  
 **作者**: Hermes Agent (with lelandgong)  
 **适用范围**: blockchain-node-benchmark 全部 8 链 (Solana / Ethereum / Bsc / Base / Scroll / Polygon / Starknet / Sui) — **真相来源:`config/config_loader.sh:660 supported_blockchains` + `tools/mock_rpc_server.py:387 CHAIN_HANDLERS`**  
@@ -878,6 +878,27 @@ kubectl exec -it bnb-collector-xxx -- python3 monitoring/pod_device_mapper.py
 - **修复**:v1.4.3 改为 `^\s*${unit}([-@]|\.service)`(`-` 加入字符类)
 - **护栏**:`tests/test_systemd_unit_regex.sh` 19-case 真值表防回归(标准/template/suffix/anti-collision/noise/trap 6 类场景)
 - **Ownership**:自己(fc07f8b S2 引入 + f7b8340 v1.4.2 改 array + 本次 v1.4.3 修 regex)
+
+#### v1.4.4 已修(批判性 token 级精读 12 P0/P1):no-deferred-bugs 铁律落地
+
+**触发**:用户(2026-05-21)质问"为什么不是 A 全修? 每次遇到问题都要往后推,造成越来越多的技术债"。承认错误后落地 `software-development/no-deferred-bugs` skill,**全部 12 bug 当 turn 修完**(B 选项分档为"推后"已废)。
+
+**修复矩阵**(commit `ec38ada`,详见 commit message):
+
+| 模块 | bug 数 | 修复要点 | 护栏 |
+|------|-------|---------|------|
+| `monitoring/cgroup_collector.py` | 2 P1 | v2 swap key (swapcached → swap) + v1 显式路径子路径补全 | 5 测 (`test_cgroup_collector_v144_fixes.py`) |
+| `monitoring/k8s_api_client.py` | 1 P0 + 3 P1 | token lazy 重读(SA 轮转安全) + KUBERNETES_SERVICE_HOST 优先(含 IPv6) + fieldSelector/labelSelector + 5xx/429/网络重试 | 21 测 (`test_k8s_api_client_v144_fixes.py`) |
+| `monitoring/pod_device_mapper.py` | 4 P1 | 分区后缀剥(`sda1`→`sda`, `nvme0n1p1`→`nvme0n1`) + legacy `awsElasticBlockStore` 真解 vol-xxx + generic CSI 不污染(返 `?` 不返 handle) + `/proc/mounts` kubelet mount fallback | 19 测 (`test_pod_device_mapper_v144_fixes.py`) |
+| `tools/mock_rpc_server.py` | 3 P1 | 死表达式 `range(min(10, len(params) and 10 or 10))` → `range(10)` + solana/starknet/sui `{}` → `None` 统一语义 + EVM_CHAIN_IDS 5 链真值(ethereum 0x1 / bsc 0x38 / base 0x2105 / scroll 0x82750 / polygon 0x89) | 20 测 (`test_mock_rpc_server_v144_fixes.py`) |
+
+**老测同步**(2 改):
+- `tests/test_s5_k8s_stack.py` 老测 `c._token` 私有属性 → `c._current_token()` 方法(3 处,k8s_api_client 重构后必改)
+- `tests/test_s5_k8s_stack.py::test_generic_csi_falls_back_to_volume_handle` 断言从 `"opaque-handle-string"` → `"?"`(老断言正好锁定的就是 P1 bug 行为)
+
+**验收**:`134/134 单测全过` + `4/4 guard 8-chain truth` + `8/8 mock chain smoke`。GKE 真集群部分(token 1h 轮转、100+ 节点 fieldSelector 流量、xen 实例 EBS 解析)留 SE 真集群压测 — 但这是"再次实证"而非"首次发现",**所有 12 bug 在 cloudtop 单测层已实证修复**,符合 no-deferred-bugs 铁律的"行为覆盖 vs 环境覆盖"分层。
+
+**Ownership 自审**:12 bug 全部为 S2-S5 阶段我本人引入或维护的代码,无一推后到 SE/大集群/未来阶段,符合"自留债必须自己修"原则。
 
 ### S6 验收
 ```bash
