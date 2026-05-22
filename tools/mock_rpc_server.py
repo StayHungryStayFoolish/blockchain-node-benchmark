@@ -256,7 +256,17 @@ def handle_evm(method: str, params: List[Any], chain: str = "ethereum") -> Any:
             "nonce": "0x0000000000000000",
         }
     if method == "eth_getBlockByHash":
-        return handle_evm("eth_getBlockByNumber", [hex(block), params[1] if len(params) > 1 else False])
+        # v1.4.5 round-05 P2 (defensive): forward chain to the recursive
+        # call. Currently eth_getBlockByNumber returns no chain-specific
+        # fields so the behavioral diff is zero, BUT eth_chainId inside
+        # handle_evm IS chain-dependent — if future work adds chain-specific
+        # block fields (BSC validator, Polygon zkProof, Base sequencer)
+        # silently dropping `chain` would route bsc/base/polygon/scroll
+        # callers through the ethereum default. Fix the latent bug now per
+        # no-deferred-bugs skill rather than wait for the regression.
+        return handle_evm("eth_getBlockByNumber",
+                          [hex(block), params[1] if len(params) > 1 else False],
+                          chain=chain)
     if method == "eth_getTransactionByHash":
         return {
             "hash": params[0] if params else _fake_tx_hash(),
