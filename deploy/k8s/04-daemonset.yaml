@@ -60,7 +60,7 @@ spec:
       # /opt/blockchain-bench. Replace the tag in your environment.
       containers:
         - name: cgroup-collector
-          image: blockchain-node-benchmark/collector:v1.3
+          image: blockchain-node-benchmark/collector:v1.4
           imagePullPolicy: IfNotPresent
           # If container crashes during startup, capture last 80 lines of
           # stderr in PodStatus so `kubectl get pod -o yaml` shows the
@@ -83,6 +83,29 @@ spec:
           envFrom:
             - configMapRef:
                 name: blockchain-bench-config
+          # Downward API: inject POD_NAME / NODE_NAME / POD_NAMESPACE so
+          # monitoring_coordinator.sh s5_diag step [3/3] (kubelet_stats_client
+          # pod_on_node lookup) can actually run. Without these, the s5_diag
+          # check silently "skips" the K8s API path verification — a
+          # parallel-entry trap variant where the manifest claims K8s
+          # diagnostics support but the diagnostic itself can't reach K8s.
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
           securityContext:
             # Need privileged for cgroup v1 blkio reads on Bottlerocket.
             # On modern v2-only clusters you can drop privileged and use

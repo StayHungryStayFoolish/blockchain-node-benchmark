@@ -145,8 +145,14 @@ write_log() {
     local component="${LOGGER_COMPONENT:-unknown}"
     local current_level="${LOGGER_LEVEL:-$DEFAULT_LOG_LEVEL}"
     
-    # Check log level
-    if [[ $level -lt $current_level ]]; then
+    # Check log level — defensive: if either side is non-numeric (eg "INFO"),
+    # treat as level 0 (always log) rather than nounset-fail.
+    # Use printf %d with /dev/null fallback to coerce safely under set -u.
+    local lvl_num=0
+    local cur_num=0
+    [[ "$level" =~ ^[0-9]+$ ]] && lvl_num=$level
+    [[ "$current_level" =~ ^[0-9]+$ ]] && cur_num=$current_level
+    if [[ $lvl_num -lt $cur_num ]]; then
         return 0
     fi
     

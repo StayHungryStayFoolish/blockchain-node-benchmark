@@ -20,10 +20,13 @@ data:
   HOST_ROOT: "/host"
 
   # ---- Deployment mode override ----
-  # Always k8s_* inside a K8s DaemonSet; deployment_mode_detector.sh
-  # will sub-classify into k8s_eks / k8s_gke / k8s_other via /etc files
-  # on the host, so we set the prefix here and let the detector specialize.
-  DEPLOYMENT_MODE: "auto"
+  # DaemonSet pods are by definition running inside Kubernetes. baseline
+  # accepts: vm_bare | vm_systemd | docker | k8s_eks | k8s_gke | k8s_other.
+  # We set k8s_gke explicitly here (this ConfigMap ships for GKE). For EKS
+  # patch this to "k8s_eks", for other K8s use "k8s_other".
+  # Note: monitoring_coordinator.sh checks startswith "k8s" so all three
+  # k8s_* variants enable pod_device_mapper and kubelet_stats_client.
+  DEPLOYMENT_MODE: "k8s_gke"
 
   # ---- Cloud provider (will be auto-detected; override for testing) ----
   DEPLOYMENT_PLATFORM: "auto"
@@ -37,4 +40,7 @@ data:
   TARGET_CGROUP: "/"
 
   # ---- Logging ----
-  LOG_LEVEL: "INFO"
+  # Numeric per utils/unified_logger.sh: DEBUG=0, INFO=1, WARN=2, ERROR=3, FATAL=4.
+  # Logger uses arithmetic comparison ([[ $a -lt $b ]]), so passing a literal
+  # like "INFO" breaks under set -u (bash treats it as a variable name).
+  LOG_LEVEL: "1"

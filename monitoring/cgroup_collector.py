@@ -384,7 +384,7 @@ def _try_k8s_kubelet_fallback(reason: str) -> Optional[Dict[str, object]]:
     IO fields stay at 0 (kubelet /stats/summary lacks cgroup io_stat).
     MEM + CPU are populated from kubelet rate counters.
     """
-    if os.environ.get("DEPLOYMENT_MODE", "").lower() != "k8s":
+    if not os.environ.get("DEPLOYMENT_MODE", "").lower().startswith("k8s"):
         return None
     pod_name = os.environ.get("POD_NAME", "")
     pod_ns = os.environ.get("POD_NAMESPACE", "")

@@ -627,30 +627,34 @@ main() {
             echo ""
             echo "[2/3] pod_device_mapper (map_namespace_pods)"
             echo "───────────────────────────────────────────────────────────"
-            if [[ "${DEPLOYMENT_MODE:-}" == "k8s" ]]; then
+            if [[ "${DEPLOYMENT_MODE:-}" == k8s* ]]; then
                 python3 -c "
 import sys
 sys.path.insert(0, '$script_dir')
 try:
+    from k8s_api_client import K8sApiClient
     from pod_device_mapper import map_namespace_pods
     ns = '${POD_NAMESPACE:-default}'
-    result = map_namespace_pods(ns)
+    client = K8sApiClient()
+    result = map_namespace_pods(client, ns)
     if result:
         print(f'  namespace={ns}, pods={len(result)}')
-        for pod, vols in list(result.items())[:5]:
-            print(f'    {pod}: {len(vols)} volume(s)')
+        for pm in result[:5]:
+            name = getattr(pm, 'pod_name', '?')
+            vols = getattr(pm, 'volumes', []) or []
+            print(f'    {name}: {len(vols)} volume(s)')
     else:
         print(f'  namespace={ns}: 无 pod 或 API 不可达')
 except Exception as e:
     print(f'  ERROR: {e}')
 " 2>&1
             else
-                echo "  跳过 (DEPLOYMENT_MODE != k8s)"
+                echo "  跳过 (DEPLOYMENT_MODE != k8s*)"
             fi
             echo ""
             echo "[3/3] kubelet_stats_client (pod_on_node)"
             echo "───────────────────────────────────────────────────────────"
-            if [[ "${DEPLOYMENT_MODE:-}" == "k8s" && -n "${POD_NAME:-}" && -n "${NODE_NAME:-}" ]]; then
+            if [[ "${DEPLOYMENT_MODE:-}" == k8s* && -n "${POD_NAME:-}" && -n "${NODE_NAME:-}" ]]; then
                 python3 -c "
 import sys
 sys.path.insert(0, '$script_dir')
@@ -659,16 +663,19 @@ try:
     c = KubeletStatsClient()
     s = c.pod_on_node('${NODE_NAME}', '${POD_NAMESPACE:-default}', '${POD_NAME}')
     if s:
-        print(f'  cpu_usage_core_nanosec = {s.get(\"cpu_usage_core_nanosec\", \"n/a\")}')
-        print(f'  memory_rss_bytes       = {s.get(\"memory_rss_bytes\", \"n/a\")}')
-        print(f'  memory_working_set_bytes = {s.get(\"memory_working_set_bytes\", \"n/a\")}')
+        print(f'  cpu_usage_core_nanosec   = {getattr(s, \"cpu_usage_core_nanosec\", \"n/a\")}')
+        print(f'  mem_rss_bytes            = {getattr(s, \"mem_rss_bytes\", \"n/a\")}')
+        print(f'  mem_working_set_bytes    = {getattr(s, \"mem_working_set_bytes\", \"n/a\")}')
+        print(f'  volume_count             = {getattr(s, \"volume_count\", \"n/a\")}')
     else:
-        print(f'  pod={\"${POD_NAME}\"} on node={\"${NODE_NAME}\"} 未找到 (kubelet 返回空)')
+        pn = '${POD_NAME}'
+        nn = '${NODE_NAME}'
+        print(f'  pod={pn} on node={nn} 未找到 (kubelet 返回空)')
 except Exception as e:
     print(f'  ERROR: {e}')
 " 2>&1
             else
-                echo "  跳过 (需 DEPLOYMENT_MODE=k8s + POD_NAME + NODE_NAME)"
+                echo "  跳过 (需 DEPLOYMENT_MODE=k8s* + POD_NAME + NODE_NAME)"
             fi
             echo ""
             echo "═══════════════════════════════════════════════════════════"

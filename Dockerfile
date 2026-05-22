@@ -42,6 +42,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         tini \
         ca-certificates \
+        jq \
+        bc \
+        gawk \
+        sysstat \
+        net-tools \
+        netcat-openbsd \
+        ethtool \
+        procps \
+        iproute2 \
+        coreutils \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the entire repo to /opt/blockchain-bench. The DaemonSet mounts this
