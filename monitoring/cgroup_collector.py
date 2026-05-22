@@ -368,6 +368,60 @@ def collect_v1(host_paths: Dict[str, str], target_path: str) -> Dict[str, int]:
 # Top-level collect dispatcher
 # ---------------------------------------------------------------------------
 
+def _try_k8s_kubelet_fallback(reason: str) -> Optional[Dict[str, object]]:
+    """v1.4.5 Step 4: Mode E — K8s kubelet /stats/summary fallback.
+
+    Only activates when:
+      DEPLOYMENT_MODE=k8s              (env, set by deployment_mode_detector.sh)
+      AND POD_NAME + POD_NAMESPACE     (env, set by Downward API in daemonset)
+      AND NODE_NAME                    (env, set by Downward API)
+      AND K8s API reachable            (kubelet_stats_client.fetch_node ok)
+
+    Returns 19-field dict with cgroup_meta_source="k8s_fallback:{reason}" on
+    success, or None to let caller emit the original {unmounted,unresolved}
+    fallback. Failure is silent (debug log only) — never raises.
+
+    IO fields stay at 0 (kubelet /stats/summary lacks cgroup io_stat).
+    MEM + CPU are populated from kubelet rate counters.
+    """
+    if os.environ.get("DEPLOYMENT_MODE", "").lower() != "k8s":
+        return None
+    pod_name = os.environ.get("POD_NAME", "")
+    pod_ns = os.environ.get("POD_NAMESPACE", "")
+    node_name = os.environ.get("NODE_NAME", "")
+    if not (pod_name and pod_ns and node_name):
+        return None
+    try:
+        from kubelet_stats_client import KubeletStatsClient
+    except ImportError:
+        # Allow run from any cwd: add this script's dir to path
+        sys.path.insert(0, str(Path(__file__).parent))
+        try:
+            from kubelet_stats_client import KubeletStatsClient
+        except ImportError:
+            return None
+    try:
+        client = KubeletStatsClient()
+        pod = client.pod_on_node(node_name, pod_ns, pod_name)
+        if pod is None:
+            return None
+        out: Dict[str, object] = {f: 0 for f in IO_FIELDS + MEM_FIELDS + CPU_FIELDS}
+        # Map kubelet fields → cgroup_mem_*
+        out["cgroup_mem_anon"] = int(getattr(pod, "mem_rss_bytes", 0) or 0)
+        # working_set = anon + active file pages. We split crudely: file=ws-rss
+        ws = int(getattr(pod, "mem_working_set_bytes", 0) or 0)
+        rss = int(getattr(pod, "mem_rss_bytes", 0) or 0)
+        out["cgroup_mem_file"] = max(0, ws - rss)
+        # CPU: kubelet exposes nanocores (current rate) + cumulative core-nanosec
+        out["cgroup_cpu_usage_usec"] = int(
+            (getattr(pod, "cpu_usage_core_nanosec", 0) or 0) // 1000
+        )
+        out["cgroup_meta_source"] = f"k8s_fallback:{reason}"
+        return out
+    except Exception:
+        return None
+
+
 def collect() -> Dict[str, object]:
     """4-mode dispatcher. Always returns a dict with all 19 fields."""
     host_paths = get_host_paths()
@@ -396,8 +450,11 @@ def collect() -> Dict[str, object]:
                 str(cand1) if cand1.is_dir() else str(cand2)
             )
 
-    # Mode C: unmounted
+    # Mode C: unmounted (try K8s Mode E fallback first)
     if cg_ver == "unknown" or not cg_root:
+        e_result = _try_k8s_kubelet_fallback("unmounted")
+        if e_result is not None:
+            return e_result
         out: Dict[str, object] = {f: 0 for f in IO_FIELDS + MEM_FIELDS + CPU_FIELDS}
         out["cgroup_meta_source"] = "unmounted"
         return out
@@ -408,8 +465,11 @@ def collect() -> Dict[str, object]:
         target = resolve_target_cgroup(host_paths["HOST_PROC"],
                                         os.environ.get("TARGET_PID"))
 
-    # Mode D: target unresolvable → 0/0/0 with explicit source
+    # Mode D: target unresolvable → try Mode E, else 0/0/0 with explicit source
     if target is None:
+        e_result = _try_k8s_kubelet_fallback("unresolved")
+        if e_result is not None:
+            return e_result
         out: Dict[str, object] = {f: 0 for f in IO_FIELDS + MEM_FIELDS + CPU_FIELDS}
         out["cgroup_meta_source"] = "unresolved"
         return out
