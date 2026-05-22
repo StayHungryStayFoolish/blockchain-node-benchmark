@@ -1,0 +1,39 @@
+# Files NOT to copy into the K8s collector image
+# Keeps image small and reproducible.
+
+.git
+.github
+.gitignore
+.githooks
+
+# Local virtualenvs / pycache
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+
+# Test artifacts + temp files
+/tmp/*
+/blockchain-node-benchmark-result/
+analysis-notes/
+*.log
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Local Mac files
+.DS_Store
+
+# Dockerfile-related (no recursion needed)
+.dockerignore
+Dockerfile
+
+# CI artifacts (collector pod doesn't need to run CI itself)
+ci/
+
+# Documentation site (if any)
+docs/
+website/
