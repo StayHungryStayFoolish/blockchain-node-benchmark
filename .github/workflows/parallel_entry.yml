@@ -1,0 +1,51 @@
+name: parallel-entry-trap-guard
+
+# v1.4.6 Step A: enforce ci/check_parallel_entry.sh on every push/PR.
+# Skill: parallel-entry-trap. Locks in the v1.4.5 fix permanence
+# (cgroup_collector / kubelet_stats_client / pod_device_mapper / etc.
+# never silently re-orphan from main pipeline).
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  parallel-entry-guard:
+    name: parallel-entry CI guard + self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Need full history so any git-blame-driven diagnostics in
+          # future iterations don't fail on shallow clones.
+          fetch-depth: 0
+
+      - name: Show bash + grep versions (debug provenance)
+        run: |
+          bash --version | head -1
+          grep --version | head -1
+
+      - name: Make scripts executable
+        run: |
+          chmod +x ci/check_parallel_entry.sh
+          chmod +x tests/test_ci_check_parallel_entry.sh
+
+      - name: Run parallel-entry-trap guard (primary check)
+        run: bash ci/check_parallel_entry.sh
+
+      - name: Run guard's own regression suite (negative-test driven)
+        # T1 POS / T2 missing-file NEG / T3 broken-caller NEG /
+        # T4 comment-only NEG / T5 restore POS / T6 syntax.
+        # This is the meta-test: if someone weakens the guard regex,
+        # this catches it before the weakened guard reaches main.
+        run: bash tests/test_ci_check_parallel_entry.sh
+
+  # Optional: surface the same dependency map as a human-readable
+  # comment on PRs that touch monitoring/ tools/ deploy/k8s/ config/.
+  # Kept minimal; we'll add bot comments only if the team asks.
