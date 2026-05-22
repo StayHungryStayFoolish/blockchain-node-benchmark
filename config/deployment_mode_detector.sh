@@ -133,8 +133,11 @@ detect_deployment_mode() {
     if command -v systemctl >/dev/null 2>&1; then
         for unit in "${DEPLOYMENT_MODE_BUSINESS_UNITS[@]}"; do
             # systemctl list-units exits 0 even when no match; check output
+            # Prefix tolerance: systemd marks failed/not-loaded units with ● (U+25CF),
+            # × (U+00D7), ↻ (U+21BB) etc. Plain \s does NOT match these UTF-8 glyphs,
+            # so we accept any leading non-alphanumeric run. See v1.4.5 round-05 P1.
             if systemctl list-units --all --no-legend --no-pager 2>/dev/null \
-                    | grep -qE "^\s*${unit}([-@]|\.service)" ; then
+                    | grep -qE "^[^a-zA-Z0-9]*${unit}([-@]|\.service)" ; then
                 DEPLOYMENT_MODE="vm_systemd"
                 DEPLOYMENT_MODE_SOURCE="systemd:${unit}"
                 echo "✅ VM + systemd environment detected (unit=$unit)" >&2

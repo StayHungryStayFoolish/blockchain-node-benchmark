@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import ssl
 import sys
 import time
@@ -254,6 +255,14 @@ class K8sApiClient:
             raise K8sApiError(e.code, err_body, url) from e
         except urlerror.URLError as e:
             raise K8sApiError(0, str(e.reason), url) from e
+        # v1.4.5 round-05 P1 (re-opened): on Python 3.8/3.9, SSL handshake
+        # timeouts can bubble up as bare socket.timeout WITHOUT being wrapped
+        # in URLError. Python 3.10+ aliased socket.timeout to TimeoutError,
+        # and the README pins Python 3.8+, so we must catch both explicitly.
+        # Without this, retry logic in _get() misses these and the entire
+        # request fails on the first SSL hiccup.
+        except (socket.timeout, TimeoutError) as e:
+            raise K8sApiError(0, f"timeout after {self.timeout}s: {e}", url) from e
 
     # -----------------------------------------------------------------
     # Object accessors (typed wrappers)
