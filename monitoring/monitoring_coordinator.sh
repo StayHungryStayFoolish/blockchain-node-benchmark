@@ -470,6 +470,9 @@ show_usage() {
     echo "  health               Perform health check"
     echo "  start-monitor <name> Start specified monitoring task"
     echo "  stop-monitor <name>  Stop specified monitoring task"
+    echo "  s5_diag              S5 cgroup/K8s diagnostic triplet (read-only,"
+    echo "                       runs cgroup_collector + pod_device_mapper +"
+    echo "                       kubelet_stats_client once and prints results)"
     echo ""
     echo "Available monitoring tasks:"
     for monitor in "${!MONITOR_TASKS[@]}"; do
@@ -599,6 +602,78 @@ main() {
                 exit 1
             fi
             stop_monitor "$2"
+            ;;
+        "s5_diag")
+            # S5 三件套一次性诊断 (read-only): cgroup_collector + pod_device_mapper
+            # + kubelet_stats_client。给 SE 排查 K8s 部署 cgroup/kubelet 连通性用。
+            local script_dir
+            script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+            echo "═══════════════════════════════════════════════════════════"
+            echo "  S5 三件套诊断 (cgroup + pod_device + kubelet)"
+            echo "═══════════════════════════════════════════════════════════"
+            echo ""
+            echo "[1/3] cgroup_collector --header / --data"
+            echo "───────────────────────────────────────────────────────────"
+            local cg_hdr cg_data
+            cg_hdr="$(python3 "$script_dir/cgroup_collector.py" --header 2>&1 || echo 'ERROR')"
+            cg_data="$(python3 "$script_dir/cgroup_collector.py" --data 2>&1 || echo 'ERROR')"
+            echo "header  ($(echo "$cg_hdr" | tr ',' '\n' | wc -l) fields):"
+            echo "  $cg_hdr"
+            echo "data    ($(echo "$cg_data" | tr ',' '\n' | wc -l) fields):"
+            echo "  $cg_data"
+            local meta_source
+            meta_source="$(echo "$cg_data" | awk -F',' '{print $NF}')"
+            echo "→ cgroup meta_source = $meta_source"
+            echo ""
+            echo "[2/3] pod_device_mapper (map_namespace_pods)"
+            echo "───────────────────────────────────────────────────────────"
+            if [[ "${DEPLOYMENT_MODE:-}" == "k8s" ]]; then
+                python3 -c "
+import sys
+sys.path.insert(0, '$script_dir')
+try:
+    from pod_device_mapper import map_namespace_pods
+    ns = '${POD_NAMESPACE:-default}'
+    result = map_namespace_pods(ns)
+    if result:
+        print(f'  namespace={ns}, pods={len(result)}')
+        for pod, vols in list(result.items())[:5]:
+            print(f'    {pod}: {len(vols)} volume(s)')
+    else:
+        print(f'  namespace={ns}: 无 pod 或 API 不可达')
+except Exception as e:
+    print(f'  ERROR: {e}')
+" 2>&1
+            else
+                echo "  跳过 (DEPLOYMENT_MODE != k8s)"
+            fi
+            echo ""
+            echo "[3/3] kubelet_stats_client (pod_on_node)"
+            echo "───────────────────────────────────────────────────────────"
+            if [[ "${DEPLOYMENT_MODE:-}" == "k8s" && -n "${POD_NAME:-}" && -n "${NODE_NAME:-}" ]]; then
+                python3 -c "
+import sys
+sys.path.insert(0, '$script_dir')
+try:
+    from kubelet_stats_client import KubeletStatsClient
+    c = KubeletStatsClient()
+    s = c.pod_on_node('${NODE_NAME}', '${POD_NAMESPACE:-default}', '${POD_NAME}')
+    if s:
+        print(f'  cpu_usage_core_nanosec = {s.get(\"cpu_usage_core_nanosec\", \"n/a\")}')
+        print(f'  memory_rss_bytes       = {s.get(\"memory_rss_bytes\", \"n/a\")}')
+        print(f'  memory_working_set_bytes = {s.get(\"memory_working_set_bytes\", \"n/a\")}')
+    else:
+        print(f'  pod={\"${POD_NAME}\"} on node={\"${NODE_NAME}\"} 未找到 (kubelet 返回空)')
+except Exception as e:
+    print(f'  ERROR: {e}')
+" 2>&1
+            else
+                echo "  跳过 (需 DEPLOYMENT_MODE=k8s + POD_NAME + NODE_NAME)"
+            fi
+            echo ""
+            echo "═══════════════════════════════════════════════════════════"
+            echo "  诊断完成。三件套均为只读,无副作用。"
+            echo "═══════════════════════════════════════════════════════════"
             ;;
         "-h"|"--help"|"help")
             show_usage
