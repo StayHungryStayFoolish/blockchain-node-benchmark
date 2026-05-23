@@ -382,13 +382,18 @@ case "${BLOCKCHAIN_NODE,,}" in
         MAINNET_RPC_URL="https://mainnet.base.org"
         ;;
     polygon)
-        MAINNET_RPC_URL="https://polygon-rpc.com"
+        # 2026-05-23: 原 https://polygon-rpc.com 已停服(返 "API key disabled, tenant disabled" HTTP 401)
+        # 改用 publicnode 公开 endpoint(与 ethereum 同 provider,实测 eth_blockNumber+eth_getBalance PASS)
+        MAINNET_RPC_URL="https://polygon-bor-rpc.publicnode.com"
         ;;
     scroll)
         MAINNET_RPC_URL="https://rpc.scroll.io"
         ;;
     starknet)
-        MAINNET_RPC_URL="https://starknet-mainnet.public.blastapi.io"
+        # 2026-05-23: 原 https://starknet-mainnet.public.blastapi.io 已停服
+        # (返 "Blast API is no longer available. Please update your integration to use Alchemy's API instead" HTTP 403)
+        # 改用 Lava Network 公开 endpoint(实测 blockNumber/getClassAt/getNonce/getStorageAt/getEvents 全 PASS,spec 0.8.1)
+        MAINNET_RPC_URL="https://rpc.starknet.lava.build"
         ;;
     sui)
         MAINNET_RPC_URL="https://fullnode.mainnet.sui.io:443"
@@ -427,13 +432,13 @@ UNIFIED_BLOCKCHAIN_CONFIG=$(cat <<'EOF'
       ],
       "rpc_methods": {
         "single": "getAccountInfo",
-        "mixed": "getAccountInfo,getBalance,getTokenAccountBalance,getRecentBlockhash,getBlockHeight"
+        "mixed": "getAccountInfo,getBalance,getTokenAccountBalance,getLatestBlockhash,getBlockHeight"
       },
       "param_formats": {
         "getAccountInfo": "single_address",
         "getBalance": "single_address",
         "getTokenAccountBalance": "single_address",
-        "getRecentBlockhash": "no_params",
+        "getLatestBlockhash": "no_params",
         "getBlockHeight": "no_params"
       }
     },
@@ -620,7 +625,7 @@ UNIFIED_BLOCKCHAIN_CONFIG=$(cat <<'EOF'
       "params": {
         "account_count": "ACCOUNT_COUNT",
         "output_file": "ACCOUNTS_OUTPUT_FILE",
-        "target_address": "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+        "target_address": "0x0000000000000000000000000000000000000000000000000000000000000005",
         "max_signatures": "ACCOUNT_MAX_SIGNATURES",
         "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
         "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
@@ -633,13 +638,14 @@ UNIFIED_BLOCKCHAIN_CONFIG=$(cat <<'EOF'
       "system_addresses": ["0x1", "0x2", "0x3"],
       "rpc_methods": {
         "single": "sui_getObject",
-        "mixed": "sui_getObject,sui_getObjectsOwnedByAddress,sui_getTotalTransactionBlocks,sui_getLatestCheckpointSequenceNumber"
+        "mixed": "sui_getObject,sui_getTotalTransactionBlocks,sui_getLatestCheckpointSequenceNumber,suix_getReferenceGasPrice,sui_getChainIdentifier"
       },
       "param_formats": {
         "sui_getObject": "address_with_options",
-        "sui_getObjectsOwnedByAddress": "single_address",
         "sui_getTotalTransactionBlocks": "no_params",
-        "sui_getLatestCheckpointSequenceNumber": "no_params"
+        "sui_getLatestCheckpointSequenceNumber": "no_params",
+        "suix_getReferenceGasPrice": "no_params",
+        "sui_getChainIdentifier": "no_params"
       }
     }
   }
