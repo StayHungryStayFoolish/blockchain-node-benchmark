@@ -1,0 +1,169 @@
+[
+  {
+    "chain": "solana",
+    "method": "getAccountInfo",
+    "tier": "tier-mid",
+    "param_format": "single_address",
+    "params_sent": [
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    ],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://solana.com/docs/rpc",
+      "method": "URL path in /http/, not /deprecated/"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "dict",
+      "result_excerpt": "{\"context\": {\"apiVersion\": \"4.0.0\", \"slot\": 421670877}, \"value\": {\"data\": \"DK9N4DzFoA11J4H9JqhtRCAJbt1Z4CbmR9F5yhoo65zo5wagbiLzscNYmfDf8CmbRbjrrtm3fcVEz9oybQy1RNGdco4kTxDSVJzG7VmqJYyfceA\", \"executable"
+    },
+    "L3_schema": {
+      "status": "NEEDS_FULL_PAYLOAD",
+      "detail": "Expected fields: ['result.value']",
+      "_todo": "需要在 L2 阶段就保留 full response 以便深度访问"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "solana",
+    "method": "getBalance",
+    "tier": "tier-low",
+    "param_format": "single_address",
+    "params_sent": [
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    ],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://solana.com/docs/rpc",
+      "method": "URL path in /http/, not /deprecated/"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "dict",
+      "result_excerpt": "{\"context\": {\"apiVersion\": \"4.0.0\", \"slot\": 421670880}, \"value\": 498150005540}"
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "solana",
+    "method": "getTokenAccountBalance",
+    "tier": "tier-mid",
+    "param_format": "single_address",
+    "params_sent": [
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    ],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://solana.com/docs/rpc",
+      "method": "URL path in /http/, not /deprecated/"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: Invalid param: not a Token account",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"error\": {\"code\": -32602, \"message\": \"Invalid param: not a Token account\"}, \"id\": 1}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "solana",
+    "method": "getLatestBlockhash",
+    "tier": "tier-mid",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://solana.com/docs/rpc",
+      "method": "URL path in /http/, not /deprecated/"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "dict",
+      "result_excerpt": "{\"context\": {\"apiVersion\": \"4.0.0\", \"slot\": 421670887}, \"value\": {\"blockhash\": \"7WFumg93vVdbRrHSxm7vi2UiYi9P2ggUzBb1BBFFW3qf\", \"lastValidBlockHeight\": 399759139}}"
+    },
+    "L3_schema": {
+      "status": "NEEDS_FULL_PAYLOAD",
+      "detail": "Expected fields: ['result.value', 'result.value.blockhash']",
+      "_todo": "需要在 L2 阶段就保留 full response 以便深度访问"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "solana",
+    "method": "getBlockHeight",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://solana.com/docs/rpc",
+      "method": "URL path in /http/, not /deprecated/"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "int",
+      "result_excerpt": "399758991"
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "solana",
+    "method": "getSignaturesForAddress",
+    "tier": "tier-mid",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://solana.com/docs/rpc",
+      "method": "URL path in /http/, not /deprecated/"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: `params` should have at least 1 argument(s)",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"error\": {\"code\": -32602, \"message\": \"`params` should have at least 1 argument(s)\"}, \"id\": 1}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "solana",
+    "method": "getTransaction",
+    "tier": "tier-mid",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://solana.com/docs/rpc",
+      "method": "URL path in /http/, not /deprecated/"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: `params` should have at least 1 argument(s)",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"error\": {\"code\": -32602, \"message\": \"`params` should have at least 1 argument(s)\"}, \"id\": 1}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": null
+  }
+]

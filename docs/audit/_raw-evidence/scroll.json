@@ -1,0 +1,143 @@
+[
+  {
+    "chain": "scroll",
+    "method": "eth_getBalance",
+    "tier": "tier-low",
+    "param_format": "address_latest",
+    "params_sent": [
+      "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4",
+      "latest"
+    ],
+    "verdict": "🟡 P1_NOT_IN_SPEC",
+    "L1_doc": {
+      "status": "NOT_IN_SPEC",
+      "evidence_url": "https://docs.scroll.io/en/developers/developer-quickstart/",
+      "method": "'eth_getBalance' NOT found in execution-apis spec body"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x0\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "scroll",
+    "method": "eth_getTransactionCount",
+    "tier": "tier-low",
+    "param_format": "address_latest",
+    "params_sent": [
+      "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4",
+      "latest"
+    ],
+    "verdict": "🟡 P1_NOT_IN_SPEC",
+    "L1_doc": {
+      "status": "NOT_IN_SPEC",
+      "evidence_url": "https://docs.scroll.io/en/developers/developer-quickstart/",
+      "method": "'eth_getTransactionCount' NOT found in execution-apis spec body"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x1\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "scroll",
+    "method": "eth_blockNumber",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟡 P1_NOT_IN_SPEC",
+    "L1_doc": {
+      "status": "NOT_IN_SPEC",
+      "evidence_url": "https://docs.scroll.io/en/developers/developer-quickstart/",
+      "method": "'eth_blockNumber' NOT found in execution-apis spec body"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x203e00a\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "scroll",
+    "method": "eth_gasPrice",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟡 P1_NOT_IN_SPEC",
+    "L1_doc": {
+      "status": "NOT_IN_SPEC",
+      "evidence_url": "https://docs.scroll.io/en/developers/developer-quickstart/",
+      "method": "'eth_gasPrice' NOT found in execution-apis spec body"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x1d52c\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "scroll",
+    "method": "eth_getLogs",
+    "tier": "tier-high",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_NOT_IN_SPEC",
+    "L1_doc": {
+      "status": "NOT_IN_SPEC",
+      "evidence_url": "https://docs.scroll.io/en/developers/developer-quickstart/",
+      "method": "'eth_getLogs' NOT found in execution-apis spec body"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: missing value for required argument 0",
+      "raw_excerpt": "{\"id\": 1, \"jsonrpc\": \"2.0\", \"error\": {\"code\": -32602, \"message\": \"missing value for required argument 0\"}}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": {
+      "status": "ERROR_THROWN_AT_RPC_LAYER",
+      "detail": "Bad params triggered JSON-RPC error (top-level error field) — framework needs to handle this",
+      "error_code": -32602,
+      "error_msg": "invalid argument 0: json: cannot unmarshal string into Go value of type filters.input"
+    }
+  },
+  {
+    "chain": "scroll",
+    "method": "eth_getTransactionByHash",
+    "tier": "tier-mid",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_NOT_IN_SPEC",
+    "L1_doc": {
+      "status": "NOT_IN_SPEC",
+      "evidence_url": "https://docs.scroll.io/en/developers/developer-quickstart/",
+      "method": "'eth_getTransactionByHash' NOT found in execution-apis spec body"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: missing value for required argument 0",
+      "raw_excerpt": "{\"id\": 1, \"jsonrpc\": \"2.0\", \"error\": {\"code\": -32602, \"message\": \"missing value for required argument 0\"}}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": null
+  }
+]

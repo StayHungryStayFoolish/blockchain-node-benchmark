@@ -1,0 +1,157 @@
+[
+  {
+    "chain": "starknet",
+    "method": "starknet_getClassAt",
+    "tier": "tier-mid",
+    "param_format": "latest_address",
+    "params_sent": [
+      "latest",
+      "0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8"
+    ],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "DOC_ERROR",
+      "evidence_url": "https://docs.starknet.io/architecture-and-concepts/network-architecture/rpc-providers/",
+      "method": "HTTPError: HTTP Error 404: Not Found"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "dict",
+      "result_excerpt": "{\"abi\": \"[{\\\"type\\\": \\\"impl\\\", \\\"name\\\": \\\"ERC20MetadataImpl\\\", \\\"interface_name\\\": \\\"openzeppelin_interfaces::token::erc20::IERC20Metadata\\\"}, {\\\"type\\\": \\\"struct\\\", \\\"name\\\": \\\"core::byte_array::Byt"
+    },
+    "L3_schema": {
+      "status": "NEEDS_FULL_PAYLOAD",
+      "detail": "Expected fields: ['result']",
+      "_todo": "需要在 L2 阶段就保留 full response 以便深度访问"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "starknet",
+    "method": "starknet_getNonce",
+    "tier": "tier-mid",
+    "param_format": "latest_address",
+    "params_sent": [
+      "latest",
+      "0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8"
+    ],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "DOC_ERROR",
+      "evidence_url": "https://docs.starknet.io/architecture-and-concepts/network-architecture/rpc-providers/",
+      "method": "HTTPError: HTTP Error 404: Not Found"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x0\""
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "No expected fields defined for this method"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "starknet",
+    "method": "starknet_getStorageAt",
+    "tier": "tier-mid",
+    "param_format": "address_key_latest",
+    "params_sent": [
+      "0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8",
+      "0x0",
+      "latest"
+    ],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "DOC_ERROR",
+      "evidence_url": "https://docs.starknet.io/architecture-and-concepts/network-architecture/rpc-providers/",
+      "method": "HTTPError: HTTP Error 404: Not Found"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x0\""
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "No expected fields defined for this method"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "starknet",
+    "method": "starknet_blockNumber",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "DOC_ERROR",
+      "evidence_url": "https://docs.starknet.io/architecture-and-concepts/network-architecture/rpc-providers/",
+      "method": "HTTPError: HTTP Error 404: Not Found"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "int",
+      "result_excerpt": "10084664"
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "starknet",
+    "method": "starknet_getEvents",
+    "tier": "tier-high",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "DOC_ERROR",
+      "evidence_url": "https://docs.starknet.io/architecture-and-concepts/network-architecture/rpc-providers/",
+      "method": "HTTPError: HTTP Error 404: Not Found"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: Invalid params",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"error\": {\"code\": -32602, \"message\": \"Invalid params\", \"data\": {\"reason\": \"missing field: \\\"filter\\\"\"}}}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": {
+      "status": "ERROR_THROWN_AT_RPC_LAYER",
+      "detail": "Bad params triggered JSON-RPC error (top-level error field) — framework needs to handle this",
+      "error_code": -32602,
+      "error_msg": "Invalid params"
+    }
+  },
+  {
+    "chain": "starknet",
+    "method": "starknet_getTransactionByHash",
+    "tier": "tier-mid",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "DOC_ERROR",
+      "evidence_url": "https://docs.starknet.io/architecture-and-concepts/network-architecture/rpc-providers/",
+      "method": "HTTPError: HTTP Error 404: Not Found"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: Invalid params",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"error\": {\"code\": -32602, \"message\": \"Invalid params\", \"data\": {\"reason\": \"missing field: \\\"transaction_hash\\\"\"}}}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": null
+  }
+]

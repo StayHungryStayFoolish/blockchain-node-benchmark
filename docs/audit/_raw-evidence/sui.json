@@ -1,0 +1,186 @@
+[
+  {
+    "chain": "sui",
+    "method": "sui_getObject",
+    "tier": "tier-mid",
+    "param_format": "address_with_options",
+    "params_sent": [
+      "0x0000000000000000000000000000000000000000000000000000000000000005",
+      {
+        "showType": true,
+        "showOwner": true
+      }
+    ],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "SKIPPED",
+      "evidence_url": "https://docs.sui.io/sui-api-ref",
+      "method": "Sui docs structure不易自动判别,L1 skipped, rely on L2"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "dict",
+      "result_excerpt": "{\"data\": {\"objectId\": \"0x0000000000000000000000000000000000000000000000000000000000000005\", \"version\": \"891490027\", \"digest\": \"9GEFuEDn35ckKebszVoUodZrs6oXAHFByEqh3XNcuMsm\", \"type\": \"0x3::sui_system::"
+    },
+    "L3_schema": {
+      "status": "NEEDS_FULL_PAYLOAD",
+      "detail": "Expected fields: ['result.data']",
+      "_todo": "需要在 L2 阶段就保留 full response 以便深度访问"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "sui",
+    "method": "sui_getTotalTransactionBlocks",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "SKIPPED",
+      "evidence_url": "https://docs.sui.io/sui-api-ref",
+      "method": "Sui docs structure不易自动判别,L1 skipped, rely on L2"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"5221450196\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "sui",
+    "method": "sui_getLatestCheckpointSequenceNumber",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "SKIPPED",
+      "evidence_url": "https://docs.sui.io/sui-api-ref",
+      "method": "Sui docs structure不易自动判别,L1 skipped, rely on L2"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"278815968\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "sui",
+    "method": "suix_getReferenceGasPrice",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "SKIPPED",
+      "evidence_url": "https://docs.sui.io/sui-api-ref",
+      "method": "Sui docs structure不易自动判别,L1 skipped, rely on L2"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"100\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "sui",
+    "method": "sui_getChainIdentifier",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "SKIPPED",
+      "evidence_url": "https://docs.sui.io/sui-api-ref",
+      "method": "Sui docs structure不易自动判别,L1 skipped, rely on L2"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"35834a8a\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "sui",
+    "method": "suix_getOwnedObjects",
+    "tier": "tier-mid",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "SKIPPED",
+      "evidence_url": "https://docs.sui.io/sui-api-ref",
+      "method": "Sui docs structure不易自动判别,L1 skipped, rely on L2"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: Invalid params",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"error\": {\"code\": -32602, \"message\": \"Invalid params\", \"data\": \"No more params\"}}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "sui",
+    "method": "sui_getTransactionBlock",
+    "tier": "tier-mid",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "SKIPPED",
+      "evidence_url": "https://docs.sui.io/sui-api-ref",
+      "method": "Sui docs structure不易自动判别,L1 skipped, rely on L2"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: Invalid params",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"error\": {\"code\": -32602, \"message\": \"Invalid params\", \"data\": \"No more params\"}}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "sui",
+    "method": "suix_queryTransactionBlocks",
+    "tier": "tier-mid",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "SKIPPED",
+      "evidence_url": "https://docs.sui.io/sui-api-ref",
+      "method": "Sui docs structure不易自动判别,L1 skipped, rely on L2"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: Invalid params",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"error\": {\"code\": -32602, \"message\": \"Invalid params\", \"data\": \"No more params\"}}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": null
+  }
+]

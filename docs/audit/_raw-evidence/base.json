@@ -1,0 +1,143 @@
+[
+  {
+    "chain": "base",
+    "method": "eth_getBalance",
+    "tier": "tier-low",
+    "param_format": "address_latest",
+    "params_sent": [
+      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "latest"
+    ],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://docs.base.org/chain/network-information",
+      "method": "'eth_getBalance' found in execution-apis spec"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x22d1a2c0d26ed3\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "base",
+    "method": "eth_getTransactionCount",
+    "tier": "tier-low",
+    "param_format": "address_latest",
+    "params_sent": [
+      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "latest"
+    ],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://docs.base.org/chain/network-information",
+      "method": "'eth_getTransactionCount' found in execution-apis spec"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x1\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "base",
+    "method": "eth_blockNumber",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://docs.base.org/chain/network-information",
+      "method": "'eth_blockNumber' found in execution-apis spec"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x2c3bc55\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "base",
+    "method": "eth_gasPrice",
+    "tier": "tier-low",
+    "param_format": "no_params",
+    "params_sent": [],
+    "verdict": "🟢 PASS",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://docs.base.org/chain/network-information",
+      "method": "'eth_gasPrice' found in execution-apis spec"
+    },
+    "L2_endpoint": {
+      "status": "PASS",
+      "detail": "result returned",
+      "result_type": "str",
+      "result_excerpt": "\"0x5b8d80\""
+    },
+    "L3_schema": null,
+    "L4_error_semantics": null
+  },
+  {
+    "chain": "base",
+    "method": "eth_getLogs",
+    "tier": "tier-high",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://docs.base.org/chain/network-information",
+      "method": "'eth_getLogs' found in execution-apis spec"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: Invalid params",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"error\": {\"code\": -32602, \"message\": \"Invalid params\", \"data\": \"No more params\"}, \"id\": 1}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": {
+      "status": "ERROR_THROWN_AT_RPC_LAYER",
+      "detail": "Bad params triggered JSON-RPC error (top-level error field) — framework needs to handle this",
+      "error_code": -32602,
+      "error_msg": "Invalid params"
+    }
+  },
+  {
+    "chain": "base",
+    "method": "eth_getTransactionByHash",
+    "tier": "tier-mid",
+    "param_format": null,
+    "params_sent": [],
+    "verdict": "🟡 P1_RPC_ERROR",
+    "L1_doc": {
+      "status": "ACTIVE",
+      "evidence_url": "https://docs.base.org/chain/network-information",
+      "method": "'eth_getTransactionByHash' found in execution-apis spec"
+    },
+    "L2_endpoint": {
+      "status": "RPC_ERROR",
+      "detail": "code=-32602: Invalid params",
+      "raw_excerpt": "{\"jsonrpc\": \"2.0\", \"error\": {\"code\": -32602, \"message\": \"Invalid params\", \"data\": \"No more params\"}, \"id\": 1}"
+    },
+    "L3_schema": {
+      "status": "SKIPPED",
+      "detail": "L2 not PASS"
+    },
+    "L4_error_semantics": null
+  }
+]
