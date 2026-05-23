@@ -108,6 +108,32 @@ lsblk
 
 ### 前置条件
 
+最快的方式是使用项目自带的依赖安装脚本：
+
+```bash
+# 交互式安装（每个需要 sudo 的步骤会先询问）
+bash scripts/install_deps.sh
+
+# 非交互式（CI / Docker / 无人值守 VM）
+bash scripts/install_deps.sh --yes
+
+# 仅检查模式 — 只列出缺什么，不做任何修改
+bash scripts/install_deps.sh --check
+
+# 查看所有参数
+bash scripts/install_deps.sh --help
+```
+
+安装器涵盖：
+- **系统包**（`sysstat bc jq net-tools procps`）— 自动检测 apt/yum/dnf/apk
+- **Python 包**（来自 `requirements.txt`）— 自动处理 PEP 668（Debian 12+）
+- **vegeta v12.12.0** — 锁定版本，SHA256 校验，安装到 `~/bin/vegeta`
+
+支持的发行版：Ubuntu、Debian、RHEL、CentOS、Rocky、AlmaLinux、Amazon Linux、Fedora、Alpine。
+
+<details>
+<summary>手动安装（如果您希望逐步控制）</summary>
+
 ```bash
 # 安装 Vegeta v12.12.0（QPS 测试工具）
 wget https://github.com/tsenart/vegeta/releases/download/v12.12.0/vegeta_12.12.0_linux_amd64.tar.gz
@@ -115,8 +141,10 @@ tar -xzf vegeta_12.12.0_linux_amd64.tar.gz
 sudo mv vegeta /usr/local/bin/
 vegeta -version  # 验证安装
 
-# 安装系统监控工具
-sudo apt-get install sysstat  # 提供 iostat、mpstat、sar
+# 安装系统监控工具（框架硬依赖 — 全部必需）
+sudo apt-get install -y sysstat bc jq net-tools procps
+# sysstat → iostat/mpstat/sar  |  bc → shell 脚本中的算术运算
+# jq → JSON 解析  |  net-tools → netstat  |  procps → ps/top
 
 # 安装 Python 和虚拟环境支持
 sudo apt-get install python3 python3-venv
@@ -132,6 +160,8 @@ python3 --version
 
 # 安装 Python 依赖（从项目根目录执行）
 pip3 install -r requirements.txt
+# 注意：在 Debian 12+（PEP 668）上，如果您跳过了上面的 venv，请使用：
+#   pip3 install --user --break-system-packages -r requirements.txt
 
 # 验证所有工具已安装
 which vegeta    # QPS 测试工具
@@ -139,6 +169,8 @@ which iostat    # I/O 监控工具
 which mpstat    # CPU 监控工具
 which sar       # 网络监控工具
 ```
+
+</details>
 
 ### 基本使用
 

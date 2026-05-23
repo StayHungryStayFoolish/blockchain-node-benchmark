@@ -108,6 +108,32 @@ lsblk
 
 ### Prerequisites
 
+The fastest way is to use the bundled dependency installer:
+
+```bash
+# Interactive install (asks before each step that needs sudo)
+bash scripts/install_deps.sh
+
+# Non-interactive (CI / Docker / unattended VMs)
+bash scripts/install_deps.sh --yes
+
+# Audit only — check what's missing without installing anything
+bash scripts/install_deps.sh --check
+
+# Show all flags
+bash scripts/install_deps.sh --help
+```
+
+The installer covers:
+- **System packages** (`sysstat bc jq net-tools procps`) — auto-detects apt/yum/dnf/apk
+- **Python packages** (from `requirements.txt`) — handles PEP 668 (Debian 12+) automatically
+- **vegeta v12.12.0** — pinned version, SHA256 verified, installed to `~/bin/vegeta`
+
+Supported distros: Ubuntu, Debian, RHEL, CentOS, Rocky, AlmaLinux, Amazon Linux, Fedora, Alpine.
+
+<details>
+<summary>Manual install (if you prefer step-by-step control)</summary>
+
 ```bash
 # Install Vegeta v12.12.0 (QPS testing tool)
 wget https://github.com/tsenart/vegeta/releases/download/v12.12.0/vegeta_12.12.0_linux_amd64.tar.gz
@@ -115,8 +141,10 @@ tar -xzf vegeta_12.12.0_linux_amd64.tar.gz
 sudo mv vegeta /usr/local/bin/
 vegeta -version  # Verify installation
 
-# Install system monitoring tools
-sudo apt-get install sysstat  # Provides iostat, mpstat, sar
+# Install system monitoring tools (framework hard deps — all required)
+sudo apt-get install -y sysstat bc jq net-tools procps
+# sysstat → iostat/mpstat/sar  |  bc → arithmetic in shell scripts
+# jq → JSON parsing  |  net-tools → netstat  |  procps → ps/top
 
 # Install Python and virtual environment support
 sudo apt-get install python3 python3-venv
@@ -132,6 +160,8 @@ python3 --version
 
 # Install Python dependencies (from project root directory)
 pip3 install -r requirements.txt
+# Note: on Debian 12+ (PEP 668), if you skip the venv above, use:
+#   pip3 install --user --break-system-packages -r requirements.txt
 
 # Verify all tools are installed
 which vegeta    # QPS testing tool
@@ -139,6 +169,8 @@ which iostat    # I/O monitoring tool
 which mpstat    # CPU monitoring tool
 which sar       # Network monitoring tool
 ```
+
+</details>
 
 ### Basic Usage
 
