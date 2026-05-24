@@ -233,6 +233,84 @@ def test_rest_requires_env_and_path_map():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Test 8 (S3-A): JsonRpc new formats — block_number / block_number_int /
+#                transaction_hash / eth_call_object_latest / object_single
+# ─────────────────────────────────────────────────────────────────────────────
+def test_jsonrpc_s3a_new_formats():
+    print("\n[8] JsonRpc S3-A new formats (5 EVM-compat chains)")
+    a = get_adapter("arbitrum")  # any jsonrpc chain works
+    url = "http://x"
+
+    # block_number → ["latest", false]
+    t = a.build_vegeta_target("eth_getBlockByNumber", "0xabc", url, "block_number")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"] == ["latest", False], f"block_number wrong: {body['params']}"
+    _ok(f"block_number → {body['params']}")
+
+    # block_number_int → [<int>]
+    t = a.build_vegeta_target("zks_getBlockDetails", "60100000", url, "block_number_int")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"] == [60100000], f"block_number_int wrong: {body['params']}"
+    _ok(f"block_number_int (int address) → {body['params']}")
+    # fallback when address not int-parseable
+    t = a.build_vegeta_target("zks_getBlockDetails", "not_an_int", url, "block_number_int")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"] == [1], f"block_number_int fallback wrong: {body['params']}"
+    _ok(f"block_number_int (bad address) → fallback {body['params']}")
+
+    # transaction_hash → [<tx_hash>]
+    # with valid 0x + 64-hex address-as-hash:
+    fake_hash = "0x" + "ab" * 32
+    t = a.build_vegeta_target("eth_getTransactionReceipt", fake_hash, url, "transaction_hash")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"] == [fake_hash], f"transaction_hash wrong: {body['params']}"
+    _ok(f"transaction_hash (valid) → {body['params'][0][:18]}...")
+    # fallback when address is not a tx hash shape:
+    t = a.build_vegeta_target("eth_getTransactionReceipt", "0xshort", url, "transaction_hash")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"] == ["0x" + "0" * 64], f"transaction_hash fallback wrong: {body['params']}"
+    _ok(f"transaction_hash (short addr) → fallback {body['params'][0][:18]}...")
+
+    # eth_call_object_latest → [{to, data}, "latest"]
+    t = a.build_vegeta_target("eth_call", "0xc0ffee", url, "eth_call_object_latest")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"][1] == "latest", f"eth_call missing latest: {body['params']}"
+    assert body["params"][0]["to"] == "0xc0ffee", f"eth_call to wrong: {body['params']}"
+    assert body["params"][0]["data"].startswith("0x70a08231"), f"data missing balanceOf selector: {body['params']}"
+    _ok(f"eth_call_object_latest → [{{to,data}}, latest]")
+
+    # object_single → [{from, to, value}]
+    t = a.build_vegeta_target("linea_estimateGas", "0xc0ffee", url, "object_single")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert isinstance(body["params"], list) and len(body["params"]) == 1
+    assert body["params"][0]["from"] == "0xc0ffee"
+    assert body["params"][0]["value"] == "0x1"
+    _ok(f"object_single → [{{from,to,value}}] single-elem list")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 9 (S3-A): 5 EVM-compat chains have only standard-enum param_formats
+# ─────────────────────────────────────────────────────────────────────────────
+def test_evm_compat_5chains_standard_enum():
+    print("\n[9] EVM-compat 5 chains: param_formats ⊂ adapter standard enum")
+    STANDARD = {
+        "no_params", "single_address", "address_latest", "latest_address",
+        "address_storage_latest", "address_key_latest", "address_with_options",
+        "block_number", "block_number_int", "transaction_hash",
+        "eth_call_object_latest", "object_single",
+    }
+    EVM_COMPAT = ["arbitrum", "optimism", "zksync-era", "linea", "avalanche-c"]
+    for chain in EVM_COMPAT:
+        p = REPO / "config" / "chains" / f"{chain}.json"
+        data = json.loads(p.read_text())
+        pf = data.get("param_formats", {})
+        bad = {m: f for m, f in pf.items() if f not in STANDARD}
+        if bad:
+            _fail(f"{chain} has nonstandard formats: {bad}")
+        _ok(f"{chain}: {len(pf)} formats all standard")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
@@ -244,6 +322,8 @@ def main():
         test_health_check_requests,
         test_bitcoin_auth,
         test_rest_requires_env_and_path_map,
+        test_jsonrpc_s3a_new_formats,
+        test_evm_compat_5chains_standard_enum,
     ]
     print(f"Running {len(tests)} test groups for chain_adapters")
     for t in tests:

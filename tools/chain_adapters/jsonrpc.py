@@ -44,6 +44,7 @@ class JsonRpcAdapter(ChainAdapter):
 
     @staticmethod
     def _build_params(param_format: str, address: str) -> list:
+        # Baseline 7 formats (S2)
         if param_format == "no_params":
             return []
         if param_format == "single_address":
@@ -57,10 +58,41 @@ class JsonRpcAdapter(ChainAdapter):
         if param_format == "address_key_latest":
             return [address, "0x1", "latest"]
         if param_format == "address_with_options":
+            # Sui-style: [addr, {showType, showContent, showDisplay}]
             return [
                 address,
                 {"showType": True, "showContent": True, "showDisplay": False},
             ]
+        # S3-A: EVM standard formats (arbitrum/optimism/zksync-era/linea/avalanche-c)
+        if param_format == "block_number":
+            # eth_getBlockByNumber → ["latest", false]   (don't return full txs)
+            return ["latest", False]
+        if param_format == "block_number_int":
+            # zks_getBlockDetails / similar → [<int>]
+            # Use a recent block number placeholder; production callers should
+            # override via injected `address` (parseable as int) for real load
+            try:
+                bn = int(address)
+            except (TypeError, ValueError):
+                bn = 1  # safe fallback — node returns null but request is valid
+            return [bn]
+        if param_format == "transaction_hash":
+            # eth_getTransactionByHash/Receipt → [<tx_hash>]
+            # `address` arg is repurposed as tx_hash by the caller; if not given,
+            # use a 32-byte placeholder (vegeta still gets a syntactically valid
+            # request and node returns null result, which counts as success)
+            tx_hash = address if address.startswith("0x") and len(address) == 66 else "0x" + "0" * 64
+            return [tx_hash]
+        if param_format == "eth_call_object_latest":
+            # eth_call → [{to, data}, "latest"]
+            # data = balanceOf(0x0)  → 0x70a08231 + 32-byte padded zero
+            return [
+                {"to": address, "data": "0x70a08231" + "0" * 64},
+                "latest",
+            ]
+        if param_format == "object_single":
+            # linea_estimateGas / similar → [{from, to, value, ...}] (no latest)
+            return [{"from": address, "to": address, "value": "0x1"}]
         # default fallback (matches old target_generator.sh L107)
         return [address]
 

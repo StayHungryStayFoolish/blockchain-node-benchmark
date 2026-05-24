@@ -313,6 +313,34 @@ def handle_evm(method: str, params: List[Any], chain: str = "ethereum") -> Any:
         return hex(50)
     if method == "web3_clientVersion":
         return "Mock/v1.0.0-mock/linux-amd64/go1.21"
+    # S3-A: L2 chain-specific methods (zksync-era / linea / arbitrum / optimism)
+    if method == "zks_L1BatchNumber":
+        return hex(block // 1000)  # L1 batch roughly 1/1000 of L2 block
+    if method == "zks_L1ChainId":
+        return "0x1"  # mainnet
+    if method == "zks_getBlockDetails":
+        bn = params[0] if params else block
+        return {
+            "number": bn,
+            "l1BatchNumber": bn // 1000,
+            "timestamp": int(time.time()),
+            "l1TxCount": 0, "l2TxCount": 1,
+            "rootHash": _fake_tx_hash(),
+            "status": "verified",
+            "commitTxHash": _fake_tx_hash(),
+            "committedAt": "2026-05-23T00:00:00Z",
+            "proveTxHash": _fake_tx_hash(),
+            "provenAt": "2026-05-23T01:00:00Z",
+            "executeTxHash": _fake_tx_hash(),
+            "executedAt": "2026-05-23T04:30:00Z",
+            "baseSystemContractsHashes": {"bootloader": "0x" + "0"*64, "default_aa": "0x" + "0"*64},
+        }
+    if method == "linea_estimateGas":
+        return {
+            "gasLimit": "0x5208",
+            "baseFeePerGas": "0x7",
+            "priorityFeePerGas": "0x25d1eb6",
+        }
     return None
 
 
@@ -419,6 +447,13 @@ CHAIN_HANDLERS = {
     "scroll": handle_evm,
     "starknet": handle_starknet,
     "sui": handle_sui,
+    # S3-A: EVM-compat 5 chains (full EVM JSON-RPC + chain-specific methods
+    # like zks_* / linea_* handled in handle_evm directly)
+    "arbitrum": handle_evm,
+    "optimism": handle_evm,
+    "zksync-era": handle_evm,
+    "linea": handle_evm,
+    "avalanche-c": handle_evm,
 }
 
 

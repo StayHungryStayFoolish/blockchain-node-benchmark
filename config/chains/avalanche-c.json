@@ -6,7 +6,7 @@
     "eth_getBalance": "address_latest",
     "eth_getBlockByNumber": "block_number",
     "eth_getTransactionByHash": "transaction_hash",
-    "eth_call": "address_with_options"
+    "eth_call": "eth_call_object_latest"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -51,6 +51,7 @@
     "original_notes": "EVM-equivalent (Coreth=geth fork); 100% 复用 EthereumAdapter; chain_id=43114; ~0.93s/block",
     "adapter_required": false,
     "adapter_family": "jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "s3_a_fix": "translate baseline address_with_options→eth_call_object_latest for EVM call methods"
   }
 }

@@ -6,7 +6,7 @@
     "eth_getBalance": "address_latest",
     "eth_getBlockByNumber": "block_number",
     "eth_getTransactionByHash": "transaction_hash",
-    "linea_estimateGas": "address_with_options"
+    "linea_estimateGas": "object_single"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -52,6 +52,7 @@
     "original_notes": "ZK Rollup Type 2 (字节码等价); chain_id=59144; 仅 3 个 linea_* method; SMT/Mimc trie; baseFee 锁 7 wei; 标准 EOA",
     "adapter_required": false,
     "adapter_family": "jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "s3_a_fix": "linea_estimateGas uses [{from,to,value}] not Sui options"
   }
 }
