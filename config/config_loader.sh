@@ -404,254 +404,6 @@ case "${BLOCKCHAIN_NODE,,}" in
         ;;
 esac
 
-UNIFIED_BLOCKCHAIN_CONFIG=$(cat <<'EOF'
-{
-  "blockchains": {
-    "solana": {
-      "chain_type": "solana",
-      "rpc_url": "LOCAL_RPC_URL",
-      "params": {
-        "account_count": "ACCOUNT_COUNT",
-        "output_file": "ACCOUNTS_OUTPUT_FILE",
-        "target_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-      },
-      "methods": {
-        "get_signatures": "getSignaturesForAddress",
-        "get_transaction": "getTransaction"
-      },
-      "system_addresses": [
-        "11111111111111111111111111111111",
-        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
-        "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
-        "SysvarRent111111111111111111111111111111111",
-        "ComputeBudget111111111111111111111111111111"
-      ],
-      "rpc_methods": {
-        "single": "getAccountInfo",
-        "mixed": "getAccountInfo,getBalance,getTokenAccountBalance,getLatestBlockhash,getBlockHeight"
-      },
-      "param_formats": {
-        "getAccountInfo": "single_address",
-        "getBalance": "single_address",
-        "getTokenAccountBalance": "single_address",
-        "getLatestBlockhash": "no_params",
-        "getBlockHeight": "no_params"
-      }
-    },
-    "ethereum": {
-      "chain_type": "ethereum",
-      "rpc_url": "LOCAL_RPC_URL",
-      "params": {
-        "account_count": "ACCOUNT_COUNT",
-        "output_file": "ACCOUNTS_OUTPUT_FILE",
-        "target_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-      },
-      "methods": {
-        "get_logs": "eth_getLogs",
-        "get_transaction": "eth_getTransactionByHash"
-      },
-      "system_addresses": [
-        "0x0000000000000000000000000000000000000000",
-        "0x000000000000000000000000000000000000dead"
-      ],
-      "rpc_methods": {
-        "single": "eth_getBalance",
-        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-      },
-      "param_formats": {
-        "eth_getBalance": "address_latest",
-        "eth_getTransactionCount": "address_latest",
-        "eth_blockNumber": "no_params",
-        "eth_gasPrice": "no_params"
-      }
-    },
-    "bsc": {
-      "chain_type": "bsc",
-      "rpc_url": "LOCAL_RPC_URL",
-      "params": {
-        "account_count": "ACCOUNT_COUNT",
-        "output_file": "ACCOUNTS_OUTPUT_FILE",
-        "target_address": "0x250632378E573c6Be1AC2f97Fcdf00515d0Aa91B",
-        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-      },
-      "methods": {
-        "get_logs": "eth_getLogs",
-        "get_transaction": "eth_getTransactionByHash"
-      },
-      "system_addresses": [
-        "0x0000000000000000000000000000000000000000",
-        "0x000000000000000000000000000000000000dead"
-      ],
-      "rpc_methods": {
-        "single": "eth_getBalance",
-        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-      },
-      "param_formats": {
-        "eth_getBalance": "address_latest",
-        "eth_getTransactionCount": "address_latest",
-        "eth_blockNumber": "no_params",
-        "eth_gasPrice": "no_params"
-      }
-    },
-    "base": {
-      "chain_type": "base",
-      "rpc_url": "LOCAL_RPC_URL",
-      "params": {
-        "account_count": "ACCOUNT_COUNT",
-        "output_file": "ACCOUNTS_OUTPUT_FILE",
-        "target_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-      },
-      "methods": {
-        "get_logs": "eth_getLogs",
-        "get_transaction": "eth_getTransactionByHash"
-      },
-      "system_addresses": [
-        "0x0000000000000000000000000000000000000000",
-        "0x000000000000000000000000000000000000dead"
-      ],
-      "rpc_methods": {
-        "single": "eth_getBalance",
-        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-      },
-      "param_formats": {
-        "eth_getBalance": "address_latest",
-        "eth_getTransactionCount": "address_latest",
-        "eth_blockNumber": "no_params",
-        "eth_gasPrice": "no_params"
-      }
-    },
-    "scroll": {
-      "chain_type": "scroll",
-      "rpc_url": "LOCAL_RPC_URL",
-      "params": {
-        "account_count": "ACCOUNT_COUNT",
-        "output_file": "ACCOUNTS_OUTPUT_FILE",
-        "target_address": "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4",
-        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-      },
-      "methods": {
-        "get_logs": "eth_getLogs",
-        "get_transaction": "eth_getTransactionByHash"
-      },
-      "system_addresses": [
-        "0x0000000000000000000000000000000000000000",
-        "0x000000000000000000000000000000000000dead"
-      ],
-      "rpc_methods": {
-        "single": "eth_getBalance",
-        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-      },
-      "param_formats": {
-        "eth_getBalance": "address_latest",
-        "eth_getTransactionCount": "address_latest",
-        "eth_blockNumber": "no_params",
-        "eth_gasPrice": "no_params"
-      }
-    },
-    "polygon": {
-      "chain_type": "polygon",
-      "rpc_url": "LOCAL_RPC_URL",
-      "params": {
-        "account_count": "ACCOUNT_COUNT",
-        "output_file": "ACCOUNTS_OUTPUT_FILE",
-        "target_address": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
-        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-      },
-      "methods": {
-        "get_logs": "eth_getLogs",
-        "get_transaction": "eth_getTransactionByHash"
-      },
-      "system_addresses": [
-        "0x0000000000000000000000000000000000000000",
-        "0x000000000000000000000000000000000000dead"
-      ],
-      "rpc_methods": {
-        "single": "eth_getBalance",
-        "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
-      },
-      "param_formats": {
-        "eth_getBalance": "address_latest",
-        "eth_getTransactionCount": "address_latest",
-        "eth_blockNumber": "no_params",
-        "eth_gasPrice": "no_params"
-      }
-    },
-    "starknet": {
-      "chain_type": "starknet",
-      "rpc_url": "LOCAL_RPC_URL",
-      "params": {
-        "account_count": "ACCOUNT_COUNT",
-        "output_file": "ACCOUNTS_OUTPUT_FILE",
-        "target_address": "0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8",
-        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-      },
-      "methods": {
-        "get_events_native": "starknet_getEvents",
-        "get_transaction": "starknet_getTransactionByHash"
-      },
-      "system_addresses": [],
-      "rpc_methods": {
-        "single": "starknet_getClassAt",
-        "mixed": "starknet_getClassAt,starknet_getNonce,starknet_getStorageAt,starknet_blockNumber"
-      },
-      "param_formats": {
-        "starknet_getClassAt": "latest_address",
-        "starknet_getNonce": "latest_address",
-        "starknet_getStorageAt": "address_key_latest",
-        "starknet_blockNumber": "no_params"
-      }
-    },
-    "sui": {
-      "chain_type": "sui",
-      "rpc_url": "LOCAL_RPC_URL",
-      "params": {
-        "account_count": "ACCOUNT_COUNT",
-        "output_file": "ACCOUNTS_OUTPUT_FILE",
-        "target_address": "0x0000000000000000000000000000000000000000000000000000000000000005",
-        "max_signatures": "ACCOUNT_MAX_SIGNATURES",
-        "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-        "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-      },
-      "methods": {
-        "get_owned_objects": "suix_getOwnedObjects",
-        "get_transaction": "sui_getTransactionBlock",
-        "get_transactions": "suix_queryTransactionBlocks"
-      },
-      "system_addresses": ["0x1", "0x2", "0x3"],
-      "rpc_methods": {
-        "single": "sui_getObject",
-        "mixed": "sui_getObject,sui_getTotalTransactionBlocks,sui_getLatestCheckpointSequenceNumber,suix_getReferenceGasPrice,sui_getChainIdentifier"
-      },
-      "param_formats": {
-        "sui_getObject": "address_with_options",
-        "sui_getTotalTransactionBlocks": "no_params",
-        "sui_getLatestCheckpointSequenceNumber": "no_params",
-        "suix_getReferenceGasPrice": "no_params",
-        "sui_getChainIdentifier": "no_params"
-      }
-    }
-  }
-}
-EOF
-)
 
 # =====================================================================
 # Automatic Configuration Generation Functions
@@ -662,19 +414,33 @@ validate_blockchain_node() {
     local blockchain_node="$1"
     local blockchain_node_lower
     blockchain_node_lower=$(echo "$blockchain_node" | tr '[:upper:]' '[:lower:]')
-    # Supported blockchain list
-    local supported_blockchains=("solana" "ethereum" "bsc" "base" "scroll" "polygon" "starknet" "sui")
-    # Check if in supported list
-    for supported in "${supported_blockchains[@]}"; do
-        if [[ "$blockchain_node_lower" == "$supported" ]]; then
-            return 0  # Valid
-        fi
-    done
-    # Invalid blockchain type
+
+    # S1.1 (5bd01a6+): supported chains discovered from config/chains/*.json
+    # instead of hardcoded list. Source of truth = one chain template JSON per
+    # chain. No parallel-entry-trap: there is no second authority list.
+    local chains_dir="${CONFIG_LOADER_DIR:-$(dirname "${BASH_SOURCE[0]}")}/chains"
+    if [[ ! -d "$chains_dir" ]]; then
+        echo "❌ Error: chain template directory not found: $chains_dir" >&2
+        return 1
+    fi
+
+    local target_file="$chains_dir/${blockchain_node_lower}.json"
+    if [[ -f "$target_file" ]]; then
+        return 0  # Valid
+    fi
+
+    # Invalid blockchain type — discover known chains for diagnostic output
+    local known_chains=()
+    while IFS= read -r f; do
+        known_chains+=("$(basename "$f" .json)")
+    done < <(find "$chains_dir" -maxdepth 1 -name '*.json' -type f | sort)
+
     echo "❌ Error: Unsupported blockchain type '$blockchain_node'" >&2
-    echo "📋 Supported blockchain types:" >&2
-    printf "   - %s\n" "${supported_blockchains[@]}" >&2
+    echo "   No template at $target_file" >&2
+    echo "📋 Supported blockchain types (${#known_chains[@]} discovered):" >&2
+    printf "   - %s\n" "${known_chains[@]}" >&2
     echo "💡 Tip: Please check the value of BLOCKCHAIN_NODE environment variable" >&2
+    echo "💡 Tip: To add a new chain, create config/chains/<name>.json" >&2
     return 1  # Invalid
 }
 
@@ -732,8 +498,17 @@ generate_auto_config() {
         CHAIN_CONFIG="$cached_config"
 
     else
-        local jq_query=".blockchains.\"$blockchain_node_lower\""
-        CHAIN_CONFIG=$(echo "$UNIFIED_BLOCKCHAIN_CONFIG" | jq -c "$jq_query")
+        # S1.1 (5bd01a6+): read chain template from config/chains/<name>.json
+        # instead of the legacy UNIFIED_BLOCKCHAIN_CONFIG heredoc. The .json
+        # file is the single source of truth; _meta field is stripped by jq
+        # so downstream consumers see the same shape as before.
+        local chains_dir="${CONFIG_LOADER_DIR:-$(dirname "${BASH_SOURCE[0]}")}/chains"
+        local chain_file="$chains_dir/${blockchain_node_lower}.json"
+        if [[ ! -f "$chain_file" ]]; then
+            CHAIN_CONFIG=""
+        else
+            CHAIN_CONFIG=$(jq -c 'del(._meta)' "$chain_file")
+        fi
         # Cache parsing result
         if [[ "$CHAIN_CONFIG" != "null" && -n "$CHAIN_CONFIG" ]]; then
             export "$cache_var_name"="$CHAIN_CONFIG"
@@ -743,8 +518,8 @@ generate_auto_config() {
     # Validate if configuration loaded correctly
     if [[ "$CHAIN_CONFIG" == "null" || -z "$CHAIN_CONFIG" ]]; then
         echo "❌ Error: Unable to load configuration for $blockchain_node_lower" >&2
-        echo "   This indicates missing configuration for this blockchain in UNIFIED_BLOCKCHAIN_CONFIG" >&2
-        echo "   Please check configuration file integrity" >&2
+        echo "   Expected file: config/chains/${blockchain_node_lower}.json" >&2
+        echo "   This indicates missing or malformed chain template" >&2
         exit 1
     fi
     

@@ -7,7 +7,7 @@ Supports HTTP POST (JSON-RPC 2.0) + WebSocket subscribe for all 8 chains:
 - Starknet
 - Sui
 
-Source of truth for RPC methods: config/config_loader.sh L388-600 (UNIFIED_BLOCKCHAIN_CONFIG).
+Source of truth for RPC methods: config/chains/<name>.json (since S1.1, replaces legacy UNIFIED_BLOCKCHAIN_CONFIG heredoc).
 
 Usage:
     python3 mock_rpc_server.py --port 8899 --chain solana
