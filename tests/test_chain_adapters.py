@@ -36,9 +36,9 @@ def _fail(msg: str):
 def test_factory_registers_six_families():
     print("\n[1] Factory registration")
     fams = list_adapters()
-    expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "ogmios", "tron"}
+    expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "ogmios", "tron", "avax"}
     assert set(fams) == expected, f"expected {expected}, got {fams}"
-    _ok(f"7 families registered: {sorted(fams)}")
+    _ok(f"8 families registered: {sorted(fams)}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -394,6 +394,90 @@ def test_tron_adapter_shapes():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Test 11: AvaXAdapter — Avalanche X-Chain object params + multi-endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+def test_avax_adapter_shapes():
+    print("\n[11] AvaXAdapter: avm.*/info.* multi-endpoint + object params + uint64-as-string")
+    import base64
+    a = get_adapter("avalanche-x")
+    assert a.protocol_family == "avax", f"expected 'avax', got {a.protocol_family!r}"
+
+    BASE = "http://localhost:9650"
+    BECH = "X-avax13k6hxpfuu80dlnqlqs0dxxjrzl4lxz94n38vnw"
+    HEX_ADDR = "0xdeadbeef00000000000000000000000000000000"  # EVM-style; adapter should swap
+
+    # 11a: avm.getHeight → /ext/bc/X with empty object params
+    t = a.build_vegeta_target("avm.getHeight", "", BASE, "no_params")
+    assert t["method"] == "POST"
+    assert t["url"] == "http://localhost:9650/ext/bc/X", f"bad url: {t['url']}"
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"] == {}, f"params must be empty OBJECT, got {body['params']}"
+    assert body["method"] == "avm.getHeight"
+    _ok(f"avm.getHeight → POST /ext/bc/X with params={{}}")
+
+    # 11b: avm.getBlockByHeight → height as STRING (uint64-as-string contract)
+    t = a.build_vegeta_target("avm.getBlockByHeight", "517990", BASE, "height_encoding")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"] == {"height": "517990", "encoding": "json"}, f"bad params: {body['params']}"
+    assert isinstance(body["params"]["height"], str), "height must be STRING not int"
+    _ok(f"avm.getBlockByHeight → height='517990' as STRING")
+
+    # 11c: avm.getAllBalances → address surrogated when EVM-style addr passed
+    t = a.build_vegeta_target("avm.getAllBalances", HEX_ADDR, BASE, "address_only")
+    body = json.loads(base64.b64decode(t["body"]))
+    # 0x... addr should be swapped to bech32 placeholder (not the 0x... we passed)
+    assert body["params"]["address"].startswith("X-avax1"), f"hex addr should swap to bech32: {body['params']}"
+    _ok(f"avm.getAllBalances → bech32 surrogate when EVM addr supplied")
+
+    # 11d: avm.getAllBalances with real bech32 → preserved
+    t = a.build_vegeta_target("avm.getAllBalances", BECH, BASE, "address_only")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"]["address"] == BECH, f"bech32 must be preserved: {body['params']}"
+    _ok(f"avm.getAllBalances → bech32 preserved when supplied")
+
+    # 11e: avm.getUTXOs → addresses is LIST, limit + encoding
+    t = a.build_vegeta_target("avm.getUTXOs", BECH, BASE, "addresses_limit_encoding")
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"]["addresses"] == [BECH], f"addresses must be list: {body['params']}"
+    assert body["params"]["limit"] == 10, f"limit must be int 10: {body['params']}"
+    assert body["params"]["encoding"] == "hex", f"encoding must be 'hex': {body['params']}"
+    _ok(f"avm.getUTXOs → addresses[list] + limit + encoding")
+
+    # 11f: info.getBlockchainID → routes to /ext/info
+    t = a.build_vegeta_target("info.getBlockchainID", "", BASE, "alias_only")
+    assert t["url"] == "http://localhost:9650/ext/info", f"info.* must route to /ext/info: {t['url']}"
+    body = json.loads(base64.b64decode(t["body"]))
+    assert body["params"] == {"alias": "X"}
+    _ok(f"info.getBlockchainID → POST /ext/info with alias='X'")
+
+    # 11g: platform.* routes to /ext/bc/P
+    t = a.build_vegeta_target("platform.getCurrentValidators", "", BASE, "no_params")
+    assert t["url"] == "http://localhost:9650/ext/bc/P", f"platform.* must route to /ext/bc/P: {t['url']}"
+    _ok(f"platform.* → POST /ext/bc/P")
+
+    # 11h: parse_block_height — uint64-as-string (height returned as string)
+    sample = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"height": "517990"}})
+    h = a.parse_block_height(sample)
+    assert h == 517990, f"expected 517990 (string-parsed), got {h}"
+    _ok(f"parse_block_height: result.height='517990' (string) → 517990")
+
+    # 11i: health_check
+    hc = a.health_check_request(BASE)
+    assert hc["url"] == BASE + "/ext/bc/X"
+    assert hc["parse_jq"] == ".result.height"
+    body = json.loads(hc["body"])
+    assert body["method"] == "avm.getHeight"
+    _ok(f"health_check → POST /ext/bc/X avm.getHeight")
+
+    # 11j: unknown namespace prefix → raises
+    try:
+        a.build_vegeta_target("xchain.foo", BECH, BASE, "")
+        _fail("expected ValueError for unknown namespace")
+    except ValueError as e:
+        _ok(f"unknown namespace raises ValueError: {str(e)[:60]}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
@@ -408,6 +492,7 @@ def main():
         test_jsonrpc_s3a_new_formats,
         test_evm_compat_5chains_standard_enum,
         test_tron_adapter_shapes,
+        test_avax_adapter_shapes,
     ]
     print(f"Running {len(tests)} test groups for chain_adapters")
     for t in tests:

@@ -458,6 +458,12 @@ CHAIN_HANDLERS = {
     # (eth_* methods); HTTP /wallet/* is routed in do_POST() via process_tron_http
     # before reaching this dispatch table.
     "tron": handle_evm,
+    # S3-A3: Avalanche X-Chain — AVM JSON-RPC 2.0 with avm.*/info.*/platform.*
+    # namespaces. Routed in do_POST() via process_avax_jsonrpc by path prefix
+    # (/ext/bc/X, /ext/info, /ext/bc/P). The entry here is a placeholder so the
+    # --chain startup validator doesn't reject. The handler is never invoked for
+    # avax because do_POST returns before hitting dispatch().
+    "avalanche-x": handle_evm,
 }
 
 
@@ -558,6 +564,155 @@ _TRON_VERB_HANDLERS = {
     "triggerconstantcontract": _tron_triggerconstantcontract,
     "getblockbynum": _tron_getblockbynum,
     "getaccountresource": _tron_getaccountresource,
+}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# S3-A3: Avalanche X-Chain (AVM) JSON-RPC 2.0 handlers
+# ─────────────────────────────────────────────────────────────────────
+# Avalanche uses JSON-RPC 2.0 with these special rules:
+#   1. params is OBJECT not array
+#   2. uint64 fields are STRINGS in responses ("517990" not 517990)
+#   3. IDs use cb58 (we return fixed placeholders, not generate real cb58)
+#   4. multi-endpoint: /ext/bc/X (avm.*), /ext/info (info.*), /ext/bc/P (platform.*)
+
+# Placeholder cb58 IDs (32-byte zeros + 4-byte checksum; valid-shape, fake-value).
+_AVAX_PLACEHOLDER_BLOCK_ID = "jrGWDh5Po9FMj54depyunNixpia5PN4aAYxfmNzU8n752Rjga"
+_AVAX_PLACEHOLDER_TX_ID = "5Hb7uXBFQTaXCDwymYxDfYyEwRYVG35aMmdLwgcvKQniHama5"
+_AVAX_PLACEHOLDER_ASSET_ID = "FvwEAhmxKfeiG8SnEvq42hc6whRyY3EFYAvebMqDNDGCgxN5Z"  # AVAX native
+_AVAX_PLACEHOLDER_BLOCKCHAIN_ID = "2oYMBNV4eNHyqk2fjjV5nVQLDbtmNJzq5s3qs3Lo6ftnC6FByM"
+
+
+def process_avax_jsonrpc(path: str, payload: Dict[str, Any], latency_ms: int = 0) -> Dict[str, Any]:
+    """Dispatch Avalanche X-Chain JSON-RPC request. Returns JSON-RPC envelope."""
+    if latency_ms > 0:
+        time.sleep(latency_ms / 1000.0)
+    if not isinstance(payload, dict):
+        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Batch not supported on avax"}}
+    method = payload.get("method", "")
+    params = payload.get("params", {})
+    req_id = payload.get("id")
+    _count_request(f"avax:{method}")
+
+    # Enforce namespace consistency with path
+    if path.startswith("/ext/bc/X") and not method.startswith("avm."):
+        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Method '{method}' not allowed at /ext/bc/X (need avm.*)"}}
+    if path.startswith("/ext/info") and not method.startswith("info."):
+        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Method '{method}' not allowed at /ext/info (need info.*)"}}
+    if path.startswith("/ext/bc/P") and not method.startswith("platform."):
+        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Method '{method}' not allowed at /ext/bc/P (need platform.*)"}}
+
+    handler = _AVAX_METHOD_HANDLERS.get(method)
+    if handler is None:
+        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"avax method '{method}' not implemented"}}
+    try:
+        result = handler(params)
+        return {"jsonrpc": "2.0", "id": req_id, "result": result}
+    except Exception as e:
+        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32603, "message": f"Internal error: {e}"}}
+
+
+def _avax_getHeight(_params):
+    # uint64 → STRING contract
+    return {"height": "517990"}
+
+
+def _avax_getBlockByHeight(params):
+    h = params.get("height", "517990")  # string per contract
+    return {
+        "block": {
+            "parentID": _AVAX_PLACEHOLDER_BLOCK_ID,
+            "id": _AVAX_PLACEHOLDER_BLOCK_ID,
+            "height": int(h) if str(h).isdigit() else 517990,  # block.height returned as int per evidence
+            "time": 1735200000,
+            "merkleRoot": "11111111111111111111111111111111LpoYY",
+            "txs": [
+                {"id": _AVAX_PLACEHOLDER_TX_ID, "unsignedTx": {"networkID": 1, "blockchainID": _AVAX_PLACEHOLDER_BLOCKCHAIN_ID, "outputs": []}, "credentials": []}
+            ],
+        },
+        "encoding": "json",
+    }
+
+
+def _avax_getBlock(params):
+    """avm.getBlock by blockID."""
+    return _avax_getBlockByHeight({"height": "517990"})
+
+
+def _avax_getTx(params):
+    return {
+        "tx": {
+            "id": params.get("txID", _AVAX_PLACEHOLDER_TX_ID),
+            "unsignedTx": {
+                "networkID": 1,
+                "blockchainID": _AVAX_PLACEHOLDER_BLOCKCHAIN_ID,
+                "outputs": [{"assetID": _AVAX_PLACEHOLDER_ASSET_ID, "output": {"amount": "1000000000", "addresses": ["X-avax13k6hxpfuu80dlnqlqs0dxxjrzl4lxz94n38vnw"]}}],
+                "inputs": [],
+            },
+            "credentials": [],
+        },
+        "encoding": "json",
+    }
+
+
+def _avax_getTxStatus(_params):
+    return {"status": "Accepted"}  # one of Accepted | Rejected | Processing | Unknown
+
+
+def _avax_getBalance(params):
+    # uint64 → STRING
+    return {"balance": "189093923788006", "utxoIDs": []}
+
+
+def _avax_getAllBalances(params):
+    # Multi-asset: must return ≥2 distinct assets to honor the model
+    return {
+        "balances": [
+            {"asset": _AVAX_PLACEHOLDER_ASSET_ID, "balance": "189093923788006"},
+            {"asset": "2EuZzt6W4MtNhDofY1TBL24yHrpz5QEG8shiFEqDBccEzYVHwW", "balance": "300"},
+        ]
+    }
+
+
+def _avax_getUTXOs(params):
+    # uint64 → STRING; encoding "hex" with 0x-prefix bytes
+    return {
+        "numFetched": "3",
+        "utxos": ["0x000076aa00000000", "0x0000ce7200000000", "0x000009bb00000000"],
+        "endIndex": {"address": params.get("addresses", ["X-?"])[0], "utxo": "GJ98vX57"},
+        "encoding": "hex",
+    }
+
+
+def _avax_getAssetDescription(_params):
+    return {"name": "Avalanche", "symbol": "AVAX", "denomination": "9"}
+
+
+def _info_getBlockchainID(_params):
+    return {"blockchainID": _AVAX_PLACEHOLDER_BLOCKCHAIN_ID}
+
+
+def _info_getNodeVersion(_params):
+    return {
+        "version": "avalanche/1.14.2",
+        "databaseVersion": "v1.4.5",
+        "gitCommit": "6e5acf9",
+        "vmVersions": {},
+    }
+
+
+_AVAX_METHOD_HANDLERS = {
+    "avm.getHeight": _avax_getHeight,
+    "avm.getBlockByHeight": _avax_getBlockByHeight,
+    "avm.getBlock": _avax_getBlock,
+    "avm.getTx": _avax_getTx,
+    "avm.getTxStatus": _avax_getTxStatus,
+    "avm.getBalance": _avax_getBalance,
+    "avm.getAllBalances": _avax_getAllBalances,
+    "avm.getUTXOs": _avax_getUTXOs,
+    "avm.getAssetDescription": _avax_getAssetDescription,
+    "info.getBlockchainID": _info_getBlockchainID,
+    "info.getNodeVersion": _info_getNodeVersion,
 }
 
 
@@ -679,6 +834,13 @@ class RPCHandler(BaseHTTPRequestHandler):
         # The Tron JSON-RPC subset lives at /jsonrpc (EVM-compat namespace).
         if self.path.startswith("/wallet/") or self.path.startswith("/walletsolidity/"):
             response = process_tron_http(self.path, payload, self.latency_ms)
+            self._send_json(200, response)
+            return
+        # S3-A3: Avalanche X-Chain multi-endpoint routing
+        # /ext/bc/X → avm.* namespace; /ext/info → info.* namespace; /ext/bc/P → platform.*
+        # All are JSON-RPC 2.0 but with object params and uint64-as-string contract.
+        if self.path.startswith("/ext/bc/X") or self.path.startswith("/ext/info") or self.path.startswith("/ext/bc/P"):
+            response = process_avax_jsonrpc(self.path, payload, self.latency_ms)
             self._send_json(200, response)
             return
         # Default: JSON-RPC (either at "/" or "/jsonrpc")
