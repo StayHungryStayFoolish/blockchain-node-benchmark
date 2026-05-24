@@ -48,7 +48,9 @@
     ],
     "original_notes": "双协议(HTTP REST POST + JSON-RPC);base58check ↔ hex41 双格式;USDT-TRC20 合约为基准 target",
     "adapter_required": true,
-    "adapter_family": "jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family": "tron",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "s3a2_normalized_at": "2026-05-24T10:00:00Z",
+    "s3a2_note": "Switched from jsonrpc to tron family; standardized param_formats to TronAdapter enum"
   }
 }
