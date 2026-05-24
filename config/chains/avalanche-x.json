@@ -5,7 +5,7 @@
     "avm.getHeight": "no_params",
     "avm.getBlockByHeight": "height_encoding",
     "avm.getTx": "txid_encoding",
-    "avm.getAllBalances": "address_only",
+    "avm.getAllBalances": "single_address",
     "avm.getUTXOs": "addresses_limit_encoding"
   },
   "params": {
@@ -48,9 +48,7 @@
     ],
     "original_notes": "multi-asset UTXO; cb58 ID encoding; uint64 as string; namespace prefix avm.*; 需新建 AvalancheXAdapter",
     "adapter_required": false,
-    "adapter_family": "avax",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
-    "s3a3_normalized_at": "2026-05-24T10:30:00Z",
-    "s3a3_note": "Switched from jsonrpc to avax family; translated single_address→address_only per AvaXAdapter enum"
+    "adapter_family": "jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }
