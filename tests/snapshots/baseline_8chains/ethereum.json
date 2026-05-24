@@ -1,0 +1,30 @@
+{
+  "chain_type": "ethereum",
+  "methods": {
+    "get_logs": "eth_getLogs",
+    "get_transaction": "eth_getTransactionByHash"
+  },
+  "param_formats": {
+    "eth_blockNumber": "no_params",
+    "eth_gasPrice": "no_params",
+    "eth_getBalance": "address_latest",
+    "eth_getTransactionCount": "address_latest"
+  },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice",
+    "single": "eth_getBalance"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
+  "system_addresses": [
+    "0x0000000000000000000000000000000000000000",
+    "0x000000000000000000000000000000000000dead"
+  ]
+}

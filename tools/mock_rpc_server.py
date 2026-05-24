@@ -422,10 +422,33 @@ CHAIN_HANDLERS = {
 }
 
 
+def handle_unknown(method: str, params: List[Any]) -> Dict[str, Any]:
+    """Fallback handler for chains without a real implementation yet.
+
+    Returns an echo envelope so smoke tests can verify the request reached
+    the server, while making it OBVIOUS in logs/asserts that no real
+    semantics happened. Gated by env MOCK_ALLOW_UNKNOWN=1 in dispatch().
+
+    Shape: {"_mock_echo": true, "_method": <m>, "_params": <p>}
+    Callers MUST treat _mock_echo=true as "not validated" — never used to
+    claim semantic correctness, only liveness.
+    """
+    return {"_mock_echo": True, "_method": method, "_params": params}
+
+
 def dispatch(chain: str, method: str, params: List[Any]) -> Tuple[Any, Optional[Dict[str, Any]]]:
     """Return (result, error). Exactly one is None."""
     handler = CHAIN_HANDLERS.get(chain)
     if handler is None:
+        # Fallback path — only when MOCK_ALLOW_UNKNOWN=1 (explicit opt-in).
+        # Default behavior unchanged: reject with -32601 so unknown chains
+        # surface loudly in CI rather than silently passing as ethereum.
+        if os.environ.get("MOCK_ALLOW_UNKNOWN") == "1":
+            try:
+                result = handle_unknown(method, params)
+                return result, None
+            except Exception as e:
+                return None, {"code": -32603, "message": f"Echo handler error: {e}"}
         return None, {"code": -32601, "message": f"Chain '{chain}' not supported"}
     try:
         # handle_evm accepts chain= kwarg for eth_chainId differentiation;
@@ -711,11 +734,19 @@ def main():
     p.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
     p.add_argument("--port", type=int, default=8899, help="HTTP port (default 8899 = solana convention)")
     p.add_argument("--ws-port", type=int, default=None, help="WebSocket port (default: HTTP port + 1)")
-    p.add_argument("--chain", choices=list(CHAIN_HANDLERS.keys()), default="solana", help="chain to mock")
+    p.add_argument("--chain", default="solana",
+                   help="chain to mock; must be in CHAIN_HANDLERS unless MOCK_ALLOW_UNKNOWN=1 (then any chain → echo fallback)")
     p.add_argument("--latency-ms", type=int, default=0, help="artificial per-request latency in ms (default 0)")
     p.add_argument("--no-ws", action="store_true", help="disable WebSocket server")
     p.add_argument("--stats-interval", type=int, default=30, help="seconds between stats prints (default 30)")
     args = p.parse_args()
+
+    # Startup gate — refuse unknown chain unless explicit opt-in.
+    if args.chain not in CHAIN_HANDLERS and os.environ.get("MOCK_ALLOW_UNKNOWN") != "1":
+        known = ", ".join(sorted(CHAIN_HANDLERS.keys()))
+        print(f"ERROR: chain '{args.chain}' has no handler. Known: {known}. "
+              f"Set MOCK_ALLOW_UNKNOWN=1 to use echo fallback.", file=sys.stderr)
+        sys.exit(2)
 
     ws_port = args.ws_port if args.ws_port else (args.port + 1)
 

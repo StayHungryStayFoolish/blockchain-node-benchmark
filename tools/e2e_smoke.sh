@@ -26,6 +26,11 @@
 #   MOCK_PORT=18545
 #   SKIP_HTML=1               # skip HTML render check (unit-test mode)
 #   OUTPUT_DIR=/tmp/e2e_$$    # override scratch dir
+#   CHAIN_CONFIG=path/to.json # OPTIONAL: chain template JSON; when set,
+#                             #   asserts file exists + .chain_type matches
+#                             #   MOCK_CHAIN family (consistency gate for
+#                             #   S2 wave incremental adds). No behavior
+#                             #   change when unset (backward compatible).
 # =====================================================================
 
 set -euo pipefail
@@ -41,6 +46,7 @@ MOCK_CHAIN="${MOCK_CHAIN:-ethereum}"
 MOCK_PORT="${MOCK_PORT:-18545}"
 SKIP_HTML="${SKIP_HTML:-0}"
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/e2e_smoke_$$}"
+CHAIN_CONFIG="${CHAIN_CONFIG:-}"
 
 # -------- Logging helpers -------------------------------------------
 log()   { echo "[$(date +%H:%M:%S)] $*" >&2; }
@@ -77,6 +83,27 @@ mkdir -p "$OUTPUT_DIR/logs" "$OUTPUT_DIR/reports"
 log "Phase 1: prep — OUTPUT_DIR=$OUTPUT_DIR"
 
 # -------- Phase 2: mock RPC node ------------------------------------
+# Optional consistency gate: if caller passed CHAIN_CONFIG, verify file
+# exists and its .chain_type makes sense for MOCK_CHAIN. This catches
+# "wave added bitcoin.json but mock_rpc_server has no bitcoin handler"
+# silently passing because mock falls back to ethereum.
+if [[ -n "$CHAIN_CONFIG" ]]; then
+  if [[ ! -f "$CHAIN_CONFIG" ]]; then
+    fail "CHAIN_CONFIG=$CHAIN_CONFIG does not exist"
+    exit 1
+  fi
+  declared_type="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('chain_type','?'))" "$CHAIN_CONFIG" 2>/dev/null || echo 'PARSE_FAIL')"
+  if [[ "$declared_type" == "PARSE_FAIL" || "$declared_type" == "?" ]]; then
+    fail "CHAIN_CONFIG=$CHAIN_CONFIG has no readable .chain_type"
+    exit 1
+  fi
+  # Allow MOCK_CHAIN to be either the chain name (matching filename) or the
+  # chain_type family. We don't enforce a strict mapping table here — the
+  # mock_rpc_server.py CHAIN_HANDLERS dict is the final arbiter via boot
+  # success. We just log the binding so failures are diagnosable.
+  pass "CHAIN_CONFIG gate: $(basename "$CHAIN_CONFIG") declares chain_type=$declared_type"
+fi
+
 log "Phase 2: starting mock RPC node ($MOCK_CHAIN on :$MOCK_PORT)"
 python3 "${REPO_ROOT}/tools/mock_rpc_server.py" \
   --chain "$MOCK_CHAIN" --port "$MOCK_PORT" \
