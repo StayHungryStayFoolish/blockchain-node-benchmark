@@ -47,6 +47,8 @@
       }
     ],
     "original_notes": "JSON-RPC 1.0 + Esplora REST 双栈;UTXO 模型,无 address index,balance 必经 Esplora",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "bitcoin_jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

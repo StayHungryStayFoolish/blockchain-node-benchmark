@@ -52,6 +52,8 @@
       }
     ],
     "original_notes": "三协议并存(Tendermint RPC/REST/gRPC),推荐 REST/LCD;system_addresses 为 SPECULATED module accounts",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "tendermint",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

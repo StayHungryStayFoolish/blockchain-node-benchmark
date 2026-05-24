@@ -60,6 +60,8 @@
       }
     ],
     "original_notes": "TON独立family,需新建TONAdapter。toncenter v2同时提供REST和JSON-RPC双协议;响应envelope非标准({ok,result,@extra}包装)。地址三态:raw(0:hex64)/friendly bounceable(EQ...)/non-bounceable(UQ...),adapter必须normalize到raw去重。tx_id是(account,lt,hash)三元组,非单hash。native decimals=9 nanoton。公链限流1RPS无key,性能基准必须self-host ton-http-api。",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "rest",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

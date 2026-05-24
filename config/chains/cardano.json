@@ -47,6 +47,8 @@
       }
     ],
     "original_notes": "EUTXO 模型;cardano-node 无原生 HTTP,必经 middleware(Koios);多数 method 是 POST + JSON array body",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "ogmios",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

@@ -49,6 +49,8 @@
       }
     ],
     "original_notes": "Cosmos + EVM 双协议;in-protocol EVM 及 inEVM L2(2525) 公共 endpoint 均 requires_self_hosted;INJ decimals=18",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "tendermint",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

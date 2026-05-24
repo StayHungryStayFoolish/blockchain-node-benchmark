@@ -65,62 +65,17 @@ show_help() {
 }
 
 generate_rpc_json() {
+    # Single-target wrapper for legacy callers / debugging.
+    # Production path uses build_targets_batch() — see generate_targets().
     local method="$1"
     local address="$2"
     local rpc_url="$LOCAL_RPC_URL"
-
-    # Get method parameter format (using JSON query function)
-    local param_format
-    param_format=$(get_param_format_from_json "$method")
-    local params_json=""
-
-    case "$param_format" in
-        "no_params")
-            params_json="[]"
-            ;;
-        "single_address")
-            params_json="[\"$address\"]"
-            ;;
-        "address_latest")
-            # EVM compatible chain format: ["address", "latest"]
-            params_json="[\"$address\", \"latest\"]"
-            ;;
-        "latest_address")
-            # StarkNet format: ["latest", "address"]
-            params_json="[\"latest\", \"$address\"]"
-            ;;
-        "address_storage_latest")
-            # eth_getStorageAt format: ["address", "0x0", "latest"]
-            params_json="[\"$address\", \"0x0\", \"latest\"]"
-            ;;
-        "address_key_latest")
-            # starknet_getStorageAt format: ["address", "0x1", "latest"]
-            params_json="[\"$address\", \"0x1\", \"latest\"]"
-            ;;
-        "address_with_options")
-            # sui_getObject format: ["address", options]
-            params_json="[\"$address\", {\"showType\": true, \"showContent\": true, \"showDisplay\": false}]"
-            ;;
-        *)
-            # Default to single address parameter
-            echo "⚠️ Warning: Unknown parameter format $param_format for method $method, using default format" >&2
-            params_json="[\"$address\"]"
-            ;;
-    esac
-
-    # Generate JSON RPC request body
-    local request_body="{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$method\",\"params\":$params_json}"
-
-    # Generate Vegeta target JSON
-    jq -nc --arg method "POST" \
-           --arg url "$rpc_url" \
-           --arg body "$request_body" \
-           '{
-             method: $method,
-             url: $url,
-             header: {"Content-Type": ["application/json"]},
-             body: ($body | @base64)
-           }'
+    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
+    python3 "${script_dir}/chain_adapters/cli.py" build-target \
+        --chain "$BLOCKCHAIN_NODE" \
+        --method "$method" \
+        --address "$address" \
+        --rpc-url "$rpc_url"
 }
 
 # Parameter parsing
@@ -276,43 +231,45 @@ generate_targets() {
 
     echo "✅ Read ${#accounts[@]} accounts" >&2
 
-    # Generate targets
-    local count=0
+    # Generate targets — batch path: emit TSV (method\taddress) to cli.py
+    # build-targets-batch, which writes all vegeta targets in a single
+    # python invocation. Avoids per-target subprocess fork (50ms × N).
+    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
+    local batch_cli="${script_dir}/chain_adapters/cli.py"
 
     if [[ "$RPC_MODE" == "single" ]]; then
         # Single method mode
         local method="${CURRENT_RPC_METHODS_ARRAY[0]}"
         echo "📝 Using single method: $method" >&2
 
+        # Stream TSV to cli batch
         for address in "${accounts[@]}"; do
-            generate_rpc_json "$method" "$address" >> "$CURRENT_OUTPUT_FILE"
-            ((count++))
-
-            if [[ "$VERBOSE" == "true" && $((count % 100)) -eq 0 ]]; then
-                echo "   Generated $count targets..." >&2
-            fi
-        done
+            printf '%s\t%s\n' "$method" "$address"
+        done | python3 "$batch_cli" build-targets-batch \
+                 --chain "$BLOCKCHAIN_NODE" \
+                 --rpc-url "$LOCAL_RPC_URL" \
+                 > "$CURRENT_OUTPUT_FILE"
     else
         # Mixed method mode
         local method_count=${#CURRENT_RPC_METHODS_ARRAY[@]}
-        local account_index=0
 
         echo "📝 Using mixed methods: ${CURRENT_RPC_METHODS_ARRAY[*]}" >&2
 
+        local account_index=0
         for address in "${accounts[@]}"; do
             local method_index=$((account_index % method_count))
             local method="${CURRENT_RPC_METHODS_ARRAY[$method_index]}"
-
-            generate_rpc_json "$method" "$address" >> "$CURRENT_OUTPUT_FILE"
-
-            ((count++))
-            ((account_index++))
-
-            if [[ "$VERBOSE" == "true" && $((count % 100)) -eq 0 ]]; then
-                echo "   Generated $count targets (current method: $method)..." >&2
-            fi
-        done
+            printf '%s\t%s\n' "$method" "$address"
+            account_index=$((account_index + 1))
+        done | python3 "$batch_cli" build-targets-batch \
+                 --chain "$BLOCKCHAIN_NODE" \
+                 --rpc-url "$LOCAL_RPC_URL" \
+                 > "$CURRENT_OUTPUT_FILE"
     fi
+
+    # Final count from output file (subshell var doesn't propagate)
+    local count
+    count=$(wc -l < "$CURRENT_OUTPUT_FILE")
 
     echo "✅ Successfully generated $count test targets" >&2
 

@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+"""Adapter L1 unit tests — per-family unit + cross-family byte equality with bash.
+
+Run directly (repo has no pytest):
+    python3 tests/test_chain_adapters.py
+
+Exits non-zero on first failure with descriptive message.
+"""
+from __future__ import annotations
+import base64
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "tools"))
+
+from chain_adapters import get_adapter, list_adapters
+
+
+PASS = "\033[32m✓\033[0m"
+FAIL = "\033[31m✗\033[0m"
+
+
+def _ok(msg: str): print(f"  {PASS} {msg}")
+def _fail(msg: str):
+    print(f"  {FAIL} {msg}")
+    raise AssertionError(msg)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 1: Factory registration — 6 families
+# ─────────────────────────────────────────────────────────────────────────────
+def test_factory_registers_six_families():
+    print("\n[1] Factory registration")
+    fams = list_adapters()
+    expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "ogmios"}
+    assert set(fams) == expected, f"expected {expected}, got {fams}"
+    _ok(f"6 families registered: {sorted(fams)}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 2: All 36 chains resolve to an adapter
+# ─────────────────────────────────────────────────────────────────────────────
+def test_all_36_chains_resolve():
+    print("\n[2] 36 chain templates → adapter resolution")
+    chains_dir = REPO / "config" / "chains"
+    chain_files = sorted(chains_dir.glob("*.json"))
+    assert len(chain_files) == 36, f"expected 36 chains, got {len(chain_files)}"
+    for cf in chain_files:
+        chain = cf.stem
+        try:
+            a = get_adapter(chain)
+            assert a.protocol_family, f"{chain}: empty protocol_family"
+        except Exception as e:
+            _fail(f"{chain}: {e}")
+    _ok(f"36/36 chains resolve to a registered adapter")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 3: JsonRpcAdapter — byte equality with bash for all baseline 8 chains
+# ─────────────────────────────────────────────────────────────────────────────
+def _bash_old_target(method, address, rpc_url, param_format):
+    """Mirror of target_generator.sh generate_rpc_json() L67-124."""
+    if param_format == "no_params":
+        params = []
+    elif param_format == "single_address":
+        params = [address]
+    elif param_format == "address_latest":
+        params = [address, "latest"]
+    elif param_format == "latest_address":
+        params = ["latest", address]
+    elif param_format == "address_storage_latest":
+        params = [address, "0x0", "latest"]
+    elif param_format == "address_key_latest":
+        params = [address, "0x1", "latest"]
+    elif param_format == "address_with_options":
+        params = [address, {"showType": True, "showContent": True, "showDisplay": False}]
+    else:
+        params = [address]
+    body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    body_str = json.dumps(body, separators=(",", ":"))
+    target = {
+        "method": "POST",
+        "url": rpc_url,
+        "header": {"Content-Type": ["application/json"]},
+        "body": base64.b64encode(body_str.encode()).decode(),
+    }
+    return json.dumps(target, separators=(",", ":"))
+
+
+def test_baseline_8_vegeta_byte_equality():
+    print("\n[3] Baseline 8 chains vegeta target byte-equality (Python adapter vs old bash)")
+    baseline = ["ethereum", "bsc", "polygon", "base", "scroll", "solana", "starknet", "sui"]
+    test_addr = "0xd8da6bf26964af9d7eed9e03e53415d37aa96045"
+    rpc_url = "http://localhost:8545"
+    chains_dir = REPO / "config" / "chains"
+    total = 0
+    for chain in baseline:
+        tpl = json.loads((chains_dir / f"{chain}.json").read_text())
+        for method, pf in tpl.get("params", {}).items():
+            if not isinstance(pf, str):
+                continue
+            expected = _bash_old_target(method, test_addr, rpc_url, pf)
+            r = subprocess.run(
+                ["python3", str(REPO / "tools/chain_adapters/cli.py"), "build-target",
+                 "--chain", chain, "--method", method,
+                 "--address", test_addr, "--rpc-url", rpc_url,
+                 "--param-format", pf],
+                capture_output=True, text=True)
+            actual = r.stdout.strip()
+            if actual != expected:
+                _fail(f"{chain}/{method}({pf}): mismatch\n      expected: {expected}\n      actual:   {actual}")
+            total += 1
+    _ok(f"{total} (chain × method) targets all byte-equal old bash path")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 4: Each family adapter parse_block_height round-trip
+# ─────────────────────────────────────────────────────────────────────────────
+def test_parse_block_height_per_family():
+    print("\n[4] parse_block_height per family")
+
+    # JsonRpc — EVM 0x-hex
+    a = get_adapter("ethereum")
+    h = a.parse_block_height(json.dumps({"result": "0x10D4F"}))
+    assert h == 0x10D4F == 68943, f"jsonrpc EVM 0x-hex: got {h}"
+    _ok("JsonRpcAdapter parses 0x-hex result")
+
+    # JsonRpc — Solana decimal int
+    h = a.parse_block_height(json.dumps({"result": "337632288"}))
+    assert h == 337632288, f"jsonrpc decimal: got {h}"
+    _ok("JsonRpcAdapter parses decimal int result")
+
+    # Tendermint
+    a = get_adapter("cosmos-hub")
+    h = a.parse_block_height(json.dumps(
+        {"result": {"sync_info": {"latest_block_height": "21459123"}}}))
+    assert h == 21459123, f"tendermint: got {h}"
+    _ok("TendermintAdapter parses sync_info.latest_block_height")
+
+    # Bitcoin
+    a = get_adapter("bitcoin")
+    h = a.parse_block_height(json.dumps({"result": 870000}))
+    assert h == 870000, f"bitcoin: got {h}"
+    _ok("BitcoinJsonRpcAdapter parses int result")
+
+    # Substrate
+    a = get_adapter("polkadot")
+    h = a.parse_block_height(json.dumps({"result": {"number": "0x1A2B3C"}}))
+    assert h == 0x1A2B3C, f"substrate: got {h}"
+    _ok("SubstrateAdapter parses .result.number 0x-hex")
+
+    # Ogmios
+    a = get_adapter("cardano")
+    h = a.parse_block_height(json.dumps({"result": {"height": 10500000, "slot": 99}}))
+    assert h == 10500000, f"ogmios: got {h}"
+    _ok("OgmiosAdapter prefers height over slot")
+
+    # Rest — Tezos with .header.level
+    os.environ["BLOCKCHAIN_NODE"] = "tezos"
+    a = get_adapter("tezos")
+    h = a.parse_block_height(json.dumps({"header": {"level": 8888888}}))
+    assert h == 8888888, f"rest tezos: got {h}"
+    _ok("RestAdapter parses Tezos .header.level")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 5: Health-check requests are well-formed per family
+# ─────────────────────────────────────────────────────────────────────────────
+def test_health_check_requests():
+    print("\n[5] health_check_request shape per family")
+
+    for chain in ["ethereum", "bitcoin", "cosmos-hub", "polkadot", "cardano"]:
+        os.environ["BLOCKCHAIN_NODE"] = chain
+        a = get_adapter(chain)
+        req = a.health_check_request("http://localhost:8545")
+        for k in ("method", "url", "headers", "body", "parse_jq"):
+            assert k in req, f"{chain}: health request missing {k!r}"
+        assert req["method"] in ("GET", "POST")
+        assert req["url"]
+        _ok(f"{chain:12s} health request well-formed (method={req['method']})")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 6: BitcoinJsonRpcAdapter honors auth env vars
+# ─────────────────────────────────────────────────────────────────────────────
+def test_bitcoin_auth():
+    print("\n[6] BitcoinJsonRpcAdapter auth")
+    os.environ["BITCOIN_RPC_USER"] = "alice"
+    os.environ["BITCOIN_RPC_PASSWORD"] = "secret"
+    try:
+        a = get_adapter("bitcoin")
+        t = a.build_vegeta_target("getblockcount", "addr", "http://localhost:8332", "no_params")
+        assert "Authorization" in t["header"], f"missing auth header: {t}"
+        expected_auth = "Basic " + base64.b64encode(b"alice:secret").decode()
+        assert t["header"]["Authorization"][0] == expected_auth
+        _ok("Bitcoin adapter injects Authorization: Basic header")
+    finally:
+        del os.environ["BITCOIN_RPC_USER"]
+        del os.environ["BITCOIN_RPC_PASSWORD"]
+
+    # Without auth env, no Authorization header
+    a = get_adapter("bitcoin")
+    t = a.build_vegeta_target("getblockcount", "addr", "http://localhost:8332", "no_params")
+    assert "Authorization" not in t["header"], f"unexpected auth header: {t}"
+    _ok("Bitcoin adapter omits Authorization when no env set")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 7: REST adapter requires BLOCKCHAIN_NODE env
+# ─────────────────────────────────────────────────────────────────────────────
+def test_rest_requires_env_and_path_map():
+    print("\n[7] RestAdapter requires BLOCKCHAIN_NODE + _meta.rest_paths")
+    os.environ.pop("BLOCKCHAIN_NODE", None)
+    a = get_adapter("aptos")
+    try:
+        a.build_vegeta_target("GET_ACCOUNT", "0xabc", "http://localhost:8080", "")
+        _fail("expected RuntimeError without BLOCKCHAIN_NODE")
+    except RuntimeError as e:
+        _ok(f"RuntimeError correctly raised: {e}")
+
+    # With env set but no rest_paths in template, expect ValueError
+    os.environ["BLOCKCHAIN_NODE"] = "aptos"
+    try:
+        a = get_adapter("aptos")
+        a.build_vegeta_target("nonexistent_method", "0xabc", "http://localhost:8080", "")
+        _fail("expected ValueError for unknown method")
+    except ValueError as e:
+        _ok(f"ValueError correctly raised for unknown method: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
+def main():
+    tests = [
+        test_factory_registers_six_families,
+        test_all_36_chains_resolve,
+        test_baseline_8_vegeta_byte_equality,
+        test_parse_block_height_per_family,
+        test_health_check_requests,
+        test_bitcoin_auth,
+        test_rest_requires_env_and_path_map,
+    ]
+    print(f"Running {len(tests)} test groups for chain_adapters")
+    for t in tests:
+        try:
+            t()
+        except AssertionError as e:
+            print(f"\n{FAIL} TEST FAILED: {t.__name__}")
+            print(f"   {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"\n{FAIL} TEST ERROR: {t.__name__}: {type(e).__name__}: {e}")
+            import traceback; traceback.print_exc()
+            sys.exit(2)
+    print(f"\n{PASS} ALL TESTS PASSED ({len(tests)} groups)")
+
+
+if __name__ == "__main__":
+    main()

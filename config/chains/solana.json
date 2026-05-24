@@ -37,6 +37,8 @@
     "extracted_from": "config/config_loader.sh UNIFIED_BLOCKCHAIN_CONFIG (line 408-652)",
     "baseline_sha": "ffbeeee",
     "extract_date": "2026-05-23",
-    "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持"
+    "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持",
+    "adapter_family": "jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

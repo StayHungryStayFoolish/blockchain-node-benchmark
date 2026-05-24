@@ -49,6 +49,8 @@
       }
     ],
     "original_notes": "ZK Rollup Type 4; chain_id=324; native AA (EOA 即合约); tx type 113 含 paymasterParams; 三阶段 finality (committed/proven/executed)",
-    "adapter_required": false
+    "adapter_required": false,
+    "adapter_family": "jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

@@ -49,6 +49,8 @@
       }
     ],
     "original_notes": "OP Stack Optimistic Rollup; 100% 复用 EthereumAdapter; chain_id=10; ~2s/block; optimism_*/rollup_* 公共白名单屏蔽; receipt 含 l1Fee",
-    "adapter_required": false
+    "adapter_required": false,
+    "adapter_family": "jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

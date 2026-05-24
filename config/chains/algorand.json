@@ -53,6 +53,8 @@
       }
     ],
     "original_notes": "双节点架构(algod + indexer),每 method 需 node_role 路由;Base32 地址 58 字符;ASA 持仓内嵌于 accounts 响应",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "rest",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

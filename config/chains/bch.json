@@ -47,6 +47,8 @@
       }
     ],
     "original_notes": "BCH 公链仅 REST 代理可用,JSON-RPC 需 self-hosted;CashAddr 地址格式独有",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "bitcoin_jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

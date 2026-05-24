@@ -47,6 +47,8 @@
       }
     ],
     "original_notes": "BTC fork; 100% 复用 BitcoinAdapter family=utxo-btc; 150s 出块; 公链无匿名 JSON-RPC,benchmark 需 self-host 9332; MWEB 激活但 schema 兼容",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "bitcoin_jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

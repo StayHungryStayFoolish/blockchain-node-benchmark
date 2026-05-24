@@ -59,6 +59,8 @@
       }
     ],
     "original_notes": "Cosmos + Parallel EVM (OCC) 双协议;EVM 公链双源稳定;sei1↔0x 双地址绑定;块时间 ~400ms",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "tendermint",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

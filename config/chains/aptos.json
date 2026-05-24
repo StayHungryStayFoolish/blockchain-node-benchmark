@@ -56,6 +56,8 @@
       }
     ],
     "original_notes": "REST 而非 JSON-RPC,POST JSON-RPC 返 405;响应自带 x-aptos-* header 免去 ledger 调用",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "rest",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

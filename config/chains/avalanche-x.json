@@ -47,6 +47,8 @@
       }
     ],
     "original_notes": "multi-asset UTXO; cb58 ID encoding; uint64 as string; namespace prefix avm.*; 需新建 AvalancheXAdapter",
-    "adapter_required": false
+    "adapter_required": false,
+    "adapter_family": "jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

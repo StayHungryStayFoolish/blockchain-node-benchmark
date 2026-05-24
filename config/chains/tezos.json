@@ -53,6 +53,8 @@
       }
     ],
     "original_notes": "REST 深路径(5-7 段);bare-string 响应;无 getTxByHash 必经 TzKT indexer 二级反查;chain_id 字符串",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "rest",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

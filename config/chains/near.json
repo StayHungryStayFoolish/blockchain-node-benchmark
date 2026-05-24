@@ -59,6 +59,8 @@
       }
     ],
     "original_notes": "account_id 是字符串(非 hex/base58);query 是 dispatcher (request_type 二级路由);tx 需 (hash,signer_id) 二元组",
-    "adapter_required": false
+    "adapter_required": false,
+    "adapter_family": "jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

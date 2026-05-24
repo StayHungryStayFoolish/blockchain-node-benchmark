@@ -53,6 +53,8 @@
       }
     ],
     "original_notes": "Polkadot parachain 2006;EVM + WASM(ink!)双 VM + Substrate;ss58=5; gasPrice ~778 gwei(MinGasPrice 高,非拥堵)",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "substrate",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

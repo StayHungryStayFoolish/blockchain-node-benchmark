@@ -47,6 +47,8 @@
       }
     ],
     "original_notes": "BTC/LTC 两层 fork; 100% 复用 BitcoinAdapter family=utxo-btc; 60s 出块; AuxPoW 与 LTC 合并挖矿; 无 SegWit/Taproot; scantxoutset 不支持; 公链 JSON-RPC 几乎不可用",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "bitcoin_jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

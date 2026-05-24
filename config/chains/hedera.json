@@ -53,6 +53,8 @@
       }
     ],
     "original_notes": "双协议 Mirror REST + JSON-RPC; 3-part account ID (shard.realm.num); tinybar vs weibar 单位换算; gRPC 不测",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "rest",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

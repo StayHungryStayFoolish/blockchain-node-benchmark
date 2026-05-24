@@ -47,6 +47,8 @@
       }
     ],
     "original_notes": "双协议 JSON-RPC + Sidecar REST;raw state_getStorage 需 client SCALE 编码,推荐走 sidecar",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "substrate",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

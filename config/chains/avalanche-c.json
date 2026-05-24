@@ -49,6 +49,8 @@
       }
     ],
     "original_notes": "EVM-equivalent (Coreth=geth fork); 100% 复用 EthereumAdapter; chain_id=43114; ~0.93s/block",
-    "adapter_required": false
+    "adapter_required": false,
+    "adapter_family": "jsonrpc",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }

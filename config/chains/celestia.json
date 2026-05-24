@@ -47,6 +47,8 @@
       }
     ],
     "original_notes": "Modular DA layer;blob/blobstream/minfee 等独有 module publicnode 不开放,requires_self_hosted;块体积 8MB hard cap",
-    "adapter_required": true
+    "adapter_required": true,
+    "adapter_family": "tendermint",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
   }
 }
