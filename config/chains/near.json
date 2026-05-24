@@ -1,0 +1,57 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/08-near.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "near",
+  "chain_type": "near",
+  "public_endpoints": [
+    {
+      "url": "https://free.rpc.fastnear.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "最快 0.17s 推荐主测"
+    },
+    {
+      "url": "https://rpc.mainnet.near.org",
+      "auth": false,
+      "verified": "E2",
+      "notes": "官方 2.19s,可能限流"
+    },
+    {
+      "url": "https://near.lava.build",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Lava 公共网关 0.43s"
+    }
+  ],
+  "single_method": "status",
+  "mixed_methods": [
+    "query",
+    "block",
+    "tx",
+    "gas_price",
+    "validators"
+  ],
+  "param_formats": {
+    "query": "query_dispatcher_request_type",
+    "block": "block_finality_or_id",
+    "tx": "[hash,signer_id]",
+    "gas_price": "[null]",
+    "validators": "[null]"
+  },
+  "system_addresses": [
+    "near",
+    "aurora",
+    "wrap.near",
+    "usdt.tether-token.near",
+    "token.sweat"
+  ],
+  "target_address": "relay.aurora",
+  "rpc_protocol": "json-rpc",
+  "notes": "account_id 是字符串(非 hex/base58);query 是 dispatcher (request_type 二级路由);tx 需 (hash,signer_id) 二元组"
+}

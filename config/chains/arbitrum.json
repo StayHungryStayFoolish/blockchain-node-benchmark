@@ -1,0 +1,48 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/15-arbitrum.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "arbitrum",
+  "chain_type": "arbitrum",
+  "public_endpoints": [
+    {
+      "url": "https://arb1.arbitrum.io/rpc",
+      "auth": false,
+      "verified": "E2",
+      "notes": "官方 RPC,nitro/v3.10.1"
+    },
+    {
+      "url": "https://arbitrum-one-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "publicnode 备用"
+    }
+  ],
+  "single_method": "eth_blockNumber",
+  "mixed_methods": [
+    "eth_blockNumber",
+    "eth_getBalance",
+    "eth_getBlockByNumber",
+    "eth_getTransactionReceipt",
+    "eth_call"
+  ],
+  "param_formats": {
+    "eth_blockNumber": "no_params",
+    "eth_getBalance": "address_latest",
+    "eth_getBlockByNumber": "block_number",
+    "eth_getTransactionReceipt": "transaction_hash",
+    "eth_call": "address_with_options"
+  },
+  "system_addresses": [
+    "0xa4b000000000000000000073657175656e636572",
+    "0x00000000000000000000000000000000000000c8"
+  ],
+  "target_address": "0xC0fFee254729296a45a3885639AC7E10F9d54979",
+  "rpc_protocol": "json-rpc",
+  "notes": "Optimistic Rollup; 100% 复用 EthereumAdapter; chain_id=42161; ~250ms/block; arb_* namespace 已弃用; receipt 含 gasUsedForL1"
+}

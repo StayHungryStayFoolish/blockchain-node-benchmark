@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/17-zksync-era.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "zksync-era",
+  "chain_type": "zksync-era",
+  "public_endpoints": [
+    {
+      "url": "https://mainnet.era.zksync.io",
+      "auth": false,
+      "verified": "E2",
+      "notes": "官方 RPC,~150ms,zks_* 全支持"
+    },
+    {
+      "url": "https://zksync-era-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "publicnode 备用,多数 zks_* 支持"
+    }
+  ],
+  "single_method": "eth_blockNumber",
+  "mixed_methods": [
+    "eth_blockNumber",
+    "eth_getBalance",
+    "eth_getBlockByNumber",
+    "zks_L1BatchNumber",
+    "zks_getBlockDetails"
+  ],
+  "param_formats": {
+    "eth_blockNumber": "no_params",
+    "eth_getBalance": "address_latest",
+    "eth_getBlockByNumber": "block_number",
+    "zks_L1BatchNumber": "no_params",
+    "zks_getBlockDetails": "block_number"
+  },
+  "system_addresses": [
+    "0x32400084c286cf3e17e7b677ea9583e60a000324"
+  ],
+  "target_address": "0xC0fFee254729296a45a3885639AC7E10F9d54979",
+  "rpc_protocol": "json-rpc",
+  "notes": "ZK Rollup Type 4; chain_id=324; native AA (EOA 即合约); tx type 113 含 paymasterParams; 三阶段 finality (committed/proven/executed)"
+}

@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/27-acala.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "acala",
+  "chain_type": "acala",
+  "public_endpoints": [
+    {
+      "url": "https://acala-rpc-0.aca-api.network",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Substrate JSON-RPC"
+    },
+    {
+      "url": "https://eth-rpc-acala.aca-api.network",
+      "auth": false,
+      "verified": "E2",
+      "notes": "EVM+ JSON-RPC ChainID 787"
+    }
+  ],
+  "single_method": "system_chain",
+  "mixed_methods": [
+    "system_chain",
+    "chain_getHeader",
+    "state_getRuntimeVersion",
+    "eth_chainId",
+    "eth_blockNumber"
+  ],
+  "param_formats": {
+    "system_chain": "no_params",
+    "chain_getHeader": "no_params",
+    "state_getRuntimeVersion": "no_params",
+    "eth_chainId": "no_params",
+    "eth_blockNumber": "no_params"
+  },
+  "system_addresses": [],
+  "target_address": "0x0000000000000000000000000000000000000000",
+  "rpc_protocol": "mixed",
+  "notes": "Polkadot parachain 2000;Substrate + EVM+ 双协议;多 token system [ACA,AUSD,DOT,LDOT];in-protocol shared-block EVM"
+}

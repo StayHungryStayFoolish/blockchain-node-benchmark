@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/07-polkadot.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "polkadot",
+  "chain_type": "polkadot",
+  "public_endpoints": [
+    {
+      "url": "https://rpc.polkadot.io",
+      "auth": false,
+      "verified": "E2",
+      "notes": "官方 JSON-RPC over HTTP"
+    },
+    {
+      "url": "https://polkadot-public-sidecar.parity-chains.parity.io",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Parity 公共 sidecar REST,推荐 0 Python balance 路径"
+    }
+  ],
+  "single_method": "chain_getHeader",
+  "mixed_methods": [
+    "GET /accounts/{addr}/balance-info",
+    "GET /blocks/{n}",
+    "account_nextIndex",
+    "GET /pallets/staking/progress",
+    "chain_getHeader"
+  ],
+  "param_formats": {
+    "GET /accounts/{addr}/balance-info": "path_addr",
+    "GET /blocks/{n}": "path_height",
+    "account_nextIndex": "single_address",
+    "GET /pallets/staking/progress": "no_params",
+    "chain_getHeader": "no_params"
+  },
+  "system_addresses": [],
+  "target_address": "13UVJyLnbVp9RBZYFwFGyDvVd1y27Tt8tkntv6Q7JVPhFsTB",
+  "rpc_protocol": "mixed",
+  "notes": "双协议 JSON-RPC + Sidecar REST;raw state_getStorage 需 client SCALE 编码,推荐走 sidecar"
+}

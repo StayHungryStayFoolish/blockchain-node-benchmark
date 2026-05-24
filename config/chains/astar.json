@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/29-astar.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "astar",
+  "chain_type": "astar",
+  "public_endpoints": [
+    {
+      "url": "https://evm.astar.network",
+      "auth": false,
+      "verified": "E2",
+      "notes": "EVM JSON-RPC ChainID 592"
+    },
+    {
+      "url": "https://rpc.astar.network",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Substrate JSON-RPC;两 hostname 同一 RPC server"
+    },
+    {
+      "url": "wss://rpc.astar.network",
+      "auth": false,
+      "verified": "E2",
+      "notes": "WSS subscription"
+    }
+  ],
+  "single_method": "eth_chainId",
+  "mixed_methods": [
+    "eth_chainId",
+    "eth_blockNumber",
+    "system_chain",
+    "chain_getHeader",
+    "state_getRuntimeVersion"
+  ],
+  "param_formats": {
+    "eth_chainId": "no_params",
+    "eth_blockNumber": "no_params",
+    "system_chain": "no_params",
+    "chain_getHeader": "no_params",
+    "state_getRuntimeVersion": "no_params"
+  },
+  "system_addresses": [],
+  "target_address": "0x0000000000000000000000000000000000000000",
+  "rpc_protocol": "mixed",
+  "notes": "Polkadot parachain 2006;EVM + WASM(ink!)双 VM + Substrate;ss58=5; gasPrice ~778 gwei(MinGasPrice 高,非拥堵)"
+}

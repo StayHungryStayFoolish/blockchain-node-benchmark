@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/03-bitcoin.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "bitcoin",
+  "chain_type": "bitcoin",
+  "public_endpoints": [
+    {
+      "url": "https://bitcoin-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "allnodes 反代,wallet 类 method 被禁(-32701)"
+    },
+    {
+      "url": "https://blockstream.info/api",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Esplora REST,address balance 补全"
+    }
+  ],
+  "single_method": "getblockcount",
+  "mixed_methods": [
+    "getblockcount",
+    "getblock",
+    "getrawtransaction",
+    "getrawmempool",
+    "estimatesmartfee"
+  ],
+  "param_formats": {
+    "getblockcount": "no_params",
+    "getblock": "[blockhash,verbosity]",
+    "getrawtransaction": "[txid,verbose]",
+    "getrawmempool": "no_params",
+    "estimatesmartfee": "[conf_target]"
+  },
+  "system_addresses": [],
+  "target_address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+  "rpc_protocol": "mixed",
+  "notes": "JSON-RPC 1.0 + Esplora REST 双栈;UTXO 模型,无 address index,balance 必经 Esplora"
+}

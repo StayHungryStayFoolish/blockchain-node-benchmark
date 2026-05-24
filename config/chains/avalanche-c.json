@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/12-avalanche-c.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "avalanche-c",
+  "chain_type": "avalanche-c",
+  "public_endpoints": [
+    {
+      "url": "https://avalanche-c-chain-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "无缓存延迟,推荐默认"
+    },
+    {
+      "url": "https://api.avax.network/ext/bc/C/rpc",
+      "auth": false,
+      "verified": "E2",
+      "notes": "官方,有 ~6s block 缓存"
+    }
+  ],
+  "single_method": "eth_blockNumber",
+  "mixed_methods": [
+    "eth_blockNumber",
+    "eth_getBalance",
+    "eth_getBlockByNumber",
+    "eth_getTransactionByHash",
+    "eth_call"
+  ],
+  "param_formats": {
+    "eth_blockNumber": "no_params",
+    "eth_getBalance": "address_latest",
+    "eth_getBlockByNumber": "block_number",
+    "eth_getTransactionByHash": "transaction_hash",
+    "eth_call": "address_with_options"
+  },
+  "system_addresses": [
+    "0x0100000000000000000000000000000000000000"
+  ],
+  "target_address": "0xC0fFee254729296a45a3885639AC7E10F9d54979",
+  "rpc_protocol": "json-rpc",
+  "notes": "EVM-equivalent (Coreth=geth fork); 100% 复用 EthereumAdapter; chain_id=43114; ~0.93s/block"
+}

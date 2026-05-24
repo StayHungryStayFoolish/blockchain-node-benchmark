@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/06-cardano.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "cardano",
+  "chain_type": "cardano",
+  "public_endpoints": [
+    {
+      "url": "https://api.koios.rest/api/v1",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Koios REST 免 key 推荐"
+    },
+    {
+      "url": "https://cardano-mainnet.blockfrost.io/api/v0",
+      "auth": false,
+      "verified": "E2",
+      "notes": "需 project_id,无 key=403"
+    }
+  ],
+  "single_method": "GET /tip",
+  "mixed_methods": [
+    "POST /address_info",
+    "POST /tx_info",
+    "POST /address_assets",
+    "POST /block_info",
+    "POST /asset_info"
+  ],
+  "param_formats": {
+    "POST /address_info": "body_addresses_array",
+    "POST /tx_info": "body_tx_hashes_array",
+    "POST /address_assets": "body_addresses_array",
+    "POST /block_info": "body_block_hashes_array",
+    "POST /asset_info": "body_asset_list_array"
+  },
+  "system_addresses": [],
+  "target_address": "addr1qxahjgt8c9fsjrc8g0937h5q2cqpyglq9kyy62834ngfyct0kzq5as673n2e05chwvsptgx0ngwtggj20shf84h4fx0qm4kw4a",
+  "rpc_protocol": "rest",
+  "notes": "EUTXO 模型;cardano-node 无原生 HTTP,必经 middleware(Koios);多数 method 是 POST + JSON array body"
+}

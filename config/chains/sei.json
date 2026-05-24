@@ -1,0 +1,57 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/25-sei.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "sei",
+  "chain_type": "sei",
+  "public_endpoints": [
+    {
+      "url": "https://sei-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Tendermint RPC pacific-1"
+    },
+    {
+      "url": "https://sei-rest.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Cosmos REST"
+    },
+    {
+      "url": "https://evm-rpc.sei-apis.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "EVM JSON-RPC ChainID 1329"
+    },
+    {
+      "url": "https://sei.drpc.org",
+      "auth": false,
+      "verified": "E2",
+      "notes": "EVM 备用源"
+    }
+  ],
+  "single_method": "eth_chainId",
+  "mixed_methods": [
+    "eth_chainId",
+    "eth_blockNumber",
+    "eth_getBalance",
+    "eth_call",
+    "/status"
+  ],
+  "param_formats": {
+    "eth_chainId": "no_params",
+    "eth_blockNumber": "no_params",
+    "eth_getBalance": "address_latest",
+    "eth_call": "address_with_options",
+    "/status": "no_params"
+  },
+  "system_addresses": [],
+  "target_address": "0x0000000000000000000000000000000000000000",
+  "rpc_protocol": "mixed",
+  "notes": "Cosmos + Parallel EVM (OCC) 双协议;EVM 公链双源稳定;sei1↔0x 双地址绑定;块时间 ~400ms"
+}

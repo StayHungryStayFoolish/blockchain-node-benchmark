@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/14-hedera.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "hedera",
+  "chain_type": "hedera",
+  "public_endpoints": [
+    {
+      "url": "https://mainnet-public.mirrornode.hedera.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Mirror REST API,GET 风格"
+    },
+    {
+      "url": "https://mainnet.hashio.io/api",
+      "auth": false,
+      "verified": "E2",
+      "notes": "JSON-RPC Relay (EVM-compat),chainId=295"
+    }
+  ],
+  "single_method": "mirror_account_query",
+  "mixed_methods": [
+    "mirror_account_query",
+    "mirror_balance_query",
+    "mirror_tx_lookup",
+    "eth_getBalance",
+    "eth_call"
+  ],
+  "param_formats": {
+    "mirror_account_query": "path_account_3part",
+    "mirror_balance_query": "query_account_3part",
+    "mirror_tx_lookup": "path_tx_id_3part_dash",
+    "eth_getBalance": "address_latest",
+    "eth_call": "address_with_options"
+  },
+  "system_addresses": [
+    "0.0.1",
+    "0.0.2",
+    "0.0.98",
+    "0.0.800",
+    "0.0.801"
+  ],
+  "target_address": "0.0.2",
+  "rpc_protocol": "mixed",
+  "notes": "双协议 Mirror REST + JSON-RPC; 3-part account ID (shard.realm.num); tinybar vs weibar 单位换算; gRPC 不测"
+}

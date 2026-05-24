@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/20-dogecoin.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "dogecoin",
+  "chain_type": "dogecoin",
+  "public_endpoints": [
+    {
+      "url": "https://api.blockcypher.com/v1/doge/main",
+      "auth": false,
+      "verified": "E2",
+      "notes": "REST 主实证 fallback"
+    },
+    {
+      "url": "https://api.blockchair.com/dogecoin/stats",
+      "auth": false,
+      "verified": "E2",
+      "notes": "REST 交叉校验"
+    }
+  ],
+  "single_method": "getblockcount",
+  "mixed_methods": [
+    "getblockcount",
+    "getbestblockhash",
+    "getblock",
+    "getrawtransaction",
+    "getmempoolinfo"
+  ],
+  "param_formats": {
+    "getblockcount": "no_params",
+    "getbestblockhash": "no_params",
+    "getblock": "block_hash",
+    "getrawtransaction": "transaction_hash",
+    "getmempoolinfo": "no_params"
+  },
+  "system_addresses": [],
+  "target_address": "D7Y55r6Yoc1G8EECxkQ6SuSjTGGJqHGTaC",
+  "rpc_protocol": "rest",
+  "notes": "BTC/LTC 两层 fork; 100% 复用 BitcoinAdapter family=utxo-btc; 60s 出块; AuxPoW 与 LTC 合并挖矿; 无 SegWit/Taproot; scantxoutset 不支持; 公链 JSON-RPC 几乎不可用"
+}

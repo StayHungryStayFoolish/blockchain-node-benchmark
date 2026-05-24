@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/22-osmosis.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "osmosis",
+  "chain_type": "osmosis",
+  "public_endpoints": [
+    {
+      "url": "https://osmosis-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Tendermint RPC, height 62344664"
+    },
+    {
+      "url": "https://osmosis-rest.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Cosmos REST/LCD"
+    },
+    {
+      "url": "https://lcd.osmosis.zone",
+      "auth": false,
+      "verified": "E2",
+      "notes": "官方 LCD"
+    }
+  ],
+  "single_method": "/status",
+  "mixed_methods": [
+    "/status",
+    "/cosmos/bank/v1beta1/balances/{address}",
+    "/osmosis/poolmanager/v1beta1/num_pools",
+    "/osmosis/gamm/v1beta1/pools/{pool_id}",
+    "/osmosis/twap/v1beta1/ArithmeticTwapToNow"
+  ],
+  "param_formats": {
+    "/status": "no_params",
+    "/cosmos/bank/v1beta1/balances/{address}": "path_address",
+    "/osmosis/poolmanager/v1beta1/num_pools": "no_params",
+    "/osmosis/gamm/v1beta1/pools/{pool_id}": "path_pool_id",
+    "/osmosis/twap/v1beta1/ArithmeticTwapToNow": "query_params"
+  },
+  "system_addresses": [],
+  "target_address": "osmo1jv65s3grqf6v6jl3dp4t6c9t9rk99cd80yhvld",
+  "rpc_protocol": "mixed",
+  "notes": "CometBFT JSON-RPC + Cosmos REST 双协议;独有 module gamm/CL/poolmanager 全公链可达"
+}

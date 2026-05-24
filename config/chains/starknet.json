@@ -1,0 +1,34 @@
+{
+  "chain_type": "starknet",
+  "rpc_url": "LOCAL_RPC_URL",
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "target_address": "0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+  },
+  "methods": {
+    "get_events_native": "starknet_getEvents",
+    "get_transaction": "starknet_getTransactionByHash"
+  },
+  "system_addresses": [],
+  "rpc_methods": {
+    "single": "starknet_getClassAt",
+    "mixed": "starknet_getClassAt,starknet_getNonce,starknet_getStorageAt,starknet_blockNumber"
+  },
+  "param_formats": {
+    "starknet_getClassAt": "latest_address",
+    "starknet_getNonce": "latest_address",
+    "starknet_getStorageAt": "address_key_latest",
+    "starknet_blockNumber": "no_params"
+  },
+  "_meta": {
+    "source": "baseline-config_loader.sh",
+    "extracted_from": "config/config_loader.sh UNIFIED_BLOCKCHAIN_CONFIG (line 408-652)",
+    "baseline_sha": "ffbeeee",
+    "extract_date": "2026-05-23",
+    "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/24-injective.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "injective",
+  "chain_type": "injective",
+  "public_endpoints": [
+    {
+      "url": "https://injective-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Tendermint RPC, height 167817179"
+    },
+    {
+      "url": "https://injective-rest.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Cosmos REST/LCD"
+    }
+  ],
+  "single_method": "/status",
+  "mixed_methods": [
+    "/status",
+    "/cosmos/bank/v1beta1/balances/{address}",
+    "/injective/exchange/v1beta1/spot/markets",
+    "/injective/exchange/v1beta1/derivative/markets",
+    "/injective/oracle/v1beta1/params"
+  ],
+  "param_formats": {
+    "/status": "no_params",
+    "/cosmos/bank/v1beta1/balances/{address}": "path_address",
+    "/injective/exchange/v1beta1/spot/markets": "no_params",
+    "/injective/exchange/v1beta1/derivative/markets": "no_params",
+    "/injective/oracle/v1beta1/params": "no_params"
+  },
+  "system_addresses": [
+    "0xF955C57f9EA9Dc8781965FEaE0b6A2acE2BAD6f3"
+  ],
+  "target_address": "inj17xpfvakm2amg962yls6f84z3kell8c5l6s5ye9",
+  "rpc_protocol": "mixed",
+  "notes": "Cosmos + EVM 双协议;in-protocol EVM 及 inEVM L2(2525) 公共 endpoint 均 requires_self_hosted;INJ decimals=18"
+}

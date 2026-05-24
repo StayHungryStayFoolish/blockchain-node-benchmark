@@ -1,0 +1,40 @@
+{
+  "chain_type": "sui",
+  "rpc_url": "LOCAL_RPC_URL",
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "target_address": "0x0000000000000000000000000000000000000000000000000000000000000005",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+  },
+  "methods": {
+    "get_owned_objects": "suix_getOwnedObjects",
+    "get_transaction": "sui_getTransactionBlock",
+    "get_transactions": "suix_queryTransactionBlocks"
+  },
+  "system_addresses": [
+    "0x1",
+    "0x2",
+    "0x3"
+  ],
+  "rpc_methods": {
+    "single": "sui_getObject",
+    "mixed": "sui_getObject,sui_getTotalTransactionBlocks,sui_getLatestCheckpointSequenceNumber,suix_getReferenceGasPrice,sui_getChainIdentifier"
+  },
+  "param_formats": {
+    "sui_getObject": "address_with_options",
+    "sui_getTotalTransactionBlocks": "no_params",
+    "sui_getLatestCheckpointSequenceNumber": "no_params",
+    "suix_getReferenceGasPrice": "no_params",
+    "sui_getChainIdentifier": "no_params"
+  },
+  "_meta": {
+    "source": "baseline-config_loader.sh",
+    "extracted_from": "config/config_loader.sh UNIFIED_BLOCKCHAIN_CONFIG (line 408-652)",
+    "baseline_sha": "ffbeeee",
+    "extract_date": "2026-05-23",
+    "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持"
+  }
+}

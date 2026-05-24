@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/10-algorand.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "algorand",
+  "chain_type": "algorand",
+  "public_endpoints": [
+    {
+      "url": "https://mainnet-api.algonode.cloud",
+      "auth": false,
+      "verified": "E2",
+      "notes": "algod 实时节点 0.21s"
+    },
+    {
+      "url": "https://mainnet-idx.algonode.cloud",
+      "auth": false,
+      "verified": "E2",
+      "notes": "indexer 历史查询节点 0.15s"
+    },
+    {
+      "url": "https://mainnet-api.4160.nodely.dev",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Nodely 备用"
+    }
+  ],
+  "single_method": "GET /v2/status",
+  "mixed_methods": [
+    "GET /v2/accounts/{address}",
+    "GET /v2/transactions/{txid}",
+    "GET /v2/blocks/{round}",
+    "GET /v2/assets/{asset_id}",
+    "GET /v2/accounts/{address}/transactions"
+  ],
+  "param_formats": {
+    "GET /v2/accounts/{address}": "path_addr_base32",
+    "GET /v2/transactions/{txid}": "path_txid_base32",
+    "GET /v2/blocks/{round}": "path_round_int",
+    "GET /v2/assets/{asset_id}": "path_asset_id_int",
+    "GET /v2/accounts/{address}/transactions": "path_addr_query_limit"
+  },
+  "system_addresses": [],
+  "target_address": "Q5WOHVUKNEM4XOVL725KH77WS6GODZSI4HTSWZAILM36ANSYVHW5RJI3KE",
+  "rpc_protocol": "rest",
+  "notes": "双节点架构(algod + indexer),每 method 需 node_role 路由;Base32 地址 58 字符;ASA 持仓内嵌于 accounts 响应"
+}

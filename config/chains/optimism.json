@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/16-optimism.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "optimism",
+  "chain_type": "optimism",
+  "public_endpoints": [
+    {
+      "url": "https://mainnet.optimism.io",
+      "auth": false,
+      "verified": "E2",
+      "notes": "官方 RPC,op-reth/v2.2.0"
+    },
+    {
+      "url": "https://optimism-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "publicnode 备用(未单独 curl)"
+    }
+  ],
+  "single_method": "eth_blockNumber",
+  "mixed_methods": [
+    "eth_blockNumber",
+    "eth_getBalance",
+    "eth_getBlockByNumber",
+    "eth_getTransactionReceipt",
+    "eth_call"
+  ],
+  "param_formats": {
+    "eth_blockNumber": "no_params",
+    "eth_getBalance": "address_latest",
+    "eth_getBlockByNumber": "block_number",
+    "eth_getTransactionReceipt": "transaction_hash",
+    "eth_call": "address_with_options"
+  },
+  "system_addresses": [
+    "0x4200000000000000000000000000000000000006"
+  ],
+  "target_address": "0xC0fFee254729296a45a3885639AC7E10F9d54979",
+  "rpc_protocol": "json-rpc",
+  "notes": "OP Stack Optimistic Rollup; 100% 复用 EthereumAdapter; chain_id=10; ~2s/block; optimism_*/rollup_* 公共白名单屏蔽; receipt 含 l1Fee"
+}

@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/23-celestia.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "celestia",
+  "chain_type": "celestia",
+  "public_endpoints": [
+    {
+      "url": "https://celestia-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Tendermint RPC, height 11218365"
+    },
+    {
+      "url": "https://celestia-rest.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Cosmos REST"
+    }
+  ],
+  "single_method": "/status",
+  "mixed_methods": [
+    "/status",
+    "/cosmos/base/tendermint/v1beta1/blocks/latest",
+    "/cosmos/base/tendermint/v1beta1/node_info",
+    "/cosmos/bank/v1beta1/balances/{address}",
+    "/block"
+  ],
+  "param_formats": {
+    "/status": "no_params",
+    "/cosmos/base/tendermint/v1beta1/blocks/latest": "no_params",
+    "/cosmos/base/tendermint/v1beta1/node_info": "no_params",
+    "/cosmos/bank/v1beta1/balances/{address}": "path_address",
+    "/block": "[height]"
+  },
+  "system_addresses": [],
+  "target_address": "",
+  "rpc_protocol": "mixed",
+  "notes": "Modular DA layer;blob/blobstream/minfee 等独有 module publicnode 不开放,requires_self_hosted;块体积 8MB hard cap"
+}

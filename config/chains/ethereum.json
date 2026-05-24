@@ -1,0 +1,37 @@
+{
+  "chain_type": "ethereum",
+  "rpc_url": "LOCAL_RPC_URL",
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "target_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+  },
+  "methods": {
+    "get_logs": "eth_getLogs",
+    "get_transaction": "eth_getTransactionByHash"
+  },
+  "system_addresses": [
+    "0x0000000000000000000000000000000000000000",
+    "0x000000000000000000000000000000000000dead"
+  ],
+  "rpc_methods": {
+    "single": "eth_getBalance",
+    "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice"
+  },
+  "param_formats": {
+    "eth_getBalance": "address_latest",
+    "eth_getTransactionCount": "address_latest",
+    "eth_blockNumber": "no_params",
+    "eth_gasPrice": "no_params"
+  },
+  "_meta": {
+    "source": "baseline-config_loader.sh",
+    "extracted_from": "config/config_loader.sh UNIFIED_BLOCKCHAIN_CONFIG (line 408-652)",
+    "baseline_sha": "ffbeeee",
+    "extract_date": "2026-05-23",
+    "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持"
+  }
+}

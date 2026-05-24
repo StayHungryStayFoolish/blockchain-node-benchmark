@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/26-kusama.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "kusama",
+  "chain_type": "kusama",
+  "public_endpoints": [
+    {
+      "url": "https://kusama-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "Substrate JSON-RPC,block #33648335"
+    },
+    {
+      "url": "wss://kusama-rpc.polkadot.io",
+      "auth": false,
+      "verified": "E2",
+      "notes": "WSS-only 官方端点"
+    }
+  ],
+  "single_method": "chain_getHeader",
+  "mixed_methods": [
+    "chain_getHeader",
+    "chain_getFinalizedHead",
+    "system_health",
+    "system_properties",
+    "chain_getBlockHash"
+  ],
+  "param_formats": {
+    "chain_getHeader": "no_params",
+    "chain_getFinalizedHead": "no_params",
+    "system_health": "no_params",
+    "system_properties": "no_params",
+    "chain_getBlockHash": "[block_number]"
+  },
+  "system_addresses": [],
+  "target_address": "F3opxRbN5ZbjJNU511Kj2TLuzFcDq9BGduA9TgiECafpg29",
+  "rpc_protocol": "json-rpc",
+  "notes": "Polkadot canary;ss58 prefix=2, KSM 12 decimals;method 集与 Polkadot 100% 同"
+}

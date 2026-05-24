@@ -1,0 +1,48 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/18-linea.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "linea",
+  "chain_type": "linea",
+  "public_endpoints": [
+    {
+      "url": "https://rpc.linea.build",
+      "auth": false,
+      "verified": "E2",
+      "notes": "官方 linea-geth follower,~120ms"
+    },
+    {
+      "url": "https://linea-rpc.publicnode.com",
+      "auth": false,
+      "verified": "E2",
+      "notes": "第三方镜像,~180ms"
+    }
+  ],
+  "single_method": "eth_blockNumber",
+  "mixed_methods": [
+    "eth_blockNumber",
+    "eth_getBalance",
+    "eth_getBlockByNumber",
+    "eth_getTransactionByHash",
+    "linea_estimateGas"
+  ],
+  "param_formats": {
+    "eth_blockNumber": "no_params",
+    "eth_getBalance": "address_latest",
+    "eth_getBlockByNumber": "block_number",
+    "eth_getTransactionByHash": "transaction_hash",
+    "linea_estimateGas": "address_with_options"
+  },
+  "system_addresses": [
+    "0xd19d4B5d358258f05D7B411E21A1460D11B0876F",
+    "0x051F1D88f0aF5763fB888eC4378b4D8B29ea3319"
+  ],
+  "target_address": "0xC0fFee254729296a45a3885639AC7E10F9d54979",
+  "rpc_protocol": "json-rpc",
+  "notes": "ZK Rollup Type 2 (字节码等价); chain_id=59144; 仅 3 个 linea_* method; SMT/Mimc trie; baseFee 锁 7 wei; 标准 EOA"
+}

@@ -1,0 +1,42 @@
+{
+  "chain_type": "solana",
+  "rpc_url": "LOCAL_RPC_URL",
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "target_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
+  },
+  "methods": {
+    "get_signatures": "getSignaturesForAddress",
+    "get_transaction": "getTransaction"
+  },
+  "system_addresses": [
+    "11111111111111111111111111111111",
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+    "SysvarRent111111111111111111111111111111111",
+    "ComputeBudget111111111111111111111111111111"
+  ],
+  "rpc_methods": {
+    "single": "getAccountInfo",
+    "mixed": "getAccountInfo,getBalance,getTokenAccountBalance,getLatestBlockhash,getBlockHeight"
+  },
+  "param_formats": {
+    "getAccountInfo": "single_address",
+    "getBalance": "single_address",
+    "getTokenAccountBalance": "single_address",
+    "getLatestBlockhash": "no_params",
+    "getBlockHeight": "no_params"
+  },
+  "_meta": {
+    "source": "baseline-config_loader.sh",
+    "extracted_from": "config/config_loader.sh UNIFIED_BLOCKCHAIN_CONFIG (line 408-652)",
+    "baseline_sha": "ffbeeee",
+    "extract_date": "2026-05-23",
+    "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持"
+  }
+}

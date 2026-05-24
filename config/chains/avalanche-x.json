@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/13-avalanche-x.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
+  },
+  "chain": "avalanche-x",
+  "chain_type": "avalanche-x",
+  "public_endpoints": [
+    {
+      "url": "https://api.avax.network/ext/bc/X",
+      "auth": false,
+      "verified": "E2",
+      "notes": "AVM JSON-RPC 2.0; ~55ms 热连接"
+    },
+    {
+      "url": "https://api.avax.network/ext/info",
+      "auth": false,
+      "verified": "E2",
+      "notes": "info.* namespace 独立 endpoint"
+    }
+  ],
+  "single_method": "avm.getHeight",
+  "mixed_methods": [
+    "avm.getHeight",
+    "avm.getBlockByHeight",
+    "avm.getTx",
+    "avm.getAllBalances",
+    "avm.getUTXOs"
+  ],
+  "param_formats": {
+    "avm.getHeight": "no_params",
+    "avm.getBlockByHeight": "height_encoding",
+    "avm.getTx": "txid_encoding",
+    "avm.getAllBalances": "single_address",
+    "avm.getUTXOs": "addresses_limit_encoding"
+  },
+  "system_addresses": [],
+  "target_address": "X-avax13k6hxpfuu80dlnqlqs0dxxjrzl4lxz94n38vnw",
+  "rpc_protocol": "json-rpc",
+  "notes": "multi-asset UTXO; cb58 ID encoding; uint64 as string; namespace prefix avm.*; 需新建 AvalancheXAdapter"
+}
