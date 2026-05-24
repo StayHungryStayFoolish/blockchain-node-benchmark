@@ -463,7 +463,7 @@ validate_config_consistency() {
                 CURRENT_RPC_METHODS_STRING="$expected_method"
 
                 # Update cache
-                local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower}_${rpc_mode_lower}"
+                local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower//-/_}_${rpc_mode_lower}"
                 export "$rpc_cache_var_name"="$CURRENT_RPC_METHODS_STRING"
 
                 echo "✅ Configuration consistency fixed" >&2
@@ -490,7 +490,11 @@ generate_auto_config() {
     echo "   Target blockchain: $blockchain_node_lower" >&2
     
     # Performance optimization: Use cached JSON parsing results
-    local cache_var_name="CACHED_CHAIN_CONFIG_${blockchain_node_lower}"
+    # NOTE (S0.7-norm): bash variable names disallow '-', so chain names like
+    # avalanche-c / cosmos-hub / zksync-era must have '-' normalized to '_'
+    # for the cache var name only. The on-disk file name stays as-is.
+    local blockchain_node_var_safe="${blockchain_node_lower//-/_}"
+    local cache_var_name="CACHED_CHAIN_CONFIG_${blockchain_node_var_safe}"
     local cached_config="${!cache_var_name:-}"
     
     if [[ -n "$cached_config" ]]; then
@@ -528,7 +532,7 @@ generate_auto_config() {
     rpc_mode_lower=$(echo "${RPC_MODE:-single}" | tr '[:upper:]' '[:lower:]')
     
     # Performance optimization: Use cached RPC method parsing results
-    local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower}_${rpc_mode_lower}"
+    local rpc_cache_var_name="CACHED_RPC_METHODS_${blockchain_node_lower//-/_}_${rpc_mode_lower}"
     local cached_rpc_methods="${!rpc_cache_var_name:-}"
     
     if [[ -n "$cached_rpc_methods" ]]; then

@@ -1,36 +1,6 @@
 {
-  "_meta": {
-    "source": "research-md",
-    "research_doc": "docs/zh/chains/07-polkadot.md",
-    "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
-    "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
-  },
-  "chain": "polkadot",
   "chain_type": "polkadot",
-  "public_endpoints": [
-    {
-      "url": "https://rpc.polkadot.io",
-      "auth": false,
-      "verified": "E2",
-      "notes": "官方 JSON-RPC over HTTP"
-    },
-    {
-      "url": "https://polkadot-public-sidecar.parity-chains.parity.io",
-      "auth": false,
-      "verified": "E2",
-      "notes": "Parity 公共 sidecar REST,推荐 0 Python balance 路径"
-    }
-  ],
-  "single_method": "chain_getHeader",
-  "mixed_methods": [
-    "GET /accounts/{addr}/balance-info",
-    "GET /blocks/{n}",
-    "account_nextIndex",
-    "GET /pallets/staking/progress",
-    "chain_getHeader"
-  ],
+  "methods": {},
   "param_formats": {
     "GET /accounts/{addr}/balance-info": "path_addr",
     "GET /blocks/{n}": "path_height",
@@ -38,8 +8,45 @@
     "GET /pallets/staking/progress": "no_params",
     "chain_getHeader": "no_params"
   },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "13UVJyLnbVp9RBZYFwFGyDvVd1y27Tt8tkntv6Q7JVPhFsTB",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "single": "chain_getHeader",
+    "mixed": "GET /accounts/{addr}/balance-info,GET /blocks/{n},account_nextIndex,GET /pallets/staking/progress,chain_getHeader"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
-  "target_address": "13UVJyLnbVp9RBZYFwFGyDvVd1y27Tt8tkntv6Q7JVPhFsTB",
-  "rpc_protocol": "mixed",
-  "notes": "双协议 JSON-RPC + Sidecar REST;raw state_getStorage 需 client SCALE 编码,推荐走 sidecar"
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/07-polkadot.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "normalized_at": "2026-05-24T04:43:09.942477+00:00",
+    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "original_rpc_protocol": "mixed",
+    "original_public_endpoints": [
+      {
+        "url": "https://rpc.polkadot.io",
+        "auth": false,
+        "verified": "E2",
+        "notes": "官方 JSON-RPC over HTTP"
+      },
+      {
+        "url": "https://polkadot-public-sidecar.parity-chains.parity.io",
+        "auth": false,
+        "verified": "E2",
+        "notes": "Parity 公共 sidecar REST,推荐 0 Python balance 路径"
+      }
+    ],
+    "original_notes": "双协议 JSON-RPC + Sidecar REST;raw state_getStorage 需 client SCALE 编码,推荐走 sidecar",
+    "adapter_required": true
+  }
 }

@@ -1,36 +1,6 @@
 {
-  "_meta": {
-    "source": "research-md",
-    "research_doc": "docs/zh/chains/05-cosmos-hub.md",
-    "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
-    "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
-  },
-  "chain": "cosmos-hub",
   "chain_type": "cosmos-hub",
-  "public_endpoints": [
-    {
-      "url": "https://cosmos-rpc.publicnode.com",
-      "auth": false,
-      "verified": "E2",
-      "notes": "Tendermint RPC :26657 风格"
-    },
-    {
-      "url": "https://cosmos-rest.publicnode.com",
-      "auth": false,
-      "verified": "E2",
-      "notes": "REST/LCD :1317 风格(推荐主测)"
-    }
-  ],
-  "single_method": "GET /cosmos/base/tendermint/v1beta1/blocks/latest",
-  "mixed_methods": [
-    "GET /cosmos/bank/v1beta1/balances/{addr}",
-    "GET /cosmos/tx/v1beta1/txs/{hash}",
-    "GET /cosmos/base/tendermint/v1beta1/blocks/{height}",
-    "GET /cosmos/staking/v1beta1/validators",
-    "GET /cosmos/base/tendermint/v1beta1/blocks/latest"
-  ],
+  "methods": {},
   "param_formats": {
     "GET /cosmos/bank/v1beta1/balances/{addr}": "path_addr",
     "GET /cosmos/tx/v1beta1/txs/{hash}": "path_hash_upper_hex_no_prefix",
@@ -38,13 +8,50 @@
     "GET /cosmos/staking/v1beta1/validators": "query_pagination",
     "GET /cosmos/base/tendermint/v1beta1/blocks/latest": "no_params"
   },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "cosmos1wypsnn7n5hsd2kvk424qv9yuretz9m6kvumev2",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "single": "GET /cosmos/base/tendermint/v1beta1/blocks/latest",
+    "mixed": "GET /cosmos/bank/v1beta1/balances/{addr},GET /cosmos/tx/v1beta1/txs/{hash},GET /cosmos/base/tendermint/v1beta1/blocks/{height},GET /cosmos/staking/v1beta1/validators,GET /cosmos/base/tendermint/v1beta1/blocks/latest"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [
     "cosmos1fl48vsnmsdzcv85q5d2q4z5ajdha8yu34mf0eh",
     "cosmos17xpfvakm2amg962yls6f84z3kell8c5lserqta",
     "cosmos1jv65s3grqf6v6jl3dp4t6c9t9rk99cd88lyufl",
     "cosmos1tygms3xhhs3yv487phx3dw4a95jn7t7lpm470r"
   ],
-  "target_address": "cosmos1wypsnn7n5hsd2kvk424qv9yuretz9m6kvumev2",
-  "rpc_protocol": "rest",
-  "notes": "三协议并存(Tendermint RPC/REST/gRPC),推荐 REST/LCD;system_addresses 为 SPECULATED module accounts"
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/05-cosmos-hub.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "normalized_at": "2026-05-24T04:43:09.937968+00:00",
+    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "original_rpc_protocol": "rest",
+    "original_public_endpoints": [
+      {
+        "url": "https://cosmos-rpc.publicnode.com",
+        "auth": false,
+        "verified": "E2",
+        "notes": "Tendermint RPC :26657 风格"
+      },
+      {
+        "url": "https://cosmos-rest.publicnode.com",
+        "auth": false,
+        "verified": "E2",
+        "notes": "REST/LCD :1317 风格(推荐主测)"
+      }
+    ],
+    "original_notes": "三协议并存(Tendermint RPC/REST/gRPC),推荐 REST/LCD;system_addresses 为 SPECULATED module accounts",
+    "adapter_required": true
+  }
 }

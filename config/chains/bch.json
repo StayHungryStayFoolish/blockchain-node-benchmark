@@ -1,36 +1,6 @@
 {
-  "_meta": {
-    "source": "research-md",
-    "research_doc": "docs/zh/chains/21-bch.md",
-    "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
-    "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
-  },
-  "chain": "bch",
   "chain_type": "bch",
-  "public_endpoints": [
-    {
-      "url": "https://rest1.biggestfan.net/v2/",
-      "auth": false,
-      "verified": "E2",
-      "notes": "BCHN 29 REST代理,blocks=952310"
-    },
-    {
-      "url": "https://api.blockchair.com/bitcoin-cash/",
-      "auth": false,
-      "verified": "E2",
-      "notes": "Blockchair REST,30 req/min"
-    }
-  ],
-  "single_method": "getblockcount",
-  "mixed_methods": [
-    "getblockcount",
-    "getnetworkinfo",
-    "getmempoolinfo",
-    "getblock",
-    "getrawtransaction"
-  ],
+  "methods": {},
   "param_formats": {
     "getblockcount": "no_params",
     "getnetworkinfo": "no_params",
@@ -38,8 +8,45 @@
     "getblock": "[blockhash]",
     "getrawtransaction": "[txhash,verbose]"
   },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx0qaa",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "single": "getblockcount",
+    "mixed": "getblockcount,getnetworkinfo,getmempoolinfo,getblock,getrawtransaction"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
-  "target_address": "bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx0qaa",
-  "rpc_protocol": "rest",
-  "notes": "BCH 公链仅 REST 代理可用,JSON-RPC 需 self-hosted;CashAddr 地址格式独有"
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/21-bch.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "normalized_at": "2026-05-24T04:43:09.936178+00:00",
+    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "original_rpc_protocol": "rest",
+    "original_public_endpoints": [
+      {
+        "url": "https://rest1.biggestfan.net/v2/",
+        "auth": false,
+        "verified": "E2",
+        "notes": "BCHN 29 REST代理,blocks=952310"
+      },
+      {
+        "url": "https://api.blockchair.com/bitcoin-cash/",
+        "auth": false,
+        "verified": "E2",
+        "notes": "Blockchair REST,30 req/min"
+      }
+    ],
+    "original_notes": "BCH 公链仅 REST 代理可用,JSON-RPC 需 self-hosted;CashAddr 地址格式独有",
+    "adapter_required": true
+  }
 }

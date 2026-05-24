@@ -1,42 +1,6 @@
 {
-  "_meta": {
-    "source": "research-md",
-    "research_doc": "docs/zh/chains/11-tezos.md",
-    "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
-    "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
-  },
-  "chain": "tezos",
   "chain_type": "tezos",
-  "public_endpoints": [
-    {
-      "url": "https://mainnet.api.tez.ie",
-      "auth": false,
-      "verified": "E2",
-      "notes": "ECAD 主推,Octez v24.4"
-    },
-    {
-      "url": "https://mainnet.smartpy.io",
-      "auth": false,
-      "verified": "E2",
-      "notes": "SmartPy 备份"
-    },
-    {
-      "url": "https://api.tzkt.io",
-      "auth": false,
-      "verified": "E2",
-      "notes": "TzKT indexer,用于 op_hash 反查"
-    }
-  ],
-  "single_method": "GET /chains/main/blocks/head/header",
-  "mixed_methods": [
-    "GET /chains/main/blocks/head/context/contracts/{addr}/balance",
-    "GET /chains/main/blocks/{block}/operations/{vp}",
-    "GET /chains/main/blocks/head/header",
-    "GET /chains/main/blocks/head/protocols",
-    "GET /chains/main/blocks/head/votes/current_period"
-  ],
+  "methods": {},
   "param_formats": {
     "GET /chains/main/blocks/head/context/contracts/{addr}/balance": "path_addr",
     "GET /chains/main/blocks/{block}/operations/{vp}": "path_block_and_vp",
@@ -44,8 +8,51 @@
     "GET /chains/main/blocks/head/protocols": "no_params",
     "GET /chains/main/blocks/head/votes/current_period": "no_params"
   },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "single": "GET /chains/main/blocks/head/header",
+    "mixed": "GET /chains/main/blocks/head/context/contracts/{addr}/balance,GET /chains/main/blocks/{block}/operations/{vp},GET /chains/main/blocks/head/header,GET /chains/main/blocks/head/protocols,GET /chains/main/blocks/head/votes/current_period"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
-  "target_address": "tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx",
-  "rpc_protocol": "rest",
-  "notes": "REST 深路径(5-7 段);bare-string 响应;无 getTxByHash 必经 TzKT indexer 二级反查;chain_id 字符串"
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/11-tezos.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "normalized_at": "2026-05-24T04:43:09.943462+00:00",
+    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "original_rpc_protocol": "rest",
+    "original_public_endpoints": [
+      {
+        "url": "https://mainnet.api.tez.ie",
+        "auth": false,
+        "verified": "E2",
+        "notes": "ECAD 主推,Octez v24.4"
+      },
+      {
+        "url": "https://mainnet.smartpy.io",
+        "auth": false,
+        "verified": "E2",
+        "notes": "SmartPy 备份"
+      },
+      {
+        "url": "https://api.tzkt.io",
+        "auth": false,
+        "verified": "E2",
+        "notes": "TzKT indexer,用于 op_hash 反查"
+      }
+    ],
+    "original_notes": "REST 深路径(5-7 段);bare-string 响应;无 getTxByHash 必经 TzKT indexer 二级反查;chain_id 字符串",
+    "adapter_required": true
+  }
 }

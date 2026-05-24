@@ -1,36 +1,6 @@
 {
-  "_meta": {
-    "source": "research-md",
-    "research_doc": "docs/zh/chains/04-aptos.md",
-    "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
-    "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
-  },
-  "chain": "aptos",
   "chain_type": "aptos",
-  "public_endpoints": [
-    {
-      "url": "https://fullnode.mainnet.aptoslabs.com/v1",
-      "auth": false,
-      "verified": "E2",
-      "notes": "主推 endpoint,HTTP 200 0.24s"
-    },
-    {
-      "url": "https://api.mainnet.aptoslabs.com/v1",
-      "auth": false,
-      "verified": "E2",
-      "notes": "别名,/-/healthy=aptos-node:ok"
-    }
-  ],
-  "single_method": "GET /v1",
-  "mixed_methods": [
-    "POST /v1/view",
-    "GET /v1",
-    "GET /v1/accounts/{addr}",
-    "GET /v1/accounts/{addr}/resources",
-    "GET /v1/transactions/by_hash/{hash}"
-  ],
+  "methods": {},
   "param_formats": {
     "POST /v1/view": "move_view_call",
     "GET /v1": "no_params",
@@ -38,6 +8,19 @@
     "GET /v1/accounts/{addr}/resources": "path_addr",
     "GET /v1/transactions/by_hash/{hash}": "path_hash"
   },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "0xd503b95164384a5ebbccbb5c4bdc8b4a5893d9651e9953abda8e1c22fcc1181d",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "single": "GET /v1",
+    "mixed": "POST /v1/view,GET /v1,GET /v1/accounts/{addr},GET /v1/accounts/{addr}/resources,GET /v1/transactions/by_hash/{hash}"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [
     "0x1",
     "0x2",
@@ -48,7 +31,31 @@
     "0x7",
     "0xa"
   ],
-  "target_address": "0xd503b95164384a5ebbccbb5c4bdc8b4a5893d9651e9953abda8e1c22fcc1181d",
-  "rpc_protocol": "rest",
-  "notes": "REST 而非 JSON-RPC,POST JSON-RPC 返 405;响应自带 x-aptos-* header 免去 ledger 调用"
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/04-aptos.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "normalized_at": "2026-05-24T04:43:09.933707+00:00",
+    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "original_rpc_protocol": "rest",
+    "original_public_endpoints": [
+      {
+        "url": "https://fullnode.mainnet.aptoslabs.com/v1",
+        "auth": false,
+        "verified": "E2",
+        "notes": "主推 endpoint,HTTP 200 0.24s"
+      },
+      {
+        "url": "https://api.mainnet.aptoslabs.com/v1",
+        "auth": false,
+        "verified": "E2",
+        "notes": "别名,/-/healthy=aptos-node:ok"
+      }
+    ],
+    "original_notes": "REST 而非 JSON-RPC,POST JSON-RPC 返 405;响应自带 x-aptos-* header 免去 ledger 调用",
+    "adapter_required": true
+  }
 }

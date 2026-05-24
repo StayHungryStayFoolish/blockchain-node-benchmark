@@ -1,48 +1,6 @@
 {
-  "_meta": {
-    "source": "research-md",
-    "research_doc": "docs/zh/chains/30-ton.md",
-    "extracted_at": "2026-05-24T00:33:48Z",
-    "extracted_by": "subagent_ton_dedicated",
-    "baseline_sha": "ffbeeee",
-    "note": "TON research conducted independently with H8 curl evidence. 4/7 endpoints verified E2 200 OK. param_formats may need normalization in S1 alignment with TONAdapter."
-  },
-  "chain": "ton",
   "chain_type": "ton",
-  "public_endpoints": [
-    {
-      "url": "https://toncenter.com/api/v2/jsonRPC",
-      "auth": false,
-      "verified": "E2",
-      "notes": "toncenter v2 JSON-RPC, HTTP:200 getMasterchainInfo, ratelimit 1 RPS without key"
-    },
-    {
-      "url": "https://toncenter.com/api/v2",
-      "auth": false,
-      "verified": "E2",
-      "notes": "toncenter v2 REST (same backend as jsonRPC), HTTP:200 across 8 methods"
-    },
-    {
-      "url": "https://toncenter.com/api/v3",
-      "auth": false,
-      "verified": "E2",
-      "notes": "toncenter v3 REST indexer, HTTP:200 masterchainInfo and transactions; envelope-less"
-    },
-    {
-      "url": "https://mainnet-v4.tonhubapi.com",
-      "auth": false,
-      "verified": "E2",
-      "notes": "Tonhub v4 API, HTTP:200 /block/latest, camelCase schema, independent of toncenter"
-    }
-  ],
-  "single_method": "getMasterchainInfo",
-  "mixed_methods": [
-    "getAddressBalance",
-    "getAddressInformation",
-    "getTransactions",
-    "lookupBlock",
-    "runGetMethod"
-  ],
+  "methods": {},
   "param_formats": {
     "getMasterchainInfo": "{}",
     "getAddressBalance": "{address: friendly_base64url|raw}",
@@ -51,8 +9,57 @@
     "lookupBlock": "{workchain: int, shard: dec_string, seqno: int}",
     "runGetMethod": "{address, method: string, stack: array}"
   },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "single": "getMasterchainInfo",
+    "mixed": "getAddressBalance,getAddressInformation,getTransactions,lookupBlock,runGetMethod"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
-  "target_address": "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N",
-  "rpc_protocol": "mixed",
-  "notes": "TON独立family,需新建TONAdapter。toncenter v2同时提供REST和JSON-RPC双协议;响应envelope非标准({ok,result,@extra}包装)。地址三态:raw(0:hex64)/friendly bounceable(EQ...)/non-bounceable(UQ...),adapter必须normalize到raw去重。tx_id是(account,lt,hash)三元组,非单hash。native decimals=9 nanoton。公链限流1RPS无key,性能基准必须self-host ton-http-api。"
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/30-ton.md",
+    "extracted_at": "2026-05-24T00:33:48Z",
+    "extracted_by": "subagent_ton_dedicated",
+    "baseline_sha": "ffbeeee",
+    "note": "TON research conducted independently with H8 curl evidence. 4/7 endpoints verified E2 200 OK. param_formats may need normalization in S1 alignment with TONAdapter.",
+    "normalized_at": "2026-05-24T04:43:09.944219+00:00",
+    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "original_rpc_protocol": "mixed",
+    "original_public_endpoints": [
+      {
+        "url": "https://toncenter.com/api/v2/jsonRPC",
+        "auth": false,
+        "verified": "E2",
+        "notes": "toncenter v2 JSON-RPC, HTTP:200 getMasterchainInfo, ratelimit 1 RPS without key"
+      },
+      {
+        "url": "https://toncenter.com/api/v2",
+        "auth": false,
+        "verified": "E2",
+        "notes": "toncenter v2 REST (same backend as jsonRPC), HTTP:200 across 8 methods"
+      },
+      {
+        "url": "https://toncenter.com/api/v3",
+        "auth": false,
+        "verified": "E2",
+        "notes": "toncenter v3 REST indexer, HTTP:200 masterchainInfo and transactions; envelope-less"
+      },
+      {
+        "url": "https://mainnet-v4.tonhubapi.com",
+        "auth": false,
+        "verified": "E2",
+        "notes": "Tonhub v4 API, HTTP:200 /block/latest, camelCase schema, independent of toncenter"
+      }
+    ],
+    "original_notes": "TON独立family,需新建TONAdapter。toncenter v2同时提供REST和JSON-RPC双协议;响应envelope非标准({ok,result,@extra}包装)。地址三态:raw(0:hex64)/friendly bounceable(EQ...)/non-bounceable(UQ...),adapter必须normalize到raw去重。tx_id是(account,lt,hash)三元组,非单hash。native decimals=9 nanoton。公链限流1RPS无key,性能基准必须self-host ton-http-api。",
+    "adapter_required": true
+  }
 }

@@ -1,36 +1,6 @@
 {
-  "_meta": {
-    "source": "research-md",
-    "research_doc": "docs/zh/chains/20-dogecoin.md",
-    "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
-    "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
-  },
-  "chain": "dogecoin",
   "chain_type": "dogecoin",
-  "public_endpoints": [
-    {
-      "url": "https://api.blockcypher.com/v1/doge/main",
-      "auth": false,
-      "verified": "E2",
-      "notes": "REST 主实证 fallback"
-    },
-    {
-      "url": "https://api.blockchair.com/dogecoin/stats",
-      "auth": false,
-      "verified": "E2",
-      "notes": "REST 交叉校验"
-    }
-  ],
-  "single_method": "getblockcount",
-  "mixed_methods": [
-    "getblockcount",
-    "getbestblockhash",
-    "getblock",
-    "getrawtransaction",
-    "getmempoolinfo"
-  ],
+  "methods": {},
   "param_formats": {
     "getblockcount": "no_params",
     "getbestblockhash": "no_params",
@@ -38,8 +8,45 @@
     "getrawtransaction": "transaction_hash",
     "getmempoolinfo": "no_params"
   },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "D7Y55r6Yoc1G8EECxkQ6SuSjTGGJqHGTaC",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "single": "getblockcount",
+    "mixed": "getblockcount,getbestblockhash,getblock,getrawtransaction,getmempoolinfo"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
-  "target_address": "D7Y55r6Yoc1G8EECxkQ6SuSjTGGJqHGTaC",
-  "rpc_protocol": "rest",
-  "notes": "BTC/LTC 两层 fork; 100% 复用 BitcoinAdapter family=utxo-btc; 60s 出块; AuxPoW 与 LTC 合并挖矿; 无 SegWit/Taproot; scantxoutset 不支持; 公链 JSON-RPC 几乎不可用"
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/20-dogecoin.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "normalized_at": "2026-05-24T04:43:09.938322+00:00",
+    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "original_rpc_protocol": "rest",
+    "original_public_endpoints": [
+      {
+        "url": "https://api.blockcypher.com/v1/doge/main",
+        "auth": false,
+        "verified": "E2",
+        "notes": "REST 主实证 fallback"
+      },
+      {
+        "url": "https://api.blockchair.com/dogecoin/stats",
+        "auth": false,
+        "verified": "E2",
+        "notes": "REST 交叉校验"
+      }
+    ],
+    "original_notes": "BTC/LTC 两层 fork; 100% 复用 BitcoinAdapter family=utxo-btc; 60s 出块; AuxPoW 与 LTC 合并挖矿; 无 SegWit/Taproot; scantxoutset 不支持; 公链 JSON-RPC 几乎不可用",
+    "adapter_required": true
+  }
 }

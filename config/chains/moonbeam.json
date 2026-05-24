@@ -1,36 +1,6 @@
 {
-  "_meta": {
-    "source": "research-md",
-    "research_doc": "docs/zh/chains/28-moonbeam.md",
-    "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
-    "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
-  },
-  "chain": "moonbeam",
   "chain_type": "moonbeam",
-  "public_endpoints": [
-    {
-      "url": "https://rpc.api.moonbeam.network",
-      "auth": false,
-      "verified": "E2",
-      "notes": "单端点双协议 EVM+Substrate"
-    },
-    {
-      "url": "wss://wss.api.moonbeam.network",
-      "auth": false,
-      "verified": "E2",
-      "notes": "WSS subscription"
-    }
-  ],
-  "single_method": "eth_chainId",
-  "mixed_methods": [
-    "eth_chainId",
-    "eth_blockNumber",
-    "eth_getBalance",
-    "eth_gasPrice",
-    "system_health"
-  ],
+  "methods": {},
   "param_formats": {
     "eth_chainId": "no_params",
     "eth_blockNumber": "no_params",
@@ -38,8 +8,45 @@
     "eth_gasPrice": "no_params",
     "system_health": "no_params"
   },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "0x0000000000000000000000000000000000000000",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "single": "eth_chainId",
+    "mixed": "eth_chainId,eth_blockNumber,eth_getBalance,eth_gasPrice,system_health"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
-  "target_address": "0x0000000000000000000000000000000000000000",
-  "rpc_protocol": "mixed",
-  "notes": "Polkadot parachain 2004;EVM primary + Substrate secondary;ChainID 1284 = SS58Prefix(刻意对齐);GLMR 18 dec"
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/28-moonbeam.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "normalized_at": "2026-05-24T04:43:09.940953+00:00",
+    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "original_rpc_protocol": "mixed",
+    "original_public_endpoints": [
+      {
+        "url": "https://rpc.api.moonbeam.network",
+        "auth": false,
+        "verified": "E2",
+        "notes": "单端点双协议 EVM+Substrate"
+      },
+      {
+        "url": "wss://wss.api.moonbeam.network",
+        "auth": false,
+        "verified": "E2",
+        "notes": "WSS subscription"
+      }
+    ],
+    "original_notes": "Polkadot parachain 2004;EVM primary + Substrate secondary;ChainID 1284 = SS58Prefix(刻意对齐);GLMR 18 dec",
+    "adapter_required": true
+  }
 }

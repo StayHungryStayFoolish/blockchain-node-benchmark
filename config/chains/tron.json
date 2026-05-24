@@ -1,36 +1,6 @@
 {
-  "_meta": {
-    "source": "research-md",
-    "research_doc": "docs/zh/chains/09-tron.md",
-    "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
-    "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters."
-  },
-  "chain": "tron",
   "chain_type": "tron",
-  "public_endpoints": [
-    {
-      "url": "https://api.trongrid.io",
-      "auth": false,
-      "verified": "E2",
-      "notes": "同主机暴露 HTTP API + JSON-RPC 双协议"
-    },
-    {
-      "url": "https://api.trongrid.io/jsonrpc",
-      "auth": false,
-      "verified": "E2",
-      "notes": "EVM-compat JSON-RPC 路径"
-    }
-  ],
-  "single_method": "eth_blockNumber",
-  "mixed_methods": [
-    "/wallet/getaccount",
-    "/wallet/triggerconstantcontract",
-    "/wallet/gettransactionbyid",
-    "/wallet/getnowblock",
-    "eth_blockNumber"
-  ],
+  "methods": {},
   "param_formats": {
     "/wallet/getaccount": "body_address_visible",
     "/wallet/triggerconstantcontract": "body_owner_contract_selector_parameter",
@@ -38,8 +8,45 @@
     "/wallet/getnowblock": "no_params",
     "eth_blockNumber": "no_params"
   },
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "output_file": "ACCOUNTS_OUTPUT_FILE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+  },
+  "rpc_methods": {
+    "single": "eth_blockNumber",
+    "mixed": "/wallet/getaccount,/wallet/triggerconstantcontract,/wallet/gettransactionbyid,/wallet/getnowblock,eth_blockNumber"
+  },
+  "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
-  "target_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-  "rpc_protocol": "mixed",
-  "notes": "双协议(HTTP REST POST + JSON-RPC);base58check ↔ hex41 双格式;USDT-TRC20 合约为基准 target"
+  "_meta": {
+    "source": "research-md",
+    "research_doc": "docs/zh/chains/09-tron.md",
+    "extracted_at": "2026-05-24T00:26:38Z",
+    "extracted_by": "subagent_batch_S0-inv",
+    "baseline_sha": "ffbeeee",
+    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "normalized_at": "2026-05-24T04:43:09.945010+00:00",
+    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "original_rpc_protocol": "mixed",
+    "original_public_endpoints": [
+      {
+        "url": "https://api.trongrid.io",
+        "auth": false,
+        "verified": "E2",
+        "notes": "同主机暴露 HTTP API + JSON-RPC 双协议"
+      },
+      {
+        "url": "https://api.trongrid.io/jsonrpc",
+        "auth": false,
+        "verified": "E2",
+        "notes": "EVM-compat JSON-RPC 路径"
+      }
+    ],
+    "original_notes": "双协议(HTTP REST POST + JSON-RPC);base58check ↔ hex41 双格式;USDT-TRC20 合约为基准 target",
+    "adapter_required": true
+  }
 }
