@@ -36,9 +36,9 @@ def _fail(msg: str):
 def test_factory_registers_six_families():
     print("\n[1] Factory registration")
     fams = list_adapters()
-    expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "ogmios", "tron"}
+    expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "ogmios"}
     assert set(fams) == expected, f"expected {expected}, got {fams}"
-    _ok(f"7 families registered: {sorted(fams)}")
+    _ok(f"6 families registered: {sorted(fams)}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -311,89 +311,6 @@ def test_evm_compat_5chains_standard_enum():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 10: TronAdapter — dual-protocol shapes
-# ─────────────────────────────────────────────────────────────────────────────
-def test_tron_adapter_shapes():
-    print("\n[10] TronAdapter: HTTP /wallet/* + JSON-RPC /jsonrpc subset")
-    import base64
-    a = get_adapter("tron")
-    assert a.protocol_family == "tron", f"expected 'tron', got {a.protocol_family!r}"
-
-    BASE = "http://localhost:8545"
-    ADDR = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"  # base58 tron address
-
-    # 10a: /wallet/getnowblock → empty body
-    t = a.build_vegeta_target("/wallet/getnowblock", ADDR, BASE, "no_params")
-    assert t["method"] == "POST"
-    assert t["url"] == "http://localhost:8545/wallet/getnowblock", f"bad url: {t['url']}"
-    body = json.loads(base64.b64decode(t["body"]))
-    assert body == {}, f"expected empty body, got {body}"
-    _ok(f"/wallet/getnowblock → POST {t['url']} body={{}}")
-
-    # 10b: /wallet/getaccount → {address, visible}
-    t = a.build_vegeta_target("/wallet/getaccount", ADDR, BASE, "body_address_visible")
-    body = json.loads(base64.b64decode(t["body"]))
-    assert body == {"address": ADDR, "visible": True}, f"bad body: {body}"
-    _ok(f"/wallet/getaccount → body={{address: {ADDR[:10]}..., visible: True}}")
-
-    # 10c: /wallet/gettransactionbyid → {value: txid_no_0x}
-    txid = "0xabc123" + "0" * 58
-    t = a.build_vegeta_target("/wallet/gettransactionbyid", txid, BASE, "body_value_txid_nopfx")
-    body = json.loads(base64.b64decode(t["body"]))
-    assert body["value"] == "abc123" + "0" * 58, f"expected stripped 0x: {body}"
-    _ok(f"/wallet/gettransactionbyid → body.value 0x-stripped")
-
-    # 10d: /wallet/triggerconstantcontract → 5-field body
-    t = a.build_vegeta_target(
-        "/wallet/triggerconstantcontract", ADDR, BASE,
-        "body_owner_contract_selector_parameter",
-    )
-    body = json.loads(base64.b64decode(t["body"]))
-    assert body["function_selector"] == "balanceOf(address)", f"bad selector: {body.get('function_selector')}"
-    assert body["owner_address"] == ADDR
-    assert len(body["parameter"]) == 64, f"parameter must be 32-byte hex, got len={len(body['parameter'])}"
-    _ok(f"/wallet/triggerconstantcontract → 5-field body with balanceOf selector")
-
-    # 10e: JSON-RPC subset routes to /jsonrpc path
-    t = a.build_vegeta_target("eth_blockNumber", ADDR, BASE, "no_params")
-    assert t["url"] == "http://localhost:8545/jsonrpc", f"jsonrpc path mismatch: {t['url']}"
-    body = json.loads(base64.b64decode(t["body"]))
-    assert body["method"] == "eth_blockNumber"
-    assert body["params"] == []
-    _ok(f"eth_blockNumber → POST /jsonrpc with JSON-RPC envelope")
-
-    # 10f: parse_block_height — Tron getnowblock response
-    sample = json.dumps({
-        "blockID": "0" * 64,
-        "block_header": {"raw_data": {"number": 60100000, "timestamp": 1735200000000}},
-    })
-    h = a.parse_block_height(sample)
-    assert h == 60100000, f"expected 60100000, got {h}"
-    _ok(f"parse_block_height Tron envelope → 60100000")
-
-    # 10g: parse_block_height — JSON-RPC fallback
-    rpc_sample = json.dumps({"jsonrpc": "2.0", "id": 1, "result": "0x3947ea0"})
-    h = a.parse_block_height(rpc_sample)
-    assert h == 0x3947ea0, f"expected {0x3947ea0}, got {h}"
-    _ok(f"parse_block_height JSON-RPC fallback → {0x3947ea0}")
-
-    # 10h: health_check_request shape
-    hc = a.health_check_request(BASE)
-    assert hc["method"] == "POST"
-    assert hc["url"] == BASE + "/wallet/getnowblock"
-    assert hc["body"] == "{}"
-    assert hc["parse_jq"] == ".block_header.raw_data.number"
-    _ok(f"health_check → POST /wallet/getnowblock + parse_jq")
-
-    # 10i: unknown method shape → raises
-    try:
-        a.build_vegeta_target("foo_bar", ADDR, BASE, "")
-        _fail("expected ValueError for unknown method")
-    except ValueError as e:
-        _ok(f"unknown method raises ValueError: {str(e)[:60]}")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
@@ -407,7 +324,6 @@ def main():
         test_rest_requires_env_and_path_map,
         test_jsonrpc_s3a_new_formats,
         test_evm_compat_5chains_standard_enum,
-        test_tron_adapter_shapes,
     ]
     print(f"Running {len(tests)} test groups for chain_adapters")
     for t in tests:

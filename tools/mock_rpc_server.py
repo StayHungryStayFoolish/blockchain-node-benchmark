@@ -454,110 +454,6 @@ CHAIN_HANDLERS = {
     "zksync-era": handle_evm,
     "linea": handle_evm,
     "avalanche-c": handle_evm,
-    # S3-A2: Tron — dual-protocol. JSON-RPC subset goes through handle_evm
-    # (eth_* methods); HTTP /wallet/* is routed in do_POST() via process_tron_http
-    # before reaching this dispatch table.
-    "tron": handle_evm,
-}
-
-
-# ─────────────────────────────────────────────────────────────────────
-# S3-A2: Tron HTTP /wallet/* handlers (NOT JSON-RPC)
-# ─────────────────────────────────────────────────────────────────────
-
-def process_tron_http(path: str, body: Dict[str, Any], latency_ms: int = 0) -> Dict[str, Any]:
-    """Dispatch Tron HTTP API request. Returns raw JSON response (not JSON-RPC envelope)."""
-    if latency_ms > 0:
-        time.sleep(latency_ms / 1000.0)
-    _count_request(f"tron:{path}")
-    # Normalize: strip leading /wallet/ or /walletsolidity/ to get verb
-    verb = path.split("/")[-1].lower() if "/" in path else path.lower()
-    handler = _TRON_VERB_HANDLERS.get(verb)
-    if handler is None:
-        return {"Error": f"Tron HTTP verb '{verb}' not implemented (path={path})"}
-    try:
-        return handler(body)
-    except Exception as e:
-        return {"Error": f"Tron handler error: {e}"}
-
-
-def _tron_getnowblock(_body):
-    """/wallet/getnowblock — mock current block envelope."""
-    return {
-        "blockID": "0" * 64,
-        "block_header": {
-            "raw_data": {
-                "number": 60100000,
-                "txTrieRoot": "0" * 64,
-                "witness_address": "41" + "0" * 40,
-                "parentHash": "0" * 64,
-                "version": 30,
-                "timestamp": 1735200000000,
-            },
-            "witness_signature": "0" * 130,
-        },
-    }
-
-
-def _tron_getaccount(body):
-    """/wallet/getaccount — needs {address, visible}."""
-    addr = body.get("address", "T" + "0" * 33)
-    return {
-        "address": addr,
-        "balance": 1000000000,  # 1000 TRX (in sun)
-        "create_time": 1700000000000,
-        "latest_opration_time": 1735200000000,
-    }
-
-
-def _tron_gettransactionbyid(body):
-    """/wallet/gettransactionbyid — needs {value: <txid>}."""
-    txid = body.get("value", "0" * 64)
-    return {
-        "txID": txid,
-        "ret": [{"contractRet": "SUCCESS"}],
-        "raw_data": {"timestamp": 1735200000000, "expiration": 1735200060000},
-    }
-
-
-def _tron_triggerconstantcontract(body):
-    """/wallet/triggerconstantcontract — TRC20 balanceOf or similar."""
-    return {
-        "result": {"result": True},
-        "energy_used": 1234,
-        "constant_result": ["0" * 64],  # uint256 = 0
-        "transaction": {"txID": "0" * 64},
-    }
-
-
-def _tron_getblockbynum(body):
-    """/wallet/getblockbynum — {num: <int>}."""
-    n = body.get("num", 60100000)
-    return {
-        "blockID": "0" * 64,
-        "block_header": {"raw_data": {"number": n, "timestamp": 1735200000000}},
-    }
-
-
-def _tron_getaccountresource(body):
-    """/wallet/getaccountresource — energy/bandwidth resource view."""
-    addr = body.get("address", "T" + "0" * 33)
-    return {
-        "freeNetUsed": 0,
-        "freeNetLimit": 600,
-        "EnergyLimit": 0,
-        "TotalNetLimit": 43200000000,
-        "TotalEnergyLimit": 90000000000,
-    }
-
-
-_TRON_VERB_HANDLERS = {
-    "getnowblock": _tron_getnowblock,
-    "getaccount": _tron_getaccount,
-    "gettransactionbyid": _tron_gettransactionbyid,
-    "triggerconstantcontract": _tron_triggerconstantcontract,
-    "getblockbynum": _tron_getblockbynum,
-    "getaccountresource": _tron_getaccountresource,
 }
 
 
@@ -674,14 +570,6 @@ class RPCHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send_json(400, {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"Parse error: {e}"}})
             return
-        # S3-A2: Tron HTTP API path dispatch — /wallet/* and /walletsolidity/* are
-        # NOT JSON-RPC; they accept raw JSON bodies and return raw JSON responses.
-        # The Tron JSON-RPC subset lives at /jsonrpc (EVM-compat namespace).
-        if self.path.startswith("/wallet/") or self.path.startswith("/walletsolidity/"):
-            response = process_tron_http(self.path, payload, self.latency_ms)
-            self._send_json(200, response)
-            return
-        # Default: JSON-RPC (either at "/" or "/jsonrpc")
         response = process_jsonrpc(self.chain, payload, self.latency_ms)
         self._send_json(200, response)
 
