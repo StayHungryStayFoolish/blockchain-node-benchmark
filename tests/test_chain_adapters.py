@@ -311,6 +311,160 @@ def test_evm_compat_5chains_standard_enum():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Test 10: L1-CLI end-to-end — every chain must produce a valid vegeta target
+# via the real production entrypoint (tools/chain_adapters/cli.py build-target),
+# which is the only path called by target_generator.sh -> master_qps_executor.sh.
+#
+# Two assertions per chain:
+#   (a) cli.py exits 0
+#   (b) decoded body contains the supplied address
+#
+# KNOWN_BROKEN: chains where the CURRENT state is broken at the CLI entrypoint
+# (commit 436e1d0 baseline, 2026-05-24 audit). Each entry MUST cite its
+# failure-mode bucket (F1/F2/F3/F4) so the responsible S3 wave knows what to fix.
+#
+# Invariant: KNOWN_BROKEN must shrink monotonically. New chains may not be added
+# without explicit user decision. Each S3-B/C/D/E/F wave is required to remove
+# at least the entries assigned to it (see "Fix wave" column below).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# (chain, expected_failure_mode, fix_wave_owner, reason)
+KNOWN_BROKEN_CLI = {
+    # F1: rpc_methods.single picked a health-probe (no address) instead of
+    #     a real benchmark method. Fix = pick a method from param_formats
+    #     that takes an address. Pure chain-template edit, no adapter work.
+    "algorand":  ("F1", "S3-E", "single='GET /v2/status' is health-probe; use 'GET /v2/accounts/{address}'"),
+    "aptos":     ("F1", "S3-E", "single='GET /v1' returns collection root; use 'POST /v1/view' or 'GET /v1/accounts/{addr}'"),
+    "hedera":    ("F1", "S3-E", "single='mirror_account_query' is logical name, no real path; use 'mirror_balance_query' or 'eth_getBalance'"),
+    "tezos":     ("F1", "S3-E", "single='GET /chains/main/blocks/head/header' has no address; use '/contracts/{addr}/balance'"),
+    "ton":       ("F1", "S3-E", "single='getMasterchainInfo' is health-probe; use 'getAddressBalance'"),
+    "kusama":    ("F1", "S3-C", "single='chain_getHeader' has no address; use 'system_account' or similar"),
+    "polkadot":  ("F1", "S3-C", "single='chain_getHeader' has no address; mixed_first 'GET /accounts/{addr}/balance-info' is correct shape"),
+
+    # F2: chain template uses REST paths in rpc_methods.single but
+    #     family=tendermint goes through jsonrpc.py generic builder which
+    #     wraps everything in {jsonrpc:"2.0", method:"<path>", params:{}}.
+    #     Fix = adapter dispatch (tendermint must do HTTP GET <path>, not POST JSON).
+    "celestia":   ("F2", "S3-B", "REST path '/status' wrapped as jsonrpc body; tendermint adapter must HTTP GET"),
+    "injective":  ("F2", "S3-B", "REST path '/status' wrapped as jsonrpc body"),
+    "osmosis":    ("F2", "S3-B", "REST path '/status' wrapped as jsonrpc body"),
+    "cosmos-hub": ("F2", "S3-B", "REST path wrapped as jsonrpc body"),
+    "cardano":    ("F2", "S3-F", "ogmios family wraps 'GET /tip' as jsonrpc body; ogmios adapter is WebSocket JSON-RPC, different protocol"),
+
+    # F3: family=substrate but chain runs EVM via Frontier pallet. mixed_first
+    #     is eth_chainId (no address). Fix = decide family (substrate vs jsonrpc)
+    #     and pick benchmark method with address (eth_getBalance).
+    "astar":     ("F3", "S3-C", "family=substrate but Astar runs EVM via Frontier; single='eth_chainId' has no address"),
+    "moonbeam":  ("F3", "S3-C", "family=substrate but Moonbeam runs EVM via Frontier; single='eth_chainId' has no address"),
+    "sei":       ("F3", "S3-B", "family=tendermint with EVM compat layer; single='eth_chainId' has no address"),
+    "acala":     ("F3", "S3-C", "family=substrate; single='system_chain' has no address; pick eth_getBalance from param_formats"),
+}
+
+assert len(KNOWN_BROKEN_CLI) == 16, f"KNOWN_BROKEN_CLI must have exactly 16 entries (commit 436e1d0 baseline), got {len(KNOWN_BROKEN_CLI)}"
+
+
+def _sample_address_for(family: str) -> str:
+    """Return a family-appropriate sample address for the build-target probe.
+
+    Adapters either echo the address verbatim into the body (so any string works
+    for the L1 assertion) or template it into a URL path (REST {address}/{addr}).
+    These canonical samples are recognizable in decoded bodies.
+    """
+    return {
+        "jsonrpc":         "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "bitcoin_jsonrpc": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+        "substrate":       "12bzRJfh7arnnfPPUZHeJUaE62QLEwhK48QnH9LXeK2m1iZU",
+        "tendermint":      "cosmos1abc",
+        "ogmios":          "addr1q9adlx6mh0dr8xs0gpcm9nz5pqe5w2hzfx5l8qj5",
+        "rest":            "TESTADDR123",
+    }.get(family, "TESTADDR123")
+
+
+def test_cli_build_target_all_36_chains():
+    """L1-CLI: every chain produces a valid vegeta target via cli.py with address.
+
+    Real production path: target_generator.sh:74 invokes this exact cli.py
+    incantation. If this test passes, the CLI path is healthy; L1 PASS via
+    direct adapter calls (test_3 / test_8 etc.) is NOT sufficient because
+    cli.py adds an additional layer of plumbing (param_format lookup from
+    chain template, BLOCKCHAIN_NODE env, sys.path manipulation).
+    """
+    print("\n[10] CLI build-target end-to-end for all 36 chains (real production path)")
+    chains_dir = REPO / "config" / "chains"
+    cli_py = REPO / "tools" / "chain_adapters" / "cli.py"
+
+    expected_broken = set(KNOWN_BROKEN_CLI.keys())
+    actually_broken: set[str] = set()
+    healthy: list[str] = []
+
+    for cf in sorted(chains_dir.glob("*.json")):
+        chain = cf.stem
+        tpl = json.loads(cf.read_text())
+        family = tpl.get("_meta", {}).get("adapter_family", "")
+        single_method = (tpl.get("rpc_methods") or {}).get("single")
+        if not single_method:
+            actually_broken.add(chain)
+            continue
+
+        addr = _sample_address_for(family)
+        r = subprocess.run(
+            ["python3", str(cli_py), "build-target",
+             "--chain", chain, "--method", single_method,
+             "--address", addr, "--rpc-url", "http://localhost:8545"],
+            capture_output=True, text=True, timeout=10,
+        )
+
+        # Gate 1: exit code
+        if r.returncode != 0:
+            actually_broken.add(chain)
+            continue
+        # Gate 2: body is valid JSON
+        try:
+            tgt = json.loads(r.stdout)
+            body = base64.b64decode(tgt["body"]).decode("utf-8", errors="replace")
+        except Exception:
+            actually_broken.add(chain)
+            continue
+        # Gate 3: body or URL contains the address we passed
+        url = tgt.get("url", "")
+        if addr not in body and addr not in url:
+            actually_broken.add(chain)
+            continue
+
+        healthy.append(chain)
+
+    # Invariant check: actually_broken must be a SUBSET of expected_broken
+    # (broken set may only shrink, never grow). New chains added to the
+    # framework must either pass cleanly or be explicitly added to
+    # KNOWN_BROKEN_CLI with a fix-wave owner.
+    unexpected_new_broken = actually_broken - expected_broken
+    unexpectedly_healthy = expected_broken - actually_broken
+
+    print(f"  Healthy: {len(healthy)}/36 chains")
+    print(f"  KNOWN_BROKEN (must shrink, never grow): {len(expected_broken)}")
+    print(f"  Actually broken now: {len(actually_broken)}")
+
+    if unexpected_new_broken:
+        _fail(
+            f"REGRESSION — new chains broken at CLI entrypoint that were "
+            f"NOT in KNOWN_BROKEN_CLI: {sorted(unexpected_new_broken)}. "
+            f"Either fix them or add to KNOWN_BROKEN_CLI with explicit "
+            f"fix-wave assignment (F1/F2/F3/F4 + S3-B/C/D/E/F owner)."
+        )
+
+    if unexpectedly_healthy:
+        # This is GOOD news — chain got fixed. But the test must enforce the
+        # KNOWN_BROKEN list is current, so author must remove the entry.
+        _fail(
+            f"PROGRESS — these chains are now healthy and must be REMOVED "
+            f"from KNOWN_BROKEN_CLI: {sorted(unexpectedly_healthy)}. "
+            f"Edit tests/test_chain_adapters.py KNOWN_BROKEN_CLI dict."
+        )
+
+    _ok(f"{len(healthy)}/36 healthy + {len(actually_broken)} known-broken (set matches expected)")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
@@ -324,6 +478,7 @@ def main():
         test_rest_requires_env_and_path_map,
         test_jsonrpc_s3a_new_formats,
         test_evm_compat_5chains_standard_enum,
+        test_cli_build_target_all_36_chains,
     ]
     print(f"Running {len(tests)} test groups for chain_adapters")
     for t in tests:
