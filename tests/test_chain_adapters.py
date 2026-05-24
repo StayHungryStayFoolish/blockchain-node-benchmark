@@ -334,7 +334,6 @@ KNOWN_BROKEN_CLI = {
     #     a real benchmark method. Fix = pick a method from param_formats
     #     that takes an address. Pure chain-template edit, no adapter work.
     "algorand":  ("F1", "S3-E", "single='GET /v2/status' is health-probe; use 'GET /v2/accounts/{address}'"),
-    "aptos":     ("F1", "S3-E", "single='GET /v1' returns collection root; use 'POST /v1/view' or 'GET /v1/accounts/{addr}'"),
     "hedera":    ("F1", "S3-E", "single='mirror_account_query' is logical name, no real path; use 'mirror_balance_query' or 'eth_getBalance'"),
     "tezos":     ("F1", "S3-E", "single='GET /chains/main/blocks/head/header' has no address; use '/contracts/{addr}/balance'"),
     "ton":       ("F1", "S3-E", "single='getMasterchainInfo' is health-probe; use 'getAddressBalance'"),
@@ -360,7 +359,7 @@ KNOWN_BROKEN_CLI = {
     "acala":     ("F3", "S3-C", "family=substrate; single='system_chain' has no address; pick eth_getBalance from param_formats"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 16, f"KNOWN_BROKEN_CLI must have exactly 16 entries (commit 436e1d0 baseline), got {len(KNOWN_BROKEN_CLI)}"
+assert len(KNOWN_BROKEN_CLI) == 15, f"KNOWN_BROKEN_CLI must have exactly 15 entries (commit 436e1d0 baseline minus aptos fixed in S3-E.1), got {len(KNOWN_BROKEN_CLI)}"
 
 
 def _sample_address_for(family: str) -> str:
@@ -418,10 +417,11 @@ def test_cli_build_target_all_36_chains():
         if r.returncode != 0:
             actually_broken.add(chain)
             continue
-        # Gate 2: body is valid JSON
+        # Gate 2: body is valid JSON (body is optional for GET requests)
         try:
             tgt = json.loads(r.stdout)
-            body = base64.b64decode(tgt["body"]).decode("utf-8", errors="replace")
+            body_b64 = tgt.get("body", "")
+            body = base64.b64decode(body_b64).decode("utf-8", errors="replace") if body_b64 else ""
         except Exception:
             actually_broken.add(chain)
             continue

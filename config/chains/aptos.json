@@ -17,7 +17,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "GET /v1",
+    "single": "GET /v1/accounts/{addr}",
     "mixed": "POST /v1/view,GET /v1,GET /v1/accounts/{addr},GET /v1/accounts/{addr}/resources,GET /v1/transactions/by_hash/{hash}"
   },
   "rpc_url": "LOCAL_RPC_URL",
@@ -58,6 +58,14 @@
     "original_notes": "REST 而非 JSON-RPC,POST JSON-RPC 返 405;响应自带 x-aptos-* header 免去 ledger 调用",
     "adapter_required": true,
     "adapter_family": "rest",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "rest_paths": {
+      "POST /v1/view": {"method": "POST", "path": "/v1/view"},
+      "GET /v1": {"method": "GET", "path": "/v1"},
+      "GET /v1/accounts/{addr}": {"method": "GET", "path": "/v1/accounts/{address}"},
+      "GET /v1/accounts/{addr}/resources": {"method": "GET", "path": "/v1/accounts/{address}/resources"},
+      "GET /v1/transactions/by_hash/{hash}": {"method": "GET", "path": "/v1/transactions/by_hash/{address}"}
+    },
+    "health_probe": {"method": "GET", "path": "/v1", "parse_jq": ".block_height"}
   }
 }
