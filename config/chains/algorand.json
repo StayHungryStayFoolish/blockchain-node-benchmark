@@ -17,7 +17,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "GET /v2/status",
+    "single": "GET /v2/accounts/{address}",
     "mixed": "GET /v2/accounts/{address},GET /v2/transactions/{txid},GET /v2/blocks/{round},GET /v2/assets/{asset_id},GET /v2/accounts/{address}/transactions"
   },
   "rpc_url": "LOCAL_RPC_URL",
@@ -55,6 +55,15 @@
     "original_notes": "双节点架构(algod + indexer),每 method 需 node_role 路由;Base32 地址 58 字符;ASA 持仓内嵌于 accounts 响应",
     "adapter_required": true,
     "adapter_family": "rest",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "rest_paths": {
+      "GET /v2/accounts/{address}": {"method": "GET", "path": "/v2/accounts/{address}"},
+      "GET /v2/transactions/{txid}": {"method": "GET", "path": "/v2/transactions/{address}"},
+      "GET /v2/blocks/{round}": {"method": "GET", "path": "/v2/blocks/{address}"},
+      "GET /v2/assets/{asset_id}": {"method": "GET", "path": "/v2/assets/{address}"},
+      "GET /v2/accounts/{address}/transactions": {"method": "GET", "path": "/v2/accounts/{address}/transactions"},
+      "GET /v2/status": {"method": "GET", "path": "/v2/status"}
+    },
+    "health_probe": {"method": "GET", "path": "/v2/status", "parse_jq": ".[\"last-round\"]"}
   }
 }

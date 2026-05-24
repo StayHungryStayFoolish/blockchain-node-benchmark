@@ -44,7 +44,13 @@ def _get_param_format(chain: str, method: str) -> str:
 def cmd_build_target(args):
     adapter = get_adapter(args.chain)
     # Honor BLOCKCHAIN_NODE so RestAdapter can resolve _meta.rest_paths
-    os.environ.setdefault("BLOCKCHAIN_NODE", args.chain)
+    # --chain is the explicit user intent; ALWAYS override any inherited
+    # BLOCKCHAIN_NODE env var (setdefault is wrong here: it lets a stale
+    # parent-process value silently hijack the call and route RestAdapter
+    # to the wrong chain template — caught in S3-E.2 when test_7 leaked
+    # BLOCKCHAIN_NODE=aptos into the test_10 subprocess and all algorand
+    # CLI calls then queried aptos's rest_paths).
+    os.environ["BLOCKCHAIN_NODE"] = args.chain
     param_format = args.param_format or _get_param_format(args.chain, args.method)
     target = adapter.build_vegeta_target(
         method=args.method,
@@ -64,7 +70,7 @@ def cmd_build_targets_batch(args):
     amortizes across all targets in one process).
     """
     adapter = get_adapter(args.chain)
-    os.environ.setdefault("BLOCKCHAIN_NODE", args.chain)
+    os.environ["BLOCKCHAIN_NODE"] = args.chain  # always override; see cmd_build_target
     # Pre-cache param_format per method
     pf_cache: dict[str, str] = {}
     out = sys.stdout
@@ -92,7 +98,7 @@ def cmd_build_targets_batch(args):
 
 def cmd_health_probe(args):
     adapter = get_adapter(args.chain)
-    os.environ.setdefault("BLOCKCHAIN_NODE", args.chain)
+    os.environ["BLOCKCHAIN_NODE"] = args.chain  # always override; see cmd_build_target
     req = adapter.health_check_request(args.rpc_url)
     print(json.dumps(req, separators=(",", ":")))
 

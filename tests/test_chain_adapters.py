@@ -214,22 +214,32 @@ def test_bitcoin_auth():
 # ─────────────────────────────────────────────────────────────────────────────
 def test_rest_requires_env_and_path_map():
     print("\n[7] RestAdapter requires BLOCKCHAIN_NODE + _meta.rest_paths")
-    os.environ.pop("BLOCKCHAIN_NODE", None)
-    a = get_adapter("aptos")
+    # Save original to restore at end — otherwise leaks into test_10's
+    # subprocess env and silently hijacks RestAdapter chain resolution.
+    _saved_env = os.environ.get("BLOCKCHAIN_NODE")
     try:
-        a.build_vegeta_target("GET_ACCOUNT", "0xabc", "http://localhost:8080", "")
-        _fail("expected RuntimeError without BLOCKCHAIN_NODE")
-    except RuntimeError as e:
-        _ok(f"RuntimeError correctly raised: {e}")
-
-    # With env set but no rest_paths in template, expect ValueError
-    os.environ["BLOCKCHAIN_NODE"] = "aptos"
-    try:
+        os.environ.pop("BLOCKCHAIN_NODE", None)
         a = get_adapter("aptos")
-        a.build_vegeta_target("nonexistent_method", "0xabc", "http://localhost:8080", "")
-        _fail("expected ValueError for unknown method")
-    except ValueError as e:
-        _ok(f"ValueError correctly raised for unknown method: {e}")
+        try:
+            a.build_vegeta_target("GET_ACCOUNT", "0xabc", "http://localhost:8080", "")
+            _fail("expected RuntimeError without BLOCKCHAIN_NODE")
+        except RuntimeError as e:
+            _ok(f"RuntimeError correctly raised: {e}")
+
+        # With env set but no rest_paths in template, expect ValueError
+        os.environ["BLOCKCHAIN_NODE"] = "aptos"
+        try:
+            a = get_adapter("aptos")
+            a.build_vegeta_target("nonexistent_method", "0xabc", "http://localhost:8080", "")
+            _fail("expected ValueError for unknown method")
+        except ValueError as e:
+            _ok(f"ValueError correctly raised for unknown method: {e}")
+    finally:
+        # Restore original env state (or remove if it wasn't set)
+        if _saved_env is None:
+            os.environ.pop("BLOCKCHAIN_NODE", None)
+        else:
+            os.environ["BLOCKCHAIN_NODE"] = _saved_env
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -333,7 +343,6 @@ KNOWN_BROKEN_CLI = {
     # F1: rpc_methods.single picked a health-probe (no address) instead of
     #     a real benchmark method. Fix = pick a method from param_formats
     #     that takes an address. Pure chain-template edit, no adapter work.
-    "algorand":  ("F1", "S3-E", "single='GET /v2/status' is health-probe; use 'GET /v2/accounts/{address}'"),
     "hedera":    ("F1", "S3-E", "single='mirror_account_query' is logical name, no real path; use 'mirror_balance_query' or 'eth_getBalance'"),
     "tezos":     ("F1", "S3-E", "single='GET /chains/main/blocks/head/header' has no address; use '/contracts/{addr}/balance'"),
     "ton":       ("F1", "S3-E", "single='getMasterchainInfo' is health-probe; use 'getAddressBalance'"),
@@ -359,7 +368,7 @@ KNOWN_BROKEN_CLI = {
     "acala":     ("F3", "S3-C", "family=substrate; single='system_chain' has no address; pick eth_getBalance from param_formats"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 15, f"KNOWN_BROKEN_CLI must have exactly 15 entries (commit 436e1d0 baseline minus aptos fixed in S3-E.1), got {len(KNOWN_BROKEN_CLI)}"
+assert len(KNOWN_BROKEN_CLI) == 14, f"KNOWN_BROKEN_CLI must have exactly 14 entries (baseline 16 minus aptos S3-E.1 minus algorand S3-E.2), got {len(KNOWN_BROKEN_CLI)}"
 
 
 def _sample_address_for(family: str) -> str:
