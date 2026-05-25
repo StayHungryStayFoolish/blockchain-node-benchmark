@@ -350,7 +350,6 @@ KNOWN_BROKEN_CLI = {
     # ─────────────────────────────────────────────────────────────────────
     # F1: RestAdapter Gate1 — rc=1 because single method not in _meta.rest_paths
     # ─────────────────────────────────────────────────────────────────────
-    "tezos": ("F1", "S3-E", "single='GET /chains/main/blocks/head/header' not in rest_paths; use '/contracts/{addr}/balance'"),
     "ton":   ("F1", "S3-E", "single='getMasterchainInfo' is health-probe with no rest_paths entry; use 'getAddressBalance'"),
 
     # ─────────────────────────────────────────────────────────────────────
@@ -402,9 +401,9 @@ KNOWN_BROKEN_CLI = {
     "near":    ("F4", "S3-E", "single='status' not in param_formats; near JSON-RPC has no 'status' method — use 'query' with {request_type:view_account, account_id}"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 25, (
-    f"KNOWN_BROKEN_CLI must have exactly 25 entries (cli-param-bug wave 2026-05-25: "
-    f"old 13 dropped to 4 via Gate 4, then real fallback fix exposed 21 F3-NOADDR + 2 F4 = 25), "
+assert len(KNOWN_BROKEN_CLI) == 24, (
+    f"KNOWN_BROKEN_CLI must have exactly 24 entries (cli-param-bug wave reset to 25, "
+    f"then S3-E.4 tezos balance method + rest_paths brought count to 24), "
     f"got {len(KNOWN_BROKEN_CLI)}"
 )
 
@@ -433,6 +432,18 @@ KNOWN_BROKEN_MIXED = {
         "(2) fetch_active_accounts.py 不支持 hedera → 喂 3-part ID 0.0.N 给 Hashio "
         "返 HTTP 400 'Expected 0x prefixed string representing the address (20 bytes)'. "
         "需 fetcher 拿 mirror /accounts/{id} 的 evm_address 字段。"
+        " [PARAM resolved in cli-param-bug commit e3ae757; ADDR_FMT still blocking, S4]"
+    ),
+    "tezos": (
+        "MULTI_PLACEHOLDER", "S4 (RestAdapter v2)",
+        "S3-E.4 2026-05-25: single (balance) works in single mode L1+L3 PASS, "
+        "but mixed mode method 'GET /chains/main/blocks/{block}/operations/{vp}' "
+        "needs both {block} and {vp} (validation_pass int 0-3) placeholders. "
+        "RestAdapter v1 only supports single {address} placeholder. Fix requires "
+        "either RestAdapter v2 with named multi-placeholder template, OR a "
+        "two-step adapter (query operation_hashes → iterate (block, vp, index))."
+        " 4 of 5 methods in mixed are no-placeholder or single-{addr} so they "
+        "are not blocked; only operations method is."
     ),
 }
 

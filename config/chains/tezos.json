@@ -17,7 +17,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "GET /chains/main/blocks/head/header",
+    "single": "GET /chains/main/blocks/head/context/contracts/{addr}/balance",
     "mixed": "GET /chains/main/blocks/head/context/contracts/{addr}/balance,GET /chains/main/blocks/{block}/operations/{vp},GET /chains/main/blocks/head/header,GET /chains/main/blocks/head/protocols,GET /chains/main/blocks/head/votes/current_period"
   },
   "rpc_url": "LOCAL_RPC_URL",
@@ -55,6 +55,56 @@
     "original_notes": "REST 深路径(5-7 段);bare-string 响应;无 getTxByHash 必经 TzKT indexer 二级反查;chain_id 字符串",
     "adapter_required": true,
     "adapter_family": "rest",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "rest_paths": {
+      "GET /chains/main/blocks/head/context/contracts/{addr}/balance": {
+        "method": "GET",
+        "path": "/chains/main/blocks/head/context/contracts/{address}/balance"
+      },
+      "GET /chains/main/blocks/head/header": {
+        "method": "GET",
+        "path": "/chains/main/blocks/head/header"
+      },
+      "GET /chains/main/blocks/head/protocols": {
+        "method": "GET",
+        "path": "/chains/main/blocks/head/protocols"
+      },
+      "GET /chains/main/blocks/head/votes/current_period": {
+        "method": "GET",
+        "path": "/chains/main/blocks/head/votes/current_period"
+      }
+    },
+    "health_probe": {
+      "method": "GET",
+      "path": "/chains/main/blocks/head/header",
+      "parse_jq": ".level"
+    },
+    "upgrade_notes": [
+      "S3-E.4 (cli-param-bug followup 2026-05-25): switched single from",
+      "'GET /chains/main/blocks/head/header' (no_params health-probe) to",
+      "'GET /chains/main/blocks/head/context/contracts/{addr}/balance' which",
+      "takes a real tz1/tz2/tz3/KT1 address. Added _meta.rest_paths for 4 of",
+      "5 methods (operations method excluded — needs multi-placeholder",
+      "{block}+{vp} support which RestAdapter v1 does not provide).",
+      "Live evidence (docs/zh/chains/11-tezos.md §H8 2026-05-23):",
+      "  curl https://mainnet.api.tez.ie/chains/main/blocks/head/context/contracts/tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx/balance",
+      "  → HTTP 200 returns bare JSON string e.g. \"53\" (mutez)"
+    ],
+    "known_broken_mixed": {
+      "status": "OPERATIONS_METHOD_BLOCKED",
+      "evidence_date": "2026-05-25",
+      "blockers": [
+        "GET /chains/main/blocks/{block}/operations/{vp} needs both {block}",
+        "and {vp} (validation_pass int 0-3) placeholders. RestAdapter v1",
+        "only supports a single {address} placeholder substitution.",
+        "Requires either:",
+        "  (a) RestAdapter v2 with named multi-placeholder template support",
+        "  (b) Two-step adapter: query head/operation_hashes first, then",
+        "      iterate over (block, vp, index) tuples — needs new adapter family",
+        "Workaround for benchmark: skip operations method in mixed mode,",
+        "single mode (balance only) is fully functional."
+      ],
+      "fix_wave": "S4 or RestAdapter v2 wave"
+    }
   }
 }
