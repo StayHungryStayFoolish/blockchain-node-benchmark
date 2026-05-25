@@ -141,4 +141,4 @@ def list_adapters() -> list[str]:
 
 
 # Trigger registration of all subclasses
-from . import jsonrpc, rest, tendermint, bitcoin_jsonrpc, substrate, ogmios  # noqa: E402, F401
+from . import jsonrpc, rest, tendermint, bitcoin_jsonrpc, substrate, ogmios, hedera_dual  # noqa: E402, F401

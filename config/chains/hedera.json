@@ -17,8 +17,8 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "mirror_account_query",
-    "mixed": "mirror_account_query,mirror_balance_query,mirror_tx_lookup,eth_getBalance,eth_call"
+    "single": "GET /api/v1/accounts/{addr}",
+    "mixed": "GET /api/v1/accounts/{addr},GET /api/v1/balances?account.id={addr},GET /api/v1/transactions/{addr},eth_getBalance,eth_call"
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [
@@ -54,7 +54,18 @@
     ],
     "original_notes": "双协议 Mirror REST + JSON-RPC; 3-part account ID (shard.realm.num); tinybar vs weibar 单位换算; gRPC 不测",
     "adapter_required": true,
-    "adapter_family": "rest",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family": "hedera_dual",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "adapter_family_upgraded_at": "2026-05-24T18:00:00Z",
+    "adapter_family_upgrade_note": "S3-E.3: was 'rest' (broken — couldn't route eth_*); upgraded to dual-protocol adapter that routes per-method between Mirror REST and JSON-RPC Relay.",
+    "json_rpc_url": "https://mainnet.hashio.io/api",
+    "rest_paths": {
+      "GET /api/v1/accounts/{addr}": {"method": "GET", "path": "/api/v1/accounts/{address}"},
+      "GET /api/v1/balances?account.id={addr}": {"method": "GET", "path": "/api/v1/balances?account.id={address}"},
+      "GET /api/v1/transactions/{addr}": {"method": "GET", "path": "/api/v1/transactions/{address}"},
+      "GET /api/v1/blocks?limit=1&order=desc": {"method": "GET", "path": "/api/v1/blocks?limit=1&order=desc"},
+      "GET /api/v1/network/supply": {"method": "GET", "path": "/api/v1/network/supply"}
+    },
+    "health_probe": {"method": "GET", "path": "/api/v1/network/supply", "parse_jq": ".timestamp"}
   }
 }

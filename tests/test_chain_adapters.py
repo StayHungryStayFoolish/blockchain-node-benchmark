@@ -33,12 +33,12 @@ def _fail(msg: str):
 # ─────────────────────────────────────────────────────────────────────────────
 # Test 1: Factory registration — 6 families
 # ─────────────────────────────────────────────────────────────────────────────
-def test_factory_registers_six_families():
+def test_factory_registers_seven_families():
     print("\n[1] Factory registration")
     fams = list_adapters()
-    expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "ogmios"}
+    expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "ogmios", "hedera_dual"}
     assert set(fams) == expected, f"expected {expected}, got {fams}"
-    _ok(f"6 families registered: {sorted(fams)}")
+    _ok(f"7 families registered: {sorted(fams)}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -343,7 +343,6 @@ KNOWN_BROKEN_CLI = {
     # F1: rpc_methods.single picked a health-probe (no address) instead of
     #     a real benchmark method. Fix = pick a method from param_formats
     #     that takes an address. Pure chain-template edit, no adapter work.
-    "hedera":    ("F1", "S3-E", "single='mirror_account_query' is logical name, no real path; use 'mirror_balance_query' or 'eth_getBalance'"),
     "tezos":     ("F1", "S3-E", "single='GET /chains/main/blocks/head/header' has no address; use '/contracts/{addr}/balance'"),
     "ton":       ("F1", "S3-E", "single='getMasterchainInfo' is health-probe; use 'getAddressBalance'"),
     "kusama":    ("F1", "S3-C", "single='chain_getHeader' has no address; use 'system_account' or similar"),
@@ -368,7 +367,7 @@ KNOWN_BROKEN_CLI = {
     "acala":     ("F3", "S3-C", "family=substrate; single='system_chain' has no address; pick eth_getBalance from param_formats"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 14, f"KNOWN_BROKEN_CLI must have exactly 14 entries (baseline 16 minus aptos S3-E.1 minus algorand S3-E.2), got {len(KNOWN_BROKEN_CLI)}"
+assert len(KNOWN_BROKEN_CLI) == 13, f"KNOWN_BROKEN_CLI must have exactly 13 entries (baseline 16 minus aptos S3-E.1 minus algorand S3-E.2 minus hedera S3-E.3), got {len(KNOWN_BROKEN_CLI)}"
 
 
 def _sample_address_for(family: str) -> str:
@@ -385,6 +384,11 @@ def _sample_address_for(family: str) -> str:
         "tendermint":      "cosmos1abc",
         "ogmios":          "addr1q9adlx6mh0dr8xs0gpcm9nz5pqe5w2hzfx5l8qj5",
         "rest":            "TESTADDR123",
+        # hedera_dual: native 3-part account ID; L1 only asserts the address
+        # string appears in url-or-body, not EVM semantics. Production
+        # fetch_active_accounts must convert 0.0.N → EVM 0x...0N for eth_*
+        # routes — out of scope for L1.
+        "hedera_dual":     "0.0.2",
     }.get(family, "TESTADDR123")
 
 
@@ -478,7 +482,7 @@ def test_cli_build_target_all_36_chains():
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
     tests = [
-        test_factory_registers_six_families,
+        test_factory_registers_seven_families,
         test_all_36_chains_resolve,
         test_baseline_8_vegeta_byte_equality,
         test_parse_block_height_per_family,
