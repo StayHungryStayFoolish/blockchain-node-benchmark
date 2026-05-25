@@ -370,6 +370,34 @@ KNOWN_BROKEN_CLI = {
 assert len(KNOWN_BROKEN_CLI) == 13, f"KNOWN_BROKEN_CLI must have exactly 13 entries (baseline 16 minus aptos S3-E.1 minus algorand S3-E.2 minus hedera S3-E.3), got {len(KNOWN_BROKEN_CLI)}"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# KNOWN_BROKEN_MIXED — chains whose `single` benchmark passes L1-CLI test_10
+# but whose `mixed` (multi-method) path is broken in production (live HTTP
+# would 4xx/5xx). Documented here for honesty; not auto-asserted because we
+# don't yet have a `mixed` equivalent of test_10. When a future wave adds a
+# mixed-path test, this dict graduates to enforced invariant.
+#
+# Format: (chain, failure_layer, fix_wave, evidence)
+#   failure_layer:
+#     PARAM     — cli.py reads tpl['params'] (fetcher config) when it should
+#                 read tpl['param_formats'] (method→shape). Affects all
+#                 JSON-RPC chains' eth_* calls (missing 'latest'). Fix wave: cli-param-bug
+#     ADDR_FMT  — fetch_active_accounts.py doesn't know chain-specific address
+#                 transformations (hedera 3-part 0.0.N → EVM 0x...0N).
+#                 Fix wave: S4 (per-chain account fetcher)
+# ─────────────────────────────────────────────────────────────────────────────
+KNOWN_BROKEN_MIXED = {
+    "hedera": (
+        "PARAM+ADDR_FMT", "cli-param-bug + S4",
+        "S3-E.3 C1 实证:adapter routing 正确 (test_11 PASS),但 (1) cli.py L40 "
+        "读 tpl['params'] 应读 tpl['param_formats'] → eth_getBalance 缺 'latest'; "
+        "(2) fetch_active_accounts.py 不支持 hedera → 喂 3-part ID 0.0.N 给 Hashio "
+        "返 HTTP 400 'Expected 0x prefixed string representing the address (20 bytes)'. "
+        "需 fetcher 拿 mirror /accounts/{id} 的 evm_address 字段。"
+    ),
+}
+
+
 def _sample_address_for(family: str) -> str:
     """Return a family-appropriate sample address for the build-target probe.
 
@@ -478,6 +506,110 @@ def test_cli_build_target_all_36_chains():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Test 11: HederaDualAdapter — per-request protocol routing
+# ─────────────────────────────────────────────────────────────────────────────
+def test_hedera_dual_adapter_routing():
+    print("\n[11] HederaDualAdapter per-method protocol routing")
+    import base64 as _b64
+    import json as _json
+    from chain_adapters.hedera_dual import HederaDualAdapter, _is_jsonrpc_method
+
+    _saved = os.environ.get("BLOCKCHAIN_NODE")
+    os.environ["BLOCKCHAIN_NODE"] = "hedera"
+    try:
+        a = HederaDualAdapter()
+        mirror_url = "https://mainnet-public.mirrornode.hedera.com"
+        # REST path-style method → GET against passed rpc_url
+        tgt = a.build_vegeta_target(
+            method="GET /api/v1/accounts/{addr}",
+            address="0.0.2", rpc_url=mirror_url,
+        )
+        assert tgt["method"] == "GET", f"REST should be GET, got {tgt['method']}"
+        assert tgt["url"] == f"{mirror_url}/api/v1/accounts/0.0.2", f"got {tgt['url']}"
+        assert "body" not in tgt or not tgt.get("body"), "GET should have no body"
+        _ok("REST method → GET Mirror URL with address in path")
+
+        # JSON-RPC method → POST against _meta.json_rpc_url, NOT rpc_url
+        tgt = a.build_vegeta_target(
+            method="eth_blockNumber", address="",
+            rpc_url=mirror_url, param_format="no_params",
+        )
+        assert tgt["method"] == "POST", f"JSON-RPC should be POST, got {tgt['method']}"
+        assert tgt["url"] == "https://mainnet.hashio.io/api", \
+            f"JSON-RPC URL should come from _meta.json_rpc_url, got {tgt['url']}"
+        body = _json.loads(_b64.b64decode(tgt["body"]).decode())
+        assert body["method"] == "eth_blockNumber"
+        assert body["params"] == []
+        _ok("eth_blockNumber → POST Hashio with empty params")
+
+        # eth_getBalance routing → POST with [addr, "latest"] when param_format=address_latest
+        tgt = a.build_vegeta_target(
+            method="eth_getBalance",
+            address="0x0000000000000000000000000000000000000002",
+            rpc_url=mirror_url, param_format="address_latest",
+        )
+        assert tgt["url"] == "https://mainnet.hashio.io/api"
+        body = _json.loads(_b64.b64decode(tgt["body"]).decode())
+        assert body["params"] == ["0x0000000000000000000000000000000000000002", "latest"], \
+            f"params should be [addr, 'latest'], got {body['params']}"
+        _ok("eth_getBalance routes to Hashio with [addr, latest] payload")
+
+        # Missing _meta.json_rpc_url → ValueError (defensive check)
+        # We test by temporarily mutating the cached chain dict
+        a2 = HederaDualAdapter()
+        a2._load_chain("hedera")  # populate cache
+        original = a2._chain_cache["hedera"]["_meta"].pop("json_rpc_url")
+        try:
+            try:
+                a2.build_vegeta_target(method="eth_blockNumber", address="",
+                                       rpc_url=mirror_url, param_format="no_params")
+                assert False, "should have raised ValueError when json_rpc_url missing"
+            except ValueError as e:
+                assert "json_rpc_url" in str(e), f"error msg should mention json_rpc_url: {e}"
+            _ok("Missing _meta.json_rpc_url raises ValueError")
+        finally:
+            a2._chain_cache["hedera"]["_meta"]["json_rpc_url"] = original
+
+        # Missing BLOCKCHAIN_NODE → RuntimeError
+        del os.environ["BLOCKCHAIN_NODE"]
+        try:
+            a.build_vegeta_target(method="eth_blockNumber", address="",
+                                  rpc_url=mirror_url, param_format="no_params")
+            assert False, "should have raised RuntimeError when BLOCKCHAIN_NODE missing"
+        except RuntimeError as e:
+            assert "BLOCKCHAIN_NODE" in str(e)
+        _ok("Missing BLOCKCHAIN_NODE raises RuntimeError")
+    finally:
+        if _saved is None:
+            os.environ.pop("BLOCKCHAIN_NODE", None)
+        else:
+            os.environ["BLOCKCHAIN_NODE"] = _saved
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 12: _is_jsonrpc_method regex boundary
+# ─────────────────────────────────────────────────────────────────────────────
+def test_is_jsonrpc_method_regex():
+    print("\n[12] _is_jsonrpc_method routing regex boundary")
+    from chain_adapters.hedera_dual import _is_jsonrpc_method
+    # Positive cases — JSON-RPC namespaces
+    for m in ["eth_getBalance", "eth_call", "eth_blockNumber",
+              "net_version", "web3_clientVersion",
+              "debug_traceTransaction", "trace_block"]:
+        assert _is_jsonrpc_method(m), f"{m!r} should route to JSON-RPC"
+    # Negative cases — REST path keys, never JSON-RPC
+    for m in ["GET /api/v1/accounts/{addr}",
+              "GET /api/v1/balances?account.id={addr}",
+              "POST /api/v1/contracts/call",
+              "mirror_account_query",  # legacy logical name
+              "getAccount",            # camelCase non-eth
+              "ethReporter",           # starts with "eth" but no underscore
+              "_eth_getBalance"]:      # leading underscore
+        assert not _is_jsonrpc_method(m), f"{m!r} should NOT route to JSON-RPC"
+    _ok("regex correctly distinguishes 7 JSON-RPC namespaces from REST/other forms")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
@@ -492,6 +624,8 @@ def main():
         test_jsonrpc_s3a_new_formats,
         test_evm_compat_5chains_standard_enum,
         test_cli_build_target_all_36_chains,
+        test_hedera_dual_adapter_routing,
+        test_is_jsonrpc_method_regex,
     ]
     print(f"Running {len(tests)} test groups for chain_adapters")
     for t in tests:

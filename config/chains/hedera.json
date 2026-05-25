@@ -58,6 +58,16 @@
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
     "adapter_family_upgraded_at": "2026-05-24T18:00:00Z",
     "adapter_family_upgrade_note": "S3-E.3: was 'rest' (broken — couldn't route eth_*); upgraded to dual-protocol adapter that routes per-method between Mirror REST and JSON-RPC Relay.",
+    "known_broken_mixed": {
+      "status": "ADAPTER_OK_BUT_UPSTREAM_BROKEN",
+      "evidence_date": "2026-05-24",
+      "live_http_test": "curl POST mainnet.hashio.io/api eth_getBalance params=['0.0.801'] → HTTP 400 'Expected 0x prefixed string representing the address (20 bytes)'",
+      "blockers": [
+        "PARAM: cli.py L40 reads tpl['params'] (fetcher config) instead of tpl['param_formats'] (method→format) — eth_getBalance call gets [addr] not [addr, 'latest']. Affects all JSON-RPC chains.",
+        "ADDR_FMT: fetch_active_accounts.py does not produce EVM-format addresses for hedera (only 3-part 0.0.N). Mirror REST works (path uses raw ID), JSON-RPC Relay requires 0x-prefixed 20-byte hex."
+      ],
+      "fix_wave": "cli-param-bug (PARAM) + S4 (ADDR_FMT)"
+    },
     "json_rpc_url": "https://mainnet.hashio.io/api",
     "rest_paths": {
       "GET /api/v1/accounts/{addr}": {"method": "GET", "path": "/api/v1/accounts/{address}"},
