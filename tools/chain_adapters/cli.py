@@ -26,19 +26,34 @@ from chain_adapters import get_adapter  # noqa: E402
 
 
 def _get_param_format(chain: str, method: str) -> str:
-    """Read param_format from chain template params field for given method.
+    """Read param_format from chain template `param_formats.<method>`.
 
-    Falls back to '' (which adapters interpret as default)."""
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    Mirrors config_loader.sh:600 `get_param_format_from_json()` (bash path):
+      - reads from `param_formats` (method→format map), NOT `params`
+        (which holds fetcher config like account_count/output_file).
+      - default fallback is "single_address" (matches bash line 105 case).
+
+    Pre-2026-05-24 bug history (cli-param-bug wave):
+      commit 6866cba (S2 skeleton) accidentally read tpl["params"] (fetcher
+      config dict whose values are bash env var names like "ACCOUNT_COUNT")
+      and fell back to "". The JsonRpcAdapter's own default fallback is also
+      `[address]`, so byte-equality test_3 happened to pass via symmetric
+      fallback — but real production calls had wrong params:
+        * eth_getBalance(addr) → [addr]   (should be [addr, "latest"])
+        * eth_blockNumber()    → [addr]   (should be [])
+      Discovered when hedera_dual mixed C1 live-curl returned HTTP 400.
+      See KNOWN_BROKEN_MIXED in tests/test_chain_adapters.py.
+    """
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     chain_file = os.path.join(repo_root, "config", "chains", f"{chain}.json")
     if not os.path.exists(chain_file):
-        return ""
+        return "single_address"
     with open(chain_file) as f:
         tpl = json.load(f)
-    params = tpl.get("params", {})
-    if isinstance(params, dict):
-        return params.get(method, "")
-    return ""
+    param_formats = tpl.get("param_formats", {})
+    if isinstance(param_formats, dict):
+        return param_formats.get(method, "single_address")
+    return "single_address"
 
 
 def cmd_build_target(args):

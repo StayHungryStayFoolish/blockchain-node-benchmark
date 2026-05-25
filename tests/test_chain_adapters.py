@@ -100,7 +100,12 @@ def test_baseline_8_vegeta_byte_equality():
     total = 0
     for chain in baseline:
         tpl = json.loads((chains_dir / f"{chain}.json").read_text())
-        for method, pf in tpl.get("params", {}).items():
+        # Read from param_formats (method→format map) — was reading from
+        # tpl["params"] (fetcher config) pre-cli-param-bug fix; that path
+        # tested nothing because both _bash_old_target and JsonRpcAdapter
+        # fell back to [address] for unknown "param_formats" like
+        # "ACCOUNT_COUNT", trivially byte-equal but not real-method coverage.
+        for method, pf in tpl.get("param_formats", {}).items():
             if not isinstance(pf, str):
                 continue
             expected = _bash_old_target(method, test_addr, rpc_url, pf)
@@ -114,6 +119,8 @@ def test_baseline_8_vegeta_byte_equality():
             if actual != expected:
                 _fail(f"{chain}/{method}({pf}): mismatch\n      expected: {expected}\n      actual:   {actual}")
             total += 1
+    # Guard against the bug where total=0 because field name is wrong
+    assert total >= 8 * 2, f"too few methods tested ({total}); param_formats field name likely wrong"
     _ok(f"{total} (chain × method) targets all byte-equal old bash path")
 
 
@@ -340,34 +347,66 @@ def test_evm_compat_5chains_standard_enum():
 
 # (chain, expected_failure_mode, fix_wave_owner, reason)
 KNOWN_BROKEN_CLI = {
-    # F1: rpc_methods.single picked a health-probe (no address) instead of
-    #     a real benchmark method. Fix = pick a method from param_formats
-    #     that takes an address. Pure chain-template edit, no adapter work.
-    "tezos":     ("F1", "S3-E", "single='GET /chains/main/blocks/head/header' has no address; use '/contracts/{addr}/balance'"),
-    "ton":       ("F1", "S3-E", "single='getMasterchainInfo' is health-probe; use 'getAddressBalance'"),
-    "kusama":    ("F1", "S3-C", "single='chain_getHeader' has no address; use 'system_account' or similar"),
-    "polkadot":  ("F1", "S3-C", "single='chain_getHeader' has no address; mixed_first 'GET /accounts/{addr}/balance-info' is correct shape"),
+    # ─────────────────────────────────────────────────────────────────────
+    # F1: RestAdapter Gate1 — rc=1 because single method not in _meta.rest_paths
+    # ─────────────────────────────────────────────────────────────────────
+    "tezos": ("F1", "S3-E", "single='GET /chains/main/blocks/head/header' not in rest_paths; use '/contracts/{addr}/balance'"),
+    "ton":   ("F1", "S3-E", "single='getMasterchainInfo' is health-probe with no rest_paths entry; use 'getAddressBalance'"),
 
-    # F2: chain template uses REST paths in rpc_methods.single but
-    #     family=tendermint goes through jsonrpc.py generic builder which
-    #     wraps everything in {jsonrpc:"2.0", method:"<path>", params:{}}.
-    #     Fix = adapter dispatch (tendermint must do HTTP GET <path>, not POST JSON).
-    "celestia":   ("F2", "S3-B", "REST path '/status' wrapped as jsonrpc body; tendermint adapter must HTTP GET"),
-    "injective":  ("F2", "S3-B", "REST path '/status' wrapped as jsonrpc body"),
-    "osmosis":    ("F2", "S3-B", "REST path '/status' wrapped as jsonrpc body"),
-    "cosmos-hub": ("F2", "S3-B", "REST path wrapped as jsonrpc body"),
-    "cardano":    ("F2", "S3-F", "ogmios family wraps 'GET /tip' as jsonrpc body; ogmios adapter is WebSocket JSON-RPC, different protocol"),
+    # ─────────────────────────────────────────────────────────────────────
+    # F3-NOADDR (cli-param-bug 2026-05-25 wave revealed):
+    #   chain template single is a no-address health-probe method
+    #   (eth_blockNumber / eth_chainId / chain_getHeader / getblockcount /
+    #   system_chain / /status / GET .../latest / avm.getHeight).
+    #   These were FALSELY healthy pre-cli-param-bug: cli.py read tpl["params"]
+    #   (fetcher config) → fallback "" → JsonRpcAdapter fallback [address] →
+    #   Gate 3 (addr in body) trivially passed. After fix, param_format is
+    #   correctly resolved to "no_params" → params=[] → addr NOT in body →
+    #   Gate 3 correctly fails.
+    #   Fix = chain template edit: pick an address-bearing method from
+    #   param_formats and set rpc_methods.single to it. No adapter work.
+    # ─────────────────────────────────────────────────────────────────────
+    # Bitcoin family (4): use a real address-bearing method (getreceivedbyaddress / scantxoutset)
+    "bitcoin":   ("F3-NOADDR", "S3-D", "single='getblockcount' has no address; use 'getreceivedbyaddress' or 'scantxoutset' (no_params→need addr-bearing)"),
+    "bch":       ("F3-NOADDR", "S3-D", "single='getblockcount' has no address; use 'getreceivedbyaddress'"),
+    "dogecoin":  ("F3-NOADDR", "S3-D", "single='getblockcount' has no address; use 'getreceivedbyaddress'"),
+    "litecoin":  ("F3-NOADDR", "S3-D", "single='getblockcount' has no address; use 'getreceivedbyaddress'"),
 
-    # F3: family=substrate but chain runs EVM via Frontier pallet. mixed_first
-    #     is eth_chainId (no address). Fix = decide family (substrate vs jsonrpc)
-    #     and pick benchmark method with address (eth_getBalance).
-    "astar":     ("F3", "S3-C", "family=substrate but Astar runs EVM via Frontier; single='eth_chainId' has no address"),
-    "moonbeam":  ("F3", "S3-C", "family=substrate but Moonbeam runs EVM via Frontier; single='eth_chainId' has no address"),
-    "sei":       ("F3", "S3-B", "family=tendermint with EVM compat layer; single='eth_chainId' has no address"),
-    "acala":     ("F3", "S3-C", "family=substrate; single='system_chain' has no address; pick eth_getBalance from param_formats"),
+    # Tendermint family (4): pick a real account-bearing path (cosmos/auth/v1beta1/accounts/{addr})
+    "celestia":   ("F3-NOADDR", "S3-B", "single='/status' has no address; use '/cosmos/auth/v1beta1/accounts/{addr}' or similar"),
+    "cosmos-hub": ("F3-NOADDR", "S3-B", "single='GET .../blocks/latest' has no address; use auth/balances/{addr} REST path"),
+    "injective":  ("F3-NOADDR", "S3-B", "single='/status' has no address"),
+    "osmosis":    ("F3-NOADDR", "S3-B", "single='/status' has no address"),
+
+    # Substrate family (4): pick system_account / state_getStorage with addr key
+    "acala":     ("F3-NOADDR", "S3-C", "single='system_chain' has no address; use 'system_account' or eth_getBalance (EVM via Frontier pallet)"),
+    "astar":     ("F3-NOADDR", "S3-C", "single='eth_chainId' has no address; Astar runs EVM, use 'eth_getBalance'"),
+    "kusama":    ("F3-NOADDR", "S3-C", "single='chain_getHeader' has no address; use 'system_account' with SS58 addr"),
+    "moonbeam":  ("F3-NOADDR", "S3-C", "single='eth_chainId' has no address; Moonbeam runs EVM, use 'eth_getBalance'"),
+    "polkadot":  ("F3-NOADDR", "S3-C", "single='chain_getHeader' has no address; use 'system_account'"),
+    "sei":       ("F3-NOADDR", "S3-B", "single='eth_chainId' has no address; Sei has EVM compat, use 'eth_getBalance'"),
+
+    # EVM L2 family (7): default health probe instead of eth_getBalance
+    "arbitrum":    ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance' (param_formats already declares address_latest)"),
+    "avalanche-c": ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance'"),
+    "avalanche-x": ("F3-NOADDR", "S3-A", "single='avm.getHeight' has no address; use 'avm.getBalance' or address-bearing alt"),
+    "linea":       ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance'"),
+    "optimism":    ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance'"),
+    "tron":        ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance' (Tron supports EVM RPC)"),
+    "zksync-era":  ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance'"),
+
+    # ─────────────────────────────────────────────────────────────────────
+    # F4: chain template single method UNDECLARED in param_formats/rest_paths
+    # ─────────────────────────────────────────────────────────────────────
+    "cardano": ("F4", "S3-F", "single='GET /tip' not declared in param_formats/rest_paths; ogmios family is WebSocket JSON-RPC (separate protocol)"),
+    "near":    ("F4", "S3-E", "single='status' not in param_formats; near JSON-RPC has no 'status' method — use 'query' with {request_type:view_account, account_id}"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 13, f"KNOWN_BROKEN_CLI must have exactly 13 entries (baseline 16 minus aptos S3-E.1 minus algorand S3-E.2 minus hedera S3-E.3), got {len(KNOWN_BROKEN_CLI)}"
+assert len(KNOWN_BROKEN_CLI) == 25, (
+    f"KNOWN_BROKEN_CLI must have exactly 25 entries (cli-param-bug wave 2026-05-25: "
+    f"old 13 dropped to 4 via Gate 4, then real fallback fix exposed 21 F3-NOADDR + 2 F4 = 25), "
+    f"got {len(KNOWN_BROKEN_CLI)}"
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -469,6 +508,23 @@ def test_cli_build_target_all_36_chains():
         # Gate 3: body or URL contains the address we passed
         url = tgt.get("url", "")
         if addr not in body and addr not in url:
+            actually_broken.add(chain)
+            continue
+        # Gate 4: single_method must be EXPLICITLY declared in chain template
+        # (param_formats for JSON-RPC families, _meta.rest_paths for REST).
+        # Otherwise cli.py falls back to "single_address" and silently injects
+        # the address into a method that semantically takes no address
+        # (e.g. cardano `GET /tip`, acala `system_chain`). The vegeta target
+        # generates fine but the real node returns -32602 / 404 / empty.
+        # Discovered during cli-param-bug wave (2026-05-25): default
+        # fallback "single_address" was masking 11 F1/F2/F3 broken chains.
+        param_formats = tpl.get("param_formats") or {}
+        rest_paths = (tpl.get("_meta") or {}).get("rest_paths") or []
+        method_declared = (
+            single_method in param_formats
+            or single_method in rest_paths
+        )
+        if not method_declared:
             actually_broken.add(chain)
             continue
 
