@@ -46,21 +46,12 @@
 
 ---
 
-## OQ-3:per-method 归因算法
+## OQ-3:per-method 归因算法 ✅ 已锁定(2026-05-27)
 
-**问题**:proxy 输出"每请求 method + timestamp + latency",monitor 输出"每秒资源时序",**如何归因?**
-
-| 算法候选 | 描述 | 优点 | 缺点 |
-|---|---|---|---|
-| **(a) 简单 group_by**(秒级时间窗) | 按 1s 窗口 group proxy 请求,统计每 method 占比,按比例分摊该秒的资源增量 | 简单、直观、运维易懂 | 假设资源消耗与请求数线性相关,不精确 |
-| **(b) 加权回归**(method 占比 → 资源消耗) | 线性回归 / 多元回归,各 method 占比为自变量,资源消耗为因变量 | 较精确 | 需大样本、有共线性风险、运维难解释 |
-| **(c) 蒙特卡洛 / 试验设计** | 不同 method 比例下多轮压测,反推每 method 单位资源消耗 | 最精确 | 时间成本高(每链多轮压测) |
-
-**用户原话(2026-05-27)**:"运维人员看 rpc method 相关的资源图可以快速理解,获取到运维人员希望获取的数据就可以"
-
-**当前倾向**:**(a) 简单 group_by + 秒级时间窗** — 符合"运维快速理解"原则,可解释性强,实施成本低;(b)(c) 作为后续增强,不在 PoC 范围
-
-**决策时点**:阶段 1-A 架构文档落地时
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-7**。
+> **决策摘要**:加权 group_by(秒级时间窗);权重源 = 公开资料先配粗粒度(`analysis-notes/research_notes/01-06` 各 method "典型延迟量级" → 映射 1/10/100 三档);后期实际使用根据真实压测数据迭代调整;PoC 撤销条件 = ground truth 误差 > 20% 才升级 (b) 加权回归。
+> **决策依据**:用户原话 "运维人员看 rpc method 相关的资源图可以快速理解" + 收敛于 `analysis-notes/research_notes/07-per-method-resource-attribution-via-proxy.md` §2。
+> **ADR 待写**:`docs/architecture/decisions/0001-per-method-attribution.md`(归阶段 4 PoC 启动前补)
 
 ---
 
@@ -197,5 +188,5 @@
 
 ---
 
-**当前状态**:**8 个 OQ 待决**
+**当前状态**:**7 个 OQ 待决**(OQ-1 / OQ-2 / OQ-4 / OQ-5 / OQ-6 / OQ-7 / OQ-8;OQ-3 已锁 → NORTH-STAR Q4-7)
 **下次预期更新**:阶段 1 架构文档 review 通过后(OQ-2 / OQ-3 / OQ-4 / OQ-5 / OQ-7 / OQ-8 部分应该可决);阶段 2 调研档完成后 OQ-1 可决

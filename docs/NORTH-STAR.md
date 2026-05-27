@@ -45,6 +45,7 @@
 | Q4-4 | **chain template proxy 解析规则表达** | **完全 declarative DSL**(只支持有限模式:JSON body field / URL path regex / Bitcoin RPC body / gRPC method),**禁止内嵌 lua/python snippet** |
 | Q4-5 | **vegeta → proxy 链路改造** | **`PROXY_ENABLED` + `PROXY_URL` 显式环境变量**,默认关闭(向后兼容老用户),可关 proxy 跑老模式做对比基线 |
 | Q4-6 | **现有 monitor 字段** | **不动**(具体字段数以代码实查为准),proxy 是新增独立数据源,join 在分析层完成 |
+| Q4-7 | **per-method 归因算法** | **加权 group_by + 秒级时间窗**;**权重源 = 公开资料先配粗粒度**(`analysis-notes/research_notes/01-06` 各 method "典型延迟量级" → 映射 1/10/100 三档),**后期实际使用根据真实压测数据迭代调整**(非阻塞决策);PoC 撤销条件:ground truth 误差 > 20% 才升级回归算法 |
 | W-1 | **文档落点** | `docs/architecture/` 新目录,与现有"现状说明书"分开 |
 | W-2 | **阶段 1 架构文档形态** | **3 份独立 md**(整体架构 + chain template spec + migration 路径) |
 | W-3 | **架构图工具** | mermaid(git diff 友好,GitHub 原生渲染) |
@@ -55,7 +56,7 @@
 **待决项(未锁定)**:见 `docs/architecture/OPEN-QUESTIONS.md`
 - proxy 具体选型(envoy / nginx / mitmproxy / 自写 Go)
 - proxy 部署形态细节(systemd vs docker container)
-- per-method 归因算法细节(group_by vs 回归)
+- ~~per-method 归因算法细节(group_by vs 回归)~~ → **已锁 Q4-7**(2026-05-27 用户决策:权重按公开资料配,后期迭代)
 - sink 默认格式(CSV vs JSONL)
 
 ---
