@@ -33,5 +33,13 @@ Proposed / Accepted / Deprecated / Superseded by ADR-XXXX
 
 ## 当前 ADR 索引
 
-(暂无 — NORTH-STAR.md 初始决策表来自 2026-05-27 session,作为 baseline 不写 ADR;
-后续修改必须写 ADR)
+| 编号 | 标题 | 状态 | commit |
+|---|---|---|---|
+| [ADR-0001](0001-per-method-attribution.md) | per-method 资源归因算法 — monitor + proxy 旁路 + 离线 join | Accepted | `5338bba` |
+| [ADR-0002](0002-proxy-implementation.md) | proxy 实现 — Go 反向代理 + 流式 JSON decoder 提 method 字段 | Accepted | `9e52ead` |
+| [ADR-0003](0003-sink-format.md) | sink 格式 — CSV(ts_ns, method, status, latency_ns) | Accepted | `9e52ead` |
+| [ADR-0004](0004-proxy-overhead.md) | proxy 自身开销 — 目标 < 节点 CPU 10% | Accepted | `9e52ead` |
+
+> 备注:NORTH-STAR.md 初始决策表(commit `7921b71`)作为 baseline 不写 ADR;
+> baseline 之后的决策变更必须写 ADR。
+

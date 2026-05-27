@@ -151,7 +151,7 @@ DSL 4 模式(json_rpc / rest / bitcoin_rpc / grpc)覆盖测试 — 需在阶段 
 
 ### 4.4 OQ-4 锁定建议
 
-→ **已合入 NORTH-STAR §3 Q4-9**(2026-05-27 用户决策):默认 CSV + 字段最小集 6 列(`timestamp, method, req_bytes, resp_bytes, latency_ms, status`);sink 抽象层支持 JSONL/Parquet 切换(`PROXY_SINK_FORMAT` 环境变量);无强撤销条件,日志体积 > 100GB/天再评估切 Parquet。**关键变化**:初始倾向 JSONL,被 §4 反方论证 R9-R12 翻成 CSV。OPEN-QUESTIONS OQ-4 已移除;ADR `0003-sink-format.md` 待写。
+→ **已合入 NORTH-STAR §3 Q4-9**(2026-05-27 用户决策):默认 CSV + 字段最小集 6 列(`timestamp, method, req_bytes, resp_bytes, latency_ms, status`);sink 抽象层支持 JSONL/Parquet 切换(`PROXY_SINK_FORMAT` 环境变量);无强撤销条件,日志体积 > 100GB/天再评估切 Parquet。**关键变化**:初始倾向 JSONL,被 §4 反方论证 R9-R12 翻成 CSV。OPEN-QUESTIONS OQ-4 已锁定;ADR [`0003-sink-format.md`](../../docs/architecture/decisions/0003-sink-format.md) 已落地(2026-05-27)。
 
 ---
 
