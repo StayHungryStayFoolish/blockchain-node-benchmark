@@ -156,6 +156,46 @@
 
 ---
 
+## OQ-9:fake-node v2 — 5 个 stub handler 何时落地?
+
+**背景**(2026-05-27, R1 范式纠正):fake-node v2 实现了 7 个协议族的 handler 注册 + dispatch 架构,但 R1 只完整实现 2/7 (jsonrpc + bitcoin_jsonrpc, 覆盖 20/36 链),剩余 5/7 注册为 `NotImplementedHandler` stub (覆盖 16/36 链 startup,RPC 调用返回 loud error)。
+
+**待决问题**:5 个 stub handler 的实施时点与顺序。
+
+| Handler            | Chains | Coverage 链名                                   | 实施成本 (估)        | 触发优先级     |
+|--------------------|-------:|-------------------------------------------------|----------------------|----------------|
+| `substrate`        | 5      | polkadot, kusama, acala, astar, moonbeam        | ~250 行 Go + 5 fixtures | 中 (有商用流量) |
+| `tendermint`       | 5      | cosmos-hub, osmosis, celestia, injective, sei   | ~300 行 Go + 5 fixtures | 中             |
+| `rest`             | 4      | algorand, aptos, tezos, ton                     | ~200 行 Go + 4 fixtures | 低             |
+| `ogmios`           | 1      | cardano                                         | ~200 行 Go (websocket fixture replay) | 低 |
+| `hedera_dual`      | 1      | hedera                                          | ~250 行 Go (双协议)  | 低             |
+
+**当前倾向**:**按"商用使用率从高到低"实施**,而非按字母序。下一波:`substrate + tendermint`(5+5=10 链,商用流量大),再 `rest`,最后 `ogmios + hedera_dual` (各 1 链)。
+
+**安全网**:stub 已注册不静默失败 (smoke step 4 验过 cardano: HTTP 404, NOT 200)。R1 完成 = "20 链可 smoke + 36 链可 startup + 16 链 RPC 必失败有响"。
+
+**决策时点**:阶段 5 (36 链 weight + proxy 协议 dispatcher 全覆盖) 启动前必须给出实施顺序;`no-deferred-bugs` 4th 已检查过 (这是范围切分非 P0 推后)。
+
+---
+
+## OQ-10:fake-node fixture 录制流水线如何标准化?
+
+**背景**:R1 ethereum fixtures 当前是手写最小合法 JSON-RPC 响应 (字节假但格式真),非真 mainnet 录制。Solana fixtures 用 `scripts/record_solana_fixtures.sh` 录的,但 EVM/其他链没有等价脚本。
+
+**候选**:
+
+| 选项 | 描述 | 利 | 弊 |
+|---|---|---|---|
+| (a) per-chain 手写 record_<chain>.sh | 复用 solana 模式 | 简单, 各链独立 | 36 个脚本维护成本 |
+| (b) 统一 `record_fixtures.py` + `config/chains/*.json:rpc_methods` 驱动 | 一份代码 36 链覆盖 | 加链零脚本 | 需先有 RPC endpoint config |
+| (c) 录制改为录 framework 真实 e2e 流量 (代理 tap) | 真实流量 fixture | 真实性最高 | 需 framework 已能压目标链 (鸡生蛋) |
+
+**当前倾向**:**(b)**,与 framework `_meta` 字段驱动一致 (parallel-entry-trap 既有结论 = 不要再造 ad-hoc 入口)。
+
+**决策时点**:阶段 5 前;blocker 程度低 (手写 stub fixture 也能 smoke 通)。
+
+---
+
 ## 更新规则
 
 - 每个 OQ 决策落定时,**从本文档移除**,同步:
@@ -166,5 +206,5 @@
 
 ---
 
-**当前状态**:**4 个 OQ 待决**(OQ-2 / OQ-5 / OQ-6 / OQ-7;OQ-1 / OQ-3 / OQ-4 / OQ-8 已锁 → NORTH-STAR Q4-7~10)
+**当前状态**:**6 个 OQ 待决**(OQ-2 / OQ-5 / OQ-6 / OQ-7 / OQ-9 / OQ-10;OQ-1 / OQ-3 / OQ-4 / OQ-8 已锁 → NORTH-STAR Q4-7~10)
 **下次预期更新**:阶段 1 架构文档 review 通过后(OQ-2 / OQ-3 / OQ-4 / OQ-5 / OQ-7 / OQ-8 部分应该可决);阶段 2 调研档完成后 OQ-1 可决

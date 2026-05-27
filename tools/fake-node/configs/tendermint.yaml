@@ -1,0 +1,21 @@
+# fake-node v2 config — tendermint family (STUB)
+#
+# This family is registered as NotImplementedHandler in handlers/stubs.go.
+# This minimal config exists so:
+#   - `fake-node -chain <chain-using-tendermint>` startup succeeds (operators can inspect)
+#   - RPC calls fail loud at request time with "not yet implemented" error
+#
+# To wire real fixtures: implement handlers/tendermint.go, populate methods below,
+# and add fixtures/<chain>/<fixture>.json. Tracked in docs/architecture/OPEN-QUESTIONS.md.
+
+family: tendermint
+
+methods: {}    # empty — RPC calls return 404 "method not declared"
+
+tiers:
+  cheap: 1ms
+  mid: 10ms
+  expensive: 50ms
+
+io:
+  enabled: false     # off until real handler implemented

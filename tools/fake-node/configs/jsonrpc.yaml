@@ -1,0 +1,73 @@
+# fake-node v2 config — jsonrpc family
+#
+# Covers 16 chains under _meta.adapter_family=jsonrpc:
+#   solana, ethereum, bsc, base, polygon, scroll, arbitrum,
+#   optimism, linea, avalanche-c, avalanche-x, zksync-era,
+#   near, tron, sui, starknet
+#
+# This file describes the method-name → fixture-name mapping that the
+# jsonrpc handler uses. Fixtures themselves are stored per-chain under
+#   fixtures/<chain>/<fixture-name>.json
+# (so solana's getSlot.json is different bytes from ethereum's eth_blockNumber.json).
+#
+# The method list below is the UNION of methods used across the family —
+# any single chain only needs the subset its template references.
+# (R1: Solana + Ethereum smoke covers a subset; full method coverage tracked
+#  in docs/architecture/OPEN-QUESTIONS.md.)
+
+family: jsonrpc
+
+methods:
+  # ---- Solana methods (camelCase) ----
+  getSlot:
+    fixture: getSlot.json
+    tier: cheap
+  getBalance:
+    fixture: getBalance.json
+    tier: cheap
+  getLatestBlockhash:
+    fixture: getLatestBlockhash.json
+    tier: mid
+  getBlock:
+    fixture: getBlock.json
+    tier: expensive
+  getTransaction:
+    fixture: getTransaction.json
+    tier: expensive
+  getAccountInfo:
+    fixture: getAccountInfo.json
+    tier: cheap
+
+  # ---- Ethereum / EVM methods (eth_*) ----
+  eth_blockNumber:
+    fixture: eth_blockNumber.json
+    tier: cheap
+  eth_gasPrice:
+    fixture: eth_gasPrice.json
+    tier: cheap
+  eth_getBalance:
+    fixture: eth_getBalance.json
+    tier: cheap
+  eth_getTransactionCount:
+    fixture: eth_getTransactionCount.json
+    tier: cheap
+  eth_getBlockByNumber:
+    fixture: eth_getBlockByNumber.json
+    tier: expensive
+  eth_getTransactionByHash:
+    fixture: eth_getTransactionByHash.json
+    tier: expensive
+
+tiers:
+  cheap: 1ms
+  mid: 10ms
+  expensive: 50ms
+
+io:
+  enabled: true
+  work_dir: /tmp/fake-node-io-jsonrpc
+  min_bytes: 8192
+  max_bytes: 1048576
+  min_interval_ms: 50
+  max_interval_ms: 500
+  read_ratio: 0.3

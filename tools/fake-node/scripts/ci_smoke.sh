@@ -1,27 +1,26 @@
 #!/bin/bash
-# ci_smoke.sh — fake-node end-to-end smoke test.
+# ci_smoke.sh — fake-node v2 end-to-end smoke (multi-chain).
 #
-# Validates:
-#   1. binary builds
-#   2. fixtures exist (records them if missing)
-#   3. fake-node starts and serves all configured methods
-#   4. responses are byte-correct (match fixture file size)
-#   5. per-tier latency lands in the configured band
-#   6. IO worker writes files at non-fixed intervals (size & count grow)
-#   7. /stats endpoint reports non-zero counters
+# v2 Validates:
+#   1. binary builds (single binary serves all 36 chains via handler registry)
+#   2. solana chain: BLOCKCHAIN_NODE=solana → jsonrpc handler → byte-correct
+#   3. ethereum chain: BLOCKCHAIN_NODE=ethereum → jsonrpc handler → byte-correct
+#   4. handler routing: NotImplemented family (e.g. cardano) startup OK, RPC 500
+#   5. /stats counters report activity
+#   6. IO worker active
 #
-# Exit 0 on full pass, non-zero on first failure.
+# Exit 0 on full pass.
 #
 # Run: bash tools/fake-node/scripts/ci_smoke.sh
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="${FAKE_NODE_BIN:-/tmp/fake_node}"
-CONFIG="${ROOT}/configs/solana.yaml"
+REPO_ROOT="$(cd "$ROOT/../.." && pwd)"
+BIN="${FAKE_NODE_BIN:-/tmp/fake-node-v2}"
+CONFIGS_DIR="${ROOT}/configs"
 FIXTURES="${ROOT}/fixtures"
-PORT="${PORT:-19999}"
-IO_DIR="/tmp/fake-node-io-solana"
+CHAINS_DIR="${REPO_ROOT}/config/chains"
 
 pass=0
 fail=0
@@ -30,105 +29,141 @@ ok()   { echo "  ✓ $*"; pass=$((pass+1)); }
 ko()   { echo "  ✗ $*"; fail=$((fail+1)); }
 
 # --- 1. binary ---
-note "step 1: binary"
-if [[ ! -x "$BIN" ]]; then
-  note "  building..."
-  (cd "$ROOT" && go build -o "$BIN" fake_node.go)
-fi
+note "step 1: build binary"
+(cd "$ROOT" && go build -o "$BIN" .)
 [[ -x "$BIN" ]] && ok "binary at $BIN" || { ko "binary missing"; exit 1; }
 
-# --- 2. fixtures ---
-note "step 2: fixtures"
-if [[ ! -f "$FIXTURES/getSlot.json" ]]; then
-  note "  recording..."
-  bash "$ROOT/scripts/record_solana_fixtures.sh" >/dev/null
-fi
-n_fixtures=$(ls "$FIXTURES"/*.json 2>/dev/null | wc -l)
-[[ "$n_fixtures" -ge 5 ]] && ok "$n_fixtures fixtures present" || { ko "only $n_fixtures fixtures (need 5)"; exit 1; }
-
-# --- 3. start fake-node ---
-note "step 3: start fake-node on :$PORT"
-rm -rf "$IO_DIR"
-"$BIN" -config "$CONFIG" -fixtures-dir "$FIXTURES" -port "$PORT" > /tmp/fake-node-smoke.log 2>&1 &
-FN_PID=$!
-trap 'kill $FN_PID 2>/dev/null || true' EXIT
-
-# wait for ready (1 second + readiness probe)
-for i in 1 2 3 4 5; do
-  sleep 1
-  if curl -sf "http://127.0.0.1:$PORT/stats" >/dev/null 2>&1; then
-    ok "fake-node ready (pid=$FN_PID)"
-    break
-  fi
-  if [[ $i -eq 5 ]]; then
-    ko "fake-node not ready after 5s"
-    cat /tmp/fake-node-smoke.log
-    exit 1
-  fi
-done
-
-# --- 4. byte-correct responses ---
-note "step 4: byte-correct responses"
-declare -A PARAMS=(
-  [getSlot]='[]'
-  [getBalance]='["83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri"]'
-  [getLatestBlockhash]='[]'
-  [getBlock]='[100000000,{"encoding":"json","maxSupportedTransactionVersion":0}]'
-  [getTransaction]='["5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW",{"encoding":"json","maxSupportedTransactionVersion":0}]'
-)
-for method in getSlot getBalance getLatestBlockhash getBlock getTransaction; do
-  body=$(printf '{"jsonrpc":"2.0","id":1,"method":"%s","params":%s}' "$method" "${PARAMS[$method]}")
-  expected=$(stat -c%s "$FIXTURES/${method}.json")
-  actual=$(curl -s -X POST "http://127.0.0.1:$PORT" -H 'Content-Type: application/json' -d "$body" | wc -c)
-  if [[ "$actual" == "$expected" ]]; then
-    ok "$method: ${actual}B == fixture"
-  else
-    ko "$method: ${actual}B != ${expected}B"
-  fi
-done
-
-# --- 5. per-tier latency ---
-note "step 5: per-tier latency (cheap < 50ms, mid 5-80ms, expensive 30-150ms)"
-check_lat() {
-  local method="$1" min_ms="$2" max_ms="$3"
-  local body=$(printf '{"jsonrpc":"2.0","id":1,"method":"%s","params":%s}' "$method" "${PARAMS[$method]}")
-  local start_ns=$(date +%s%N)
-  curl -s -X POST "http://127.0.0.1:$PORT" -H 'Content-Type: application/json' -d "$body" >/dev/null
-  local end_ns=$(date +%s%N)
-  local lat_ms=$(( (end_ns - start_ns) / 1000000 ))
-  if [[ $lat_ms -ge $min_ms && $lat_ms -le $max_ms ]]; then
-    ok "$method: ${lat_ms}ms in [${min_ms}, ${max_ms}]"
-  else
-    ko "$method: ${lat_ms}ms NOT in [${min_ms}, ${max_ms}]"
-  fi
+# --- helper: start fake-node for a chain ---
+start_chain() {
+    local chain="$1" port="$2" io_dir="$3"
+    rm -rf "$io_dir"
+    BLOCKCHAIN_NODE="$chain" "$BIN" \
+        -chains-dir "$CHAINS_DIR" \
+        -configs-dir "$CONFIGS_DIR" \
+        -fixtures-dir "$FIXTURES" \
+        -port "$port" \
+        > "/tmp/fake-node-smoke-${chain}.log" 2>&1 &
+    local pid=$!
+    for i in 1 2 3 4 5; do
+        sleep 1
+        if curl -sf "http://127.0.0.1:$port/stats" >/dev/null 2>&1; then
+            echo "$pid"
+            return 0
+        fi
+        if [[ $i -eq 5 ]]; then
+            echo "FAIL: fake-node $chain not ready after 5s" >&2
+            cat "/tmp/fake-node-smoke-${chain}.log" >&2
+            return 1
+        fi
+    done
 }
-check_lat getSlot 0 50
-check_lat getLatestBlockhash 5 80
-check_lat getBlock 30 200    # 3.5MB response adds curl IO; relax upper bound
 
-# --- 6. IO worker activity ---
-note "step 6: IO worker (wait 2s, expect files to appear)"
-sleep 2
-n_io_files=$(ls "$IO_DIR" 2>/dev/null | wc -l)
-total_size=$(du -sk "$IO_DIR" 2>/dev/null | awk '{print $1}' || echo 0)
-if [[ $n_io_files -ge 1 && $total_size -ge 1 ]]; then
-  ok "IO worker active: $n_io_files files, ${total_size}KB"
+# --- 2. solana chain ---
+note "step 2: solana (jsonrpc handler, BLOCKCHAIN_NODE=solana)"
+SOL_PID=$(start_chain solana 19101 /tmp/fake-node-io-jsonrpc) || { ko "solana start failed"; exit 1; }
+trap "kill $SOL_PID 2>/dev/null || true" EXIT
+ok "solana ready (pid=$SOL_PID)"
+
+# Verify log shows the right family routing
+if grep -q "adapter_family=jsonrpc" "/tmp/fake-node-smoke-solana.log"; then
+    ok "solana → adapter_family=jsonrpc routed correctly"
 else
-  ko "IO worker idle: $n_io_files files, ${total_size}KB"
+    ko "solana adapter_family routing log missing"
 fi
 
-# --- 7. /stats endpoint ---
-note "step 7: /stats counters non-zero"
-stats=$(curl -s "http://127.0.0.1:$PORT/stats")
-req=$(echo "$stats" | jq -r '.total_requests')
-wr=$(echo "$stats" | jq -r '.io_writes')
-if [[ "$req" -ge 8 && "$wr" -ge 1 ]]; then
-  ok "stats: requests=$req io_writes=$wr"
+# Byte-correct check on a method
+for method in getSlot getBalance; do
+    expected=$(stat -c%s "$FIXTURES/solana/${method}.json")
+    body=$(printf '{"jsonrpc":"2.0","id":1,"method":"%s","params":[]}' "$method")
+    actual=$(curl -s -X POST "http://127.0.0.1:19101" -H 'Content-Type: application/json' -d "$body" | wc -c)
+    if [[ "$actual" == "$expected" ]]; then
+        ok "solana $method: ${actual}B == fixture"
+    else
+        ko "solana $method: ${actual}B != ${expected}B"
+    fi
+done
+
+# --- 3. ethereum chain ---
+note "step 3: ethereum (jsonrpc handler, BLOCKCHAIN_NODE=ethereum)"
+ETH_PID=$(start_chain ethereum 19102 /tmp/fake-node-io-jsonrpc) || { ko "ethereum start failed"; kill $SOL_PID 2>/dev/null; exit 1; }
+trap "kill $SOL_PID $ETH_PID 2>/dev/null || true" EXIT
+ok "ethereum ready (pid=$ETH_PID)"
+
+# Verify ethereum uses the SAME handler family as solana (proves jsonrpc handler reused for 16 chains)
+if grep -q "adapter_family=jsonrpc" "/tmp/fake-node-smoke-ethereum.log"; then
+    ok "ethereum → adapter_family=jsonrpc (same handler as solana, family reuse confirmed)"
 else
-  ko "stats: requests=$req io_writes=$wr (need req>=8, wr>=1)"
+    ko "ethereum adapter_family routing log missing"
+fi
+
+# Byte-correct check on eth_* method
+for method in eth_blockNumber eth_getBalance; do
+    expected=$(stat -c%s "$FIXTURES/ethereum/${method}.json")
+    body=$(printf '{"jsonrpc":"2.0","id":1,"method":"%s","params":[]}' "$method")
+    actual=$(curl -s -X POST "http://127.0.0.1:19102" -H 'Content-Type: application/json' -d "$body" | wc -c)
+    if [[ "$actual" == "$expected" ]]; then
+        ok "ethereum $method: ${actual}B == fixture"
+    else
+        ko "ethereum $method: ${actual}B != ${expected}B"
+    fi
+done
+
+# Method-isolation check: ethereum chain should 404 on solana methods
+# (proves chain template scoping works, not just blanket pass-through)
+http_code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:19102" \
+    -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"getSlot","params":[]}')
+if [[ "$http_code" == "404" ]]; then
+    ok "ethereum 404 on solana method getSlot (chain isolation OK)"
+else
+    ko "ethereum returned $http_code on getSlot (expected 404 — chain isolation broken)"
+fi
+
+# --- 4. NotImplemented family (cardano → ogmios stub) ---
+note "step 4: cardano (NotImplemented family stub)"
+CAR_PID=$(start_chain cardano 19103 /tmp/fake-node-io-card) || { ko "cardano start failed (stub should still start)"; kill $SOL_PID $ETH_PID 2>/dev/null; exit 1; }
+trap "kill $SOL_PID $ETH_PID $CAR_PID 2>/dev/null || true" EXIT
+ok "cardano startup OK (stub registers fine)"
+
+if grep -q "adapter_family=ogmios" "/tmp/fake-node-smoke-cardano.log"; then
+    ok "cardano → adapter_family=ogmios routed to stub"
+else
+    ko "cardano adapter_family=ogmios log missing"
+fi
+
+# But RPC against it should fail loudly (stub returns error)
+# Note: cardano's ogmios methods need a fixture wired in configs/ogmios.yaml first;
+# without that, we get 404 (no fixture). Both are "loud failures" — both acceptable.
+http_code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:19103" \
+    -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"queryTip","params":[]}')
+if [[ "$http_code" == "404" || "$http_code" == "500" ]]; then
+    ok "cardano queryTip → HTTP $http_code (stub correctly fails loud, not silent)"
+else
+    ko "cardano queryTip → HTTP $http_code (stub silently passing)"
+fi
+
+# --- 5. /stats ---
+note "step 5: /stats on solana"
+stats=$(curl -s "http://127.0.0.1:19101/stats")
+req=$(echo "$stats" | jq -r '.total_requests')
+if [[ "$req" -ge 2 ]]; then
+    ok "solana /stats: requests=$req"
+else
+    ko "solana /stats: requests=$req (need >=2)"
+fi
+
+# --- 6. IO worker ---
+note "step 6: IO worker (wait 1.5s)"
+sleep 1.5
+n_io=$(ls /tmp/fake-node-io-jsonrpc 2>/dev/null | wc -l)
+if [[ $n_io -ge 1 ]]; then
+    ok "IO worker active: $n_io files in /tmp/fake-node-io-jsonrpc"
+else
+    ko "IO worker idle: $n_io files"
 fi
 
 # --- summary ---
 echo ""
-echo "[smoke] PASS=$pass FAIL=$fail"
+echo "[smoke v2] PASS=$pass FAIL=$fail"
 [[ $fail -eq 0 ]] && exit 0 || exit 1

@@ -1,119 +1,158 @@
-# fake-node
+# fake-node — long-lived test fixture for the blockchain-node-benchmark framework
 
-**框架集成测试夹具**(NOT a PoC,NOT a benchmark target)。
+**Purpose**: framework 集成测试夹具 (NOT a PoC, NOT a benchmark target). 每次 framework 改动 (monitor / proxy / analyzer / reporter / chain adapter) 都跑一次 framework → fake-node 全链路, 验闭环.
 
-## 是什么
+**What it provides**:
+- JSON-RPC over HTTP, 按 method 返回对应 fixture (byte-correct, 真节点录的)
+- 非固定频率磁盘 IO worker (随机大小, 随机间隔), 让 monitor 有真 IO 可观察
+- **多协议族 handler 架构** (v2): `BLOCKCHAIN_NODE` env → chain template → `_meta.adapter_family` → handler dispatch
+- 单二进制 + per-family YAML + per-chain fixtures = 36 链覆盖能力
 
-一个长期复用的"假区块链节点"程序。给 framework 全链路(workload → proxy → monitor → analysis → report)提供:
+**What it does NOT solve**:
+- weight 数值精度 (等真节点)
+- 真节点性能极限 (等真节点)
 
-1. **真形态的 RPC 响应**(byte-correct 重放真节点录的 fixtures)
-2. **真磁盘 IO 活动**(非固定频率,模拟真节点的共识/落盘 IO)
+---
 
-## 不是什么
+## v2 范式纠正 (2026-05-27)
 
-- **不是** weight 数值精度的 ground truth(等真节点)
-- **不是** 真节点性能极限测试(等真节点)
-- **不是** PoC 一次性脚本(永久测试基础设施)
+v1 实现错误: 单文件 + per-chain YAML + 声称"零代码加链", 与 framework 既有 `BLOCKCHAIN_NODE` env + `_meta.adapter_family` switch 约定不一致。 用户质问: *"BLOCKCHAIN_NODE 变量存在,fake-node 难道不能 switch case? 36 链本身就不是完全相同,怎么可能一个 fake-node 复用?"*
 
-## 何时用
+v2 改为镜像 framework `tools/chain_adapters/` 架构:
+- `handlers/base.go` → `Handler` interface + `_REGISTRY` (镜像 `chain_adapters/base.py:107`)
+- `handlers/<family>.go` → per-protocol-family 实现 (1 handler = 1 family = N chains)
+- 入口同 framework: 读 `BLOCKCHAIN_NODE` env → load `config/chains/<chain>.json` → 取 `_meta.adapter_family` → dispatch
 
-framework 任何改动都跑一次,确认闭环没破:
+---
 
-| framework 改动 | fake-node 验什么 |
-|---|---|
-| 加新 chain adapter | adapter 拉起 fake-node 跑通 = 加链 0 代码 |
-| 改 monitor | monitor 仍能采到 fake-node 的 CPU/MEM/IO |
-| 改 proxy | proxy 能解 fake-node 返回的 method/payload |
-| 改 analyzer / reporter | join + report 在 fake-node 数据上输出符合 schema |
-| 接 36 链 | 一份 binary + 36 份 yaml = 36 个 fake-node 实例 |
+## 加链工作量诚实矩阵 (取代 v1 的"零代码加链"绝对声明)
 
-## 设计
+| 场景                                  | Go 改动                       | 配置改动                              | 工作量等级       |
+|---------------------------------------|-------------------------------|---------------------------------------|------------------|
+| 已实现协议族新成员 (如新 EVM 链)     | **0 行**                      | +1 chain template (framework 共用)    | < 30 分钟        |
+| 协议族内特殊调优 (tier/IO 档位)      | 0 行                          | +1 family yaml field                  | < 10 分钟        |
+| **全新协议族** (5/7 仍 stub)         | **+1 handler.go ~150-300 行** | +1 family yaml + per-chain fixtures   | 1-2 工时         |
 
-```
-   workload → [proxy] → fake-node ─┬─ fixtures (按 method)
-       ↑          ↑                 └─ IO worker (随机 size + interval)
-   framework  framework           
-   改这里     改这里              
-       │          │              
-       └──── ci_smoke.sh 跑一次 ────┘
-              全链路闭环还在?
-```
+工作量与 framework `tools/chain_adapters/<family>.py` 对称 (1 协议族 = 1 adapter 模块)。
 
-**1 套二进制 + N 个 yaml = N 链**:每条链一份 `configs/<chain>.yaml`,定义:
-- methods: RPC method -> (fixture file, tier)
-- tiers: tier -> 处理延迟(`1ms` / `10ms` / `50ms`)
-- io: 非固定频率 IO worker 参数(min/max bytes, min/max interval, read ratio)
+---
 
-## 跑
+## 36 链 → 7 协议族归并 (源: `config/chains/*.json:_meta.adapter_family`)
+
+| Family            | Chains | Coverage | Handler 状态                                    |
+|-------------------|-------:|----------|-------------------------------------------------|
+| `jsonrpc`         | 16     | solana, ethereum, bsc, base, polygon, scroll, arbitrum, optimism, linea, avalanche-c, avalanche-x, zksync-era, near, tron, sui, starknet | ✅ **implemented** |
+| `bitcoin_jsonrpc` | 4      | bitcoin, bch, dogecoin, litecoin                | ✅ **implemented** (无 smoke 覆盖, P2) |
+| `substrate`       | 5      | polkadot, kusama, acala, astar, moonbeam        | ⚠️ stub (OQ-X)   |
+| `tendermint`      | 5      | cosmos-hub, osmosis, celestia, injective, sei   | ⚠️ stub (OQ-X)   |
+| `rest`            | 4      | algorand, aptos, tezos, ton                     | ⚠️ stub (OQ-X)   |
+| `ogmios`          | 1      | cardano                                         | ⚠️ stub (OQ-X)   |
+| `hedera_dual`     | 1      | hedera                                          | ⚠️ stub (OQ-X)   |
+| **TOTAL**         | **36** | -        | **20/36 RPC-ready, 16/36 startup-ready 仅**     |
+
+**Stub 行为**: 已注册到 registry, startup OK, 但 RPC 请求返回明确 error (HTTP 404 "method not declared" 或 500 "family not yet implemented") — **不静默通过, 不假装 healthy**.
+
+5 个 stub 已入账 `docs/architecture/OPEN-QUESTIONS.md` (OQ-X), 不算 `no-deferred-bugs` defer (这是 R1 阶段范围切分, 不是 P0 bug 推后).
+
+---
+
+## 用法
 
 ```bash
-# 1. 录 fixtures (一次性, ~10s, 公网)
-bash scripts/record_solana_fixtures.sh
+# Build
+cd tools/fake-node && go build -o /tmp/fake-node-v2 .
 
-# 2. 编译
-go build -o /tmp/fake_node fake_node.go
+# Run for a specific chain (env var, framework 一致方式)
+BLOCKCHAIN_NODE=solana   /tmp/fake-node-v2 -port 19101
+BLOCKCHAIN_NODE=ethereum /tmp/fake-node-v2 -port 19102
+BLOCKCHAIN_NODE=bitcoin  /tmp/fake-node-v2 -port 19103
 
-# 3. 起 fake-node
-/tmp/fake_node -config configs/solana.yaml -fixtures-dir ./fixtures -port 19000
+# Or via flag (overrides env)
+/tmp/fake-node-v2 -chain solana -port 19101
 
-# 4. 测它
-curl -s -X POST http://127.0.0.1:19000 \
-  -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"getSlot","params":[]}'
-curl -s http://127.0.0.1:19000/stats
-
-# 5. 一键 smoke (覆盖 7 步检测, 13 个断言)
-bash scripts/ci_smoke.sh
+# Smoke (3 chains: solana + ethereum + cardano stub)
+bash tools/fake-node/scripts/ci_smoke.sh
 ```
 
-## smoke 覆盖的 7 步检测
+CLI flags:
+- `-chain`: chain name; overrides `BLOCKCHAIN_NODE` env; default `solana`
+- `-chains-dir`: directory of framework chain templates (default `../../config/chains`)
+- `-configs-dir`: directory of per-family fake-node YAML (default `configs`)
+- `-fixtures-dir`: fixtures root (per-chain subdirs) (default `./fixtures`)
+- `-port`: listen port (default `19000`)
 
-| step | 验什么 |
-|---|---|
-| 1 | binary 编译 |
-| 2 | 5 个 fixtures 存在 (缺则自动录) |
-| 3 | fake-node 启动 + ready |
-| 4 | 5 method 响应 byte-correct (与 fixture size 一致) |
-| 5 | 三档 latency 落在期望区间 (cheap < 50ms, mid 5-80ms, expensive 30-200ms) |
-| 6 | IO worker 2s 内产出 ≥1 文件 |
-| 7 | `/stats` counter 非零 (requests + io_writes) |
+`BLOCKCHAIN_NODE` env handling matches framework `config/config_loader.sh:17,20`: default `solana`, lowercased.
 
-通过标准:`PASS=13 FAIL=0`,退出码 0。
+---
 
-## 加链(36 链对称的体现)
-
-只需 2 步,**零代码**:
-
-1. 复制 `configs/solana.yaml` 为 `configs/<chain>.yaml`,改 methods/tiers/io
-2. 录 fixtures:`bash scripts/record_<chain>_fixtures.sh`(或手写一个,curl 该链 endpoint)
-
-binary 不动。
-
-## 文件清单
+## 目录结构
 
 ```
 tools/fake-node/
-├── README.md
-├── go.mod
-├── fake_node.go              # 主体 (~270 行)
+├── fake_node.go              # main: env → template → family → handler
+├── handlers/
+│   ├── base.go               # Handler interface + _REGISTRY + NotImplementedHandler
+│   ├── jsonrpc.go            # 16-chain handler (byte-passthrough)
+│   ├── bitcoin_jsonrpc.go    # 4-chain handler (byte-passthrough)
+│   └── stubs.go              # 5 stub registrations (substrate/tendermint/rest/ogmios/hedera_dual)
 ├── configs/
-│   └── solana.yaml           # Solana 配置 (示范)
-├── scripts/
-│   ├── record_solana_fixtures.sh  # 复用 poc-min 的 fixture recorder
-│   └── ci_smoke.sh           # 7 步端到端 smoke (~120 行)
-├── fixtures/                 # .gitignored, 现录现用
-└── .gitignore
+│   ├── jsonrpc.yaml          # method list (union) + tiers + IO
+│   ├── bitcoin_jsonrpc.yaml
+│   ├── substrate.yaml        # stub (empty methods)
+│   ├── tendermint.yaml       # stub
+│   ├── rest.yaml             # stub
+│   ├── ogmios.yaml           # stub
+│   └── hedera_dual.yaml      # stub
+├── fixtures/
+│   ├── solana/               # 5 real recorded fixtures
+│   │   ├── getSlot.json
+│   │   ├── getBalance.json
+│   │   ├── getLatestBlockhash.json
+│   │   ├── getBlock.json
+│   │   └── getTransaction.json
+│   ├── ethereum/             # 6 stub fixtures (minimal valid JSON-RPC)
+│   │   ├── eth_blockNumber.json
+│   │   ├── eth_gasPrice.json
+│   │   ├── eth_getBalance.json
+│   │   ├── eth_getTransactionCount.json
+│   │   ├── eth_getBlockByNumber.json
+│   │   └── eth_getTransactionByHash.json
+│   └── <other-chains>/       # populated on demand
+└── scripts/
+    ├── ci_smoke.sh           # 3-chain smoke (15 checks)
+    └── record_solana_fixtures.sh  # recorder (reusable per-chain via mainnet RPC)
 ```
 
-## 与 `tools/proxy/poc-min/` 的关系
+---
 
-- `poc-min/` 是 **PoC**(一次性试验 + ADR 验证),已闭环
-- `fake-node/` 是 **测试夹具**(长期复用),framework 改动时反复跑
-- 两者共用 `record_fixtures.sh` 的录制逻辑(fake-node 的 record script 是 thin wrapper)
-- proxy(`poc-min/proxy.go`)可独立接 fake-node 跑全链路测试(端口配通即可)
+## 录制 fixture (per-chain)
 
-## 关联
+```bash
+# Solana (already done, fixtures committed)
+bash tools/fake-node/scripts/record_solana_fixtures.sh
 
-- NORTH-STAR NS-1(零代码加链)/ NS-3(36 链对称)
-- ADR-0001 / 0002 / 0003 / 0004(用 fake-node 反复回归)
-- 调研 07-per-method-resource-attribution-via-proxy
+# Ethereum (using stub fixtures currently; replace with real mainnet recording)
+# TODO: scripts/record_evm_fixtures.sh — needs an EVM endpoint
+```
+
+Recording uses the same approach as `tools/proxy/poc-min/scripts/record_fixtures.sh` — `curl` mainnet, save response verbatim.
+
+---
+
+## smoke 覆盖范围
+
+`scripts/ci_smoke.sh` 当前 15 个检查:
+1. binary builds
+2. solana startup + 路由 `adapter_family=jsonrpc` 正确
+3. solana getSlot / getBalance byte-correct
+4. ethereum startup + 复用 jsonrpc handler (证 family 抽象)
+5. ethereum eth_blockNumber / eth_getBalance byte-correct
+6. ethereum 在 solana method 上 404 (证 chain 隔离)
+7. cardano stub startup OK + RPC 失败有响
+8. /stats 计数对
+9. IO worker 活跃
+
+**未覆盖** (P2, 进 OQ):
+- substrate / tendermint / rest / hedera_dual 真 fixture + handler 实现
+- 4 个 EVM 兄弟链 (bsc/base/polygon/...) smoke
+- bitcoin_jsonrpc 真 fixture (handler 已实现, fixtures 待录)

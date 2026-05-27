@@ -1,0 +1,21 @@
+# fake-node v2 config — substrate family (STUB)
+#
+# This family is registered as NotImplementedHandler in handlers/stubs.go.
+# This minimal config exists so:
+#   - `fake-node -chain <chain-using-substrate>` startup succeeds (operators can inspect)
+#   - RPC calls fail loud at request time with "not yet implemented" error
+#
+# To wire real fixtures: implement handlers/substrate.go, populate methods below,
+# and add fixtures/<chain>/<fixture>.json. Tracked in docs/architecture/OPEN-QUESTIONS.md.
+
+family: substrate
+
+methods: {}    # empty — RPC calls return 404 "method not declared"
+
+tiers:
+  cheap: 1ms
+  mid: 10ms
+  expensive: 50ms
+
+io:
+  enabled: false     # off until real handler implemented
