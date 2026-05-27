@@ -124,7 +124,7 @@ DSL 4 模式(json_rpc / rest / bitcoin_rpc / grpc)覆盖测试 — 需在阶段 
 
 ### 3.5 OQ-1 锁定建议
 
-→ 推荐合入 NORTH-STAR §3:**Q4-8: proxy 选型 = 自写 Go 小代理(主方案),envoy + Lua 兜底(仅 PoC 失败时启用)**
+→ **已合入 NORTH-STAR §3 Q4-8**(2026-05-27 用户决策):自写 Go 小代理(主方案,目标 ≤ 800 行),envoy + Lua 兜底(仅 PoC 失败时启用);撤销条件:性能 < 5k QPS @ p99 < 10ms,或 DSL 覆盖 < 32/36 链。OPEN-QUESTIONS OQ-1 已移除;ADR `0002-proxy-implementation.md` 待写。
 
 ---
 
@@ -151,7 +151,7 @@ DSL 4 模式(json_rpc / rest / bitcoin_rpc / grpc)覆盖测试 — 需在阶段 
 
 ### 4.4 OQ-4 锁定建议
 
-→ 推荐合入 NORTH-STAR §3:**Q4-9: sink 默认 CSV + 字段最小集 6 列;sink 抽象层支持 JSONL/Parquet 切换**
+→ **已合入 NORTH-STAR §3 Q4-9**(2026-05-27 用户决策):默认 CSV + 字段最小集 6 列(`timestamp, method, req_bytes, resp_bytes, latency_ms, status`);sink 抽象层支持 JSONL/Parquet 切换(`PROXY_SINK_FORMAT` 环境变量);无强撤销条件,日志体积 > 100GB/天再评估切 Parquet。**关键变化**:初始倾向 JSONL,被 §4 反方论证 R9-R12 翻成 CSV。OPEN-QUESTIONS OQ-4 已移除;ADR `0003-sink-format.md` 待写。
 
 ---
 
@@ -178,7 +178,7 @@ DSL 4 模式(json_rpc / rest / bitcoin_rpc / grpc)覆盖测试 — 需在阶段 
 
 ### 5.4 OQ-8 锁定建议
 
-→ 推荐合入 NORTH-STAR §3:**Q4-10: proxy 开销默认透明记录 + 自报基线;K8s 生产用 sidecar 隔离**
+→ **已合入 NORTH-STAR §3 Q4-10**(2026-05-27 用户决策):默认透明记录 + 自报基线(`proxy_self.csv`:每秒 cpu_pct / mem_mb);分析层从节点资源减去基线后再归因 method;K8s 生产用 sidecar 独立 pod 隔离;PoC 撤销条件:proxy CPU > 节点 10% 或自报偏差 > 30% → 必须 cgroup 隔离。OPEN-QUESTIONS OQ-8 已移除;ADR `0004-proxy-overhead.md` 待写。
 
 ---
 
@@ -254,14 +254,14 @@ PoC 选 solana(NORTH-STAR §3 路线已定),以下 8 条硬验收(对齐 1-C `mi
 
 ## 9. 决策汇总(给 NORTH-STAR §3 / ADR 喂)
 
-本调研稿收敛产出 4 条决策,建议合入 NORTH-STAR §3 + 各写 ADR:
+本调研稿收敛产出 4 条决策,**全部已合入 NORTH-STAR §3**(2026-05-27 用户决策)。4 份 ADR 归阶段 4 PoC 启动前补:
 
-| 决策 ID | 内容 | 对应 OQ | 撤销条件(PoC 阶段验) |
-|---|---|---|---|
-| Q4-7 | per-method 归因 = 加权 group_by(秒级窗口),权重来自 01-06 资源画像 | OQ-3 | §2.4 误差 > 20% |
-| Q4-8 | proxy = 自写 Go 小代理(主),envoy + Lua 兜底(failback) | OQ-1 | §3.3 性能不达标 or DSL < 32 链 |
-| Q4-9 | sink 默认 CSV + 字段最小集 6 列;抽象层支持 JSONL/Parquet | OQ-4 | 无强撤销,体积超 100GB/天再讨论 |
-| Q4-10 | proxy 开销默认透明记录 + 自报基线;K8s 用 sidecar 隔离 | OQ-8 | §5.3 proxy CPU > 节点 10% |
+| 决策 ID | 内容 | 对应 OQ | 撤销条件(PoC 阶段验) | ADR 文件 |
+|---|---|---|---|---|
+| Q4-7 ✅ | per-method 归因 = 加权 group_by(秒级窗口),权重 = 公开资料先配粗粒度,后期实际调整 | OQ-3 (closed) | §2.4 误差 > 20% | `0001-per-method-attribution.md` |
+| Q4-8 ✅ | proxy = 自写 Go 小代理(主),envoy + Lua 兜底(failback) | OQ-1 (closed) | §3.3 性能不达标 or DSL < 32 链 | `0002-proxy-implementation.md` |
+| Q4-9 ✅ | sink 默认 CSV + 字段最小集 6 列;抽象层支持 JSONL/Parquet | OQ-4 (closed) | 无强撤销,体积超 100GB/天再讨论 | `0003-sink-format.md` |
+| Q4-10 ✅ | proxy 开销默认透明记录 + 自报基线;K8s 用 sidecar 隔离 | OQ-8 (closed) | §5.3 proxy CPU > 节点 10% | `0004-proxy-overhead.md` |
 
 ---
 

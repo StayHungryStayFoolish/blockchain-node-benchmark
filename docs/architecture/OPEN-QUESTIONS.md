@@ -6,26 +6,13 @@
 
 ---
 
-## OQ-1:proxy 具体选型
+## OQ-1:proxy 具体选型 ✅ 已锁定(2026-05-27)
 
-**问题**:Q4-1 已定 proxy = 独立进程(VM + GKE),但**具体用什么实现?**
-
-| 候选 | 优点 | 缺点 | 适配 NS-3 declarative? |
-|---|---|---|---|
-| **envoy** | 工业级、稳定、HTTP filter chain 成熟、Wasm/Lua 扩展 | 部署重(配置 YAML 复杂)、二进制大 | ⚠️ 默认配置 YAML 偏 declarative,但 method extraction 需 Lua/Wasm 写一次性 filter |
-| **nginx + access_log custom format** | 轻、运维熟悉、URL path 提取直接 | EVM JSON-RPC body 提取需要 Lua 模块、不支持 gRPC | ❌ JSON body 提取需 Lua |
-| **mitmproxy(Python)** | 开发快、可编程性极强、单机 PoC 首选 | 生产场景吞吐有限(Python GIL)、不适合 36 链规模 | ✅ Python 脚本可读 chain template,但**违 NS-3 零代码**(脚本=代码) |
-| **自写 Go 小代理** | 轻(~200-500 行)、吞吐高、可控、原生支持 declarative DSL | 需要开发 + 维护 | ✅ 设计上完全 declarative,从 chain template 读取规则 |
-| **Caddy + custom handler** | 配置极简、HTTP/3、自动 TLS | method extraction 需要 Go plugin、生态比 nginx 小 | ⚠️ 同 nginx,需 Go plugin |
-
-**当前倾向**:**自写 Go 小代理**(理由:NS-3 零代码加链原则下,只有自写 + declarative 设计能完全满足;envoy/nginx 都需要为新协议写一次性 filter,违反 NS-3)
-
-**决策时点**:阶段 2 调研档 `07-per-method-resource-attribution-via-proxy.md` 完成后
-
-**决策依据需要**:
-- 36 链协议矩阵覆盖测试(declarative DSL 能表达多少链?)
-- 性能基准(自写 Go 小代理在 PoC 阶段吞吐能否撑 vegeta 压力?)
-- 维护成本评估(谁来 maintain Go 代理?)
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-8**。
+> **决策摘要**:**自写 Go 小代理(主方案)**,严格 declarative DSL,目标 ≤ 800 行;**envoy + Lua 兜底(failback)**仅在主方案 PoC 失败时启用。
+> **PoC 撤销条件**:性能 < 5k QPS @ p99 < 10ms,或 DSL 覆盖 < 32/36 链 → 启用 envoy + Lua 兜底(接受违 NS-3 但保证可用)。
+> **决策依据**:NS-3 零代码加链原则下,只有"自写 Go + chain template DSL"能完全满足"加链 = 改 JSON";envoy/nginx 需要为新协议写一次性 Lua filter,违 NS-3。完整反方论证见 `analysis-notes/research_notes/07-per-method-resource-attribution-via-proxy.md` §3。
+> **ADR 待写**:`docs/architecture/decisions/0002-proxy-implementation.md`(归阶段 4 PoC 启动前补)
 
 ---
 
@@ -55,18 +42,14 @@
 
 ---
 
-## OQ-4:sink 默认格式
+## OQ-4:sink 默认格式 ✅ 已锁定(2026-05-27)
 
-**问题**:Q4-3 已定 sink = CSV/JSONL,**默认用哪个?**
-
-| 候选 | 优点 | 缺点 |
-|---|---|---|
-| **CSV** | 与现有 unified_monitor CSV 格式一致,分析层 pandas join 简单 | 字段固定、扩展不灵活、转义麻烦 |
-| **JSONL**(每行一条 JSON) | 字段灵活、扩展友好、native 表达嵌套 | 解析慢、文件大、分析层需要额外 parse 步骤 |
-
-**当前倾向**:**JSONL**(理由:proxy 日志 schema 可能随 chain template 协议变化,JSONL 扩展性更好;CSV 适合固定 schema 的 monitor,proxy 是新增可演进数据源)
-
-**决策时点**:阶段 1-A 架构文档落地时
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-9**。
+> **决策摘要**:**默认 CSV** + 字段最小集 6 列(`timestamp, method, req_bytes, resp_bytes, latency_ms, status`);sink 抽象层支持 JSONL/Parquet 切换(环境变量 `PROXY_SINK_FORMAT`)。
+> **关键变化**:初始倾向是 JSONL(理由:扩展性),但 07 调研档 §4 反方论证 R9-R12 把倾向翻成 CSV — (R9) 嵌套字段不归 proxy 责任,(R10) CSV 加列也兼容 + JSONL 体积大 30%,(R11) 高 QPS 下文件体积压力,(R12) Parquet 学习成本高。**决策准则**:与 unified_monitor CSV 一致,pandas 友好,运维熟悉。
+> **撤销条件**:无强撤销条件,日志体积 > 100GB/天再评估切 Parquet。
+> **决策依据**:`analysis-notes/research_notes/07-per-method-resource-attribution-via-proxy.md` §4。
+> **ADR 待写**:`docs/architecture/decisions/0003-sink-format.md`(归阶段 4 PoC 启动前补)
 
 ---
 
@@ -163,18 +146,13 @@
 
 ---
 
-## OQ-8:proxy 自身资源消耗如何排除?
+## OQ-8:proxy 自身资源消耗如何排除? ✅ 已锁定(2026-05-27)
 
-**问题**:proxy 与节点同机(Q4-1),proxy 自身的 CPU / MEM 消耗会被 unified_monitor 采到,**如何排除?**
-
-**候选**:
-- **(a) cgroup 隔离 proxy 进程**,monitor 排除 proxy cgroup 数据 → 精确
-- **(b) proxy 自报资源(periodic stat)**,分析层减去 → 简单但有偏差
-- **(c) 不排除,记录 proxy 开销,在报告中说明**(运维知道 proxy 占了多少) → 最透明
-
-**当前倾向**:**(c) + 可选 (a)** — PoC 阶段先 (c) 透明记录,生产环境可启用 (a)
-
-**决策时点**:阶段 1-A 架构文档落地时
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-10**。
+> **决策摘要**:**默认透明记录 + 自报基线**(`proxy_self.csv`:每秒自报 cpu_pct / mem_mb);分析层从节点资源减去基线后再归因 method;K8s 生产用 sidecar 独立 pod 隔离。
+> **PoC 撤销条件**:proxy CPU > 节点 10% 或自报偏差 > 30% → 必须启用 cgroup 隔离。
+> **决策依据**:候选 (c) 透明 + 自报基线兼顾"运维知情"与"实施简单";(a) cgroup 隔离在 GKE pod 内难做,K8s 直接走 sidecar 形态更自然。完整反方论证见 `analysis-notes/research_notes/07-per-method-resource-attribution-via-proxy.md` §5。
+> **ADR 待写**:`docs/architecture/decisions/0004-proxy-overhead.md`(归阶段 4 PoC 启动前补)
 
 ---
 
@@ -188,5 +166,5 @@
 
 ---
 
-**当前状态**:**7 个 OQ 待决**(OQ-1 / OQ-2 / OQ-4 / OQ-5 / OQ-6 / OQ-7 / OQ-8;OQ-3 已锁 → NORTH-STAR Q4-7)
+**当前状态**:**4 个 OQ 待决**(OQ-2 / OQ-5 / OQ-6 / OQ-7;OQ-1 / OQ-3 / OQ-4 / OQ-8 已锁 → NORTH-STAR Q4-7~10)
 **下次预期更新**:阶段 1 架构文档 review 通过后(OQ-2 / OQ-3 / OQ-4 / OQ-5 / OQ-7 / OQ-8 部分应该可决);阶段 2 调研档完成后 OQ-1 可决
