@@ -1,0 +1,3 @@
+# Fixtures are recorded on-demand from mainnet, not stored in git.
+# Run: bash scripts/record_fixtures.sh
+fixtures/

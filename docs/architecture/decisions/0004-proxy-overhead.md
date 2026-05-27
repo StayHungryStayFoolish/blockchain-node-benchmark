@@ -60,6 +60,13 @@ OQ-8(旧编号)= proxy 自身开销目标和监控方式。
 - **比例计算无意义**(mock 节点放大占比)
 - **阶段 4 真节点必复测**:真 solana 节点 8-16 core 满负载时,1.72 core proxy ≈ 节点的 10-20%,**接近撤销线**
 
+**录-放 PoC v2 实测**(2026-05-27,REPORT_v2.md):
+- proxy CPU 稳态 172%(1.72 core)@ 2.68k QPS mixed
+- mock_v2 CPU 稳态 56%(0.56 core)@ 三档 sleep 撑起负载
+- **proxy / mock 比例 = 3.07x**(mock 仍被 proxy 烧出来的 3 倍)
+- **仍然无法判定撤销线**:mock 是"读 fixture + sleep",不接近真 solana 节点的"查数据库 + 序列化 + 共识"
+- **撤销线判定状态**:**待真节点机会**(用户自建节点 / 临时 hosted)
+
 ## 后续工作
 
 - 阶段 4 完整 PoC:**第 1 优先级**做真节点 CPU 比例实测
