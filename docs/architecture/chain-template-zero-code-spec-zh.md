@@ -121,6 +121,130 @@ key = method 名;value = **格式 tag**(string),由 adapter 解析。
 | `health_probe` | 推荐 | health check 用的轻量 endpoint,格式 `{method, path, parse_jq}` |
 | `known_broken_mixed` | 条件必填 | 若该链 mixed workload 已知 upstream 问题,记 `{status, evidence_date, live_http_test}` |
 | `original_*` | 可选 | 抽取时的原始记录(归档用) |
+| `proxy_extraction` | 推荐(NS-3) | per-method proxy 抽取规则,见 §1.7 |
+
+### 1.7 `proxy_extraction`(NS-3 proxy 层契约,**新加链必填**)
+
+per-method 资源归因 proxy 需要从每个 RPC 请求里抽取 method 名;此字段定义抽取规则的 declarative DSL。**严格 declarative,禁止内嵌 lua/python**(违 NS-3 + Q4-4)。
+
+**Schema**:
+
+```jsonc
+{
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",         // 枚举: "json_rpc" | "rest"
+        "method_source": "body.method", // JSON path,提取 method 名
+        "id_source":     "body.id",     // 可选,提取 request id 做 latency 配对
+        "params_source": "body.params", // 可选,统计 params 大小 / 复杂度
+        "url_pattern":   "^/$",         // 正则,匹配 request URL;不匹配则跳过此 extractor
+        "batch_handling": "split",      // 枚举: "reject" | "split" | "tag_batch",默认 "split"
+        "auth": {                       // 可选,默认 {"type": "none"}
+          "type": "none"                // "none" | "basic" | "bearer"
+        }
+      },
+      {
+        "protocol": "rest",
+        "url_patterns": [                                   // list,每条带 method_name
+          {"pattern": "^/v2/accounts/[A-Z2-7]+$",   "method_name": "GET_ACCOUNT"},
+          {"pattern": "^/v2/transactions/[A-Z2-7]+$", "method_name": "GET_TRANSACTION"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+**字段语义**:
+
+| 字段 | 类型 | 必填 | 含义 |
+|---|---|---|---|
+| `extractors` | array | ✓ | 抽取规则列表,**按顺序匹配第一条命中的 extractor**;空数组 = 该链不接 proxy(`PROXY_ENABLED=0` 模式)|
+| `extractors[].protocol` | enum | ✓ | 仅支持 `json_rpc` / `rest` 两种(**封闭枚举**) |
+| `extractors[].url_pattern` / `url_patterns` | string / array | ✓ | `json_rpc` 用单个 `url_pattern`(默认 `^/$`);`rest` 用 `url_patterns` list,每条带 `method_name` |
+| `extractors[].method_source` | JSON path | json_rpc 必填 | 从 request body 取 method 名,通常 `body.method` |
+| `extractors[].batch_handling` | enum | json_rpc 推荐 | `reject` 拒绝 batch 返 400 / `split` 拆成多条记录 / `tag_batch` 整 batch 当一条;**EVM 系必须 `split`**(reject 会破坏现有用户) |
+| `extractors[].auth.type` | enum | 可选 | `none`(默认)/ `basic`(Bitcoin family 常见)/ `bearer` |
+
+**2 模式覆盖 36 链证明**(代表链):
+
+| family (链数) | 代表链 | extractor 配置 |
+|---|---|---|
+| jsonrpc (16) | arbitrum | 1 个 `json_rpc` extractor,`method_source: body.method`,`batch_handling: split` |
+| rest (5) | algorand | 1 个 `rest` extractor,5 条 `url_patterns`(对应 5 个 REST 端点) |
+| substrate (5) | acala | 1 个 `json_rpc` extractor(Substrate 是 JSON-RPC 2.0 之上的 method 命名空间) |
+| tendermint (5) | celestia | 1 个 `json_rpc` extractor(Tendermint RPC 也是 JSON-RPC 2.0) |
+| bitcoin_jsonrpc (4) | bch | 1 个 `json_rpc` extractor,`auth: {"type": "basic"}` |
+| hedera_dual (1) | hedera | **2 个 extractor**:`rest`(mirror node `/api/v1/...`)+ `json_rpc`(EVM relay `/`)— extractors 数组天然支持多协议链 |
+
+**100% 覆盖 36 链,0 BLOCKER,0 envoy 兜底**。
+
+**关键设计决策**(与 OQ-5 初稿 4 模式的差异):
+
+1. **2 模式而非 4 模式**:`json_rpc` 吞掉 `bitcoin_rpc` + `substrate` + `tendermint`(都是 JSON-RPC 2.0,仅 auth/method namespace 差异)
+2. **删 `grpc` 模式**:36 链零 gRPC adapter family,YAGNI
+3. **删 `ogmios` 模式**:cardano 已实测使用 `rest` family(见 `cardano.json _meta.adapter_family = "rest"`),0 chain 使用 ogmios
+4. **`extractors` 永远是数组**:为支持 hedera 类双协议链(无需新机制),单协议链填 1 条即可
+5. **`url_patterns` 用 list 而非单 regex**:algorand 5 个 endpoint 用 5 条独立 pattern 比 1 个复杂 regex 可读
+6. **`batch_handling` 必填**:EVM batch JSON-RPC 是真实生产模式,proxy 必须明确处理策略
+
+**违反契约的行为**(pre-commit hook 拒):
+
+- `extractors[].protocol` 出现 `json_rpc` / `rest` 之外的值
+- 出现 `proxy_extraction_lua` / `proxy_extraction_python` 字段
+- json_rpc extractor 缺 `method_source`
+- rest extractor 的 `url_patterns` 缺 `method_name`
+
+### 1.8 `rpc_methods.mixed_weighted`(NS-2 权重契约,**mixed mode 推荐填**)
+
+NS-2 要求 mixed mode 支持 weight 配置以模拟真实业务流量(`getBalance` 60% / `getBlock` 30% / `getLogs` 10%)。**向后兼容老 `mixed` 字符串字段**:旧用户配置不动,新增 `mixed_weighted` 字段时优先生效。
+
+**Schema**:
+
+```jsonc
+{
+  "rpc_methods": {
+    "single": "eth_getBalance",
+    "mixed":  "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice",  // 老字段保留
+    "mixed_weighted": [                                                                 // 新字段(可选)
+      {"method": "eth_getBalance",          "weight": 40},
+      {"method": "eth_getTransactionCount", "weight": 30},
+      {"method": "eth_blockNumber",         "weight": 20},
+      {"method": "eth_gasPrice",            "weight": 10}
+    ]
+  }
+}
+```
+
+**字段语义**:
+
+| 字段 | 类型 | 必填 | 含义 |
+|---|---|---|---|
+| `mixed_weighted` | array | 可选(优先级高于 `mixed`) | 每条 `{method, weight}`;`method` 必须出现在 `param_formats` |
+| `mixed_weighted[].weight` | int | ✓ | 整数权重,**不要求总和=100**(target_generator 按比例归一化) |
+
+**weight 数值规则**:
+
+1. 必须为正整数(>= 1)
+2. 不要求总和 = 100,target_generator 内部按 `weight_i / sum(weights)` 归一化
+3. 配置时建议总和 = 100(可读性)但非硬性
+4. 权重源参考 `analysis-notes/research_notes/01-06/` 各 method "典型业务流量比例"
+
+**优先级规则**(target_generator 实现):
+
+```
+if "mixed_weighted" in rpc_methods:
+    use mixed_weighted  # 新模式,按权重生成 vegeta target
+else:
+    use mixed (legacy)  # 老模式,均匀分布
+```
+
+**违反契约的行为**(pre-commit hook 拒):
+
+- `mixed_weighted[].method` 不在 `param_formats` key 中
+- `mixed_weighted[].weight` <= 0 或非整数
+- `mixed_weighted` 和 `mixed` 列出的 method 集合不一致(允许子集,不允许超集)
 
 ---
 

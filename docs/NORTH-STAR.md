@@ -49,6 +49,10 @@
 | Q4-8 | **proxy 实现** | **自写 Go 小代理(主方案)**,严格 declarative DSL,目标 ≤ 800 行;**envoy + Lua 兜底(failback)**仅在主方案 PoC 失败时启用;PoC 撤销条件:性能 < 5k QPS @ p99 < 10ms,或 DSL 覆盖 < 32/36 链 → 启用兜底 |
 | Q4-9 | **sink 默认格式** | **默认 CSV** + 字段最小集 6 列(`timestamp, method, req_bytes, resp_bytes, latency_ms, status`);sink 抽象层支持 JSONL/Parquet 切换(环境变量 `PROXY_SINK_FORMAT`);无强撤销条件,日志体积超 100GB/天再评估 |
 | Q4-10 | **proxy 自身开销处理** | **默认透明记录 + 自报基线**(`proxy_self.csv`:每秒自报 cpu_pct / mem_mb);分析层从节点资源减去基线后再归因 method;K8s 生产用 sidecar 独立 pod 隔离;PoC 撤销条件:proxy CPU > 节点 10% 或自报偏差 > 30% → 必须 cgroup 隔离 |
+| Q4-11 | **proxy 部署形态** | **systemd + docker 双部署**(同一 Go 二进制,部署方式按环境选):虚拟机/cloudtop 用 systemd unit,跨平台开发/CI 用 docker container;**PoC 阶段允许裸跑**(`./proxy &`);K8s 生产形态走 sidecar(Q4-10 已定);具体部署 spec 阶段 4 PoC 启动前补 ADR-0005 |
+| Q4-12 | **proxy_extraction DSL 终稿** | **2 模式(json_rpc + rest)+ `extractors:[]` 数组 + `batch_handling` 必填 + `auth` 可选**;100% 覆盖 36 链(jsonrpc/substrate/tendermint/bitcoin_jsonrpc 统一走 json_rpc,rest 走 rest,hedera dual 用 2 条 extractor 自然支持);**删 grpc 模式(36 链零 gRPC,YAGNI)+ 删 ogmios 模式(cardano 实测走 rest)**;完整 schema + 6 family 范例见 `chain-template-zero-code-spec-zh.md` §1.7;违反契约 pre-commit 拒 |
+| Q4-13 | **proxy 与 fetcher 边界** | **解耦**:proxy 只解 body / URL 抓 method 名,不依赖 fetcher;fetcher 28 链扩展归阶段 5 wave(非 S4 blocker);PoC solana 1 链 fetcher 已支持;e2e benchmark 链路 fetcher → target_generator → vegeta → proxy → 节点 |
+| Q4-14 | **mixed_weighted schema** | **新增 `rpc_methods.mixed_weighted: [{method, weight}, ...]` 字段(向后兼容)**:旧 `mixed` 字符串字段保留,新增 `mixed_weighted` 时优先生效;weight 为正整数,target_generator 按 `weight_i / sum(weights)` 归一化;权重源参考 `analysis-notes/research_notes/01-06`;完整 schema 见 `chain-template-zero-code-spec-zh.md` §1.8 |
 | W-1 | **文档落点** | `docs/architecture/` 新目录,与现有"现状说明书"分开 |
 | W-2 | **阶段 1 架构文档形态** | **3 份独立 md**(整体架构 + chain template spec + migration 路径) |
 | W-3 | **架构图工具** | mermaid(git diff 友好,GitHub 原生渲染) |

@@ -16,20 +16,12 @@
 
 ---
 
-## OQ-2:proxy 部署形态细节
+## OQ-2:proxy 部署形态细节 ✅ 已锁定(2026-05-28)
 
-**问题**:Q4-1 已定独立进程,但部署细节?
-
-| 候选 | 适用场景 | 缺点 |
-|---|---|---|
-| **systemd unit**(Linux VM 直跑) | 虚拟机 + cloudtop 直接跑 | 不跨平台,Mac/Win 开发不友好 |
-| **docker container** | 跨平台、隔离、镜像可发布 | 多一层 docker daemon 依赖 |
-| **K8s pod / sidecar(同 namespace)** | GKE / K8s 生产环境 | PoC 阶段过重 |
-| **二进制裸跑**(./proxy &) | 开发调试最快 | 无生命周期管理 |
-
-**当前倾向**:**支持 systemd + docker 双部署**(同一二进制,部署方式按环境选);PoC 阶段允许裸跑
-
-**决策时点**:阶段 1-A 架构文档落地时(确定部署 spec 即可,实现归阶段 4)
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-11**。
+> **决策摘要**:**systemd + docker 双部署**(同一 Go 二进制),虚拟机/cloudtop 走 systemd unit,跨平台开发/CI 走 docker container;**PoC 阶段允许裸跑**(`./proxy &`);K8s 生产形态走 sidecar(Q4-10 已定)。
+> **决策依据**:运维场景全覆盖 + 跨平台兼容 + PoC 阻力最小化。
+> **ADR 待写**:`docs/architecture/decisions/0005-proxy-deployment.md`(归阶段 4 PoC 启动前补)
 
 ---
 
@@ -53,96 +45,33 @@
 
 ---
 
-## OQ-5:chain template proxy_extraction DSL 完整 spec
+## OQ-5:chain template proxy_extraction DSL 完整 spec ✅ 已锁定(2026-05-28)
 
-**问题**:Q4-4 已定 declarative DSL,**4 种模式的完整字段定义?**
-
-**初稿(2026-05-27,待阶段 1-B 细化)**:
-
-```jsonc
-{
-  "proxy_extraction": {
-    "protocol": "json_rpc",  // 枚举: json_rpc | rest | bitcoin_rpc | grpc
-
-    // protocol=json_rpc / bitcoin_rpc:
-    "method_source": "body.method",     // JSON path,提取 method 名
-    "id_source": "body.id",             // 可选,提取 request id 做 latency 配对
-    "params_source": "body.params",     // 可选,统计 params 大小 / 复杂度
-
-    // protocol=rest:
-    "url_pattern": "^/v2/([^/]+)/.*$",  // 正则,提取 method 名
-    "url_method_group": 1,              // 捕获组索引
-    "method_normalize": {               // 可选,映射归一化
-      "transactions": "get_transactions",
-      "blocks": "get_blocks"
-    },
-
-    // protocol=grpc:
-    "grpc_service": "hedera.MirrorService",  // 全限定服务名
-    "grpc_method_field": "method"            // 通过 :method gRPC header 提取
-  }
-}
-```
-
-**决策时点**:阶段 1-B `chain-template-zero-code-spec-zh.md` 落地时(必须用 36 链全部协议**填表证明 DSL 够用**)
-
-**验证手段**:为 36 链每条都写出 `proxy_extraction` 配置,如果某链 4 种模式都表达不出,**反推扩充 DSL**(或将该链标 KNOWN_BROKEN_PROXY)
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-12**,完整 schema 落 `chain-template-zero-code-spec-zh.md` §1.7。
+> **决策摘要**:**2 模式(json_rpc + rest)+ `extractors:[]` 数组 + `batch_handling` 必填 + `auth` 可选**;100% 覆盖 36 链(jsonrpc/substrate/tendermint/bitcoin_jsonrpc 统一走 json_rpc,rest 走 rest,hedera dual 用 2 条 extractor 自然支持);**删 grpc 模式(36 链零 gRPC,YAGNI)+ 删 ogmios 模式(cardano 实测走 rest)**。
+> **关键变化**:初稿 4 模式(json_rpc / rest / bitcoin_rpc / grpc)经 6 family × 36 链对照实证后,有 2 BLOCKER(ogmios WS / hedera dual);改 2 模式 + extractors 数组 + url_patterns list + batch_handling 必填 后 0 BLOCKER 0 envoy 兜底。
+> **6 family 范例**:arbitrum (jsonrpc) / bch (bitcoin_jsonrpc) / acala (substrate) / algorand (rest) / celestia (tendermint) / hedera (hedera_dual) — 全部覆盖,见 spec §1.7。
+> **决策依据**:36 链 6 family 实证分布(`_meta.adapter_family` audit:jsonrpc=16, rest=5, substrate=5, tendermint=5, bitcoin_jsonrpc=4, hedera_dual=1, ogmios=0);batch_handling 来自 EVM batch JSON-RPC 真实生产场景。
+> **ADR 待写**:`docs/architecture/decisions/0006-proxy-extraction-dsl.md`(归阶段 4 PoC 启动前补)
 
 ---
 
-## OQ-6:proxy 与 fetcher 的边界
+## OQ-6:proxy 与 fetcher 的边界 ✅ 已锁定(2026-05-28)
 
-**问题**:fetcher (`tools/fetch_active_accounts.py`) 当前仅 8 链支持,**proxy 是否依赖 fetcher?**
-
-**已知**:
-- fetcher 产物 = `accounts.txt`(地址池),供 target_generator 拼 vegeta target body 用
-- proxy 不依赖 fetcher,只解 body / URL 抓 method 名
-- 但 e2e 跑 benchmark **需要** fetcher → target_generator → vegeta → proxy → 节点
-
-**当前倾向**:**fetcher 和 proxy 解耦,但 e2e 需要 fetcher 28 链扩展**(归阶段 5)。PoC(solana 1 链)fetcher 已支持,不阻塞。
-
-**决策时点**:阶段 1-C `migration-from-legacy-zh.md` 落地时(明确 fetcher 28 链补全的责任边界)
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-13**。
+> **决策摘要**:**proxy 与 fetcher 解耦** — proxy 只解 body / URL 抓 method 名,不依赖 fetcher;fetcher 28 链扩展归阶段 5 wave(非 S4 blocker);PoC solana 1 链 fetcher 已支持;e2e benchmark 链路 = fetcher → target_generator → vegeta → proxy → 节点。
+> **决策依据**:proxy 工作在 vegeta → 节点链路的中间层,只关心 wire format(body / URL),与 fetcher 取地址池逻辑完全正交;fetcher 28 链扩展是独立工作量,塞进 S4 会拖延 NS-2 主线。
+> **ADR 待写**:`docs/architecture/decisions/0007-proxy-fetcher-boundary.md`(归阶段 4 PoC 启动前补)
 
 ---
 
-## OQ-7:weight 配置的 chain template schema
+## OQ-7:weight 配置的 chain template schema ✅ 已锁定(2026-05-28)
 
-**问题**:NS-2 要求 mixed mode 支持 weight 配置,**chain template 怎么表达?**
-
-**候选 schema**:
-
-```jsonc
-// 候选 A: 扩展 mixed 字符串
-"rpc_methods": {
-  "single": "eth_getBalance",
-  "mixed": "eth_getBalance:40,eth_getTransactionCount:30,eth_blockNumber:20,eth_gasPrice:10"
-}
-
-// 候选 B: 新增 mixed_weighted 字段(向后兼容)
-"rpc_methods": {
-  "single": "eth_getBalance",
-  "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice",  // 老格式保留
-  "mixed_weighted": [
-    {"method": "eth_getBalance", "weight": 40},
-    {"method": "eth_getTransactionCount", "weight": 30},
-    {"method": "eth_blockNumber", "weight": 20},
-    {"method": "eth_gasPrice", "weight": 10}
-  ]
-}
-
-// 候选 C: 完全替代 mixed
-"rpc_methods": {
-  "single": "eth_getBalance",
-  "mixed": [
-    {"method": "eth_getBalance", "weight": 40},  // 老格式废弃
-    ...
-  ]
-}
-```
-
-**当前倾向**:**B(新增 mixed_weighted)** — 向后兼容老 user_config,且新功能显式
-
-**决策时点**:阶段 1-B `chain-template-zero-code-spec-zh.md` 落地时
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-14**,完整 schema 落 `chain-template-zero-code-spec-zh.md` §1.8。
+> **决策摘要**:**候选 B(新增 `rpc_methods.mixed_weighted: [{method, weight}, ...]` 字段,向后兼容)**:旧 `mixed` 字符串字段保留,新增 `mixed_weighted` 时优先生效;weight 为正整数,target_generator 按 `weight_i / sum(weights)` 归一化;权重源参考 `analysis-notes/research_notes/01-06`。
+> **决策依据**:候选 A(扩展 mixed 字符串)语法不易扩展;候选 C(完全替代)破坏老用户配置;候选 B 兼容 + 显式,符合 W-4 渐进重构。
+> **验证手段**:pre-commit hook 校验 `mixed_weighted[].method` ⊂ `param_formats` keys + weight > 0 + integer。
+> **ADR 待写**:`docs/architecture/decisions/0008-mixed-weighted-schema.md`(归阶段 4 PoC 启动前补)
 
 ---
 
@@ -206,5 +135,5 @@
 
 ---
 
-**当前状态**:**6 个 OQ 待决**(OQ-2 / OQ-5 / OQ-6 / OQ-7 / OQ-9 / OQ-10;OQ-1 / OQ-3 / OQ-4 / OQ-8 已锁 → NORTH-STAR Q4-7~10)
-**下次预期更新**:阶段 1 架构文档 review 通过后(OQ-2 / OQ-3 / OQ-4 / OQ-5 / OQ-7 / OQ-8 部分应该可决);阶段 2 调研档完成后 OQ-1 可决
+**当前状态**:**2 个 OQ 待决**(OQ-9 / OQ-10;OQ-1 / OQ-2 / OQ-3 / OQ-4 / OQ-5 / OQ-6 / OQ-7 / OQ-8 已锁 → NORTH-STAR Q4-7~14)
+**下次预期更新**:阶段 5 启动前 OQ-9 (fake-node stub handler) / OQ-10 (fixture 录制流水线) 可决
