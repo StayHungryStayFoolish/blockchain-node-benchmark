@@ -37,6 +37,12 @@ methods:
   getAccountInfo:
     fixture: getAccountInfo.json
     tier: cheap
+  getBlockHeight:
+    fixture: getBlockHeight.json
+    tier: cheap
+  getTokenAccountBalance:
+    fixture: getTokenAccountBalance.json
+    tier: cheap
 
   # ---- Ethereum / EVM methods (eth_*) ----
   eth_blockNumber:

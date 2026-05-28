@@ -27,6 +27,9 @@ declare -a METHODS=(
   "getLatestBlockhash|[]"
   "getBlock|[100000000,{\"encoding\":\"json\",\"maxSupportedTransactionVersion\":0}]"
   "getTransaction|[\"5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW\",{\"encoding\":\"json\",\"maxSupportedTransactionVersion\":0}]"
+  "getAccountInfo|[\"83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri\",{\"encoding\":\"base64\"}]"
+  "getBlockHeight|[]"
+  "getTokenAccountBalance|[\"3JoVBiQEA2QKsq7TzW5ez5jp4v7uXmDRwsT1V6Jq1xVc\"]"
 )
 
 echo "Recording fixtures to: $OUT_DIR"
