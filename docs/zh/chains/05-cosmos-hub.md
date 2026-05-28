@@ -672,6 +672,26 @@ gRPC 需要 protoc 编译 cosmos-sdk 全套 protobuf 定义(`cosmos/bank/v1beta1
 
 ---
 
+## ADR-0005 实施期 caller/reader 改造点(tendermint family,2026-05-28)
+
+**强制要求**(token-level-careful-edit Case-K + parallel-entry-trap):本链是 tendermint family 5 链代表(cosmos-hub/osmosis/celestia/injective/sei),ADR-0005 引入 fake-node v2 `tools/fake-node/handlers/tendermint.go`,改造点如下:
+
+| # | 位置 | 改动 | 原因 |
+|---|---|---|---|
+| 1 | `tools/fake-node/handlers/tendermint.go` | **新建** REST handler:dispatch on path(e.g. `/cosmos/bank/v1beta1/balances/{address}`)+ verb,echo fixture | 通用 ~100 LOC 覆盖 tendermint 5 链 |
+| 2 | `tools/fake-node/fixtures/cosmos-hub/` | record `/cosmos/auth/v1beta1/accounts/{addr}`、`/cosmos/bank/v1beta1/balances/{addr}`、`/cosmos/staking/v1beta1/validators`、`/blocks/latest`、`/status` 共 6+ fixture json | REST replay 数据源 |
+| 3 | `config/chains/cosmos-hub.json` `_meta.rest_paths` | **新增** path 模板字典(method 逻辑名 → REST URL with `{addr}` 占位符) | 与 cardano 同 schema,RestAdapter 通用消费 |
+| 4 | `config/chains/cosmos-hub.json` `_meta.health_probe` | **新增**:`{"path":"/status","method":"GET","expect_status":200}` | startup self-check |
+| 5 | sister chains(osmosis / celestia / injective / sei)同结构 fixture + rest_paths + health_probe | 4 链 × 6 fixture = 24 fixture json | 5 链对称 |
+| 6 | `tests/test_tendermint_smoke.sh` | **新建**:轮询 5 链 × 主要 path,断言 200 + JSON 结构 | L3 e2e |
+| 7 | `tools/ci_smoke.sh` | 追加 tendermint 5 链 | L3 全 PASS |
+
+**Gate 3 验证**:`grep -rn tendermint tools/fake-node/handlers/` + `grep -rn 'adapter_family":"tendermint"' config/chains/` 确认 5 链对称。
+
+详见 `docs/architecture/decisions/0005-cardano-family-correction-and-handler-rollout.md`。
+
+---
+
 ## Open Questions(待解决问题)
 
 - [ ] **system_addresses 4 个 module account 未 E2 验证**(§10 配置 JSON 中标 SPECULATED)— Phase 2.x 实施前必须实测每个地址(可通过 `GET /cosmos/auth/v1beta1/module_accounts` 查 module account 列表 + 提取 base_account.address)

@@ -39,6 +39,7 @@ Proposed / Accepted / Deprecated / Superseded by ADR-XXXX
 | [ADR-0002](0002-proxy-implementation.md) | proxy 实现 — Go 反向代理 + 流式 JSON decoder 提 method 字段 | Accepted | `9e52ead` |
 | [ADR-0003](0003-sink-format.md) | sink 格式 — CSV(ts_ns, method, status, latency_ns) | Accepted | `9e52ead` |
 | [ADR-0004](0004-proxy-overhead.md) | proxy 自身开销 — 目标 < 节点 CPU 10% | Accepted | `9e52ead` |
+| [ADR-0005](0005-cardano-family-correction-and-handler-rollout.md) | Cardano 协议族归位(ogmios → rest)+ 删除 ogmios family + 引入 4 family handler(rest/substrate/tendermint/hedera_dual)+ 修 rest.py POST body bug | Accepted | _pending_ |
 
 > 备注:NORTH-STAR.md 初始决策表(commit `7921b71`)作为 baseline 不写 ADR;
 > baseline 之后的决策变更必须写 ADR。

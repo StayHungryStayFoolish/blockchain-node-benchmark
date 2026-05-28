@@ -293,6 +293,35 @@ x-frame-options: DENY
 
 ---
 
+## 8.6 ADR-0005 实施期 caller/reader 改造点(2026-05-28 校正)
+
+**强制要求**(token-level-careful-edit Case-K):ADR-0005 把 cardano 从 `ogmios` family 校正到 `rest` family,以下 caller/reader 必须同 PR 改:
+
+| # | 位置(file:line) | 改动 | 原因 / Gate 3 验证 |
+|---|---|---|---|
+| 1 | `config/chains/cardano.json` `_meta.adapter_family` | `ogmios` → `rest` | 顶层 family 归位;`tools/chain_adapters/base.py:126` 读这个值 |
+| 2 | `config/chains/cardano.json` `_meta.rest_paths` | **新增**:`{"tip":"/api/v1/tip","block_info":"/api/v1/blocks","address_info":"/api/v1/address_info","tx_info":"/api/v1/tx_info","asset_info":"/api/v1/asset_info","epoch_info":"/api/v1/epoch_info"}` | RestAdapter 用逻辑名 → 真 URL 映射,代替 framework 硬编 |
+| 3 | `config/chains/cardano.json` `rpc_methods.mixed` | 改逻辑名:`["tip","block_info","address_info","tx_info","asset_info","epoch_info"]`(权重见 §8) | 与 `rest_paths` keys 对齐;`config_loader.sh:371` case dispatch 取这个 |
+| 4 | `config/chains/cardano.json` `_meta.param_formats` | **新增** body 模板:`{"address_info":{"verb":"POST","body":{"_addresses":["{ADDRESS}"]}},"tx_info":{"verb":"POST","body":{"_tx_hashes":["{TX_HASH}"]}},"asset_info":{"verb":"POST","body":{"_asset_list":[["{POLICY}","{ASSET_NAME}"]]}},"tip":{"verb":"GET"},"block_info":{"verb":"GET","query":"limit=1"},"epoch_info":{"verb":"GET"}}` | RestAdapter 读这个生成正确的 vegeta target;**修复 rest.py:87 POST body bug 后**真正生效 |
+| 5 | `config/chains/cardano.json` `_meta.health_probe` | **新增**:`{"path":"/api/v1/tip","method":"GET","expect_status":200}` | fake-node startup self-check + smoke 测试入口 |
+| 6 | `tools/chain_adapters/rest.py:87` POST 分支 | **修 bug**:从 `chain_template["_meta"]["param_formats"][method]["body"]` 读 body,替换字段占位符(`{ADDRESS}` 等)而非传空 `{}` | 与 cardano + algorand/aptos/tezos/ton 共用;rest family 整体修复 |
+| 7 | `tools/chain_adapters/ogmios.py` + `tools/chain_adapters/__init__.py` ogmios 注册 | **删除** | 0 链使用,parallel-entry-trap 0-user 规范;ADR-0005 决策 |
+| 8 | `tools/fake-node/handlers/rest.go` | **新建** 通用 REST handler:dispatch on path + verb,从 fixture 读 response | 覆盖 cardano + algorand/aptos/tezos/ton 5 链 |
+| 9 | `tools/fake-node/fixtures/cardano/` | **新建** 6 fixtures:`tip.json`, `blocks.json`, `address_info.json`, `tx_info.json`, `asset_info.json`, `epoch_info.json`(record 自 Koios 真 mainnet) | rest handler echo 这些固定响应 |
+| 10 | `tools/fake-node/handlers/stub.go`(ogmios stub) | **删除** ogmios 注册行 | 同 #7,framework + fake-node 双侧对齐 |
+| 11 | `tools/fake-node/main.go` `_REGISTRY` 列表 | grep 验证 ogmios 已无引用 | parallel-entry-trap step 3 |
+| 12 | `tests/test_cardano_smoke.sh` | **新建**:`BLOCKCHAIN_NODE=cardano` 启 fake-node,curl 6 method 各 1 次,断言 HTTP 200 + 关键字段存在 | L1 单测 + L3 e2e 入口 |
+| 13 | `tools/ci_smoke.sh` | **追加** cardano + algorand/aptos/tezos/ton + 5 substrate + 5 tendermint + hedera = 16 链 smoke | L3 全 PASS 是 ADR-0005 验收门 |
+| 14 | `docs/architecture/CURRENT-STATE.md` fake-node RPC-ready 矩阵 | 20/36 → 36/36 | 同步实施进度,不污染 NORTH-STAR(architecture-governance 四件套纪律) |
+| 15 | `docs/architecture/OPEN-QUESTIONS.md` OQ-9(若存在"ogmios 保留 stub"项) | RESOLVED:删 | ADR-0005 决策落地 |
+
+**Gate 3 完整验证**(改完每一个 caller 后必须重 grep 验):
+- `grep -rn "ogmios" tools/ config/` → 应只剩 ADR-0005 决策溯源,无活跃代码
+- `grep -rn "cardano" tools/fake-node/` → 通过 rest handler + fixture 路径访问,无硬编 cardano 分支
+- `grep -rn "adapter_family.*ogmios" config/` → 0 hits
+
+---
+
 ## 9. Mock Notes(mock_rpc_server 实现要点)
 
 - **请求路径**:**多路径**,不是单一 `POST /jsonrpc`。例:`GET /api/v1/tip`、`POST /api/v1/address_info`、`POST /api/v1/tx_info`。
@@ -327,6 +356,17 @@ x-frame-options: DENY
 ---
 
 ## 10. Adapter Reuse Decision(adapter 复用决策)
+
+> **⚠️ 已被 ADR-0005 校正(2026-05-28)**:本 §10 原决策"新建 CardanoAdapter / family=cardano-eutxo"已被 superseded。
+>
+> **新决策(ADR-0005)**:cardano 加入既有 `rest` family(与 algorand/aptos/tezos/ton 同 family),复用 `RestAdapter` + 通用 Go rest handler。理由:
+> 1. §11.8 自身就推荐 Koios REST(transport 层就是 HTTP REST + JSON,与 `rest` family 既有 4 链完全同构)
+> 2. EUTXO 是数据模型概念(reader / analysis 层),不是 transport 层概念 — 不需要独立 family
+> 3. 新建 `cardano-eutxo` family 重复造轮子(Python 新 adapter ~200 LOC + Go 新 handler ~150 LOC = ~350 LOC),而归位 `rest` 0 LOC 新增 adapter,仅需修复 `tools/chain_adapters/rest.py:87` POST body bug(独立必须的 framework bug,与本链解耦)
+>
+> 详见 `docs/architecture/decisions/0005-cardano-family-correction-and-handler-rollout.md`。
+>
+> 以下 §10 原文保留作为决策溯源(不再有效)。
 
 ### 候选 adapter
 

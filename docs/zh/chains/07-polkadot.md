@@ -383,6 +383,26 @@ curl -s -X POST https://rpc.polkadot.io \
 
 ---
 
+## ADR-0005 实施期 caller/reader 改造点(substrate family,2026-05-28)
+
+**强制要求**(token-level-careful-edit Case-K + parallel-entry-trap):本链是 substrate family 5 链代表(polkadot/kusama/acala/astar/moonbeam),ADR-0005 引入 fake-node v2 `tools/fake-node/handlers/substrate.go`,改造点如下:
+
+| # | 位置 | 改动 | 原因 |
+|---|---|---|---|
+| 1 | `tools/fake-node/handlers/substrate.go` | **新建** hex replay handler:`chain_getBlock` / `state_getStorage` 等返回的 SCALE-encoded hex 串无需解码,record 真 mainnet 一次 → replay echo | 通用 ~120 LOC 覆盖 substrate 5 链 |
+| 2 | `tools/fake-node/fixtures/polkadot/` | record 8 method × 1 response = 8 fixture json | hex replay 数据源 |
+| 3 | `config/chains/polkadot.json` `_meta.health_probe` | **新增**:`{"method":"system_chain","expect_result":"Polkadot"}` | fake-node startup self-check |
+| 4 | sister chains(kusama / acala / astar / moonbeam)`_meta.health_probe` | 同结构,改 `expect_result` 为各自链名 | 5 链对称 |
+| 5 | `tools/fake-node/fixtures/{kusama,acala,astar,moonbeam}/` | 每链 record 8 method,共 32 fixture json | replay 数据源,4 sister 链各自的 hex 不同 |
+| 6 | `tests/test_substrate_smoke.sh` | **新建**:轮询 5 链 × 主要 method,断言 200 + hex 串非空 | L3 e2e |
+| 7 | `tools/ci_smoke.sh` | 追加 substrate 5 链 | L3 全 PASS |
+
+**Gate 3 验证**:改完跑 `grep -rn substrate tools/fake-node/handlers/` 确认 handler 注册 + `grep -rn 'adapter_family":"substrate"' config/chains/` 确认 5 链全有 family。
+
+详见 `docs/architecture/decisions/0005-cardano-family-correction-and-handler-rollout.md`。
+
+---
+
 ## Open Questions(待解决问题)
 
 - [ ] **DSL ASK**:DSL 是否允许在 plugin JSON 中声明 `protocol: "rest_sidecar"` 与 `protocol: "jsonrpc"` 两种 method,vegeta target 生成器能否分别生成 GET + path 与 POST + body?(Cosmos 已开 REST GET 先例,Polkadot 是首条**双协议混用**的链 — 同一 plugin 一半 method 走 sidecar GET,一半走原生 POST。需框架确认 target 生成器支持 per-method `protocol` 字段。)

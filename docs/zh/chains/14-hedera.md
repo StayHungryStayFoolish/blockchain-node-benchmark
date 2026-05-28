@@ -348,6 +348,29 @@ curl -s -X POST https://mainnet.hashio.io/api \
 
 ---
 
+## ADR-0005 实施期 caller/reader 改造点(hedera_dual family,2026-05-28)
+
+**强制要求**(token-level-careful-edit Case-K + parallel-entry-trap):本链是 hedera_dual family 唯一链,**双协议 GET path-query + JSON-RPC POST 混合**,ADR-0005 引入专门 handler:
+
+| # | 位置 | 改动 | 原因 |
+|---|---|---|---|
+| 1 | `tools/fake-node/handlers/hedera_dual.go` | **新建** dual-protocol handler:根据 path 前缀 dispatch — `/api/v1/*` → Mirror REST、`/api` POST → Hashio JSON-RPC | 唯一链 ~150 LOC(无 sister chain 摊薄) |
+| 2 | `tools/fake-node/fixtures/hedera/mirror/` | record Mirror REST:`/api/v1/accounts/{id}`、`/api/v1/balances?account.id={id}`、`/api/v1/transactions?account.id={id}` 等 6+ fixture | REST 端 replay |
+| 3 | `tools/fake-node/fixtures/hedera/jsonrpc/` | record Hashio JSON-RPC:`eth_blockNumber`、`eth_getBalance`、`eth_getTransactionByHash` 等 5+ fixture | JSON-RPC 端 replay |
+| 4 | `config/chains/hedera.json` `_meta.rest_paths` + `_meta.jsonrpc_methods` | **双字段并存**:RestAdapter 读 rest_paths(Mirror GET),JsonRpcAdapter 读 jsonrpc_methods(Hashio POST) | 双协议 schema 来自 §11 调研 |
+| 5 | `config/chains/hedera.json` `_meta.health_probe` | **新增**:`{"path":"/api/v1/network/nodes","method":"GET","expect_status":200}` | Mirror 端 startup |
+| 6 | `tests/test_hedera_dual_smoke.sh` | **新建**:Mirror + JSON-RPC 各 3 method,断言双端 200 + 关键字段 | **双协议路由验证关键测试**(2026-05-24 dual-protocol case 教训) |
+| 7 | `tools/ci_smoke.sh` | 追加 hedera | L3 全 PASS |
+
+**特别注意 — 协议层验证(2026-05-24 hedera_dual case 教训)**:
+- L1/L2 schema 测试 PASS ≠ wire protocol OK,**必须在 ci_smoke 真打 Hashio + Mirror endpoint** 至少 1 次,验 HTTP 200 而非仅 schema 解析通过
+- 防 `_meta.id_format` adapter-fabricated 3-part ID 传给 Hashio(它要 0x EVM hex)的 HTTP 400 trap
+- 详见 skill `honest-self-check-no-fake-evidence/references/protocol-layer-changes-require-live-http.md`
+
+详见 `docs/architecture/decisions/0005-cardano-family-correction-and-handler-rollout.md`。
+
+---
+
 ## Open Questions(待解决问题)
 
 - [ ] **DSL ASK A**:`address_format` 是否定义为枚举(`{base58, hex, bech32, hedera_3part, ...}`)还是结构化对象(`{encoding, regex, prefix, length, conversion}`)?**强烈推荐结构化**(Hedera 一条链就需要 3 种 address_format 共存:`hedera_3part` + `evm_hex_long_zero` + `evm_hex_ecdsa_alias`,枚举值会爆炸)。
