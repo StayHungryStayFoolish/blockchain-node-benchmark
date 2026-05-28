@@ -100,7 +100,7 @@ show_status() {
     if command -v vegeta >/dev/null 2>&1; then
         echo "✅ Vegeta: $(vegeta --version 2>&1 | head -1)"
     else
-        echo "❌ Vegeta: Not installed"
+        echo "❌ Vegeta: Not installed (required v12.13.0+ — run: ./blockchain_node_benchmark.sh --install-vegeta)"
     fi
     
     # Check target files
@@ -238,10 +238,14 @@ show_benchmark_config() {
 pre_check() {
     echo "🔍 Performing pre-check..."
     
-    # Check vegeta
+    # Check vegeta (hard gate: --quick/standard/intensive 必须安装 vegeta 才能继续)
     if ! command -v vegeta >/dev/null 2>&1; then
-        echo "❌ Error: vegeta not installed"
-        echo "💡 Installation: https://github.com/tsenart/vegeta"
+        echo "❌ Error: vegeta not installed (required: v12.13.0+)"
+        echo "💡 推荐安装(已验证版本 v12.13.0):"
+        echo "   curl -sLO https://github.com/tsenart/vegeta/releases/download/v12.13.0/vegeta_12.13.0_linux_amd64.tar.gz"
+        echo "   tar -xzf vegeta_12.13.0_linux_amd64.tar.gz && sudo mv vegeta /usr/local/bin/ && chmod +x /usr/local/bin/vegeta"
+        echo "   # 或加入 PATH:  export PATH=\"\$HOME/.local/bin:\$PATH\"   (写入 ~/.bashrc 永久生效)"
+        echo "💡 或一键安装:    ./blockchain_node_benchmark.sh --install-vegeta"
         return 1
     fi
     

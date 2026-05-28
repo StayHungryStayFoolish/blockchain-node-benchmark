@@ -147,7 +147,19 @@ generate_device_header() {
 # Get data for all configured devices
 get_all_devices_data() {
     local device_data=""
-    
+
+    # Degraded mode: device(s) unavailable — emit NaN placeholders matching header shape
+    if [[ "${DEVICE_VALIDATION_DEGRADED:-0}" == "1" ]]; then
+        # 21 NaN fields per device (matches get_iostat_data output)
+        local nan_row="NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN"
+        device_data="$nan_row"
+        if is_accounts_configured; then
+            device_data="${device_data},$nan_row"
+        fi
+        echo "$device_data"
+        return 0
+    fi
+
     # DATA device - use data as logical name prefix (required)
     if [[ -n "$DATA_VOL_TYPE" ]]; then
         local data_stats=$(get_iostat_data "$LEDGER_DEVICE" "data")
@@ -156,7 +168,7 @@ get_all_devices_data() {
         log_error "DATA_VOL_TYPE not configured - this is required"
         return 1
     fi
-    
+
     # ACCOUNTS device - use accounts as logical name prefix
     if is_accounts_configured; then
         local accounts_stats=$(get_iostat_data "$ACCOUNTS_DEVICE" "accounts")
@@ -166,14 +178,27 @@ get_all_devices_data() {
             device_data="$accounts_stats"
         fi
     fi
-    
+
     echo "$device_data"
 }
 
 # Generate CSV header for all devices
 generate_all_devices_header() {
     local device_header=""
-    
+
+    # Degraded mode: use "NA" as device-name placeholder so header column count is stable
+    if [[ "${DEVICE_VALIDATION_DEGRADED:-0}" == "1" ]]; then
+        local data_dev="${LEDGER_DEVICE:-NA}"
+        device_header=$(generate_device_header "$data_dev" "data")
+        if is_accounts_configured; then
+            local acc_dev="${ACCOUNTS_DEVICE:-NA}"
+            local accounts_header=$(generate_device_header "$acc_dev" "accounts")
+            device_header="${device_header},$accounts_header"
+        fi
+        echo "$device_header"
+        return 0
+    fi
+
     # DATA device header - use data as logical name prefix (required)
     if [[ -n "$DATA_VOL_TYPE" ]]; then
         device_header=$(generate_device_header "$LEDGER_DEVICE" "data")
@@ -181,7 +206,7 @@ generate_all_devices_header() {
         log_error "DATA_VOL_TYPE not configured - this is required"
         return 1
     fi
-    
+
     # ACCOUNTS device header - use accounts as logical name prefix
     if is_accounts_configured; then
         local accounts_header=$(generate_device_header "$ACCOUNTS_DEVICE" "accounts")
@@ -191,31 +216,44 @@ generate_all_devices_header() {
             device_header="$accounts_header"
         fi
     fi
-    
+
     echo "$device_header"
 }
 
 # Validate device availability
+# Supports STRICT_DEVICE_VALIDATION env var:
+#   - true  : hard fail on missing devices (original behavior, for AWS EC2)
+#   - false : degraded mode (default) — WARN, set DEVICE_VALIDATION_DEGRADED=1, return 0
 validate_devices() {
     local errors=()
-    
+    local strict="${STRICT_DEVICE_VALIDATION:-false}"
+
     # DATA device validation (required)
     if [[ -z "$LEDGER_DEVICE" ]]; then
         errors+=("LEDGER_DEVICE is required but not configured")
     elif [[ ! -b "/dev/$LEDGER_DEVICE" ]]; then
         errors+=("LEDGER_DEVICE /dev/$LEDGER_DEVICE does not exist")
     fi
-    
+
     if [[ -n "$ACCOUNTS_DEVICE" && ! -b "/dev/$ACCOUNTS_DEVICE" ]]; then
         errors+=("ACCOUNTS_DEVICE /dev/$ACCOUNTS_DEVICE does not exist")
     fi
-    
+
     if [[ ${#errors[@]} -gt 0 ]]; then
-        printf "❌ Device validation failed:\n"
-        printf "  - %s\n" "${errors[@]}"
-        return 1
+        if [[ "$strict" == "true" ]]; then
+            printf "❌ Device validation failed:\n"
+            printf "  - %s\n" "${errors[@]}"
+            return 1
+        else
+            printf "⚠️  Device validation WARN (degraded mode, STRICT_DEVICE_VALIDATION=false):\n" >&2
+            printf "  - %s\n" "${errors[@]}" >&2
+            printf "⚠️  Disk I/O columns will be filled with N/A; CPU/mem/net monitoring still active.\n" >&2
+            printf "💡 Set STRICT_DEVICE_VALIDATION=true to enforce hard failure (AWS EC2 default expectation).\n" >&2
+            export DEVICE_VALIDATION_DEGRADED=1
+            return 0
+        fi
     fi
-    
+
     return 0
 }
 

@@ -245,9 +245,15 @@ init_monitoring() {
         return 1
     fi
 
-    # Validate devices
+    # Validate devices (degraded mode allowed unless STRICT_DEVICE_VALIDATION=true)
     if ! validate_devices; then
         return 1
+    fi
+
+    # Surface degraded-mode notice if validate_devices set the flag
+    if [[ "${DEVICE_VALIDATION_DEGRADED:-0}" == "1" ]]; then
+        echo "⚠️  Running in DEGRADED MODE: disk I/O monitoring disabled (devices unavailable); CPU/mem/net still active" >&2
+        log_warn "DEVICE_VALIDATION_DEGRADED=1 — iostat columns will be NaN placeholders"
     fi
 
     # Check required commands - gracefully handle missing commands

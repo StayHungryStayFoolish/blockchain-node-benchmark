@@ -8,17 +8,33 @@
 #   NETWORK_INTERFACE      - 主网卡名 (eth0/ens4/...)
 
 # === detect_platform: 通过 metadata 探测 ===
+# 注意: 用内容校验而不是 curl exit code, 防止沙盒/代理在 169.254/metadata.google.internal
+#       上返回 HTTP 200 + HTML 错误页 → curl 退出 0 → 误判。
 detect_platform() {
-    # GCP metadata (3s timeout, 失败即非 GCP)
-    if curl -s -m 3 -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/id > /dev/null 2>&1; then
+    local body
+
+    # --- 1. GCP metadata (3s timeout) ---
+    # GCP instance id 是纯数字 (>= 1 位)。Metadata-Flavor 头是 GCP 元数据契约的强制要求,
+    # 任何非 GCP 端点不会返回符合此格式的响应。
+    body=$(curl -s -m 3 -H 'Metadata-Flavor: Google' \
+        http://metadata.google.internal/computeMetadata/v1/instance/id 2>/dev/null)
+    if [[ "$body" =~ ^[0-9]+$ ]]; then
         echo "gcp"; return
     fi
-    # AWS IMDSv2 (3s timeout, 失败即非 AWS)
+
+    # --- 2. AWS IMDSv2 (3s timeout) ---
+    # EC2 instance id 形如 i-0123456789abcdef0,有严格前缀。
     local token
-    token=$(curl -s -m 3 -X PUT 'http://169.254.169.254/latest/api/token' -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 2>/dev/null)
-    if [[ -n "$token" ]] && curl -s -m 3 -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/instance-id > /dev/null 2>&1; then
-        echo "aws"; return
+    token=$(curl -s -m 3 -X PUT 'http://169.254.169.254/latest/api/token' \
+        -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 2>/dev/null)
+    if [[ -n "$token" ]]; then
+        body=$(curl -s -m 3 -H "X-aws-ec2-metadata-token: $token" \
+            http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null)
+        if [[ "$body" =~ ^i-[0-9a-f]+$ ]]; then
+            echo "aws"; return
+        fi
     fi
+
     echo "other"
 }
 

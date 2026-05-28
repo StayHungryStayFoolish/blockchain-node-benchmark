@@ -65,6 +65,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config/config_loader.sh"
 source "${SCRIPT_DIR}/utils/error_handler.sh"
 source "${SCRIPT_DIR}/core/common_functions.sh"
+# W2 RPC proxy lifecycle helpers (Phase 2.5 / Phase 4.5)
+if [[ -f "${SCRIPT_DIR}/lib/proxy_lifecycle.sh" ]]; then
+    source "${SCRIPT_DIR}/lib/proxy_lifecycle.sh"
+fi
 
 # Clean or create memory sharing directory
 if [[ -d "$MEMORY_SHARE_DIR" ]]; then
@@ -96,6 +100,11 @@ BOTTLENECK_INFO=""
 # Cleanup function
 cleanup_framework() {
     echo "🧹 Executing framework cleanup..."
+    
+    # Stop RPC proxy (no-op if Phase 2.5 didn't run)
+    if declare -F stop_rpc_proxy >/dev/null 2>&1; then
+        stop_rpc_proxy || true
+    fi
     
     # Stop monitoring system
     stop_monitoring_system
@@ -346,6 +355,17 @@ process_test_results() {
     return 0
 }
 
+# Generate the degraded-mode HTML report (fallback when perf.csv is unusable)
+generate_degraded_report() {
+    echo "🟠 Generating DEGRADED-mode HTML report..."
+    local script="${SCRIPT_DIR}/analysis/degraded_report.py"
+    if [[ ! -f "$script" ]]; then
+        echo "[ERROR] Missing $script"
+        return 1
+    fi
+    python3 "$script" "${VEGETA_RESULTS_DIR}" "${LOGS_DIR}" "${REPORTS_DIR}"
+}
+
 # Execute data analysis
 execute_data_analysis() {
     echo "🔍 Executing data analysis..."
@@ -368,11 +388,10 @@ execute_data_analysis() {
     local latest_csv="${LOGS_DIR}/performance_latest.csv"
     
     if [[ ! -f "$latest_csv" ]]; then
-        echo "[ERROR] Performance data file not found: $latest_csv"
-        echo "[DEBUG] Available CSV files:"
-        ls -la "$LOGS_DIR"/*.csv 2>/dev/null || echo "  No CSV files found"
-        echo "[DEBUG] LOGS_DIR = $LOGS_DIR"
-        return 1
+        echo "[WARN] Performance data file not found: $latest_csv"
+        echo "[WARN] Falling back to DEGRADED analysis mode."
+        export ANALYSIS_DEGRADED=1
+        generate_degraded_report && return 0 || return 1
     fi
     
     # Verify file integrity and symlink target
@@ -388,8 +407,9 @@ execute_data_analysis() {
     
     local line_count=$(wc -l < "$latest_csv")
     if [[ $line_count -lt 2 ]]; then
-        echo "[ERROR] Performance data file is empty or only contains header: $line_count lines"
-        return 1
+        echo "[WARN] Performance data file empty/header-only ($line_count lines) — DEGRADED mode."
+        export ANALYSIS_DEGRADED=1
+        generate_degraded_report && return 0 || return 1
     fi
     
     # Verify CSV header integrity and required fields
@@ -889,6 +909,10 @@ parse_rpc_mode_args() {
                 RPC_MODE="mixed"
                 shift
                 ;;
+            --no-proxy)
+                export SKIP_RPC_PROXY=1
+                shift
+                ;;
             *)
                 # Other parameters continue to pass
                 shift
@@ -897,8 +921,70 @@ parse_rpc_mode_args() {
     done
 }
 
+# Install vegeta v12.13.0 binary (--install-vegeta)
+# 选择安装目录:优先 /usr/local/bin(可写或有 sudo -n),否则 ~/.local/bin,否则 ./bin
+install_vegeta() {
+    local version="v12.13.0"
+    local tarball="vegeta_12.13.0_linux_amd64.tar.gz"
+    local url="https://github.com/tsenart/vegeta/releases/download/${version}/${tarball}"
+    local install_dir use_sudo=""
+
+    if [[ -w /usr/local/bin ]]; then
+        install_dir="/usr/local/bin"
+    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        install_dir="/usr/local/bin"
+        use_sudo="sudo"
+    elif mkdir -p "$HOME/.local/bin" 2>/dev/null && [[ -w "$HOME/.local/bin" ]]; then
+        install_dir="$HOME/.local/bin"
+    else
+        install_dir="$(pwd)/bin"
+        mkdir -p "$install_dir"
+    fi
+
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    echo "🔧 Installing vegeta ${version} -> ${install_dir}/vegeta"
+    echo "   download url: ${url}"
+
+    if ! curl -fsSL -o "${tmpdir}/${tarball}" "$url"; then
+        echo "❌ Download failed (curl)"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+    if ! tar -xzf "${tmpdir}/${tarball}" -C "$tmpdir"; then
+        echo "❌ Extract failed (tar)"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+    if [[ ! -f "${tmpdir}/vegeta" ]]; then
+        echo "❌ tarball did not contain 'vegeta' binary"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+    $use_sudo mv "${tmpdir}/vegeta" "${install_dir}/vegeta" || { echo "❌ mv failed"; rm -rf "$tmpdir"; return 1; }
+    $use_sudo chmod +x "${install_dir}/vegeta"
+    rm -rf "$tmpdir"
+
+    echo "✅ Installed: ${install_dir}/vegeta"
+    "${install_dir}/vegeta" --version 2>&1 | head -1 || true
+    case ":$PATH:" in
+        *":${install_dir}:"*) : ;;
+        *) echo "⚠️  ${install_dir} 不在 PATH 中,请添加:"
+           echo "    export PATH=\"${install_dir}:\$PATH\"   # 写入 ~/.bashrc 永久生效" ;;
+    esac
+    return 0
+}
+
 # Main execution function
 main() {
+    # 0. Sub-command hot-path: --install-vegeta (handled before any heavy init)
+    for arg in "$@"; do
+        if [[ "$arg" == "--install-vegeta" ]]; then
+            install_vegeta
+            exit $?
+        fi
+    done
+
     # Save original parameters for subsequent passing
     local original_args=("$@")
     
@@ -934,6 +1020,14 @@ main() {
         exit 1
     fi
     
+    # Phase 2.5: Start RPC proxy (per-method attribution, optional/non-fatal)
+    echo "📋 Phase 2.5: Start RPC proxy"
+    if declare -F start_rpc_proxy >/dev/null 2>&1; then
+        start_rpc_proxy || true
+    else
+        echo "⚠️  proxy_lifecycle.sh not loaded — skipping Phase 2.5"
+    fi
+    
     # Phase 3: Execute core QPS test
     echo "📋 Phase 3: Execute core QPS test"
     if ! execute_core_qps_test "${original_args[@]}"; then
@@ -945,6 +1039,12 @@ main() {
     echo "📋 Phase 4: Stop monitoring system"
     stop_monitoring_system
     
+    # Phase 4.5: Stop RPC proxy & restore LOCAL_RPC_URL
+    echo "📋 Phase 4.5: Stop RPC proxy"
+    if declare -F stop_rpc_proxy >/dev/null 2>&1; then
+        stop_rpc_proxy || true
+    fi
+    
     # Phase 5: Process test results
     echo "📋 Phase 5: Process test results"
     process_test_results "${original_args[@]}"
@@ -952,8 +1052,11 @@ main() {
     # Phase 6: Execute data analysis
     echo "📋 Phase 6: Execute data analysis"
     if ! execute_data_analysis "${original_args[@]}"; then
-        echo "❌ Data analysis failed, test terminated"
-        exit 1
+        echo "⚠️  Standard analysis failed, attempting degraded report..."
+        if ! generate_degraded_report; then
+            echo "❌ Both standard and degraded analysis failed"
+            exit 1
+        fi
     fi
     
     # Phase 7: Generate final reports

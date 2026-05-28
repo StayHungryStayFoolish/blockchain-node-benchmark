@@ -35,6 +35,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -401,11 +402,89 @@ func resolveChain(flagChain string) string {
 	return "solana" // mirror config_loader.sh:17 default
 }
 
+// ---- default path resolution (binary-location-aware) ----
+//
+// 默认 flag 值需要满足两类用例:
+//   (a) 从源目录 (tools/fake-node/) `go run` 或 `./fake-node` — 历史用法,
+//       相对路径 "../../config/chains" / "configs" / "./fixtures" 即可工作。
+//   (b) Binary 被 cp 或 build -o 到任意目录 (如 /tmp/fake-node-v2) 后启动 —
+//       cwd 不再是源目录,相对路径会 fail。
+//
+// 解决策略 (优先级从高到低):
+//   1. runtime.Caller(0) — go 编译时把源文件绝对路径嵌入 binary。只要源仓库
+//      还在原位,无论 binary 跑哪儿都能找到资源。对 (b) 用例是主路径。
+//   2. os.Executable() — binary 自身位置,适用于"binary 和资源同目录部署"
+//      场景 (e.g. 容器/打包发行)。检测到资源相对 binary dir 存在则用之。
+//   3. 相对路径 fallback — 兼容 (a) 用例 + `go run` (临时 build dir 下
+//      runtime.Caller 仍返回源路径,但保险起见保留)。
+//
+// 任一 helper 失败 (e.g. runtime.Caller 不可用),自动降级到下一级。
+
+// sourceDir 返回 fake_node.go 所在目录的绝对路径 (编译时嵌入)。
+// 若 runtime.Caller 失败或路径不再存在,返回空串。
+func sourceDir() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok || file == "" {
+		return ""
+	}
+	dir := filepath.Dir(file)
+	if _, err := os.Stat(dir); err != nil {
+		return "" // 源目录已移动/删除
+	}
+	return dir
+}
+
+// executableDir 返回当前 binary 所在目录的绝对路径。
+// 失败返回空串。
+func executableDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	resolved, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		resolved = exe
+	}
+	return filepath.Dir(resolved)
+}
+
+// resolveDefaultPath 按 (sourceDir, executableDir, fallback) 优先级解析路径。
+// relFromSource: 相对 tools/fake-node/ 的路径 (e.g. "../../config/chains")
+// relFromExe:    相对 binary 目录的路径 (e.g. "config/chains"),用于打包部署
+// fallback:      纯相对路径,最后兜底 (向后兼容 `go run` from source dir)
+func resolveDefaultPath(relFromSource, relFromExe, fallback string) string {
+	if src := sourceDir(); src != "" {
+		p := filepath.Clean(filepath.Join(src, relFromSource))
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	if exe := executableDir(); exe != "" {
+		p := filepath.Clean(filepath.Join(exe, relFromExe))
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return fallback
+}
+
+func defaultChainsDir() string {
+	return resolveDefaultPath("../../config/chains", "config/chains", "../../config/chains")
+}
+
+func defaultConfigsDir() string {
+	return resolveDefaultPath("configs", "configs", "configs")
+}
+
+func defaultFixturesDir() string {
+	return resolveDefaultPath("fixtures", "fixtures", "./fixtures")
+}
+
 func main() {
 	chainFlag := flag.String("chain", "", "chain name (overrides BLOCKCHAIN_NODE env; default: solana)")
-	chainsDir := flag.String("chains-dir", "../../config/chains", "directory of chain template JSONs")
-	configsDir := flag.String("configs-dir", "configs", "directory of per-family fake-node YAML configs")
-	fixturesDir := flag.String("fixtures-dir", "./fixtures", "fixtures root (per-chain subdirs)")
+	chainsDir := flag.String("chains-dir", defaultChainsDir(), "directory of chain template JSONs")
+	configsDir := flag.String("configs-dir", defaultConfigsDir(), "directory of per-family fake-node YAML configs")
+	fixturesDir := flag.String("fixtures-dir", defaultFixturesDir(), "fixtures root (per-chain subdirs)")
 	port := flag.String("port", "19000", "listen port")
 	flag.Parse()
 
