@@ -31,14 +31,14 @@ def _fail(msg: str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 1: Factory registration — 6 families
+# Test 1: Factory registration — 6 families (ADR-0005: ogmios removed)
 # ─────────────────────────────────────────────────────────────────────────────
 def test_factory_registers_seven_families():
     print("\n[1] Factory registration")
     fams = list_adapters()
-    expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "ogmios", "hedera_dual"}
+    expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "hedera_dual"}
     assert set(fams) == expected, f"expected {expected}, got {fams}"
-    _ok(f"7 families registered: {sorted(fams)}")
+    _ok(f"6 families registered (ADR-0005: ogmios removed): {sorted(fams)}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -160,11 +160,14 @@ def test_parse_block_height_per_family():
     assert h == 0x1A2B3C, f"substrate: got {h}"
     _ok("SubstrateAdapter parses .result.number 0x-hex")
 
-    # Ogmios
+    # Ogmios family was removed in ADR-0005 (2026-05-28) — cardano now uses
+    # rest family (Koios REST). The block height path is now exercised below
+    # via RestAdapter on cardano with the Koios /tip response shape (block_no).
+    os.environ["BLOCKCHAIN_NODE"] = "cardano"
     a = get_adapter("cardano")
-    h = a.parse_block_height(json.dumps({"result": {"height": 10500000, "slot": 99}}))
-    assert h == 10500000, f"ogmios: got {h}"
-    _ok("OgmiosAdapter prefers height over slot")
+    h = a.parse_block_height(json.dumps([{"block_no": 10500000, "abs_slot": 99}]))
+    assert h == 10500000, f"cardano (rest via Koios /tip): got {h}"
+    _ok("RestAdapter parses Cardano Koios /tip .[0].block_no (ADR-0005)")
 
     # Rest — Tezos with .header.level
     os.environ["BLOCKCHAIN_NODE"] = "tezos"
@@ -397,13 +400,15 @@ KNOWN_BROKEN_CLI = {
     # ─────────────────────────────────────────────────────────────────────
     # F4: chain template single method UNDECLARED in param_formats/rest_paths
     # ─────────────────────────────────────────────────────────────────────
-    "cardano": ("F4", "S3-F", "single='GET /tip' not declared in param_formats/rest_paths; ogmios family is WebSocket JSON-RPC (separate protocol)"),
+    # cardano: removed from KNOWN_BROKEN_CLI in ADR-0005 (2026-05-28)
+    # — switched from ogmios family to rest family; single='GET_TIP' now
+    # declared in _meta.rest_paths. Verified by ci_smoke.sh step 4.
     "near":    ("F4", "S3-E", "single='status' not in param_formats; near JSON-RPC has no 'status' method — use 'query' with {request_type:view_account, account_id}"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 24, (
-    f"KNOWN_BROKEN_CLI must have exactly 24 entries (cli-param-bug wave reset to 25, "
-    f"then S3-E.4 tezos balance method + rest_paths brought count to 24), "
+assert len(KNOWN_BROKEN_CLI) == 23, (
+    f"KNOWN_BROKEN_CLI must have exactly 23 entries (cli-param-bug wave reset to 25, "
+    f"S3-A/B/C/D/E waves cleared 2, ADR-0005 cleared cardano → 23). "
     f"got {len(KNOWN_BROKEN_CLI)}"
 )
 
@@ -460,7 +465,7 @@ def _sample_address_for(family: str) -> str:
         "bitcoin_jsonrpc": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
         "substrate":       "12bzRJfh7arnnfPPUZHeJUaE62QLEwhK48QnH9LXeK2m1iZU",
         "tendermint":      "cosmos1abc",
-        "ogmios":          "addr1q9adlx6mh0dr8xs0gpcm9nz5pqe5w2hzfx5l8qj5",
+        # ogmios removed in ADR-0005 (cardano migrated to rest family)
         "rest":            "TESTADDR123",
         # hedera_dual: native 3-part account ID; L1 only asserts the address
         # string appears in url-or-body, not EVM semantics. Production
