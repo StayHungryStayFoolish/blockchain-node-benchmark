@@ -6,7 +6,8 @@
     "getbestblockhash": "no_params",
     "getblock": "block_hash",
     "getrawtransaction": "transaction_hash",
-    "getmempoolinfo": "no_params"
+    "getmempoolinfo": "no_params",
+    "getreceivedbyaddress": "single_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -17,7 +18,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "getblockcount",
+    "single": "getreceivedbyaddress",
     "mixed": "getblockcount,getbestblockhash,getblock,getrawtransaction,getmempoolinfo"
   },
   "rpc_url": "LOCAL_RPC_URL",

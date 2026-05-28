@@ -17,7 +17,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "/status",
+    "single": "/cosmos/bank/v1beta1/balances/{address}",
     "mixed": "/status,/cosmos/base/tendermint/v1beta1/blocks/latest,/cosmos/base/tendermint/v1beta1/node_info,/cosmos/bank/v1beta1/balances/{address},/block"
   },
   "rpc_url": "LOCAL_RPC_URL",

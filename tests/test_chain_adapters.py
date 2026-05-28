@@ -351,64 +351,18 @@ def test_evm_compat_5chains_standard_enum():
 # (chain, expected_failure_mode, fix_wave_owner, reason)
 KNOWN_BROKEN_CLI = {
     # ─────────────────────────────────────────────────────────────────────
-    # F1: RestAdapter Gate1 — rc=1 because single method not in _meta.rest_paths
+    # Step 9 (ADR-0005 + 36-chain rollout, 2026-05-28):
+    # ALL 23 prior entries fixed by chain-template edits — rpc_methods.single
+    # changed from no-address health-probe methods to address-bearing methods
+    # (eth_getBalance / system_account / getreceivedbyaddress / etc).
+    # Each chain's new single is declared in param_formats OR _meta.rest_paths.
+    # See git log fix(adr-0005): step 9 — 23 chains CLI healthy
     # ─────────────────────────────────────────────────────────────────────
-    "ton":   ("F1", "S3-E", "single='getMasterchainInfo' is health-probe with no rest_paths entry; use 'getAddressBalance'"),
-
-    # ─────────────────────────────────────────────────────────────────────
-    # F3-NOADDR (cli-param-bug 2026-05-25 wave revealed):
-    #   chain template single is a no-address health-probe method
-    #   (eth_blockNumber / eth_chainId / chain_getHeader / getblockcount /
-    #   system_chain / /status / GET .../latest / avm.getHeight).
-    #   These were FALSELY healthy pre-cli-param-bug: cli.py read tpl["params"]
-    #   (fetcher config) → fallback "" → JsonRpcAdapter fallback [address] →
-    #   Gate 3 (addr in body) trivially passed. After fix, param_format is
-    #   correctly resolved to "no_params" → params=[] → addr NOT in body →
-    #   Gate 3 correctly fails.
-    #   Fix = chain template edit: pick an address-bearing method from
-    #   param_formats and set rpc_methods.single to it. No adapter work.
-    # ─────────────────────────────────────────────────────────────────────
-    # Bitcoin family (4): use a real address-bearing method (getreceivedbyaddress / scantxoutset)
-    "bitcoin":   ("F3-NOADDR", "S3-D", "single='getblockcount' has no address; use 'getreceivedbyaddress' or 'scantxoutset' (no_params→need addr-bearing)"),
-    "bch":       ("F3-NOADDR", "S3-D", "single='getblockcount' has no address; use 'getreceivedbyaddress'"),
-    "dogecoin":  ("F3-NOADDR", "S3-D", "single='getblockcount' has no address; use 'getreceivedbyaddress'"),
-    "litecoin":  ("F3-NOADDR", "S3-D", "single='getblockcount' has no address; use 'getreceivedbyaddress'"),
-
-    # Tendermint family (4): pick a real account-bearing path (cosmos/auth/v1beta1/accounts/{addr})
-    "celestia":   ("F3-NOADDR", "S3-B", "single='/status' has no address; use '/cosmos/auth/v1beta1/accounts/{addr}' or similar"),
-    "cosmos-hub": ("F3-NOADDR", "S3-B", "single='GET .../blocks/latest' has no address; use auth/balances/{addr} REST path"),
-    "injective":  ("F3-NOADDR", "S3-B", "single='/status' has no address"),
-    "osmosis":    ("F3-NOADDR", "S3-B", "single='/status' has no address"),
-
-    # Substrate family (4): pick system_account / state_getStorage with addr key
-    "acala":     ("F3-NOADDR", "S3-C", "single='system_chain' has no address; use 'system_account' or eth_getBalance (EVM via Frontier pallet)"),
-    "astar":     ("F3-NOADDR", "S3-C", "single='eth_chainId' has no address; Astar runs EVM, use 'eth_getBalance'"),
-    "kusama":    ("F3-NOADDR", "S3-C", "single='chain_getHeader' has no address; use 'system_account' with SS58 addr"),
-    "moonbeam":  ("F3-NOADDR", "S3-C", "single='eth_chainId' has no address; Moonbeam runs EVM, use 'eth_getBalance'"),
-    "polkadot":  ("F3-NOADDR", "S3-C", "single='chain_getHeader' has no address; use 'system_account'"),
-    "sei":       ("F3-NOADDR", "S3-B", "single='eth_chainId' has no address; Sei has EVM compat, use 'eth_getBalance'"),
-
-    # EVM L2 family (7): default health probe instead of eth_getBalance
-    "arbitrum":    ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance' (param_formats already declares address_latest)"),
-    "avalanche-c": ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance'"),
-    "avalanche-x": ("F3-NOADDR", "S3-A", "single='avm.getHeight' has no address; use 'avm.getBalance' or address-bearing alt"),
-    "linea":       ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance'"),
-    "optimism":    ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance'"),
-    "tron":        ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance' (Tron supports EVM RPC)"),
-    "zksync-era":  ("F3-NOADDR", "S3-A", "single='eth_blockNumber' has no address; use 'eth_getBalance'"),
-
-    # ─────────────────────────────────────────────────────────────────────
-    # F4: chain template single method UNDECLARED in param_formats/rest_paths
-    # ─────────────────────────────────────────────────────────────────────
-    # cardano: removed from KNOWN_BROKEN_CLI in ADR-0005 (2026-05-28)
-    # — switched from ogmios family to rest family; single='GET_TIP' now
-    # declared in _meta.rest_paths. Verified by ci_smoke.sh step 4.
-    "near":    ("F4", "S3-E", "single='status' not in param_formats; near JSON-RPC has no 'status' method — use 'query' with {request_type:view_account, account_id}"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 23, (
-    f"KNOWN_BROKEN_CLI must have exactly 23 entries (cli-param-bug wave reset to 25, "
-    f"S3-A/B/C/D/E waves cleared 2, ADR-0005 cleared cardano → 23). "
+assert len(KNOWN_BROKEN_CLI) == 0, (
+    f"KNOWN_BROKEN_CLI must have exactly 0 entries (step 9 cleared all 23 chain-template "
+    f"bugs by changing rpc_methods.single to address-bearing methods). "
     f"got {len(KNOWN_BROKEN_CLI)}"
 )
 

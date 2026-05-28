@@ -17,7 +17,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "eth_blockNumber",
+    "single": "/wallet/getaccount",
     "mixed": "/wallet/getaccount,/wallet/triggerconstantcontract,/wallet/gettransactionbyid,/wallet/getnowblock,eth_blockNumber"
   },
   "rpc_url": "LOCAL_RPC_URL",

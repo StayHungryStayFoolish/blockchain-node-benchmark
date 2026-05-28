@@ -18,7 +18,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "getMasterchainInfo",
+    "single": "getAddressBalance",
     "mixed": "getAddressBalance,getAddressInformation,getTransactions,lookupBlock,runGetMethod"
   },
   "rpc_url": "LOCAL_RPC_URL",
@@ -33,6 +33,33 @@
     "normalized_at": "2026-05-24T04:43:09.944219+00:00",
     "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
     "original_rpc_protocol": "mixed",
+    "rest_paths": {
+      "getMasterchainInfo": {
+        "method": "GET",
+        "path": "/getMasterchainInfo"
+      },
+      "getAddressBalance": {
+        "method": "GET",
+        "path": "/getAddressBalance?address={address}"
+      },
+      "getAddressInformation": {
+        "method": "GET",
+        "path": "/getAddressInformation?address={address}"
+      },
+      "getTransactions": {
+        "method": "GET",
+        "path": "/getTransactions?address={address}&limit=10"
+      },
+      "lookupBlock": {
+        "method": "GET",
+        "path": "/lookupBlock?workchain=-1&shard=-9223372036854775808&seqno=1"
+      },
+      "runGetMethod": {
+        "method": "POST",
+        "path": "/runGetMethod",
+        "body": "{\"address\":\"{address}\",\"method\":\"seqno\",\"stack\":[]}"
+      }
+    },
     "original_public_endpoints": [
       {
         "url": "https://toncenter.com/api/v2/jsonRPC",

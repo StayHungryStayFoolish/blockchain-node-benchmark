@@ -17,7 +17,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "avm.getHeight",
+    "single": "avm.getAllBalances",
     "mixed": "avm.getHeight,avm.getBlockByHeight,avm.getTx,avm.getAllBalances,avm.getUTXOs"
   },
   "rpc_url": "LOCAL_RPC_URL",

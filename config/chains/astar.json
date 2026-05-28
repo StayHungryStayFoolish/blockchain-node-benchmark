@@ -6,7 +6,8 @@
     "eth_blockNumber": "no_params",
     "system_chain": "no_params",
     "chain_getHeader": "no_params",
-    "state_getRuntimeVersion": "no_params"
+    "state_getRuntimeVersion": "no_params",
+    "eth_getBalance": "address_latest"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -17,7 +18,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "eth_chainId",
+    "single": "eth_getBalance",
     "mixed": "eth_chainId,eth_blockNumber,system_chain,chain_getHeader,state_getRuntimeVersion"
   },
   "rpc_url": "LOCAL_RPC_URL",

@@ -6,7 +6,8 @@
     "chain_getFinalizedHead": "no_params",
     "system_health": "no_params",
     "system_properties": "no_params",
-    "chain_getBlockHash": "[block_number]"
+    "chain_getBlockHash": "[block_number]",
+    "system_account": "single_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -17,7 +18,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "chain_getHeader",
+    "single": "system_account",
     "mixed": "chain_getHeader,chain_getFinalizedHead,system_health,system_properties,chain_getBlockHash"
   },
   "rpc_url": "LOCAL_RPC_URL",

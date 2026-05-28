@@ -17,7 +17,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "status",
+    "single": "query",
     "mixed": "query,block,tx,gas_price,validators"
   },
   "rpc_url": "LOCAL_RPC_URL",

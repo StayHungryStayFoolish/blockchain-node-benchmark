@@ -17,7 +17,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "eth_blockNumber",
+    "single": "eth_getBalance",
     "mixed": "eth_blockNumber,eth_getBalance,eth_getBlockByNumber,eth_getTransactionReceipt,eth_call"
   },
   "rpc_url": "LOCAL_RPC_URL",

@@ -17,7 +17,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "eth_chainId",
+    "single": "eth_getBalance",
     "mixed": "eth_chainId,eth_blockNumber,eth_getBalance,eth_gasPrice,system_health"
   },
   "rpc_url": "LOCAL_RPC_URL",

@@ -6,7 +6,8 @@
     "getblock": "[blockhash,verbosity]",
     "getrawtransaction": "[txid,verbose]",
     "getrawmempool": "no_params",
-    "estimatesmartfee": "[conf_target]"
+    "estimatesmartfee": "[conf_target]",
+    "getreceivedbyaddress": "single_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -17,7 +18,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "getblockcount",
+    "single": "getreceivedbyaddress",
     "mixed": "getblockcount,getblock,getrawtransaction,getrawmempool,estimatesmartfee"
   },
   "rpc_url": "LOCAL_RPC_URL",

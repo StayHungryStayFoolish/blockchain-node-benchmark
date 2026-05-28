@@ -6,7 +6,8 @@
     "GET /blocks/{n}": "path_height",
     "account_nextIndex": "single_address",
     "GET /pallets/staking/progress": "no_params",
-    "chain_getHeader": "no_params"
+    "chain_getHeader": "no_params",
+    "system_account": "single_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -17,7 +18,7 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "chain_getHeader",
+    "single": "system_account",
     "mixed": "GET /accounts/{addr}/balance-info,GET /blocks/{n},account_nextIndex,GET /pallets/staking/progress,chain_getHeader"
   },
   "rpc_url": "LOCAL_RPC_URL",
