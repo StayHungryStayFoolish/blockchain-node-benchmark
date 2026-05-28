@@ -18,7 +18,29 @@
   },
   "rpc_methods": {
     "single": "GET /api/v1/accounts/{addr}",
-    "mixed": "GET /api/v1/accounts/{addr},GET /api/v1/balances?account.id={addr},GET /api/v1/transactions/{addr},eth_getBalance,eth_call"
+    "mixed": "GET /api/v1/accounts/{addr},GET /api/v1/balances?account.id={addr},GET /api/v1/transactions/{addr},eth_getBalance,eth_call",
+    "mixed_weighted": [
+      {
+        "method": "GET /api/v1/accounts/{addr}",
+        "weight": 1
+      },
+      {
+        "method": "GET /api/v1/balances?account.id={addr}",
+        "weight": 1
+      },
+      {
+        "method": "GET /api/v1/transactions/{addr}",
+        "weight": 1
+      },
+      {
+        "method": "eth_getBalance",
+        "weight": 1
+      },
+      {
+        "method": "eth_call",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [
@@ -70,12 +92,64 @@
     },
     "json_rpc_url": "https://mainnet.hashio.io/api",
     "rest_paths": {
-      "GET /api/v1/accounts/{addr}": {"method": "GET", "path": "/api/v1/accounts/{address}"},
-      "GET /api/v1/balances?account.id={addr}": {"method": "GET", "path": "/api/v1/balances?account.id={address}"},
-      "GET /api/v1/transactions/{addr}": {"method": "GET", "path": "/api/v1/transactions/{address}"},
-      "GET /api/v1/blocks?limit=1&order=desc": {"method": "GET", "path": "/api/v1/blocks?limit=1&order=desc"},
-      "GET /api/v1/network/supply": {"method": "GET", "path": "/api/v1/network/supply"}
+      "GET /api/v1/accounts/{addr}": {
+        "method": "GET",
+        "path": "/api/v1/accounts/{address}"
+      },
+      "GET /api/v1/balances?account.id={addr}": {
+        "method": "GET",
+        "path": "/api/v1/balances?account.id={address}"
+      },
+      "GET /api/v1/transactions/{addr}": {
+        "method": "GET",
+        "path": "/api/v1/transactions/{address}"
+      },
+      "GET /api/v1/blocks?limit=1&order=desc": {
+        "method": "GET",
+        "path": "/api/v1/blocks?limit=1&order=desc"
+      },
+      "GET /api/v1/network/supply": {
+        "method": "GET",
+        "path": "/api/v1/network/supply"
+      }
     },
-    "health_probe": {"method": "GET", "path": "/api/v1/network/supply", "parse_jq": ".timestamp"}
+    "health_probe": {
+      "method": "GET",
+      "path": "/api/v1/network/supply",
+      "parse_jq": ".timestamp"
+    }
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "rest",
+        "url_patterns": [
+          {
+            "pattern": "^/api/v1/accounts/[^/]+$",
+            "method_name": "GET_ACCOUNT"
+          },
+          {
+            "pattern": "^/api/v1/transactions/[^/]+$",
+            "method_name": "GET_TRANSACTION"
+          },
+          {
+            "pattern": "^/api/v1/balances$",
+            "method_name": "GET_BALANCES"
+          },
+          {
+            "pattern": "^/api/v1/blocks/[^/]+$",
+            "method_name": "GET_BLOCK"
+          }
+        ]
+      },
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split"
+      }
+    ]
   }
 }

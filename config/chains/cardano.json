@@ -19,7 +19,37 @@
   },
   "rpc_methods": {
     "single": "POST_ADDRESS_INFO",
-    "mixed": "GET_TIP,GET_BLOCKS,POST_ADDRESS_INFO,POST_TX_INFO,POST_BLOCK_TXS,GET_EPOCH_INFO,POST_ASSET_INFO"
+    "mixed": "GET_TIP,GET_BLOCKS,POST_ADDRESS_INFO,POST_TX_INFO,POST_BLOCK_TXS,GET_EPOCH_INFO,POST_ASSET_INFO",
+    "mixed_weighted": [
+      {
+        "method": "GET_TIP",
+        "weight": 1
+      },
+      {
+        "method": "GET_BLOCKS",
+        "weight": 1
+      },
+      {
+        "method": "POST_ADDRESS_INFO",
+        "weight": 1
+      },
+      {
+        "method": "POST_TX_INFO",
+        "weight": 1
+      },
+      {
+        "method": "POST_BLOCK_TXS",
+        "weight": 1
+      },
+      {
+        "method": "GET_EPOCH_INFO",
+        "weight": 1
+      },
+      {
+        "method": "POST_ASSET_INFO",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -54,16 +84,83 @@
     "adapter_family_corrected_at": "2026-05-28T00:00:00Z",
     "adapter_family_correction_note": "ADR-0005: was 'ogmios' (mismatched, Ogmios = WebSocket, Dandelion public endpoint dead). Corrected to 'rest' per docs/zh/chains/06-cardano.md §11.8 推荐;EUTXO is a data-model concept (reader layer), not transport — Koios REST is just HTTP + JSON, same family as algorand/aptos/tezos/ton.",
     "rest_paths": {
-      "GET_TIP":          {"method": "GET",  "path": "/tip"},
-      "GET_BLOCKS":       {"method": "GET",  "path": "/blocks?limit=1"},
-      "POST_ADDRESS_INFO":{"method": "POST", "path": "/address_info",
-                           "body": {"_addresses": ["{address}"]}},
-      "POST_TX_INFO":     {"method": "POST", "path": "/tx_info",
-                           "body": {"_tx_hashes": ["{address}"]}},
-      "POST_BLOCK_TXS":   {"method": "POST", "path": "/block_txs",
-                           "body": {"_block_hashes": ["{address}"]}},
-      "GET_EPOCH_INFO":   {"method": "GET",  "path": "/epoch_info"}
+      "GET_TIP": {
+        "method": "GET",
+        "path": "/tip"
+      },
+      "GET_BLOCKS": {
+        "method": "GET",
+        "path": "/blocks?limit=1"
+      },
+      "POST_ADDRESS_INFO": {
+        "method": "POST",
+        "path": "/address_info",
+        "body": {
+          "_addresses": [
+            "{address}"
+          ]
+        }
+      },
+      "POST_TX_INFO": {
+        "method": "POST",
+        "path": "/tx_info",
+        "body": {
+          "_tx_hashes": [
+            "{address}"
+          ]
+        }
+      },
+      "POST_BLOCK_TXS": {
+        "method": "POST",
+        "path": "/block_txs",
+        "body": {
+          "_block_hashes": [
+            "{address}"
+          ]
+        }
+      },
+      "GET_EPOCH_INFO": {
+        "method": "GET",
+        "path": "/epoch_info"
+      }
     },
-    "health_probe": {"method": "GET", "path": "/tip", "parse_jq": ".[0].block_height"}
+    "health_probe": {
+      "method": "GET",
+      "path": "/tip",
+      "parse_jq": ".[0].block_height"
+    }
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "rest",
+        "url_patterns": [
+          {
+            "pattern": "^/tip$",
+            "method_name": "GET_TIP"
+          },
+          {
+            "pattern": "^/blocks$",
+            "method_name": "GET_BLOCKS"
+          },
+          {
+            "pattern": "^/address_info$",
+            "method_name": "POST_ADDRESS_INFO"
+          },
+          {
+            "pattern": "^/tx_info$",
+            "method_name": "POST_TX_INFO"
+          },
+          {
+            "pattern": "^/block_txs$",
+            "method_name": "POST_BLOCK_TXS"
+          },
+          {
+            "pattern": "^/epoch_info$",
+            "method_name": "GET_EPOCH_INFO"
+          }
+        ]
+      }
+    ]
   }
 }

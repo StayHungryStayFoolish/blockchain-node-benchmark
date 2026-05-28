@@ -16,7 +16,25 @@
   "system_addresses": [],
   "rpc_methods": {
     "single": "starknet_getClassAt",
-    "mixed": "starknet_getClassAt,starknet_getNonce,starknet_getStorageAt,starknet_blockNumber"
+    "mixed": "starknet_getClassAt,starknet_getNonce,starknet_getStorageAt,starknet_blockNumber",
+    "mixed_weighted": [
+      {
+        "method": "starknet_getClassAt",
+        "weight": 1
+      },
+      {
+        "method": "starknet_getNonce",
+        "weight": 1
+      },
+      {
+        "method": "starknet_getStorageAt",
+        "weight": 1
+      },
+      {
+        "method": "starknet_blockNumber",
+        "weight": 1
+      }
+    ]
   },
   "param_formats": {
     "starknet_getClassAt": "latest_address",
@@ -32,5 +50,17 @@
     "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持",
     "adapter_family": "jsonrpc",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split"
+      }
+    ]
   }
 }

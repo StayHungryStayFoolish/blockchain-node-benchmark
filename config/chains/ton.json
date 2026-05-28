@@ -19,7 +19,29 @@
   },
   "rpc_methods": {
     "single": "getAddressBalance",
-    "mixed": "getAddressBalance,getAddressInformation,getTransactions,lookupBlock,runGetMethod"
+    "mixed": "getAddressBalance,getAddressInformation,getTransactions,lookupBlock,runGetMethod",
+    "mixed_weighted": [
+      {
+        "method": "getAddressBalance",
+        "weight": 1
+      },
+      {
+        "method": "getAddressInformation",
+        "weight": 1
+      },
+      {
+        "method": "getTransactions",
+        "weight": 1
+      },
+      {
+        "method": "lookupBlock",
+        "weight": 1
+      },
+      {
+        "method": "runGetMethod",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -90,5 +112,38 @@
     "adapter_required": true,
     "adapter_family": "rest",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "rest",
+        "url_patterns": [
+          {
+            "pattern": "^/getMasterchainInfo$",
+            "method_name": "getMasterchainInfo"
+          },
+          {
+            "pattern": "^/getAddressBalance$",
+            "method_name": "getAddressBalance"
+          },
+          {
+            "pattern": "^/getAddressInformation$",
+            "method_name": "getAddressInformation"
+          },
+          {
+            "pattern": "^/getTransactions$",
+            "method_name": "getTransactions"
+          },
+          {
+            "pattern": "^/lookupBlock$",
+            "method_name": "lookupBlock"
+          },
+          {
+            "pattern": "^/runGetMethod$",
+            "method_name": "runGetMethod"
+          }
+        ]
+      }
+    ]
   }
 }

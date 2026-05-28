@@ -18,7 +18,29 @@
   },
   "rpc_methods": {
     "single": "GET /chains/main/blocks/head/context/contracts/{addr}/balance",
-    "mixed": "GET /chains/main/blocks/head/context/contracts/{addr}/balance,GET /chains/main/blocks/{block}/operations/{vp},GET /chains/main/blocks/head/header,GET /chains/main/blocks/head/protocols,GET /chains/main/blocks/head/votes/current_period"
+    "mixed": "GET /chains/main/blocks/head/context/contracts/{addr}/balance,GET /chains/main/blocks/{block}/operations/{vp},GET /chains/main/blocks/head/header,GET /chains/main/blocks/head/protocols,GET /chains/main/blocks/head/votes/current_period",
+    "mixed_weighted": [
+      {
+        "method": "GET /chains/main/blocks/head/context/contracts/{addr}/balance",
+        "weight": 1
+      },
+      {
+        "method": "GET /chains/main/blocks/{block}/operations/{vp}",
+        "weight": 1
+      },
+      {
+        "method": "GET /chains/main/blocks/head/header",
+        "weight": 1
+      },
+      {
+        "method": "GET /chains/main/blocks/head/protocols",
+        "weight": 1
+      },
+      {
+        "method": "GET /chains/main/blocks/head/votes/current_period",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -106,5 +128,30 @@
       ],
       "fix_wave": "S4 or RestAdapter v2 wave"
     }
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "rest",
+        "url_patterns": [
+          {
+            "pattern": "^/chains/main/blocks/head/context/contracts/[^/]+/balance$",
+            "method_name": "GET /chains/main/blocks/head/context/contracts/{addr}/balance"
+          },
+          {
+            "pattern": "^/chains/main/blocks/head/header$",
+            "method_name": "GET /chains/main/blocks/head/header"
+          },
+          {
+            "pattern": "^/chains/main/blocks/head/protocols$",
+            "method_name": "GET /chains/main/blocks/head/protocols"
+          },
+          {
+            "pattern": "^/chains/main/blocks/head/votes/current_period$",
+            "method_name": "GET /chains/main/blocks/head/votes/current_period"
+          }
+        ]
+      }
+    ]
   }
 }

@@ -18,7 +18,29 @@
   },
   "rpc_methods": {
     "single": "eth_getBalance",
-    "mixed": "eth_blockNumber,eth_getBalance,eth_getBlockByNumber,zks_L1BatchNumber,zks_getBlockDetails"
+    "mixed": "eth_blockNumber,eth_getBalance,eth_getBlockByNumber,zks_L1BatchNumber,zks_getBlockDetails",
+    "mixed_weighted": [
+      {
+        "method": "eth_blockNumber",
+        "weight": 1
+      },
+      {
+        "method": "eth_getBalance",
+        "weight": 1
+      },
+      {
+        "method": "eth_getBlockByNumber",
+        "weight": 1
+      },
+      {
+        "method": "zks_L1BatchNumber",
+        "weight": 1
+      },
+      {
+        "method": "zks_getBlockDetails",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [
@@ -53,5 +75,17 @@
     "adapter_family": "jsonrpc",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
     "s3_a_fix": "zks_getBlockDetails uses int not latest"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split"
+      }
+    ]
   }
 }

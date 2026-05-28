@@ -18,7 +18,29 @@
   },
   "rpc_methods": {
     "single": "GET /v1/accounts/{addr}",
-    "mixed": "POST /v1/view,GET /v1,GET /v1/accounts/{addr},GET /v1/accounts/{addr}/resources,GET /v1/transactions/by_hash/{hash}"
+    "mixed": "POST /v1/view,GET /v1,GET /v1/accounts/{addr},GET /v1/accounts/{addr}/resources,GET /v1/transactions/by_hash/{hash}",
+    "mixed_weighted": [
+      {
+        "method": "POST /v1/view",
+        "weight": 1
+      },
+      {
+        "method": "GET /v1",
+        "weight": 1
+      },
+      {
+        "method": "GET /v1/accounts/{addr}",
+        "weight": 1
+      },
+      {
+        "method": "GET /v1/accounts/{addr}/resources",
+        "weight": 1
+      },
+      {
+        "method": "GET /v1/transactions/by_hash/{hash}",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [
@@ -60,12 +82,60 @@
     "adapter_family": "rest",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
     "rest_paths": {
-      "POST /v1/view": {"method": "POST", "path": "/v1/view"},
-      "GET /v1": {"method": "GET", "path": "/v1"},
-      "GET /v1/accounts/{addr}": {"method": "GET", "path": "/v1/accounts/{address}"},
-      "GET /v1/accounts/{addr}/resources": {"method": "GET", "path": "/v1/accounts/{address}/resources"},
-      "GET /v1/transactions/by_hash/{hash}": {"method": "GET", "path": "/v1/transactions/by_hash/{address}"}
+      "POST /v1/view": {
+        "method": "POST",
+        "path": "/v1/view"
+      },
+      "GET /v1": {
+        "method": "GET",
+        "path": "/v1"
+      },
+      "GET /v1/accounts/{addr}": {
+        "method": "GET",
+        "path": "/v1/accounts/{address}"
+      },
+      "GET /v1/accounts/{addr}/resources": {
+        "method": "GET",
+        "path": "/v1/accounts/{address}/resources"
+      },
+      "GET /v1/transactions/by_hash/{hash}": {
+        "method": "GET",
+        "path": "/v1/transactions/by_hash/{address}"
+      }
     },
-    "health_probe": {"method": "GET", "path": "/v1", "parse_jq": ".block_height"}
+    "health_probe": {
+      "method": "GET",
+      "path": "/v1",
+      "parse_jq": ".block_height"
+    }
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "rest",
+        "url_patterns": [
+          {
+            "pattern": "^/v1/view$",
+            "method_name": "POST /v1/view"
+          },
+          {
+            "pattern": "^/v1$",
+            "method_name": "GET /v1"
+          },
+          {
+            "pattern": "^/v1/accounts/[^/]+$",
+            "method_name": "GET /v1/accounts/{addr}"
+          },
+          {
+            "pattern": "^/v1/accounts/[^/]+/resources$",
+            "method_name": "GET /v1/accounts/{addr}/resources"
+          },
+          {
+            "pattern": "^/v1/transactions/by_hash/[^/]+$",
+            "method_name": "GET /v1/transactions/by_hash/{hash}"
+          }
+        ]
+      }
+    ]
   }
 }

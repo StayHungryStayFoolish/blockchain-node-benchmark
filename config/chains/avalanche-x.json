@@ -18,7 +18,29 @@
   },
   "rpc_methods": {
     "single": "avm.getAllBalances",
-    "mixed": "avm.getHeight,avm.getBlockByHeight,avm.getTx,avm.getAllBalances,avm.getUTXOs"
+    "mixed": "avm.getHeight,avm.getBlockByHeight,avm.getTx,avm.getAllBalances,avm.getUTXOs",
+    "mixed_weighted": [
+      {
+        "method": "avm.getHeight",
+        "weight": 1
+      },
+      {
+        "method": "avm.getBlockByHeight",
+        "weight": 1
+      },
+      {
+        "method": "avm.getTx",
+        "weight": 1
+      },
+      {
+        "method": "avm.getAllBalances",
+        "weight": 1
+      },
+      {
+        "method": "avm.getUTXOs",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -50,5 +72,17 @@
     "adapter_required": false,
     "adapter_family": "jsonrpc",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split"
+      }
+    ]
   }
 }

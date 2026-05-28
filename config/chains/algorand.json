@@ -18,7 +18,29 @@
   },
   "rpc_methods": {
     "single": "GET /v2/accounts/{address}",
-    "mixed": "GET /v2/accounts/{address},GET /v2/transactions/{txid},GET /v2/blocks/{round},GET /v2/assets/{asset_id},GET /v2/accounts/{address}/transactions"
+    "mixed": "GET /v2/accounts/{address},GET /v2/transactions/{txid},GET /v2/blocks/{round},GET /v2/assets/{asset_id},GET /v2/accounts/{address}/transactions",
+    "mixed_weighted": [
+      {
+        "method": "GET /v2/accounts/{address}",
+        "weight": 1
+      },
+      {
+        "method": "GET /v2/transactions/{txid}",
+        "weight": 1
+      },
+      {
+        "method": "GET /v2/blocks/{round}",
+        "weight": 1
+      },
+      {
+        "method": "GET /v2/assets/{asset_id}",
+        "weight": 1
+      },
+      {
+        "method": "GET /v2/accounts/{address}/transactions",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -57,13 +79,68 @@
     "adapter_family": "rest",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
     "rest_paths": {
-      "GET /v2/accounts/{address}": {"method": "GET", "path": "/v2/accounts/{address}"},
-      "GET /v2/transactions/{txid}": {"method": "GET", "path": "/v2/transactions/{address}"},
-      "GET /v2/blocks/{round}": {"method": "GET", "path": "/v2/blocks/{address}"},
-      "GET /v2/assets/{asset_id}": {"method": "GET", "path": "/v2/assets/{address}"},
-      "GET /v2/accounts/{address}/transactions": {"method": "GET", "path": "/v2/accounts/{address}/transactions"},
-      "GET /v2/status": {"method": "GET", "path": "/v2/status"}
+      "GET /v2/accounts/{address}": {
+        "method": "GET",
+        "path": "/v2/accounts/{address}"
+      },
+      "GET /v2/transactions/{txid}": {
+        "method": "GET",
+        "path": "/v2/transactions/{address}"
+      },
+      "GET /v2/blocks/{round}": {
+        "method": "GET",
+        "path": "/v2/blocks/{address}"
+      },
+      "GET /v2/assets/{asset_id}": {
+        "method": "GET",
+        "path": "/v2/assets/{address}"
+      },
+      "GET /v2/accounts/{address}/transactions": {
+        "method": "GET",
+        "path": "/v2/accounts/{address}/transactions"
+      },
+      "GET /v2/status": {
+        "method": "GET",
+        "path": "/v2/status"
+      }
     },
-    "health_probe": {"method": "GET", "path": "/v2/status", "parse_jq": ".[\"last-round\"]"}
+    "health_probe": {
+      "method": "GET",
+      "path": "/v2/status",
+      "parse_jq": ".[\"last-round\"]"
+    }
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "rest",
+        "url_patterns": [
+          {
+            "pattern": "^/v2/accounts/[^/]+$",
+            "method_name": "GET /v2/accounts/{address}"
+          },
+          {
+            "pattern": "^/v2/transactions/[^/]+$",
+            "method_name": "GET /v2/transactions/{txid}"
+          },
+          {
+            "pattern": "^/v2/blocks/[^/]+$",
+            "method_name": "GET /v2/blocks/{round}"
+          },
+          {
+            "pattern": "^/v2/assets/[^/]+$",
+            "method_name": "GET /v2/assets/{asset_id}"
+          },
+          {
+            "pattern": "^/v2/accounts/[^/]+/transactions$",
+            "method_name": "GET /v2/accounts/{address}/transactions"
+          },
+          {
+            "pattern": "^/v2/status$",
+            "method_name": "GET /v2/status"
+          }
+        ]
+      }
+    ]
   }
 }
