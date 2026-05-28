@@ -1,16 +1,24 @@
-# fake-node v2 config — tendermint family (STUB)
+# fake-node v2 config — tendermint family (ADR-0005).
 #
-# This family is registered as NotImplementedHandler in handlers/stubs.go.
-# This minimal config exists so:
-#   - `fake-node -chain <chain-using-tendermint>` startup succeeds (operators can inspect)
-#   - RPC calls fail loud at request time with "not yet implemented" error
+# Covers 5 chains under _meta.adapter_family=tendermint:
+#   cosmos-hub, osmosis, celestia, injective, sei.
 #
-# To wire real fixtures: implement handlers/tendermint.go, populate methods below,
-# and add fixtures/<chain>/<fixture>.json. Tracked in docs/architecture/OPEN-QUESTIONS.md.
+# Tendermint RPC: GET path style (e.g. /status, /block, /abci_info) or
+# JSON-RPC POST envelope (same body). Fixtures recorded from cosmos-hub
+# mainnet; sister chains will record per-chain fixtures in step 9.
 
 family: tendermint
 
-methods: {}    # empty — RPC calls return 404 "method not declared"
+methods:
+  status:
+    fixture: status.json
+    tier: cheap
+  abci_info:
+    fixture: abci_info.json
+    tier: cheap
+  block:
+    fixture: block.json
+    tier: expensive
 
 tiers:
   cheap: 1ms
@@ -18,4 +26,4 @@ tiers:
   expensive: 50ms
 
 io:
-  enabled: false     # off until real handler implemented
+  enabled: true

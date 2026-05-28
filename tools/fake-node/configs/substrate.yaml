@@ -1,16 +1,30 @@
-# fake-node v2 config — substrate family (STUB)
+# fake-node v2 config — substrate family (ADR-0005).
 #
-# This family is registered as NotImplementedHandler in handlers/stubs.go.
-# This minimal config exists so:
-#   - `fake-node -chain <chain-using-substrate>` startup succeeds (operators can inspect)
-#   - RPC calls fail loud at request time with "not yet implemented" error
+# Covers 5 chains under _meta.adapter_family=substrate:
+#   polkadot, kusama, acala, astar, moonbeam.
 #
-# To wire real fixtures: implement handlers/substrate.go, populate methods below,
-# and add fixtures/<chain>/<fixture>.json. Tracked in docs/architecture/OPEN-QUESTIONS.md.
+# JSON-RPC 2.0 POST namespace_method. Fixtures recorded from polkadot mainnet;
+# sister chains share the schema and will get per-chain recorded fixtures in
+# step 9 (so kusama/acala/etc. return their own block height etc.).
 
 family: substrate
 
-methods: {}    # empty — RPC calls return 404 "method not declared"
+methods:
+  system_chain:
+    fixture: system_chain.json
+    tier: cheap
+  system_health:
+    fixture: system_health.json
+    tier: cheap
+  chain_getFinalizedHead:
+    fixture: chain_getFinalizedHead.json
+    tier: cheap
+  chain_getBlockHash:
+    fixture: chain_getBlockHash.json
+    tier: cheap
+  state_getRuntimeVersion:
+    fixture: state_getRuntimeVersion.json
+    tier: mid
 
 tiers:
   cheap: 1ms
@@ -18,4 +32,4 @@ tiers:
   expensive: 50ms
 
 io:
-  enabled: false     # off until real handler implemented
+  enabled: true

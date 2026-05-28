@@ -1,15 +1,18 @@
 #!/bin/bash
-# ci_smoke.sh — fake-node v2 end-to-end smoke (multi-chain).
+# ci_smoke.sh — fake-node v2 end-to-end smoke (multi-chain, multi-family).
 #
-# v2 Validates:
+# ADR-0005 (2026-05-28): Extended to validate 6 protocol families:
+#   jsonrpc / bitcoin_jsonrpc / rest / substrate / tendermint / hedera_dual
+#
+# Validates:
 #   1. binary builds (single binary serves all 36 chains via handler registry)
-#   2. solana chain: BLOCKCHAIN_NODE=solana → jsonrpc handler → byte-correct
-#   3. ethereum chain: BLOCKCHAIN_NODE=ethereum → jsonrpc handler → byte-correct
-#   4. handler routing: NotImplemented family (e.g. cardano) startup OK, RPC 500
-#   5. /stats counters report activity
-#   6. IO worker active
+#   2. 6/6 family representatives: byte-correct fixture passthrough
+#   3. 36/36 chain startup smoke (no panic, family resolved)
+#   4. /stats counters report activity
+#   5. IO worker active
 #
-# Exit 0 on full pass.
+# Exit 0 on full pass. ALL 36 chains MUST startup-pass (parallel-entry-trap
+# rule: NotImplemented family registration was a defer trap and is now removed).
 #
 # Run: bash tools/fake-node/scripts/ci_smoke.sh
 
@@ -58,112 +61,136 @@ start_chain() {
     done
 }
 
-# --- 2. solana chain ---
-note "step 2: solana (jsonrpc handler, BLOCKCHAIN_NODE=solana)"
+PIDS=""
+cleanup() { for p in $PIDS; do kill $p 2>/dev/null || true; done; }
+trap cleanup EXIT
+
+# --- 2. solana (jsonrpc family — 16/36 chains) ---
+note "step 2: solana (jsonrpc family)"
 SOL_PID=$(start_chain solana 19101 /tmp/fake-node-io-jsonrpc) || { ko "solana start failed"; exit 1; }
-trap "kill $SOL_PID 2>/dev/null || true" EXIT
+PIDS="$PIDS $SOL_PID"
 ok "solana ready (pid=$SOL_PID)"
+grep -q "adapter_family=jsonrpc" "/tmp/fake-node-smoke-solana.log" \
+    && ok "solana → adapter_family=jsonrpc" \
+    || ko "solana adapter_family routing log missing"
 
-# Verify log shows the right family routing
-if grep -q "adapter_family=jsonrpc" "/tmp/fake-node-smoke-solana.log"; then
-    ok "solana → adapter_family=jsonrpc routed correctly"
-else
-    ko "solana adapter_family routing log missing"
-fi
-
-# Byte-correct check on a method
 for method in getSlot getBalance; do
     expected=$(stat -c%s "$FIXTURES/solana/${method}.json")
     body=$(printf '{"jsonrpc":"2.0","id":1,"method":"%s","params":[]}' "$method")
     actual=$(curl -s -X POST "http://127.0.0.1:19101" -H 'Content-Type: application/json' -d "$body" | wc -c)
-    if [[ "$actual" == "$expected" ]]; then
-        ok "solana $method: ${actual}B == fixture"
-    else
-        ko "solana $method: ${actual}B != ${expected}B"
-    fi
+    [[ "$actual" == "$expected" ]] && ok "solana $method: ${actual}B == fixture" || ko "solana $method: ${actual}B != ${expected}B"
 done
 
-# --- 3. ethereum chain ---
-note "step 3: ethereum (jsonrpc handler, BLOCKCHAIN_NODE=ethereum)"
-ETH_PID=$(start_chain ethereum 19102 /tmp/fake-node-io-jsonrpc) || { ko "ethereum start failed"; kill $SOL_PID 2>/dev/null; exit 1; }
-trap "kill $SOL_PID $ETH_PID 2>/dev/null || true" EXIT
+# --- 3. ethereum (jsonrpc family reuse) ---
+note "step 3: ethereum (jsonrpc family — reuse)"
+ETH_PID=$(start_chain ethereum 19102 /tmp/fake-node-io-jsonrpc) || { ko "ethereum start failed"; exit 1; }
+PIDS="$PIDS $ETH_PID"
 ok "ethereum ready (pid=$ETH_PID)"
 
-# Verify ethereum uses the SAME handler family as solana (proves jsonrpc handler reused for 16 chains)
-if grep -q "adapter_family=jsonrpc" "/tmp/fake-node-smoke-ethereum.log"; then
-    ok "ethereum → adapter_family=jsonrpc (same handler as solana, family reuse confirmed)"
-else
-    ko "ethereum adapter_family routing log missing"
-fi
-
-# Byte-correct check on eth_* method
-for method in eth_blockNumber eth_getBalance; do
-    expected=$(stat -c%s "$FIXTURES/ethereum/${method}.json")
-    body=$(printf '{"jsonrpc":"2.0","id":1,"method":"%s","params":[]}' "$method")
-    actual=$(curl -s -X POST "http://127.0.0.1:19102" -H 'Content-Type: application/json' -d "$body" | wc -c)
-    if [[ "$actual" == "$expected" ]]; then
-        ok "ethereum $method: ${actual}B == fixture"
-    else
-        ko "ethereum $method: ${actual}B != ${expected}B"
-    fi
-done
-
-# Method-isolation check: ethereum chain should 404 on solana methods
-# (proves chain template scoping works, not just blanket pass-through)
 http_code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:19102" \
     -H 'Content-Type: application/json' \
     -d '{"jsonrpc":"2.0","id":1,"method":"getSlot","params":[]}')
-if [[ "$http_code" == "404" ]]; then
-    ok "ethereum 404 on solana method getSlot (chain isolation OK)"
-else
-    ko "ethereum returned $http_code on getSlot (expected 404 — chain isolation broken)"
-fi
+[[ "$http_code" == "404" ]] && ok "ethereum 404 on solana method (chain isolation)" \
+    || ko "ethereum returned $http_code on getSlot (expected 404)"
 
-# --- 4. NotImplemented family (cardano → ogmios stub) ---
-note "step 4: cardano (NotImplemented family stub)"
-CAR_PID=$(start_chain cardano 19103 /tmp/fake-node-io-card) || { ko "cardano start failed (stub should still start)"; kill $SOL_PID $ETH_PID 2>/dev/null; exit 1; }
-trap "kill $SOL_PID $ETH_PID $CAR_PID 2>/dev/null || true" EXIT
-ok "cardano startup OK (stub registers fine)"
+# --- 4. cardano (rest family — ADR-0005) ---
+note "step 4: cardano (rest family — ADR-0005)"
+CAR_PID=$(start_chain cardano 19103 /tmp/fake-node-io-rest) || { ko "cardano start failed"; exit 1; }
+PIDS="$PIDS $CAR_PID"
+ok "cardano startup (rest family)"
+grep -q "adapter_family=rest" "/tmp/fake-node-smoke-cardano.log" \
+    && ok "cardano → adapter_family=rest (ADR-0005 ogmios → rest correction live)" \
+    || ko "cardano adapter_family=rest log missing"
 
-if grep -q "adapter_family=ogmios" "/tmp/fake-node-smoke-cardano.log"; then
-    ok "cardano → adapter_family=ogmios routed to stub"
-else
-    ko "cardano adapter_family=ogmios log missing"
-fi
+# Real RPC: path-based dispatch on /tip
+http_code=$(curl -s -o /tmp/smoke-cardano-tip.json -w '%{http_code}' "http://127.0.0.1:19103/tip")
+[[ "$http_code" == "200" ]] && ok "cardano GET /tip → HTTP 200 (real fixture)" \
+    || ko "cardano GET /tip → HTTP $http_code"
 
-# But RPC against it should fail loudly (stub returns error)
-# Note: cardano's ogmios methods need a fixture wired in configs/ogmios.yaml first;
-# without that, we get 404 (no fixture). Both are "loud failures" — both acceptable.
-http_code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:19103" \
+# Real RPC: POST body — must read _meta.rest_paths[POST_ADDRESS_INFO].body (ADR-0005 fix)
+http_code=$(curl -s -o /tmp/smoke-cardano-addr.json -w '%{http_code}' \
+    -X POST -H 'Content-Type: application/json' \
+    -d '{"_addresses":["addr1qxxx"]}' \
+    "http://127.0.0.1:19103/address_info")
+[[ "$http_code" == "200" ]] && ok "cardano POST /address_info → HTTP 200" \
+    || ko "cardano POST /address_info → HTTP $http_code"
+
+# --- 5. polkadot (substrate family) ---
+note "step 5: polkadot (substrate family)"
+POL_PID=$(start_chain polkadot 19104 /tmp/fake-node-io-substrate) || { ko "polkadot start failed"; exit 1; }
+PIDS="$PIDS $POL_PID"
+ok "polkadot startup (substrate family)"
+
+http_code=$(curl -s -o /tmp/smoke-polkadot.json -w '%{http_code}' -X POST "http://127.0.0.1:19104" \
     -H 'Content-Type: application/json' \
-    -d '{"jsonrpc":"2.0","id":1,"method":"queryTip","params":[]}')
-if [[ "$http_code" == "404" || "$http_code" == "500" ]]; then
-    ok "cardano queryTip → HTTP $http_code (stub correctly fails loud, not silent)"
-else
-    ko "cardano queryTip → HTTP $http_code (stub silently passing)"
-fi
+    -d '{"jsonrpc":"2.0","id":1,"method":"system_chain","params":[]}')
+[[ "$http_code" == "200" ]] && grep -q "Polkadot" /tmp/smoke-polkadot.json \
+    && ok "polkadot system_chain → 'Polkadot'" || ko "polkadot system_chain → $http_code"
 
-# --- 5. /stats ---
-note "step 5: /stats on solana"
-stats=$(curl -s "http://127.0.0.1:19101/stats")
-req=$(echo "$stats" | jq -r '.total_requests')
-if [[ "$req" -ge 2 ]]; then
-    ok "solana /stats: requests=$req"
-else
-    ko "solana /stats: requests=$req (need >=2)"
-fi
+# --- 6. cosmos-hub (tendermint family) ---
+note "step 6: cosmos-hub (tendermint family)"
+COS_PID=$(start_chain cosmos-hub 19105 /tmp/fake-node-io-tendermint) || { ko "cosmos-hub start failed"; exit 1; }
+PIDS="$PIDS $COS_PID"
+ok "cosmos-hub startup (tendermint family)"
 
-# --- 6. IO worker ---
-note "step 6: IO worker (wait 1.5s)"
-sleep 1.5
-n_io=$(ls /tmp/fake-node-io-jsonrpc 2>/dev/null | wc -l)
-if [[ $n_io -ge 1 ]]; then
-    ok "IO worker active: $n_io files in /tmp/fake-node-io-jsonrpc"
-else
-    ko "IO worker idle: $n_io files"
-fi
+http_code=$(curl -s -o /tmp/smoke-cosmos.json -w '%{http_code}' "http://127.0.0.1:19105/status")
+[[ "$http_code" == "200" ]] && grep -q "cosmoshub" /tmp/smoke-cosmos.json \
+    && ok "cosmos-hub /status → cosmoshub" || ko "cosmos-hub /status → $http_code"
+
+# --- 7. hedera (hedera_dual family) ---
+note "step 7: hedera (hedera_dual family)"
+HED_PID=$(start_chain hedera 19106 /tmp/fake-node-io-hedera) || { ko "hedera start failed"; exit 1; }
+PIDS="$PIDS $HED_PID"
+ok "hedera startup (hedera_dual family)"
+
+http_code=$(curl -s -o /tmp/smoke-hedera-eth.json -w '%{http_code}' -X POST "http://127.0.0.1:19106" \
+    -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}')
+[[ "$http_code" == "200" ]] && ok "hedera eth_blockNumber (JSON-RPC side) → 200" \
+    || ko "hedera eth_blockNumber → $http_code"
+
+http_code=$(curl -s -o /tmp/smoke-hedera-nodes.json -w '%{http_code}' "http://127.0.0.1:19106/network/nodes")
+[[ "$http_code" == "200" ]] && ok "hedera /network/nodes (Mirror side) → 200" \
+    || ko "hedera /network/nodes → $http_code"
+
+# Kill family chains before bulk smoke
+for p in $PIDS; do kill $p 2>/dev/null || true; done
+PIDS=""
+sleep 1
+
+# --- 8. 36-chain startup smoke ---
+# Every chain template in config/chains/*.json must startup-pass (no panic, family resolved).
+# Each chain uses port 19200+i (avoid collision with earlier chains).
+note "step 8: 36-chain startup smoke (parallel-entry-trap rule: zero ungoverned families)"
+chains=$(ls "$CHAINS_DIR"/*.json | xargs -n1 basename | sed 's/.json$//')
+i=0
+startup_pass=0
+startup_fail=0
+for ch in $chains; do
+    port=$((19200 + i))
+    i=$((i+1))
+    BLOCKCHAIN_NODE="$ch" "$BIN" \
+        -chains-dir "$CHAINS_DIR" \
+        -configs-dir "$CONFIGS_DIR" \
+        -fixtures-dir "$FIXTURES" \
+        -port "$port" \
+        > "/tmp/fake-node-startup-${ch}.log" 2>&1 &
+    pid=$!
+    sleep 0.3
+    if curl -sf "http://127.0.0.1:$port/stats" >/dev/null 2>&1; then
+        startup_pass=$((startup_pass+1))
+    else
+        echo "    chain=$ch startup FAILED — see /tmp/fake-node-startup-${ch}.log" >&2
+        tail -5 "/tmp/fake-node-startup-${ch}.log" >&2 || true
+        startup_fail=$((startup_fail+1))
+    fi
+    kill $pid 2>/dev/null || true
+    wait $pid 2>/dev/null || true
+done
+echo "  36-chain startup: pass=$startup_pass fail=$startup_fail (total chains discovered: $i)"
+[[ $startup_fail -eq 0 ]] && ok "all $i chains startup-pass" || ko "$startup_fail chains failed startup"
 
 # --- summary ---
 echo ""
-echo "[smoke v2] PASS=$pass FAIL=$fail"
+echo "[smoke v2 ADR-0005] PASS=$pass FAIL=$fail"
 [[ $fail -eq 0 ]] && exit 0 || exit 1

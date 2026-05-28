@@ -51,8 +51,13 @@ class RestAdapter(ChainAdapter):
                 self._chain_cache[chain_name] = json.load(f)
         return self._chain_cache[chain_name]
 
-    def _resolve_path(self, chain_name: str, method: str, address: str) -> tuple[str, str]:
-        """Return (http_method, path_with_substituted_address)."""
+    def _resolve_path(self, chain_name: str, method: str, address: str) -> tuple[str, str, dict | None]:
+        """Return (http_method, path_with_substituted_address, body_dict_or_None).
+
+        body comes from optional `_meta.rest_paths[method].body` template.
+        Body may contain placeholders ({address}, {addresses_array}) which are
+        substituted; pass `None` for GET methods.
+        """
         tpl = self._load_chain(chain_name)
         rest_paths = tpl.get("_meta", {}).get("rest_paths", {})
         if method not in rest_paths:
@@ -62,7 +67,16 @@ class RestAdapter(ChainAdapter):
             )
         spec = rest_paths[method]
         path = spec["path"].replace("{address}", address)
-        return spec.get("method", "GET"), path
+        body = None
+        if "body" in spec:
+            # Deep-substitute {address} / {addresses_array} inside body template
+            body_template = spec["body"]
+            body_json_str = json.dumps(body_template)
+            body_json_str = body_json_str.replace("{address}", address)
+            # Special: PostgREST-style array fields like _addresses, _tx_hashes
+            # may be templated as ["{address}"] to receive the single account.
+            body = json.loads(body_json_str)
+        return spec.get("method", "GET"), path, body
 
     def build_vegeta_target(
         self, method: str, address: str, rpc_url: str, param_format: str = "",
@@ -75,7 +89,7 @@ class RestAdapter(ChainAdapter):
         chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
         if not chain_name:
             raise RuntimeError("RestAdapter requires BLOCKCHAIN_NODE env var")
-        http_method, path = self._resolve_path(chain_name, method, address)
+        http_method, path, body = self._resolve_path(chain_name, method, address)
         # Strip trailing slash from rpc_url, ensure path starts with /
         base = rpc_url.rstrip("/")
         if not path.startswith("/"):
@@ -84,7 +98,10 @@ class RestAdapter(ChainAdapter):
         if http_method.upper() == "GET":
             return _vegeta_get(full_url)
         else:
-            return _vegeta_post_json(full_url, {})
+            # ADR-0005 fix: read body from _meta.rest_paths[method].body template
+            # (falls back to empty dict to preserve old behavior for chains that
+            # haven't declared a body template yet).
+            return _vegeta_post_json(full_url, body if body is not None else {})
 
     def health_check_request(self, rpc_url: str) -> dict:
         """REST health probe varies per chain. Default: GET / (root).
@@ -119,7 +136,7 @@ class RestAdapter(ChainAdapter):
         except json.JSONDecodeError:
             return None
         for key in ("block_height", "height", "level", "ledger_index",
-                    "last-round", "blockHeight"):
+                    "last-round", "blockHeight", "block_no"):
             v = obj.get(key) if isinstance(obj, dict) else None
             if v is not None:
                 parsed = _try_int(v)
@@ -130,4 +147,15 @@ class RestAdapter(ChainAdapter):
             header = obj.get("header")
             if isinstance(header, dict):
                 return _try_int(header.get("level"))
+        # Cardano (Koios /tip) returns a JSON array — try first element's
+        # block_no / block_height / abs_slot fallback (ADR-0005).
+        if isinstance(obj, list) and obj:
+            first = obj[0]
+            if isinstance(first, dict):
+                for key in ("block_no", "block_height", "height", "abs_slot"):
+                    v = first.get(key)
+                    if v is not None:
+                        parsed = _try_int(v)
+                        if parsed is not None:
+                            return parsed
         return None

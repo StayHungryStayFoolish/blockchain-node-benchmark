@@ -231,31 +231,70 @@ type rpcReq struct {
 
 func handleRPC(handler handlers.Handler, fixtures map[string][]byte, tiers map[string]time.Duration, methods map[string]MethodSpec) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-			totalErrors.Add(1)
-			return
-		}
-		defer r.Body.Close()
+		// Two dispatch modes:
+		//   1. JSON-RPC envelope (default): POST body has {"method": "..."},
+		//      used by jsonrpc / bitcoin_jsonrpc / substrate / tendermint(POST) /
+		//      hedera_dual(eth_* methods)
+		//   2. Path-based: URL is something other than just "/", and the path
+		//      (or first segment) is the method NAME, used by rest / tendermint(GET) /
+		//      hedera_dual(REST/Mirror side, paths under /api/v1/...).
+		//
+		// ADR-0005 (2026-05-28): Path-based mode was added to support 4 new
+		// adapter families (rest/substrate/tendermint/hedera_dual). Without it,
+		// fake-node v2 could only serve jsonrpc envelope traffic, which made
+		// ~20/36 chains unreachable.
 
-		var req rpcReq
-		if err := json.Unmarshal(body, &req); err != nil {
-			http.Error(w, err.Error(), 400)
-			totalErrors.Add(1)
-			return
+		var method string
+		var params json.RawMessage
+
+		if isPathBasedRequest(r) {
+			m, ok := resolvePathMethod(r, methods)
+			if !ok {
+				http.Error(w, fmt.Sprintf("path-based dispatch: no method matches URL %q (declared methods: %d)", r.URL.Path, len(methods)), 404)
+				totalErrors.Add(1)
+				return
+			}
+			method = m
+			// Read body (may be empty for GET, may be JSON for POST) — passed
+			// to handler.Handle() opaquely.
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), 400)
+				totalErrors.Add(1)
+				return
+			}
+			defer r.Body.Close()
+			params = json.RawMessage(body)
+		} else {
+			// JSON-RPC envelope mode
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), 400)
+				totalErrors.Add(1)
+				return
+			}
+			defer r.Body.Close()
+
+			var req rpcReq
+			if err := json.Unmarshal(body, &req); err != nil {
+				http.Error(w, err.Error(), 400)
+				totalErrors.Add(1)
+				return
+			}
+			method = req.Method
+			params = req.Params
 		}
 
-		spec, ok := methods[req.Method]
+		spec, ok := methods[method]
 		if !ok {
-			http.Error(w, fmt.Sprintf("unsupported method: %s", req.Method), 404)
+			http.Error(w, fmt.Sprintf("unsupported method: %s", method), 404)
 			totalErrors.Add(1)
 			return
 		}
 
-		fixture, hasFixture := fixtures[req.Method]
+		fixture, hasFixture := fixtures[method]
 		if !hasFixture {
-			http.Error(w, fmt.Sprintf("method %s declared but no fixture loaded for this chain", req.Method), 404)
+			http.Error(w, fmt.Sprintf("method %s declared but no fixture loaded for this chain", method), 404)
 			totalErrors.Add(1)
 			return
 		}
@@ -266,7 +305,7 @@ func handleRPC(handler handlers.Handler, fixtures map[string][]byte, tiers map[s
 		}
 
 		// Dispatch to handler — this is the v2 switch-case point.
-		resp, err := handler.Handle(req.Method, req.Params, fixture)
+		resp, err := handler.Handle(method, params, fixture)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			totalErrors.Add(1)
@@ -278,6 +317,64 @@ func handleRPC(handler handlers.Handler, fixtures map[string][]byte, tiers map[s
 		w.WriteHeader(200)
 		_, _ = w.Write(resp)
 	}
+}
+
+// isPathBasedRequest returns true if the URL path is non-trivial (not "/"),
+// indicating a path-routed REST/path-style request rather than JSON-RPC envelope.
+func isPathBasedRequest(r *http.Request) bool {
+	p := strings.TrimSpace(r.URL.Path)
+	return p != "" && p != "/"
+}
+
+// resolvePathMethod maps the request URL to a declared method NAME.
+// Strategy (cheapest first):
+//   1. Exact match: r.URL.Path == declared method's path component
+//   2. Substring match: any declared method whose path-fragment appears in URL
+//   3. Verb+path match for METHOD-style names (e.g. "GET_TIP" matches GET /tip)
+//
+// For path-based REST families we expect each method NAME in configs/<family>.yaml
+// to be either:
+//   - "VERB_RESOURCE" (e.g. "GET_TIP", "POST_ADDRESS_INFO") — match on RESOURCE
+//     against URL path's last segment
+//   - or matches the fixture-derived natural method (e.g. "status" → /status)
+//
+// This is a tolerant matcher because chain templates use 3 different naming
+// styles historically (REST verb-path, JSON-RPC namespace_method, plain word).
+func resolvePathMethod(r *http.Request, methods map[string]MethodSpec) (string, bool) {
+	urlPath := strings.ToLower(strings.TrimPrefix(r.URL.Path, "/"))
+	// Strip query string
+	if i := strings.Index(urlPath, "?"); i >= 0 {
+		urlPath = urlPath[:i]
+	}
+	// Try exact match against method names that ARE paths (e.g. "status", "abci_info").
+	for m := range methods {
+		if strings.EqualFold(m, urlPath) {
+			return m, true
+		}
+	}
+	// Try VERB_NAME style: split "GET_TIP" → verb=GET, name=tip, match if url ends with /tip.
+	for m := range methods {
+		parts := strings.SplitN(m, "_", 2)
+		if len(parts) == 2 {
+			verb := strings.ToUpper(parts[0])
+			name := strings.ToLower(parts[1])
+			if (verb == "GET" || verb == "POST") && (urlPath == name || strings.HasSuffix(urlPath, "/"+name)) {
+				if verb == r.Method {
+					return m, true
+				}
+			}
+		}
+	}
+	// Try last-segment match: "/api/v1/network/nodes" → suffix "nodes" matches "GET_NETWORK_NODES"?
+	segments := strings.Split(urlPath, "/")
+	lastSeg := segments[len(segments)-1]
+	for m := range methods {
+		mLower := strings.ToLower(m)
+		if strings.HasSuffix(mLower, "_"+lastSeg) || strings.Contains(mLower, lastSeg) {
+			return m, true
+		}
+	}
+	return "", false
 }
 
 func handleStats(w http.ResponseWriter, _ *http.Request) {
