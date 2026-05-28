@@ -3865,6 +3865,9 @@ class ReportGenerator:
             # Generate EBS analysis results
             ebs_warnings, ebs_metrics = self.parse_ebs_analyzer_log()
             ebs_analysis_section = self.generate_ebs_analysis_section(ebs_warnings, ebs_metrics)
+
+            # S4.2 W3.4: Per-method attribution section (optional — empty if proxy data absent)
+            per_method_section = self._generate_per_method_section_safe()
             
             return f"""
             <!DOCTYPE html>
@@ -3894,6 +3897,8 @@ class ReportGenerator:
                     {overhead_table}
                     {ena_warnings}
                     {ena_data_table}
+
+                    {per_method_section}
                     
                     <h2>&#128202; {self.t['cpu_ebs_correlation_analysis']}</h2>
                     {correlation_table}
@@ -4176,6 +4181,71 @@ class ReportGenerator:
                 <p>{self.t['chart_section_generation_failed']}: {str(e)}</p>
             </div>
             """
+
+    def _generate_per_method_section_safe(self):
+        """S4.2 W3.4: Generate per-method attribution section if proxy data is available.
+
+        Looks for:
+          - {output_dir}/proxy_method.csv     (or env PROXY_METHOD_CSV)
+          - {output_dir}/unified_monitor.csv  (or env UNIFIED_MONITOR_CSV, falls back to
+                                               the same self.performance_csv if absent)
+
+        Returns empty string when either file missing — silent degradation so old runs
+        without proxy data still render unchanged.
+        """
+        try:
+            proxy_csv = os.environ.get('PROXY_METHOD_CSV')
+            if not proxy_csv:
+                proxy_csv = os.path.join(self.output_dir, 'proxy_method.csv')
+            if not os.path.exists(proxy_csv):
+                return ""  # no proxy data — silent degradation
+
+            monitor_csv = os.environ.get('UNIFIED_MONITOR_CSV')
+            if not monitor_csv:
+                # fall back to the performance_csv we already have (it has timestamps)
+                monitor_csv = self.performance_csv
+            if not os.path.exists(monitor_csv):
+                return ""
+
+            # Lazy import to avoid coupling when feature not used
+            from analysis.per_method_attribution import (
+                compute_per_method_qps,
+                compute_per_method_resource,
+                read_monitor_csv,
+                read_proxy_csv,
+            )
+            from visualization.per_method_charts import generate_all_charts
+            from visualization.per_method_report import (
+                compute_summary,
+                get_chart_titles_for_language,
+                render_per_method_section,
+            )
+
+            proxy_recs = list(read_proxy_csv(proxy_csv))
+            if not proxy_recs:
+                return ""
+            qps_rows = compute_per_method_qps(proxy_recs)
+            # Re-read proxy (Iterator already consumed)
+            resource_rows = compute_per_method_resource(
+                list(read_proxy_csv(proxy_csv)),
+                list(read_monitor_csv(monitor_csv)),
+            )
+
+            chain_name = self.config.get('BLOCKCHAIN_NODE', 'chain') if hasattr(self, 'config') else 'chain'
+            chart_dir = os.path.join(self.output_dir, 'per_method_charts')
+            titles = get_chart_titles_for_language(self.language)
+            paths = generate_all_charts(
+                qps_rows, resource_rows, chart_dir, chain_name=chain_name, titles=titles,
+            )
+            summary = compute_summary(qps_rows, resource_rows)
+            # Use relative paths so report can be copied around
+            rel_paths = {k: os.path.relpath(str(p), self.output_dir) for k, p in paths.items()}
+            return render_per_method_section(
+                self.language, chain_name, rel_paths, summary,
+            )
+        except Exception as e:
+            import html as _html_mod
+            return f'<!-- per_method section skipped: {_html_mod.escape(str(e))} -->'
 
     def _generate_bottleneck_section(self):
         """Generate system-level bottleneck analysis section - always display"""
