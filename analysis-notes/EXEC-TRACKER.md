@@ -312,3 +312,42 @@
 
 ### 8.5 诚实局限(非 bug)
 - proxy_method.csv 仅 1 条 getHealth 404 数据: vegeta targets 的 method 在 fake-node 无对应 fixture。per-method **架构链路已完全打通**(图能出/section 能渲染), 但图内**数据丰富度**受限于 fake-node fixture 覆盖。要丰富真实数据需补更多 method fixture 或上真节点(用户已知"fake node 监测不到真瓶颈")。
+- 🔴 **此结论已被 §9 P0-3 推翻(2026-06-01)**: "数据稀疏"真因不是 fake-node fixture, 是 vegeta 流量绕过 proxy(proxy 启动晚于 targets 固化 url)。修 P0-3 后 proxy 采到 16万行真实 method, 数据丰富。保留此条作"self-authored 旧结论会过期"的教训。
+
+## 9. per-method 链路深度审计 + P0-3 流量绕过修复(2026-06-01 本会话)
+
+> 触发: 用户重述需求 + 要求加载全 skill/memory, token-level 批判性复审已提交代码(commit 9ed60e9)
+> 找逻辑错误/漏需求。用户两个澄清: ① single/mixed **各自模式**资源利用图(非互比) ②
+> per-method 资源消耗需有**详细文件落盘**供外部系统分析。
+
+### 9.1 审计发现的问题(基于代码事实)
+| 问题 | 级别 | 根因 |
+|---|---|---|
+| P0-1 per-method 详细 CSV 未落盘 | 🔴漏需求 | report_generator._generate_per_method_section_safe 只 generate_all_charts 出图, 未调 write_qps_csv/write_resource_csv(此二函数仅单测被调)→ 外部拿不到结构化数据 |
+| P0-2 per-method section 静默吞异常 | 🔴结构隐患 | except 仅 return HTML 注释, 任何异常静默消失无报错(BUG-3 曾被此吞) |
+| P1-1 single/mixed 文件名不区分 | 🟡 | proxy/per_method CSV+SVG 无模式标识, 先 single 后 mixed 互相覆盖 |
+| P0-3 vegeta 流量绕过 proxy | 🔴**核心需求真断点** | proxy 在 Phase 2.5 启动, 晚于 Phase 1 targets 生成; targets 把 LOCAL_RPC_URL(8899)固化进 url; proxy 后改 LOCAL_RPC_URL=18545 太晚; vegeta 用固化 targets 直连 8899 绕过 proxy → proxy 仅采 getHealth 1 条 → per-method 数据全空 |
+
+### 9.2 修复
+- P0-1: 渲染链接入 write_qps_csv/write_resource_csv → 落盘 per_method_{qps,resource}_<chain>_<mode>.csv 到 LOGS_DIR。
+- P0-2: except 加 stderr + traceback.print_exc(); CSV 落盘失败单独 WARN 不阻断出图。
+- P1-1: blockchain_node_benchmark.sh export RPC_MODE; report_generator 读 RPC_MODE 给文件名加 _single/_mixed 后缀。
+- P0-3(方案A 改时序): proxy 从 Phase 2.5 前移到 **Phase 0.5**(Phase 1 之前)。fake-node(8899)→proxy(upstream8899/listen18545, 改 LOCAL_RPC_URL=18545)→Phase1 targets 用 18545→vegeta 经 proxy。
+- commit: dcfabc9(P0-1/2 + P1-1 + P1-2) + 73f56c7(P0-3)。
+
+### 9.3 闭环验证(run_005_20260601_033206, mixed, 运行硬证)
+- **P0-3 命门**: targets url = http://localhost:18545(之前 8899)✓
+- proxy_method.csv **163337 行**(之前 1 行 getHealth): getAccountInfo 75000/200 + getBalance 74999/200 + getTransaction 10000/200 + getSignaturesForAddress 3334/200 + getBlockHeight 2/200 + getHealth 1/404。
+- per_method_resource_solana_mixed.csv 34 数据行: getAccountInfo/getBalance 各 17 行, 按权重(0.499/0.500)归因 CPU%(11.3)/MEM(2837MB)✓ 供外部分析。
+- per_method_qps_solana_mixed.csv 345 行; HTML per-method section skipped=0。
+- R0 12/12, 无残留 proxy(BUG-1 修复持续生效)。
+
+### 9.4 single 模式闭环验证(run_006_20260601_034507, 运行硬证)
+- targets url = http://localhost:18545 ✓; proxy 采 163339 行: getAccountInfo 150001/200(single 单 method 符合预期)+ getSignaturesForAddress 3334 + getTransaction 10000。
+- 文件名带 **_single** 后缀(per_method_resource_solana_single.csv 等), 与 mixed 的 _mixed 两套并存不覆盖 ✓ (P1-1 验证)。
+- HTML per-method section skipped=0 ✓。
+- **结论: single + mixed 两模式均闭环, 各自独立资源利用图 + 详细 CSV 落盘, 满足用户两个澄清需求。**
+
+### 9.5 遗留(非 bug)
+- mixed_weighted 5 method 中 fake-node 仅 getAccountInfo/getBalance 进 targets(target_generator 只生成有 fixture 的)→ 真节点会全 5 个。fake-node 范围。
+- CP-2 config 业务中立化(GCP 磁盘类型可切)未做。
