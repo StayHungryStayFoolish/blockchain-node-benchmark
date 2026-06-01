@@ -1266,6 +1266,32 @@ hostPath 挂 /host/{proc,sys,dev} + privileged, 容器内 iostat 读 node 级设
 - 第3组 B/C/E/契约: 注释 + MONITOR_INTERVAL 统一(本次)
 - 衍生独立 bug: ENA-on-GCP(§29.2, 待单独修)
 
+## 30. ✅ GCE + GKE 双环境真机闭环验证(2026-06-01, 补 GCE 盲区, 用户要求不留 VM 路径隐患)
+> 用户指出: config 改动只在 cloudtop 本地 + GKE 容器验过, 真 GCE VM 没跑 → 补 GCE 真机验证。
+### 30.1 GCE 真机环境(复用现有 VM, 同 GKE 网络)
+- VM: `instance-20260429-041108` @ us-central1-f, e2-standard-4, **Debian 12(真 VM 非 COS)**
+- **网络与 GKE 一致**: payment-network / us-central-pn-subnet(10.0.0.0/24)—— 用户确认对齐
+- 3 盘: sda(50G boot)+ sdb(500G)+ sdc(100G), 双数据盘正好测 LEDGER=sdb/ACCOUNTS=sdc
+- 有 jq/iostat/python3, 缺 go(config 验证不需要)。代码经 scp + tar 同步(含本次全部改动)。
+### 30.2 GCE VM 路径验证(全绿, 证 config 改动 VM 无回归)
+- config_loader 完整加载到底("Layered configuration loading completed!" 无报错中断)
+- VM 默认(无 env): PLATFORM=gcp(真机 metadata 自动探测)/ ENA=false(ENA 修复真 VM 也对)/ LEDGER=sda / MODE=vm_bare
+- **MODE=vm_bare 不走 k8s resolver** → 证删 resolver 对 VM 路径零影响
+- 设备名 env 覆盖: export LEDGER_DEVICE=sdb ACCOUNTS_DEVICE=sdc → 真 VM 生效(env 化对)
+- iostat 采集链工作(sdb/sdc 空闲采到 0, 设备无负载即 0, 正确)
+### 30.3 双环境闭环总结(config 治理 + ENA 修复)
+| 环境 | 验证 |
+|---|---|
+| GKE 容器 | 设备名采 sdb 真实 97.5%util / ENA pin gcp→false / A类 env / config 加载(§23/25/27/29) |
+| **GCE VM 真机** | config 完整加载 / provider 自动探测 gcp / ENA=false / 设备名默认+env / iostat 采集 / vm_bare 不走 resolver(本节) |
+| cloudtop 单测 | provider/config/device 4 套全 PASS(test_cloud_provider_detect 6/0, provider_contract 61 checks, smoke_config_loader, validate_devices 8/0) |
+- **结论: config env-override 治理 + 设备名 + ENA 修复 = GKE+GCE 双真机 + 单测三重闭环, VM 路径无回归。前面问题确实闭环。**
+### 30.4 仍未闭环(归入 TODO, 用户定 k8s/404 后做)= rpc-method-param-research.md
+- A 完整端到端出 HTML(本地+GKE+GCE 都卡 fake-node byte-correct 数据退化 target=2 → QPS test failed; 非 k8s 非 config 问题)
+- C/proxy: mixed weight 压测端未用(均权 round-robin, §见 rpc-method-param-research.md 1.2); proxy per-method 404(§24.2)
+- TODO #2 RPC method 参数位置 + 36链规律调研(rpc-method-param-research.md 阶段2/3, 需互联网+public endpoint)
+- GCE/GKE 完整 benchmark 出 HTML 真机验证(等 fake-node 数据丰富度解决后, 在真机一并跑)
+
 
 
 
