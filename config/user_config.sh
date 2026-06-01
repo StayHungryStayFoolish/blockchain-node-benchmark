@@ -34,18 +34,22 @@ ACCOUNTS_DEVICE="${ACCOUNTS_DEVICE:-}"
 DATA_VOL_TYPE="${DATA_VOL_TYPE:-io2}"                    # 按上面 CLOUD_PROVIDER 选对应云的盘类型
 DATA_VOL_SIZE="${DATA_VOL_SIZE:-2000}"                   # Current required data size to keep both snapshot archive and unarchived version of it
 DATA_VOL_MAX_IOPS="${DATA_VOL_MAX_IOPS:-30000}"              # Max IOPS for Disk volumes (REQUIRED for "instance-store"); GCP Provisioned 盘=购买的 IOPS 配额
-DATA_VOL_MAX_THROUGHPUT="700"          # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for AWS "io2"; GCP Provisioned 盘=购买的 throughput 配额)
+DATA_VOL_MAX_THROUGHPUT="700"          # Max throughput in MiB/s. ⚠️ io2 盘时此值由 DATA_VOL_MAX_IOPS 自动算出并覆盖(手配/env 仅对非-io2 盘生效); instance-store 必填; GCP Provisioned 盘=购买的 throughput 配额
 # Accounts volume configuration (optional)
 ACCOUNTS_VOL_TYPE="${ACCOUNTS_VOL_TYPE:-io2}"                # 同 DATA_VOL_TYPE, 按 CLOUD_PROVIDER 选对应云盘类型
 ACCOUNTS_VOL_SIZE="${ACCOUNTS_VOL_SIZE:-500}"                # Current required data size to keep both snapshot archive and unarchived version of it
 ACCOUNTS_VOL_MAX_IOPS="${ACCOUNTS_VOL_MAX_IOPS:-30000}"          # Max IOPS for Disk volumes (REQUIRED for "instance-store")
-ACCOUNTS_VOL_MAX_THROUGHPUT="700"      # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for AWS "io2")
+ACCOUNTS_VOL_MAX_THROUGHPUT="700"      # Max throughput in MiB/s. ⚠️ io2 盘时此值由 ACCOUNTS_VOL_MAX_IOPS 自动算出并覆盖(手配/env 仅对非-io2 盘生效); instance-store 必填
 
 # ----- Network Monitoring Configuration -----
 # EC2 instance network bandwidth configuration (unit: Gbps) - User must set according to EC2 instance type
 NETWORK_MAX_BANDWIDTH_GBPS="${NETWORK_MAX_BANDWIDTH_GBPS:-25}"       # Maximum network bandwidth (unit: Gbps) - User must set according to EC2 instance type
 
 # ENA network limitation monitoring configuration
+# ENA_MONITOR_ENABLED 设计上应由 CLOUD_PROVIDER 决定(ENA 是 AWS 专属网卡监控,
+# GCP/其他云无此概念)。⚠️ 已知 bug(待修, 见 EXEC-TRACKER §29): config_loader 仅在
+# "auto 探测"分支按 provider 设 ENA(aws=true/gcp=false), "显式 pin provider"分支漏设,
+# 故显式指定 gcp 时此处的 true 会被沿用 → GCP 误开 ENA。修复前请勿依赖此项自动关闭。
 ENA_MONITOR_ENABLED=true
 
 # ----- Monitoring Configuration -----

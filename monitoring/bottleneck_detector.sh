@@ -19,7 +19,7 @@ fi
 # Safely load configuration file to avoid readonly variable conflicts
 if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/null; then
     echo "Warning: Configuration file loading failed, using default configuration"
-    MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
+    MONITOR_INTERVAL=${MONITOR_INTERVAL:-5}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"

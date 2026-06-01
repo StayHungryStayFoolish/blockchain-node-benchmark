@@ -90,6 +90,8 @@ get_unified_epoch() {
 SILENT_MODE=${SILENT_MODE:-false}
 
 # Monitoring overhead CSV header definition - 20 fields (matches actual output from unified_monitor.sh)
+# ⚠️ 这是 CSV 字段头契约(20列), 故意 NOT env-overridable: unified_monitor.sh 据此写 header
+# 并按列数校验(wc -l), env 覆盖会导致 writer 写的列与 reader/校验期望不一致 → 静默坏数据。
 OVERHEAD_CSV_HEADER="timestamp,monitoring_cpu,monitoring_memory_percent,monitoring_memory_mb,monitoring_process_count,blockchain_cpu,blockchain_memory_percent,blockchain_memory_mb,blockchain_process_count,system_cpu_cores,system_memory_gb,system_disk_gb,system_cpu_usage,system_memory_usage,system_disk_usage,system_cached_gb,system_buffers_gb,system_anon_pages_gb,system_mapped_gb,system_shmem_gb"
 
 # Add configuration validation function

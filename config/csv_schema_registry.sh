@@ -20,6 +20,8 @@
 
 # ── 段顺序 (= CSV 列序 SSOT, 实证来源 monitoring/unified_monitor.sh:1940/1942 generate_csv_header) ──
 # 与 utils/csv_schema_registry.py SEGMENT_ORDER 严格对称.
+# ⚠️ 以下 _CSV_REGISTRY_* 是 CSV schema 契约 SSOT, 故意 NOT env-overridable(不加 ${VAR:-}):
+# 它们与 python 端字节对称, env 覆盖会打破 bash↔python 双实现一致 → 静默破坏 CSV 读写。
 # 动态段 (device/ena/cgroup) 长度运行时可变, 不用静态逻辑名枚举; 由各自生成函数产出.
 _CSV_REGISTRY_SEGMENT_ORDER="basic device network ena overhead block qps cgroup meta"
 # 动态段集合 (与 python DYNAMIC_SEGMENTS 对称: device/ena; 注: cgroup 走 collector, 不在静态 registry)

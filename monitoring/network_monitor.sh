@@ -23,7 +23,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # Load config (failure-tolerant, same pattern as ena_network_monitor.sh)
 if ! source "${PROJECT_ROOT}/config/config_loader.sh" 2>/dev/null; then
     echo "Warning: Configuration file loading failed, using defaults" >&2
-    MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
+    MONITOR_INTERVAL=${MONITOR_INTERVAL:-5}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
     SESSION_TIMESTAMP=${SESSION_TIMESTAMP:-$(date +%Y%m%d_%H%M%S)}
 fi
@@ -54,7 +54,7 @@ mkdir -p "$(dirname "$NETWORK_CSV")" 2>/dev/null || true
 
 cmd_start() {
     local duration="${1:-0}"          # 0 = run forever until SIGTERM
-    local interval="${2:-${MONITOR_INTERVAL:-10}}"
+    local interval="${2:-${MONITOR_INTERVAL:-5}}"
 
     log_info "Starting network monitor (variant=$NETWORK_PROVIDER_VARIANT, interface=${NETWORK_INTERFACE:-?}, interval=${interval}s, duration=${duration}s)"
 
