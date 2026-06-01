@@ -441,3 +441,19 @@ expected header 与实际 CSV 完全对齐(72列) — "改字段头断调用链"
 - S2: DONE(F1 补完 4 段双源收敛, 至此 framework_data_quality_checker 全段经 registry)
 - S4: 仍 TODO 守卫部分(F3 只修了 disk_chart timestamp 不对称, performance_visualizer 裸下标→registry 守卫未做; 但 F2 审计确认现有 except 容错合理, 无静默空图风险)
 - S6: DONE(F5 补 cgroup expected; cgroup 段 writer 本就经 get_cgroup_header/collector 单源, 无双源)
+
+### 12.2 S4/S5 判定: 不做无价值重构(2026-06-01 代码事实 + active-vs-latent)
+> 触发: 继续 registry 单源化收尾时, 精读 performance_visualizer + per_method schema 后判定。
+
+- **S4(performance_visualizer 裸下标→registry 守卫): 判定不做**。精读实证: 该文件已 66 处
+  `in self.df.columns` 守卫 + plot 用的列名是 `[col for col in df.columns if startswith/endswith]`
+  动态发现 + `if not cols: return None` 守卫(如 L553-557)后才用, 列不存在优雅 return 不 KeyError。
+  等效防住静默空图(F2 已确认无风险)。改成 registry resolve 是纯整洁度重构, 不解决实际 bug =
+  yak-shaving。唯一真不对称点 disk_chart timestamp 已由 F3 修。
+- **S5(per_method 字段纳入 csv_schema_registry 单源): 判定不做**。per_method 是独立 CSV +
+  独立 dataclass schema(PerMethodQpsRow/PerMethodResourceRow, 字段 timestamp_ns/method_name/
+  weight/cpu_pct/mem_mb), 与 unified CSV registry(timestamp/cpu_usage/data_*/net_*/cgroup_*)
+  **完全不同字段域、不同 CSV**。强行并入 registry = 错误耦合两个独立 schema。per_method 链路
+  已闭环(§9), 独立 schema 是正确设计。
+- **结论**: 框架本身的真问题(双源/缺字段/静默空图风险)已全部修完(F1/F3/F5)。S4/S5 经精读确认
+  无真问题, 重构无价值/反耦合, 不做。剩余仅后置真机项(CP-2 GCP e2e / mixed 真节点)。
