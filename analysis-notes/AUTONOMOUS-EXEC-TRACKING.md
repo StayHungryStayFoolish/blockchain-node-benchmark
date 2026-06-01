@@ -15,7 +15,31 @@
 | B3 调研结论(现状/风险/方案) | ✅ 已完成(rpc-method-param-research.md 阶段3, R1-R5 风险 + 方案) | ec575c9 |
 | C1 mixed weight 全链路追踪 | ✅ 已完成(两种weight厘清, 见下) | 本批 |
 | C2 proxy per-method 404 定位 | ✅ 已完成(proxy 无 bug, 404 是历史 fixture 状态) | 本批 |
-| A 完整端到端出 HTML(GKE Job + GCE 真机) | 🔄 下一步 | - |
+| A 完整端到端出 HTML(GKE Job + GCE 真机) | ⏸️ 部分(挖出更深设计问题, 待用户定方向) | - |
+
+## A 阶段结论: 触及 fake-node 数据设计本质, 非简单补 fixture(2026-06-01)
+**A 目标**: 解 fake-node 数据退化(target=2)让完整 benchmark 出 HTML。深挖后发现比预期复杂:
+- **fixture 多样化做了但不可移植**: 改 getTransaction.json → 24 accountKeys(本地验 fetch 能提多账户)。
+  但 `tools/fake-node/fixtures/` 被 .gitignore 忽略(record-replay skill R1: fixtures 不进 git, clone 后 record_*.sh 现录)。
+  → 手工改 fixture 只本地有效, GKE/GCE/clone 不存在。正解 = 改 record 脚本/生成逻辑产多样数据(更深工程)。
+- **fetch params 占位符机制**: chain template solana.json `params` 值是占位符字符串("semaphore_limit":"ACCOUNT_SEMAPHORE_LIMIT" 等),
+  全仓无 envsubst 替换逻辑。我直连跑 fetch(跳过框架 env 设置)→ 占位符未替换 → int() 炸。
+  但正常框架流程 Phase1 fetch 能取 7000+ signatures(--fake-node 实测过)= 正常流程占位符被正确处理。
+  → 我直连测试方式的误区, 非 fetch bug。我加的 int() 改动在占位符场景错误, 已回退。
+- **诚实结论**: A 的"补 fixture"是浅层解, 真正让完整 benchmark 在多环境跑出 HTML 需要:
+  (a) fake-node 数据生成多样化(改 record/生成逻辑, 不是手工改单个 fixture);
+  (b) 或用真节点/真实录制数据替代 byte-correct 单一 fixture。
+  这是 fake-node 测试夹具的数据丰富度工程, 比 k8s 适配大, 待用户回来定方向。
+- **本地 fixture 改动保留(未 commit, 因 .gitignore)**: getTransaction.json 24 账户在本地, 供后续本地验证用。
+
+## 执行日志(时间倒序, 最新在上)
+
+### A 阶段(部分)
+- fixture 多样化(getTransaction.json 24 账户)本地验 fetch 提多账户。但 fixtures 被 gitignore 不可移植。
+- 挖出 fetch params 占位符机制(chain template params 是 env 变量名占位符, 直连测试未替换炸)= 测试方式误区非 bug, int() 改动已回退。
+- 诚实结论: A 真解 = fake-node 数据生成多样化工程(改 record 逻辑)或真节点数据, 非手工补 fixture。待用户定方向。
+
+### C2 完成(proxy per-method 404)
 
 ## C2 结论: proxy per-method 404 = proxy 无 bug(2026-06-01 本地实测)
 - proxy handler.go: 纯 `httputil.NewSingleHostReverseProxy` 透传(L34/70), 不改 method/params/path, 只记录 upstream status 给 per-method CSV。代码审查确认无 404 逻辑。
