@@ -457,3 +457,44 @@ expected header 与实际 CSV 完全对齐(72列) — "改字段头断调用链"
   已闭环(§9), 独立 schema 是正确设计。
 - **结论**: 框架本身的真问题(双源/缺字段/静默空图风险)已全部修完(F1/F3/F5)。S4/S5 经精读确认
   无真问题, 重构无价值/反耦合, 不做。剩余仅后置真机项(CP-2 GCP e2e / mixed 真节点)。
+
+## 13. 深度复审(token-level 扩大范围)发现 + 方案A待执行(2026-06-01, 会话827k 将压缩前落盘)
+
+> 触发: 用户要求 token-level 精读 + 扩大范围 + 调用链, 复审本会话 F1/F3/F5/CP-2 找遗漏/误判。
+> 按 token-level skill 亲读(不委派): 读 resolver body + 追所有 caller + 全仓 grep 字面量。
+
+### 13.1 复审已验证无问题(之前判断成立)
+- F1 csv_registry_segment_header body(config/csv_schema_registry.sh:265-279): resolve 失败 `|| return 1`
+  硬传播, 未知段返空串, **无静默 fallback** ✓
+- F1 unified CSV 4 段字面量: 全仓仅 writer(unified_monitor.sh:1949-1952 fallback分支) + expected
+  (framework_data_quality_checker.sh:391-394 fallback分支), **无第三处硬编码源** ✓
+- CP-2 convert_to_standard_iops: 唯一生产 caller = iostat_collector.sh:135, 已正确传 3 参(含 _io_cap) ✓
+- disk_iops_io_cap_kib: 唯一 caller = iostat_collector.sh:131 ✓
+
+### 13.2 🔴 发现 1 个 F1 严重漏判的真双源(待修 = 方案A)
+**block_height_monitor.csv (独立 CSV, 非 unified) 的 header 双源**:
+- writer: `monitoring/block_height_monitor.sh:389` `echo "timestamp,local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss" > $BLOCK_HEIGHT_DATA_FILE` (7字段)
+- expected 校验: `tools/framework_data_quality_checker.sh:465` `block_header="timestamp,local_block_height,..."` → validate_csv_file block_height_monitor_*.csv
+- 两处字面量完全一致(timestamp + block 段6字段), 改字段头要改两处 = 同"改字段头断调用链"痛点。
+- **F1 漏因**: F1 时只盯 unified CSV 的 4 段, 没读全 framework_data_quality_checker 的所有 validate
+  路径(L465 还有个独立 block_height CSV 校验)。token-level skill"判范围前读全"教训。
+
+### 13.3 方案A(用户倾向, 待执行 — 无实质技术债, 符合 SSOT)
+registry 已有 block 段(6字段: local_block_height/mainnet_block_height/block_height_diff/
+local_health/mainnet_health/data_loss), block_height CSV = `timestamp + 这6字段`, 完全吻合。
+**执行步骤**:
+1. registry 无需改(block 段已存在, 前面 F1 已加 + symmetry 7/7 守护)。
+2. `monitoring/block_height_monitor.sh:389` writer: 字面量 → `timestamp,$(csv_registry_segment_header block)`,
+   并在文件头加 `source .../config/csv_schema_registry.sh`(当前只 source config_loader, 不含 registry,
+   实测 csv_registry_segment_header 运行时不可用), 加 fallback(registry 不可用回退字面量, 与 registry 字节一致)。
+3. `tools/framework_data_quality_checker.sh:465` expected: 字面量 → `timestamp,$(csv_registry_segment_header block)`
+   (checker 已 source registry L18, 直接可用), 加 fallback。
+4. 验证: 两处输出与原 7 字段字面量字节一致 + symmetry 7/7 + R0 12/12 + bash -n。
+**判定**: fallback 是防御非债; block_height_monitor 新增 registry 依赖是设计意图内共享(registry 本就全框架共享)
+→ 无实质技术债, 符合软件工程 SSOT。与用户最初"读写解耦/可插拔"方向一致。
+
+### 13.4 本会话已 push commit 链(feat/architecture-docs)
+9ed60e9(basic+去aws倾向+BUG1/3+fixture) → dcfabc9(P0-1/2+P1-1/2) → 73f56c7(P0-3 proxy时序) →
+c449a93(§11总览) → 8ac8a87(CP-2磁盘类型io_cap) → 3871aa1(S4/S5判定) → 0bf6a41(F1) →
+d900d13(F5) → cfc0a1b(F3) → 40fbfec(§12) → 3871aa1 已含 → (本§13 待 commit)
+**当前工作区**: 干净(F1-F5 全 push), §13 是新增文档(待 commit), 方案A 代码未动。
