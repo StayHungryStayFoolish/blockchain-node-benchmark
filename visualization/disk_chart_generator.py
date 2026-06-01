@@ -52,7 +52,10 @@ class DiskChartGenerator:
         if isinstance(data_source, str):
             # CSV file path - compatible with performance_visualizer.py call
             self.df = pd.read_csv(data_source)
-            self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
+            # F3: 与下面 DataFrame 路径对称加 timestamp 守卫(列缺失/空 CSV 时不 KeyError 崩,
+            #     而是跳过 datetime 转换; timestamp 是 basic 段必出列, 但畸形 CSV 防御)。
+            if 'timestamp' in self.df.columns:
+                self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         else:
             # DataFrame object - compatible with report_generator.py call
             self.df = data_source
