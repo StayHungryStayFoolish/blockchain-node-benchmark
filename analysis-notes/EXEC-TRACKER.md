@@ -637,4 +637,55 @@ R0 12/12 / contract 61 / sizing 5/5。
 - 注: 无 AWS 机, IOPS 拆分语义靠基线 oracle 差分 + 官方实证(aws-gcp-io-counting-rules-verified)验证;
   真 AWS 端到端实跑仍待机会窗口(L4), 但纯计算逻辑已 cloudtop 全覆盖。
 
+## 17. K8s (EKS/GKE) 资源采集完整性审计 + 补全方案(2026-06-01, 方案先行)
+
+> 触发: 用户问 k8s 部署区块链节点时资源采集(尤其 disk iops/throughput)是否缺数据、怎么补。
+> 用户澄清: 存储=EBS/PD/Local SSD/instance-store 全用; 部署=DaemonSet; 节点 pod 用 hostNetwork=true。
+> 方案2(最稳妥): 先读代码确认现状 + 出方案 + README 强调, 代码补全等真 k8s 窗口(cloudtop 测不了 k8s 路径)。
+> token-level 亲读: daemonset.yaml / cgroup_collector.py / pod_device_mapper.py / unified_monitor.sh。
+
+### 17.1 概念地基(VM vs k8s 部署区块链节点)
+- k8s 部署 = 一个 pod 跑节点进程 + 让该 pod 独占一台专属 node(resource requests≈node容量+affinity/taint), **不是"整机打包成pod"**。
+- 性能损耗(联网+领域知识, 标确定度): 块存储 CSI(EBS/PD/Local)直挂块设备损耗<5%(高); overlay CNI 网络损耗10-30%延迟, 但**区块链节点用 hostNetwork 规避**→网络近0损耗; cpu cgroup<2%; mem 近0。
+- **关键**: 磁盘真实性能损耗小(<5%), 但 pod 内 cgroup 看不到 util→"盘跑得好但监控看不见"。这是监控可见性问题, 非性能问题。
+
+### 17.2 四类资源 k8s 采集完整性矩阵(代码实证)
+| 资源 | VM(unified_monitor 主机级) | k8s 现状 | 缺口 |
+|---|---|---|---|
+| CPU | mpstat: usage/usr/sys/iowait/soft/idle | cgroup cpu: usage/user/system/nr_periods/nr_throttled/throttled_usec | 缺 iowait/soft 细分; 多 throttled(k8s重要); 未进主链路 |
+| Memory | free: used/total/usage | cgroup mem: anon/file/kernel/slab/sock/swap(更细) | 基本不缺(更细); 未进主链路 |
+| Disk | iostat: util/normalized_iops/throughput(速率+利用率, 可sizing) | cgroup io: rbytes/wbytes/rios/wios(累计counter) | 🔴 无util/无速率/无sizing(最严重硬伤) |
+| Network | ena/gve/virtio ethtool(主机网卡饱和) | DaemonSet hostNetwork=false 看不到主机网卡 | 🔴 完全没采 |
+
+### 17.3 结构性根因(比单类缺口更大)
+1. **DaemonSet(deploy/k8s/04) 只跑 cgroup_collector.py, 且只到 stdout**(yaml L76-77 自认"for now stdout is fine")
+   → cgroup 数据没接进 unified CSV→分析→报告主链路。这是 parallel-entry 家族(组件写了没接产线)。
+2. DaemonSet 权限层 ✅ 完备: hostPID:true + privileged + SYS_PTRACE/DAC_READ_SEARCH + 挂 /host/{proc,sys,dev,/}
+   → **node 级 iostat/ethtool 技术前提已成立**, 只是没跑。
+3. **pod_device_mapper.py(497行,12函数, 完整支持 EBS/PD CSI+legacy+Local+hostPath)只在 s5_diag 诊断里调**, 采集链未接。
+   它已实现 Pod→PVC→PV→node块设备名(sda/nvme1n1)的完整解析 = disk 补全的核心半成品。
+4. node pod(节点)hostNetwork=true vs 监控 DaemonSet hostNetwork=false 是两个 pod。监控 DaemonSet 开
+   hostNetwork=true(它本就挂/host/sys在node上)即可见主机网卡→network 复用 VM ethtool 路径。
+
+### 17.4 补全方案(待真 k8s 窗口实施, 不在 cloudtop 盲改)
+**Disk(最高优)**: k8s 模式采集前调 pod_device_mapper(已实现)→得 pod 各卷 node 块设备名→DaemonSet 内
+  对这些设备跑 node 级 iostat(权限已具备, 复用 VM iostat 逻辑+IOPS公式)→写 CSV→复用现有 sizing+图表。
+  理论依据: 块存储直通损耗<5%, node级测到的≈pod真实磁盘性能(§17.1 损耗数据验证方向正确)。
+**Network**: 监控 DaemonSet 改 hostNetwork=true → pod 见主机网卡 → 复用 VM 的 ena/gve/virtio ethtool 采集。
+**CPU/Mem**: cgroup 段已采(更细), 补"接进主链路"(DaemonSet 输出从 stdout → unified CSV)即可; 可选补 throttled 进报告(k8s 特有节流指标, 对资源受限 pod 重要)。
+**结构**: 核心是把 DaemonSet 采集(cgroup+新增node级iostat/network)接进 unified CSV→报告主链路, 消除"只到stdout"孤立态。
+**报告层**: 消费 cgroup_meta_source/数据来源标记, 呈现"k8s node级采集"vs"cgroup降级", 别让读者把IO=0误判真零负载(当前报告层未消费 meta_source, grep 实证)。
+
+### 17.5 待确认/前提(实施前)
+- 真 k8s(EKS/GKE)环境验证 = L4 级, cloudtop 测不了, 等机器窗口(同 GCP L4)。
+- node 级 iostat 采"哪个设备": 靠 pod_device_mapper 解析 + 验证 /host/proc/diskstats 在 DaemonSet 内可读(权限已具备, 待真机证)。
+- DaemonSet 镜像(blockchain-node-benchmark/collector:v1.4)需含 iostat/ethtool(sysstat/net-tools) — 当前镜像约定只 Python, 补全需加系统工具(见 token-level Case-H 镜像依赖审计)。
+
+### 17.6 README 文档缺口(本轮发现, 待补)
+README.md(797行)+ README_ZH.md **完全无 k8s/EKS/GKE/hostNetwork/DaemonSet 任何内容**(grep 实证), 且仍是
+AWS/EBS 旧叙述(未反映三云+k8s)。待补一整块"K8s (EKS/GKE) 部署"章节: DaemonSet 部署步骤 / **节点 pod 必须
+hostNetwork=true(用户强调)** / 存储 PVC 说明(EBS/PD/Local) / 磁盘监控前提(node级访问) / 当前采集完整性
+限制(disk/network 补全状态)。不是一句话, 是新章节。
+
+
 

@@ -210,6 +210,85 @@ screen -S benchmark_$(date +%m%d_%H%M)
 
 
 
+## 🚢 Kubernetes (EKS / GKE) 部署
+
+框架支持两种部署形态：**虚拟机**（AWS EC2 / GCP GCE / IDC / 本地 Linux —
+见上方 *基本使用*）和**容器编排集群**（AWS EKS / GCP GKE）。
+
+> **范围说明**：框架**只对接已有的 EKS/GKE 集群**，**不负责**创建或搭建集群本身。
+> `eksctl` / `gcloud container clusters create` 这类建集群步骤不在框架范围内。
+
+### 区块链节点在 K8s 上如何运行（概念模型）
+
+区块链节点（如 `solana-validator`、`geth`）本质是一个进程。在 K8s 上它运行在
+一个**独占专属 node 的 Pod** 里（resource requests ≈ node 容量 + nodeAffinity/taint）
+——**不是"把整台机器打包成一个 Pod"**。机器还是机器，Pod 是一个进程容器，实际上
+一对一独占整台 node。
+
+### ⚠️ 必需：节点 Pod 必须使用 `hostNetwork: true`
+
+区块链节点 Pod **必须以 `hostNetwork: true` 部署**。
+
+为什么这是强制要求：
+- **性能**：绕过 CNI overlay（overlay 类 CNI 会增加约 10–30% 延迟）；用
+  `hostNetwork` 时节点直接用主机网卡，网络损耗≈0。
+- **监控正确性**：框架的网络监控读取**物理网卡**计数器（AWS ENA / GCP gVNIC /
+  virtio，经 `ethtool`）。在 CNI 命名空间的 Pod 内只能看到虚拟 `veth`，看不到真实
+  网卡。`hostNetwork: true` 才能让 VM 级的网络监控路径在 K8s 上原样工作。
+
+```yaml
+# 在你的区块链节点 Pod/StatefulSet spec 中：
+spec:
+  hostNetwork: true        # 必需 —— 见上文
+  dnsPolicy: ClusterFirstWithHostNet
+```
+
+### 存储
+
+节点的持久化存储通过 PVC 提供，底层为：
+- **云块存储 CSI** —— AWS EBS（`gp3`/`io2`）/ GCP PD
+  （`pd-ssd`/`pd-balanced`/`hyperdisk-*`）。块卷以真实块设备直接挂到 node
+  （`/dev/nvme*`、`/dev/sd*`）；相比 VM 的吞吐损耗通常 <5%（块设备直通，不是网络
+  文件系统）。
+- **Local SSD / instance-store NVMe** —— `local` PV / `hostPath`，延迟最低。
+
+每个 PVC 背后的磁盘设备都映射到 node 上的真实块设备（`pod_device_mapper.py`
+解析 Pod → PVC → PV → 主机设备名）。
+
+### 采集器部署（DaemonSet）
+
+监控以 **DaemonSet** 运行（每个 node 一个采集 Pod）。清单在 `deploy/k8s/`：
+
+```bash
+kubectl apply -f deploy/k8s/01-namespace.yaml
+kubectl apply -f deploy/k8s/02-serviceaccount-rbac.yaml
+kubectl apply -f deploy/k8s/03-configmap.yaml     # 设置 DEPLOYMENT_MODE=k8s_eks | k8s_gke
+kubectl apply -f deploy/k8s/04-daemonset.yaml
+```
+
+采集 Pod 挂载主机 `/proc`、`/sys`、`/dev`（node_exporter 惯例），以
+`hostPID: true` + `privileged: true` 运行，以便读取主机级计数器。
+`DEPLOYMENT_MODE`（在 ConfigMap 设置）告诉框架当前在 K8s 上；Downward API 注入
+`POD_NAME` / `NODE_NAME` / `POD_NAMESPACE`。
+
+### ⚠️ K8s 上当前的监控完整性限制
+
+K8s 资源采集**尚未**与 VM 路径完全对齐。依赖 K8s 数据前请知悉：
+
+| 资源 | VM（主机级） | K8s 现状 |
+|------|-------------|----------|
+| CPU | mpstat（usage/usr/sys/iowait/soft/idle） | cgroup cpu（usage/user/system + **throttled 节流**）；缺 iowait/soft 细分 |
+| 内存 | free（used/total/usage） | cgroup mem（anon/file/kernel/slab/sock/swap）—— 更细，可用 |
+| **磁盘** | iostat **util / IOPS / throughput**（可做 sizing 判定） | 仅 cgroup io 累计计数（rbytes/wbytes/rios/wios）—— **尚无 util / 无速率 / 无 sizing** |
+| **网络** | ENA/gVNIC/virtio `ethtool` 饱和度 | **DaemonSet 尚未采集** |
+
+磁盘和网络的缺口在路线图上（用已挂载的 `/host` 路径做 node 级 `iostat` +
+`pod_device_mapper` 设备解析；在采集器上开启 `hostNetwork` 复用 VM 的 `ethtool`
+路径）。在此之前，**对 IO 密集 / 高 TPS、磁盘性能是关键信号的链，VM 部署能给出
+完整磁盘指标；K8s 路径目前只报 cgroup IO 计数，不报磁盘利用率/IOPS 速率。**
+
+
+
 ## 📦 系统架构
 
 ```

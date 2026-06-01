@@ -210,6 +210,99 @@ See [Best Practices](#best-practices-for-long-running-tests) for detailed instru
 
 
 
+## 🚢 Kubernetes (EKS / GKE) Deployment
+
+The framework supports two deployment topologies: **virtual machines**
+(AWS EC2 / GCP GCE / IDC / local Linux — see *Basic Usage* above) and
+**container orchestration clusters** (AWS EKS / GCP GKE).
+
+> **Scope note**: The framework **only attaches to an existing EKS/GKE
+> cluster** — it does **not** provision or set up the cluster itself. No
+> `eksctl` / `gcloud container clusters create` steps are part of this
+> framework.
+
+### How blockchain nodes run on K8s (mental model)
+
+A blockchain node (e.g. `solana-validator`, `geth`) is a process. On K8s it
+runs inside a **Pod that is pinned to a dedicated node** (resource requests
+≈ node capacity + nodeAffinity/taints) — it is **not** "the whole machine
+packed into one Pod". The node stays a node; the Pod is one process
+container that, in practice, owns the box one-to-one.
+
+### ⚠️ Required: node Pods MUST use `hostNetwork: true`
+
+Blockchain node Pods **must be deployed with `hostNetwork: true`**.
+
+Why this is mandatory:
+- **Performance**: bypasses the CNI overlay (which adds ~10–30% latency on
+  overlay CNIs); with `hostNetwork` the node uses the host NIC directly,
+  so network loss is ≈0.
+- **Monitoring correctness**: the framework's network monitoring reads the
+  **physical NIC** counters (AWS ENA / GCP gVNIC / virtio via `ethtool`).
+  Inside a CNI-namespaced Pod it would only see a virtual `veth`, not the
+  real NIC. `hostNetwork: true` is what lets the VM-grade network
+  monitoring path work unchanged on K8s.
+
+```yaml
+# In your blockchain node Pod/StatefulSet spec:
+spec:
+  hostNetwork: true        # REQUIRED — see above
+  dnsPolicy: ClusterFirstWithHostNet
+```
+
+### Storage
+
+Persistent storage for the node is provided via PVCs backed by:
+- **Cloud block storage CSI** — AWS EBS (`gp3`/`io2`) / GCP PD
+  (`pd-ssd`/`pd-balanced`/`hyperdisk-*`). Block volumes are attached
+  directly to the node as real block devices (`/dev/nvme*`, `/dev/sd*`);
+  throughput loss vs. a VM is typically <5% (block passthrough, not a
+  network filesystem).
+- **Local SSD / instance-store NVMe** — `local` PV / `hostPath`, lowest
+  latency.
+
+The disk device backing each PVC maps to a real block device on the node
+(`pod_device_mapper.py` resolves Pod → PVC → PV → host device name).
+
+### Collector deployment (DaemonSet)
+
+Monitoring runs as a **DaemonSet** (one collector Pod per node). Manifests
+live in `deploy/k8s/`:
+
+```bash
+kubectl apply -f deploy/k8s/01-namespace.yaml
+kubectl apply -f deploy/k8s/02-serviceaccount-rbac.yaml
+kubectl apply -f deploy/k8s/03-configmap.yaml     # set DEPLOYMENT_MODE=k8s_eks | k8s_gke
+kubectl apply -f deploy/k8s/04-daemonset.yaml
+```
+
+The collector Pod mounts host `/proc`, `/sys`, `/dev` (node_exporter
+convention) and runs with `hostPID: true` + `privileged: true` so it can
+read host-level counters. `DEPLOYMENT_MODE` (set in the ConfigMap) tells
+the framework it is on K8s; the Downward API injects `POD_NAME` /
+`NODE_NAME` / `POD_NAMESPACE`.
+
+### ⚠️ Current monitoring-completeness limitations on K8s
+
+K8s resource collection does **not yet** reach full parity with the VM
+path. Know this before relying on K8s numbers:
+
+| Resource | VM (host-level) | K8s status |
+|----------|-----------------|------------|
+| CPU | mpstat (usage/usr/sys/iowait/soft/idle) | cgroup cpu (usage/user/system + **throttled**); missing iowait/soft split |
+| Memory | free (used/total/usage) | cgroup mem (anon/file/kernel/slab/sock/swap) — finer-grained, OK |
+| **Disk** | iostat **util / IOPS / throughput** (sizing-capable) | cgroup io counters only (rbytes/wbytes/rios/wios) — **no util / no rate / no sizing yet** |
+| **Network** | ENA/gVNIC/virtio `ethtool` saturation | **not yet collected by the DaemonSet** |
+
+The disk and network gaps are on the roadmap (node-level `iostat` via the
+already-mounted `/host` paths + `pod_device_mapper` device resolution, and
+enabling `hostNetwork` on the collector to reuse the VM `ethtool` path).
+Until then, **for IO-heavy / high-TPS chains where disk performance is the
+key signal, the VM deployment gives complete disk metrics; the K8s path
+currently reports cgroup IO counters but not disk utilization/IOPS rates.**
+
+
+
 ## 📦 System Architecture
 
 ```
