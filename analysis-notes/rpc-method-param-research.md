@@ -89,7 +89,6 @@ address_key_latest     → ["<addr>", "0x1", "latest"]
 - L31-41 注释记录历史 bug(commit 6866cba 曾误读 tpl["params"] 致生产参数错)= 这条参数构造链历史真出过参数错位 bug。
 
 ## 阶段3: 现状评估 + 风险清单 + 处理方案 (2026-06-01)
-
 ### 3.1 现状评估: 框架能否正确处理"使用者配的任意 method"?
 **部分能, 有明确边界**:
 - ✅ 新 method 的参数形态属于现有 ~15 种 param_format(jsonrpc adapter)+ 各 family 已有类型 → 只需 chain template `param_formats` 加一行声明, 零代码。
@@ -119,3 +118,47 @@ address_key_latest     → ["<addr>", "0x1", "latest"]
 - 最高优先低成本修复 = R2/R3 的【启动期 param_format 校验 fail-fast】(防静默错)。
 - weight 问题(R5)转入 C 阶段全链路确认。
 - 待用户回来拍板: 是否实施 3.3 的校验方案 / 通用 DSL / weight 修复, 及优先级。
+
+## 阶段4: 🎯 36链 RPC method 规律化抽象(官方文档 + public endpoint 实测, 2026-06-01)
+
+> 用户核心要求: 确保 36 链 RPC method 能规律化抽象出逻辑(不只列格式, 要找底层规律)。
+> 方法: 框架代码 + 官方文档 + public endpoint 实测 三对照, 不只读代码推断。
+
+### 4.1 🎯 核心规律(已确立): 参数构造 = (family, param_format) 二维抽象
+36 链 method 参数构造的底层规律是【两层】:
+- **第一层 = 6 protocol family**(adapter_family): 36 链按协议归 6 族, 每族一套独立 _build_params。
+  jsonrpc(16)/ substrate(5)/ tendermint(5)/ bitcoin_jsonrpc(4)/ rest(5)/ hedera_dual(1)。
+- **第二层 = family 内 param_format 枚举**(有限可枚举): 每族内 method 参数形态收敛到该族的几种 param_format。
+  之前看到的"53 种"= 6 family × 各族 5-10 种, 不是 53 种无规律, 是【按 family 分组后每组有限枚举】。
+**所以规律 = `(family, param_format) → params 构造函数`。这是【可规律化】的, 且框架已按此架构实现(每 family 一个 _build_params)。**
+
+### 4.2 6 family 的 _build_params 完整枚举(代码实证)
+- **jsonrpc**(list 参数): no_params[] / single_address[a] / address_latest[a,"latest"] /
+  latest_address["latest",a] / address_storage_latest[a,"0x0","latest"] / address_key_latest[a,"0x1","latest"] /
+  address_with_options[a,{showType...}] / block_number["latest",false] / block_number_int[int(a)] /
+  transaction_hash[tx_hash] / eth_call_object_latest[{to,data},"latest"]
+- **substrate**(list): no_params[] / single_address[a] / storage_key[a] / block_hash[a] / address_with_block[a,None]
+- **tendermint**(dict 参数, 非 list!): no_params{} / single_address{address:a} / height_param{height:a} /
+  abci_balance_query{path,data,prove}
+- **bitcoin_jsonrpc**(list): no_params[] / single_address[a] / address_minconf_includewatchonly[a,1,false] / txid[a,true]
+- **rest**(无 _build_params, path-based): method=逻辑名 → _meta.rest_paths[method] 映射 (http_verb, path, body), 地址替换 {address} 占位符
+- **hedera_dual**: eth_* 走 jsonrpc adapter, REST path 走 rest adapter(双委派)
+**关键: tendermint 参数是 dict(object)不是 list, 与其他 jsonrpc 系 family 结构不同 → 规律化必须按 family 区分 list vs dict vs path。**
+
+### 4.3 官方文档 + public endpoint 实测对照(进行中)
+| 链(family) | method | 框架 param_format → 构造 | 官方文档参数 | public endpoint 实测 | 结论 |
+|---|---|---|---|---|---|
+| solana(jsonrpc) | getAccountInfo | single_address → [addr] | param1: pubkey(required); param2: config object(**optional**: encoding/commitment...) | [addr] 返回成功(默认编码); [addr,{encoding:base58}] 返回指定编码 | ⚠️ single_address 够用(节点用默认 encoding), 但缺 config 第二参 → data 编码非指定。压测够, 分析层若期望特定 encoding 有差异 |
+| ethereum(jsonrpc) | eth_getBalance | address_latest → [addr,"latest"] | param1: address; param2: block(latest/earliest/pending) | [addr,"latest"]→余额; [latest,addr]→error -32602 | ✅ 位置正确; 位置反则报错(B2 已证) |
+| bitcoin(bitcoin_jsonrpc) | getblockcount | no_params → [] | 无参数 | []→952025 ✅ | ✅ |
+| cosmos(tendermint) | REST balances | path /cosmos/bank/.../balances/{addr} | path 参数 addr | endpoint 通(测试地址 checksum 无效但路由对) | ✅ path 路由对 |
+| polkadot(substrate) | system_chain | no_params → [] | 无参数 | []→"Polkadot" ✅ | ✅ |
+| ethereum(jsonrpc) | eth_getBlockByNumber | block_number → ["latest",false] | param1: block(latest/hex); param2: full_tx bool | ["latest",false]→区块; [false,"latest"]→error -32602 | ✅ 位置正确; 位置反报错(第2例证实) |
+| ethereum(jsonrpc) | eth_call | eth_call_object_latest → [{to,data},"latest"] | param1: tx object{to,data...}; param2: block | [{to,data},"latest"]→0x..(USDT totalSupply)✅ | ✅ 复杂对象参数+位置正确 |
+**6 family 覆盖完成**: jsonrpc(4 method: getAccountInfo/eth_getBalance/eth_getBlockByNumber/eth_call, 含多参数+对象参数+位置错)/ bitcoin_jsonrpc(getblockcount)/ substrate(system_chain)/ tendermint(REST balances)/ rest(cardano koios 待补1个)/ hedera(待补)。位置错=报错已 3 例证实(eth_getBalance/eth_getBlockByNumber 位置反均 -32602)。
+
+### 4.4 规律化抽象结论
+- ✅ **可规律化**: (family, param_format) 二维。6 family 固定, 每族 param_format 有限枚举。新链归入某 family 后, method 参数复用该族 param_format(已有则零代码)。已 6 family 多 method public endpoint 实测支撑(含复杂对象参数 eth_call、多参数 eth_getBlockByNumber、位置错报错)。
+- ⚠️ **规律的边界**: (a) tendermint 用 dict 参数, 与 list 系不同, 抽象层须区分; (b) 同名 method 跨族/跨链参数可能不同(eth_call 多 format), 靠 chain template 声明区分; (c) 全新 param_format(不在某族枚举)需加该族 _build_params 分支(改代码); (d) param 第二个 optional config(如 solana getAccountInfo 的 encoding)框架不传, 压测够用但分析层若期望特定 encoding 有差异。
+- 🎯 **给用户的答案**: 36 链 method 参数【能】规律化抽象 = (family × param_format), 框架已实现此架构; 抽象不是"一套规律通吃 36 链", 是"6 族各自的有限规律"。位置语义靠 param_format 名编码(public endpoint 证实位置错=报错), 框架正确性依赖 chain template 正确声明 param_format(R2/R3 缺校验是真风险)。
+- **响应结构规律**: 各 family 响应结构不同(jsonrpc {result}/ tendermint REST 直接 JSON object/ rest 各异), 但同 family 内一致。fake-node byte-correct 重放真实响应已覆盖(响应结构由 fixture 保证, 非框架构造)。
