@@ -990,6 +990,119 @@ COS 强制容器化(事实1) + node 级 iostat 需 hostPath 容器(事实3) → 
 - 真机环境(GKE bench-k8s-test)仍在(账本 §18.9), 已验: iostat 按设备隔离/pod_device_mapper 双盘/
   /proc/PID/cgroup 提 podUID/GKE node SSH 可进但 COS 无 iostat。新会话可直接接续真机验证 21.3 的点。
 
+> 🛑 **§21 含数据污染, 已被 §22 订正(2026-06-01, 用户两次纠正 + 真机实证)。读 §21 前必先读 §22。**
+
+## 22. ✅ K8s 适配权威订正 — 极简正确模型(2026-06-01, 用户澄清 + 真机实证, 订正 §21 污染)
+
+> ⚠️ **本节订正 §21 的数据污染。§21.1 事实1 把"COS 装不了 iostat"错误推论成"benchmark 必须容器化跑全流程",
+> 进而在 §21.2/21.3 凭空造出"Pod/Job 跑全流程 vs DaemonSet 常驻"的伪岔路, 导致继任会话又横跳。
+> 用户两次纠正 + 真机实证后, 锁定本节为权威。§18/§19/§20/§21 全部当"分析过程"读, 以 §22 为准。**
+
+### 22.1 🎯 正确模型(用户澄清, 三句话闭环, 之前一直没对齐)
+1. **区块链节点 pod 独占一个 node(1 pod = 1 node)。**
+2. **benchmark 框架本来就和区块链节点 pod 一起, 跑在这同一个 node 上** —— 跟 VM 部署一模一样:
+   框架在 node 上正常跑完整有界 benchmark(Phase0.5 proxy→1 prepare→2 监控→3 vegeta 压测→报告),
+   vegeta 打 localhost 的节点 pod RPC。**框架不是从别处打过来, 不需要"重新容器化跑全流程"。**
+3. **唯一的不同点 = 磁盘 iops/throughput/util 在 pod 容器内 cgroup 拿不到**(cgroup 只有累计 counter 无 util)。
+   因 1 pod 独占 1 node, 所以"在 node 上采磁盘性能" ≈ 就是这个 pod 的磁盘性能。
+
+**本质极简**: k8s 适配 ≠ 重构部署形态。框架照常在 node 上跑, **唯一改动 = 磁盘采集那一步在 k8s 模式下
+改读 node 级 iostat(因 pod cgroup 拿不到 util/iops)**。其余 Phase、生命周期、vegeta、报告全不变。
+
+### 22.2 🛑 §21 的数据污染点(逐条标出, 勿再采信)
+| 污染点 | §21 原文 | 真相(真机实证) |
+|---|---|---|
+| **P1(最严重)** | §21.1 事实1: "COS 没 iostat/只读/装不了 → benchmark 不能在 node 裸跑 → **必须容器化(整个框架打镜像跑)**" | 错误因果绑定。① "装工具"是装进**采集用的特权容器镜像**(构建有网/VPC NAT), 跟 node COS 只读**无关**; ② 框架本就跑在 node 上(模型2), 不是"因 COS 才必须容器化跑全流程"; ③ 唯一需容器化的是**磁盘采集读 node iostat**那一步, 不是整个 benchmark |
+| **P2** | §21.2/§21.3.2: "容器跑'有界 benchmark 全流程'还是'只采集'是核心待定" / "Pod/Job 跑全流程 vs DaemonSet 常驻" | **伪岔路, 不存在。** 是 P1 错误推论催生的。框架在 node 上跑全流程是既定事实, 无需选 |
+| **P3** | §21.2/§21.3.3: 把 DaemonSet 当候选载体, 纠结"DaemonSet 怎么处置" | §19/§20 残留的 DaemonSet 思路。正确模型下根本不需要独立 DaemonSet 采集器 |
+| **P4** | §18.7/§20.2: "device_resolver POD_NAME=采集pod自己 = bug" | DaemonSet(独立采集 pod)思路下的产物。正确模型下框架跑在节点 pod 所在 node, **POD_NAME 就是区块链节点 pod 自己, 不是 bug**(代码方向对) |
+
+### 22.3 真机实证(GKE bench-k8s-test, 2026-06-01, 推翻 P1)
+- ✅ **COS node 确无 iostat/mpstat/sar**(chroot /host 实测), 根 FS `ro`(`/dev/mapper/vroot on / type ext2 (ro)`) —— 事实对
+- ✅ **"COS 装不了"的精确根因(逐层 chroot 实测, 跟权限/网络无关)**:
+  - ❌ 网络: 不是。node 出网正常(`curl https://pypi.org → HTTP/2 200`), node 自带 curl/wget, VPC NAT 通
+  - ❌ 权限: 不是。chroot 进 node 是 root, 权限够
+  - ✅ **没有任何包管理器**: apt/apt-get/yum/dnf/apk/rpm/dpkg **全无**(COS 设计=只跑容器的极简不可变 OS)
+  - ✅ **根 FS 只读**: `ext2 (ro,relatime)`, `/usr/bin` 写不进(`Read-only file system`), 有包管理器也装不进
+  - → 准确表述: "COS 装不了 iostat" = ①无包管理器 + ②根 FS 只读(Google 故意做成不可变/最小化/只跑容器), **非权限非网络**。GKE 设计哲学: 软件都经容器交付, 不往 node 装。
+- ✅ **但采集容器是 Debian(可 apt 装 sysstat)**: `bench-verify` = python:3.11-slim, `apt install sysstat` 成功(VPC NAT 通)
+- ✅ **容器经 hostPath /host/proc 读到 node 真实磁盘统计**: `/host/proc/diskstats` 拿到 sdb/sdc raw 数据
+- ✅ **容器内 iostat 算出 node 级 util/iops/throughput**: sdb `%util=98%, w/s=1849, wkB/s=118MB/s` / sdc `%util=91.9%`
+  —— 正是 fio 在节点 pod 制造的真实负载, iostat 读 node 内核块设备统计算出, **不依赖 node 装不装 iostat**
+- 结论: "装工具进采集容器镜像" 与 "node COS 只读" 完全正交。P1 的因果绑定是污染。
+
+### 22.4 据正确模型, 真正要做的(极简, 待实施)
+**核心 = benchmark 主流程 Phase2 监控的磁盘采集段, 在 k8s 模式下读 node 级 iostat。**
+1. **磁盘采集**: k8s 模式下 iostat 采集要能读到 node 级设备(框架进程在 node 上, 若跑在容器里则需 hostPath /host/{proc,sys});
+   设备名 = 用户手配 LEDGER_DEVICE/ACCOUNTS_DEVICE(独占→node 上 lsblk 固定 sdb/sdc, 最简无债)或 device_resolver 自动解析。
+2. **生命周期**: 监控本就是 Phase2(同 qps_test_status 信号, §21.1 事实6), **天然同生命周期, 无需特殊处理**(之前 (i)/(ii) 是伪问题)。
+3. **现有 deploy/k8s/(DaemonSet+cgroup_collector)**: 是 §19/§20 DaemonSet 思路的产物, 正确模型下不需要独立 DaemonSet 采集。处置待定(废弃/保留为可选 cgroup 补充), 不阻塞主线。
+4. **镜像**: 若框架本身跑在容器里, 镜像含 sysstat/ethtool/bc/jq/net-tools/python3/vegeta + 框架(K4 教训)。
+5. **网络**: pod/容器有网(VPC NAT 已配, 真机 apt 实证通); vegeta 打节点 pod RPC 同 VM(localhost)。
+
+### 22.5 ✅ 决策已定(2026-06-01 用户拍板): 甲 = 框架跑在特权容器里
+**形态甲(选定)**: 框架进程跑在一个特权容器里 —— 镜像含 sysstat/ethtool/bc/jq/net-tools/python3/vegeta + 框架代码,
+hostPath 挂 /host/{proc,sys,dev} + privileged, 容器内 iostat 读 node 级设备(真机已证 sdb %util=98%)。
+框架调度到节点 pod 所在 node, 跑完整有界 benchmark(vegeta 打 localhost 节点 pod RPC)。
+
+**选甲不选乙的理由(决定性 = 用户"不改大量代码")**:
+1. **甲: 框架代码几乎一行不动** —— iostat 照常调, 只换运行环境(VM→特权容器)。乙要重写采集层(自解析 /proc/diskstats
+   算 util/iops/await/aqu-sz), 既易算错(%util/队列深度算法), 又造出与 iostat 并存的第二套采集逻辑(parallel-entry 债)。
+2. **甲与框架既有设计一致**: 框架本就依赖 sysstat/bc/jq/python3(§21.1), 甲只是连工具一起打进镜像 = 容器化标准交付 = GKE 哲学。
+3. **甲已真机证明可行**(容器 iostat 经 hostPath 算出 node util); 乙未验且要验"自写 diskstats 解析对不对", 新增验证负担。
+4. **甲无技术债**: VM 和 k8s 跑同一套采集代码(k8s 多套容器壳+hostPath); 乙制造 iostat路径(VM) vs 自解析路径(k8s)双套实现债。
+- 乙唯一优势=镜像更小/不依赖 iostat 二进制, 对 benchmark 工具不重要, 不抵改采集核心+双套逻辑的代价。
+
+### 22.6 实施清单(甲, 待动手 — 真机端到端验证收口)
+1. **iostat 采集读 node 级设备**: k8s 模式下框架在容器内, iostat 需读 /host/{proc,sys}(hostPath)。
+   核对 iostat_collector.sh / unified_monitor.sh 的 iostat 调用是否支持指向 node proc/sys(或容器内 iostat 默认读全局 /proc 即 node)。真机已证容器默认 iostat 读到 node 设备 → 可能零改动。
+2. **设备名**: 独占→node lsblk 固定 sdb/sdc, 用户手配 LEDGER_DEVICE/ACCOUNTS_DEVICE(最简无债)或 device_resolver 自动。
+3. **镜像 Dockerfile**: 含 sysstat/ethtool/bc/jq/net-tools/coreutils/python3/vegeta + 框架代码(K4 shell 依赖审计), push AR。
+4. **Pod/Job manifest**: privileged + hostPath /host/{proc,sys,dev} + hostNetwork(vegeta 打节点 pod localhost RPC) + nodeSelector/affinity 调度到节点 pod 所在 node。有界 benchmark→Job 比 DaemonSet 合适(跑完退)。
+5. **现有 deploy/k8s/(DaemonSet+cgroup_collector)**: §19/§20 DaemonSet 思路产物, 甲下不需要独立 DaemonSet。处置: 废弃或保留为可选 cgroup 补充(CPU/MEM, pod 内本就能拿), 不阻塞主线。
+6. **真机端到端验证(集群已就绪 §18.9)**: 容器内跑 blockchain_node_benchmark.sh → Phase2 监控经 hostPath 采 node iostat → performance CSV disk 段有 util/iops → Phase6/7 出磁盘图 HTML。硬证非静态推断。
+7. **生命周期**: 监控=Phase2(同 qps_test_status), 天然同生命周期, 无需特殊处理。
+
+## 23. ✅ 甲方案命门真机验证成果(2026-06-01 本会话, GKE bench-k8s-test 硬证)
+
+> 用户坚持"每轮再分析都有新问题, 再确认一次" → 逐命门真机验证(非静态推断)。结论: **甲方案三大命门
+> (网络/块设备/iostat)全部真机验通, 且都指向"框架代码几乎不用改"。剩"整 benchmark 端到端"需打镜像跑 Job。**
+> 验证法: git archive 纯源码(98M, 排除 venv/result/.git) kubectl cp 进 bench-verify(privileged 挂 /host) +
+> apt 装 sysstat 等 + pip 装 requirements.txt(NAT 通), 逐 Phase 试跑摸坑。免打镜像先验假设(K8s ref 教训)。
+
+### 23.1 命门真机硬证(✅ 全通)
+| 命门 | 硬证 |
+|---|---|
+| **iostat 采集链 node 中立** | 代码: `get_iostat_data "$LEDGER_DEVICE" "data"`(iostat_collector.sh:201/210), 调 `iostat -dx $rate`(L44)全局采样再 `awk /^${device}/` grep 设备行; **无 nvme/cloud 硬编码** |
+| **iostat 经 hostPath 算 node util** | 容器内 `iostat -dx sdb sdc`: sdb %util=98% w/s=1849 wkB/s=118MB/s, sdc %util=91.9% —— fio 真实负载, 读 node /proc/diskstats, **不依赖 node 装 iostat** |
+| **vegeta→节点 pod RPC 可达**(最关键) | 新建 mini-rpc pod(hostNetwork, :19000, 调度到目标 node) → bench-verify(同 node hostNetwork) `localhost:19000` + `127.0.0.1:19000` GET/POST(JSON-RPC)全通。证: hostNetwork 容器共享 node 网络栈, localhost 必互通 |
+| **块设备检查 `[[ -b /dev/$LEDGER_DEVICE ]]`**(iostat_collector.sh:279) | privileged 容器内 `/dev/sdb` `/dev/sdc` 是真块设备(`brw-rw----`), 检查自动通过, **无需改代码** |
+| **框架 source 链 + Phase0 配置** | 容器内全跑通: DEPLOYMENT_MODE=k8s_gke 识别 / provider=gcp / HOST_PROC/SYS 解析 / CGROUP v2 探测 / LEDGER_DEVICE=sdb/sdc 手配生效(device_resolver 因无 POD_NAME 优雅降级保留手配=设计 fallback) |
+| **Phase0.5 proxy** | proxy 二进制没编译 → 优雅跳过(per-method attribution 关闭, 非致命降级) |
+
+### 23.2 试跑摸到的真缺口(实施时要解决)
+1. **Dockerfile "zero pip deps" 声明是错的(真缺口)**: 既有 Dockerfile(顶层)注释称 ast.walk 验证 pure-stdlib,
+   但那只审了 cgroup_collector 子集。**主流程 fetch_active_accounts.py 需 aiohttp**, Phase6/7 需 pandas/numpy/
+   matplotlib/scipy/sklearn(requirements.txt 全列)。正式镜像必须 `pip install -r requirements.txt`(已 pip 验证可装/NAT 通)。
+2. **fetch_active_accounts 需 CHAIN_CONFIG env + 真 RPC 节点**: 单跑报 `CHAIN_CONFIG environment variable is required`(框架 source 后导出);
+   且要连真 RPC 拉活跃账户 → 需 fake-node(solana, JSON-RPC :19000)提供 byte-correct 响应, mini-rpc 固定响应不够。
+3. **vegeta 未装**: 既有 Dockerfile apt 清单无 vegeta(压测必需), 正式镜像要单独装(Go 二进制)。
+
+### 23.3 顺带发现的小问题(非阻塞主线, 待单独处理)
+- **A. source 顺序 warning**: `k8s_paths.sh sourced before deployment_mode_detector.sh — DEPLOYMENT_MODE not set. Assuming vm_bare.`
+  最终 mode 识别正确(后续 detector 跑了), 但 k8s_paths 第一次 source 时 mode 未定 → 可能影响早期路径判断。待查 config_loader source 顺序。
+- **B. ENA-on-GCP**: platform=gcp 但日志 "ENA monitoring: true"。ENA 是 AWS 专属, GCP 不该开。待查 ENA_MONITOR_ENABLED 的 provider 分支。
+
+### 23.4 kubectl exec 跑长任务不稳(方法论教训, 给实施阶段)
+- 现象: nohup/setsid/background exec 跑完整 benchmark 全部 exit 143(SIGTERM) —— kubectl exec 客户端断开时
+  K8s 连带清理进程组, 后台进程保不住。**结论: 有界 benchmark 长跑必须用 k8s Job(进程归 k8s 管, kubectl logs 拿输出),
+  不能靠 kubectl exec 后台**。这恰好是甲的目标形态(有界 benchmark → Job), 实施时直接打镜像跑 Job。
+
+### 23.5 状态 + 下一步(方案B 已落盘, 实施待启)
+- **甲可行性 = 已坐实**(命门全验, 框架代码几乎不动)。剩"整 benchmark 端到端出 HTML 磁盘图"= 打镜像跑 Job 验(§22.6 清单 + §23.2 缺口)。
+- **测试残留**: mini-rpc pod(ns=default, hostNetwork :19000) + bench-verify 里 /opt/bnb 代码 + 装的依赖。验完整端到端前可保留(bench-verify 已是装好依赖的现成验证环境); 彻底放弃时按 §18.9 清理 + `kubectl delete pod mini-rpc -n default`。
+- 落盘文件留工作区未 commit(用户偏好)。
+
 
 
 
