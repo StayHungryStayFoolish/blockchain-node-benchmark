@@ -42,8 +42,80 @@
 6. 现状评估: 框架当前能否正确处理"使用者配的任意 method"; 不能的话缺口在哪。
 7. 处理方案: 扩 param_formats 类型 / 让 chain template 声明完整 param 结构 / weight 落到流量生成 等。
 
-## 阶段2: 36链规律 + public endpoint 验证 (待做)
-(空 — k8s/404 解决后填)
+## 阶段2: 36链 method 参数/响应规律 (互联网+public endpoint 验证)
 
-## 阶段3: 现状评估 + 风险清单 + 处理方案 (待做)
-(空)
+### 2.1 本地基线: 36链 param_format 全枚举(代码事实, 2026-06-01)
+- 36 链, adapter_family 分布: jsonrpc 16 / substrate 5 / rest 5 / tendermint 5 / bitcoin_jsonrpc 4 / hedera_dual 1。
+- **param_format 类型 = 53 种**(远非"几种统一规律"), 多数是单链特例。高频: no_params(76)/address_latest(19)/single_address(12)/transaction_hash(6)/path_addr(5)/block_number(5)。
+- 单链特例举例: `{workchain,shard,seqno}`(TON)/ move_view_call(Aptos)/ query_dispatcher_request_type(NEAR)/ body_owner_contract_selector_parameter(Tron)/ eth_call_object_latest 等。
+- = 框架已为每链特殊 method 手工声明 param_format, 不是统一规律; 加新 method 若是全新 format 必须新增 param_format 类型 + cli.py builder 对应分支。
+
+### 2.2 🔴 同一 method 多 param_format(用户担心的"传错位置"风险的直接证据)
+- `eth_call`: ['address_with_options', 'eth_call_object_latest'] — 同名不同参数格式
+- `getblock`: ['[blockhash,verbosity]', '[blockhash]', 'block_hash'] — 3 种
+- `getrawtransaction`: ['[txhash,verbose]', '[txid,verbose]', 'transaction_hash'] — 3 种
+- 含义: 同一 method 名在不同链/配置参数位置+数量不同; 使用者配错或框架选错 format → 构造的请求参数位置错 → 拿不到正确响应结构。**这正是用户核心担心。**
+
+### 2.3 🔴 缺 param_format 声明的 method(4 处, 框架会 fallback 可能出错)
+- cardano: POST_ASSET_INFO
+- hedera: GET /api/v1/transactions/{addr} / GET /api/v1/accounts/{addr} / GET /api/v1/balances?account.id={addr}
+
+### 2.4 待 public endpoint 验证(下一步, 用户强制方法)
+- 多参数 method 每个【位置】的真实语义(尤其 2.2 多 format 的): eth_call/getblock/getrawtransaction 各 format 对应哪条链、参数位置对不对。
+- cli.py build-targets-batch 对各 param_format 的实际构造逻辑(读 builder 代码 + 对照真实 RPC 规范)。
+- 打 public endpoint(solana/eth/cosmos 等)验真实响应结构, 确认 fixture/param_format 与真实一致。
+- 2.3 缺声明的 4 个 method fallback 行为(读 cli.py default 分支)。
+
+### 2.5 ✅ 参数位置语义 = 代码实证 + public endpoint double-check(2026-06-01)
+**框架靠 param_format 名字编码参数【位置】**(jsonrpc adapter `_build_params`, tools/chain_adapters/jsonrpc.py L46+):
+```
+no_params              → []
+single_address         → ["<addr>"]
+address_latest         → ["<addr>", "latest"]   (EVM eth_getBalance)
+latest_address         → ["latest", "<addr>"]   (StarkNet) ← 位置与 address_latest 相反!
+address_storage_latest → ["<addr>", "0x0", "latest"]
+address_key_latest     → ["<addr>", "0x1", "latest"]
+```
+**🔴 address_latest vs latest_address: 同样两参数, 位置完全相反**(EVM 地址在前 / StarkNet 地址在后)。
+
+**public endpoint double-check(publicnode EVM eth_getBalance, 真实硬证)**:
+- `["<addr>", "latest"]`(address_latest 正确序)→ `result: 0x4ec87d1290294661` ✅ 拿到余额
+- `["latest", "<addr>"]`(位置传错)→ `error -32602: cannot unmarshal ... into Address` ❌ 报错拿不到响应
+**结论: 用户担心被真实节点证实 —— 参数位置传错 = RPC 报错/错响应。** 框架正确性完全依赖 chain template 为每 method 声明正确的 param_format; 声明错/新 method 位置组合不在现有 ~15 种里 = 出错。
+
+### 2.6 cli.py fallback 风险(代码实证)
+- `_get_param_format`(cli.py L50/55): method 缺 param_format 声明时 **默认 fallback = "single_address"**(当成单地址)。
+- → §2.3 那 4 个缺声明 method(cardano POST_ASSET_INFO / hedera 3 个)会被当 single_address 构造。若它们实际不是单地址(POST_ASSET_INFO 可能要数组/body)→ 构造错误请求 → 错响应。
+- L31-41 注释记录历史 bug(commit 6866cba 曾误读 tpl["params"] 致生产参数错)= 这条参数构造链历史真出过参数错位 bug。
+
+## 阶段3: 现状评估 + 风险清单 + 处理方案 (2026-06-01)
+
+### 3.1 现状评估: 框架能否正确处理"使用者配的任意 method"?
+**部分能, 有明确边界**:
+- ✅ 新 method 的参数形态属于现有 ~15 种 param_format(jsonrpc adapter)+ 各 family 已有类型 → 只需 chain template `param_formats` 加一行声明, 零代码。
+- ✅ 同一 method 不同账户(地址值变, 结构不变)→ 安全(框架按 param_format 套地址, 与具体账户无关)。验证: 同 method 不同 addr 入参/响应结构一致。
+- 🔴 新 method 参数形态是全新组合(不在现有 param_format 枚举)→ 必须改代码(新增 param_format 类型 + adapter `_build_params` 分支), 不是零代码。
+- 🔴 使用者声明错 param_format(如给 StarkNet method 配 address_latest 而非 latest_address)→ 参数位置错 → RPC 报错/错响应(2.5 实证)。框架无校验机制拦截声明错误。
+- 🔴 method 漏声明 param_format → fallback single_address(2.6)→ 非单地址 method 静默构造错请求。
+
+### 3.2 风险清单(按严重度)
+| # | 风险 | 严重度 | 证据 |
+|---|---|---|---|
+| R1 | 使用者配新 method 但参数形态不在现有 param_format → 需改代码非零代码, 使用者不知 | 高 | 2.1(53格式多单链特例)+ jsonrpc 仅~15种 |
+| R2 | param_format 声明错(位置反/类型错)无校验 → 静默错响应 | 高 | 2.5 public endpoint 实测 [latest,addr] 报错 |
+| R3 | method 漏声明 → fallback single_address 静默错 | 中 | 2.6 + 现存 4 处缺声明(2.3) |
+| R4 | 同名 method 多 format(eth_call/getblock/getrawtransaction)选错 | 中 | 2.2 |
+| R5 | mixed weight 压测端未用(均权 round-robin)→ NS-2 按权重归因不准 | 中 | 1.2 |
+
+### 3.3 处理方案(候选, 待用户拍板优先级)
+- **针对 R2/R3(声明错/漏声明无校验)**: 加 chain template 校验 —— 启动时校验每个 rpc_methods 的 method 都有 param_format 声明 + param_format 值在已知枚举内, 否则 fail-fast 报错(不静默 fallback)。低成本高收益。
+- **针对 R1(全新参数形态)**: (a) 文档化现有 param_format 类型表给使用者参考; (b) 或设计更通用的"参数模板 DSL"让 chain template 直接声明完整 params 结构(不靠预定义类型名)—— 大改, 需评估。
+- **针对 R5(weight 未用)**: 确认 weight 全链路(C 阶段做)—— 若归因端也没用 = 死字段, 修复让 weight 落到 vegeta targets 生成(按 weight 比例分配 method, 而非 round-robin 均权)。
+- **针对 R4**: 同名多 format 由 chain template 各自声明(已是现状), 风险在使用者跨链复制配置时选错 → 同 R2 用校验兜底。
+
+### 3.4 B 阶段结论
+- 用户担心【真实且已 public endpoint 证实】: 参数位置/数量错 → 拿不到正确响应。
+- 框架现有 param_format 抽象【部分覆盖】但【无校验、有 fallback 静默错、全新形态需改代码】= 三个真缺口。
+- 最高优先低成本修复 = R2/R3 的【启动期 param_format 校验 fail-fast】(防静默错)。
+- weight 问题(R5)转入 C 阶段全链路确认。
+- 待用户回来拍板: 是否实施 3.3 的校验方案 / 通用 DSL / weight 修复, 及优先级。
