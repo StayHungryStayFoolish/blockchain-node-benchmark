@@ -13,6 +13,10 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 
+# CSV schema 单一事实源 (csv_registry_segment_header block) — writer header 与 expected 校验对齐.
+# config_loader 不含 registry, 显式 source; 失败时 writer 下方 fallback 回退字面量.
+source "$(dirname "${BASH_SOURCE[0]}")/../config/csv_schema_registry.sh" 2>/dev/null || true
+
 # Initialize variables
 MONITOR_PID=""
 BLOCK_HEIGHT_DIFF_ALERT=false
@@ -385,8 +389,16 @@ start_monitoring() {
         mkdir -p "$(dirname "$BLOCK_HEIGHT_CACHE_FILE")"
     fi
     
-    # Write CSV header
-    echo "timestamp,local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss" > "$BLOCK_HEIGHT_DATA_FILE"
+    # Write CSV header — 经 csv_schema_registry 生成 (单一事实源, 与 expected
+    # framework_data_quality_checker.sh:generate 校验严格对齐; 消除 header 字面量双源).
+    # 防御: registry 未 source 时回退字面量 (与 registry block 段字节一致, symmetry 守护).
+    local block_header
+    if declare -F csv_registry_segment_header >/dev/null 2>&1; then
+        block_header="timestamp,$(csv_registry_segment_header block)"
+    else
+        block_header="timestamp,local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss"
+    fi
+    echo "$block_header" > "$BLOCK_HEIGHT_DATA_FILE"
     
     # Unified monitoring loop - follow framework lifecycle
     if [[ "$BACKGROUND" == "true" ]]; then

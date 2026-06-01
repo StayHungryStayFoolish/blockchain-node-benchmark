@@ -462,7 +462,15 @@ validate_archive_files() {
         # Validate block height monitoring file
         local block_csv=$(find "$logs_dir" -name "block_height_monitor_*.csv" | head -1)
         if [[ -n "$block_csv" ]]; then
-            local block_header="timestamp,local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss"
+            # block 段 header — 经 csv_schema_registry 生成 (单一事实源, 与 writer
+            # block_height_monitor.sh:start_monitoring 严格对齐; 消除 header 字面量双源).
+            # 防御: registry 未 source 时回退字面量 (与 registry block 段字节一致, symmetry 守护).
+            local block_header
+            if declare -F csv_registry_segment_header >/dev/null 2>&1; then
+                block_header="timestamp,$(csv_registry_segment_header block)"
+            else
+                block_header="timestamp,local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss"
+            fi
             validate_csv_file "$block_csv" "Block height monitoring" "$block_header"
         else
             log_warn "Block height monitoring CSV file not found"
