@@ -1103,6 +1103,114 @@ hostPath 挂 /host/{proc,sys,dev} + privileged, 容器内 iostat 读 node 级设
 - **测试残留**: mini-rpc pod(ns=default, hostNetwork :19000) + bench-verify 里 /opt/bnb 代码 + 装的依赖。验完整端到端前可保留(bench-verify 已是装好依赖的现成验证环境); 彻底放弃时按 §18.9 清理 + `kubectl delete pod mini-rpc -n default`。
 - 落盘文件留工作区未 commit(用户偏好)。
 
+## 24. 🐞 独立 TODO: fake-node 容器内 fixture 加载 404(与 k8s 适配解耦, 框架既有问题)
+
+> 2026-06-01 验 k8s 端到端时撞到, 但**这是 fake-node 自测夹具自身的 bug, 与 k8s 适配无关**(VM 上同样会因 cwd/相对路径触发)。
+> 用户决定: 记下来, 不在 k8s 适配任务里修, 单独立项。
+
+**现象**: `--fake-node --quick --single` 跑到 Phase1, fake-node 编译启动成功(family=jsonrpc, :8899),
+但所有 method 经它都返 **404**(连已声明的 getAccountInfo 也 404, 不只 getSignaturesForAddress)。
+**静态定位(读代码, 非缺数据)**:
+- method 声明 ✅: `configs/jsonrpc.yaml` 明确有 `getAccountInfo: {fixture: getAccountInfo.json, tier: cheap}`
+- fixture 文件 ✅: `fixtures/solana/getAccountInfo.json` 等 9 个 method 文件都在
+- 404 来源 = fake_node.go handleRPC L291(methods map 无此 method)或 L298(fixtures map 无此 fixture)
+- → **运行时 methods/fixtures map 加载为空**, 根因疑似 fake-node 默认 `-chains-dir/-configs-dir/-fixtures-dir`
+  是相对路径(defaultChainsDir/defaultConfigsDir/defaultFixturesDir), 容器内 cwd 不对 → loadConfig/loadFixtures 加载空。
+**未修(独立 TODO)**: 待单独验证 — 用绝对路径 flag(`-chains-dir /opt/bnb/config/chains -configs-dir
+/opt/bnb/tools/fake-node/configs -fixtures-dir /opt/bnb/tools/fake-node/fixtures`)起 fake-node 看是否解 404;
+若是, 是 fake-node 路径解析对 cwd 敏感的 bug, 修 defaultXxxDir 用 SCRIPT 相对定位而非 cwd 相对。
+**不影响 k8s 适配结论**: k8s 命门(网络/块设备/iostat/source链)已全真机验通(§23.1), fake-node 仅是"完整端到端"的验证工具。
+
+## 25. ✅ 主线收口: Phase2 磁盘采集容器内端到端验通 + 发现真 bug(2026-06-01, GKE 硬证)
+
+> 绕开 fake-node(§24, 与 k8s 无关), 直接验 k8s 适配真正命门: Phase2 磁盘采集在容器内经 hostPath 采 node 级 util/iops 写进 CSV。
+
+### 25.1 端到端硬证(采集链零改动跑通)
+容器内 source config_loader + iostat_collector, 配 LEDGER_DEVICE=sdb/ACCOUNTS_DEVICE=sdc, 调 `generate_all_devices_header` + `get_all_devices_data`:
+- **双盘 header 正确**: `data_sdb_*`(21列) + `accounts_sdc_*`(21列), 全字段含 normalized_iops/util/throughput(registry 生成)
+- **真实 node 级数据采到**: sdb %util=97.6% w/s=1747 total_iops=1747 throughput=109MiB/s; sdc %util=91.3% w/s=1351 throughput=42MiB/s
+  —— 正是 bench-node-sim fio 双盘负载, 经 hostPath 读 node /proc/diskstats 算出。
+- **结论**: 特权容器 → iostat 采集链 → hostPath 读 node 设备 → performance CSV 磁盘段(正确字段+真实值)闭环成立, **采集链代码零改动**, 只需 LEDGER_DEVICE/ACCOUNTS_DEVICE 正确指向 sdb/sdc。
+
+### 25.2 🔴 发现真 bug(k8s 适配范畴, 待修): user_config 硬编码设备名覆盖环境变量
+- `config/user_config.sh:17` `LEDGER_DEVICE="sda"`(无条件赋值)+ `:19` `ACCOUNTS_DEVICE=""` —— **source 时无条件覆盖已 export 的环境变量**。
+- 后果: k8s ConfigMap 手配 LEDGER_DEVICE=sdb 被 source user_config 覆盖回 sda(boot盘)→ 采错盘(实测采到 sda boot盘 util=2.6% 而非 sdb 数据盘 97.6%)。
+- **设计不一致证据**: 同文件 L13 `CLOUD_PROVIDER="${CLOUD_PROVIDER:-auto}"` 已用 `:-` 尊重 env, L17/L19 是漏网没跟上该模式。
+- **修法(明确, 低风险)**: L17 → `LEDGER_DEVICE="${LEDGER_DEVICE:-sda}"`, L19 → `ACCOUNTS_DEVICE="${ACCOUNTS_DEVICE:-}"`。
+  这样: VM 无 env 时默认 sda(行为不变, 回归安全); k8s ConfigMap/env 设了 sdb 则尊重(修复)。
+  device_resolver(POD_NAME 注入时)自动解析仍可后续覆盖。**改前 Gate3: grep 全仓有无依赖"user_config 强制 sda"的地方**(预期无, 因 L13 已是 :- 模式)。
+
+### 25.3 k8s 适配主线状态(命门 + 核心采集全验)
+- ✅ 网络(vegeta→RPC 可达)/ 块设备检查 / iostat 经 hostPath 算 node util / source链+Phase0 配置(§23.1)
+- ✅ **Phase2 磁盘采集端到端进 CSV(本节, 真实双盘 util/iops)= k8s 适配最核心命门**
+- 🔴 待修 1 个真 bug: user_config 设备名硬编码覆盖 env(§25.2, 低风险修法已定)
+- ⏳ 未验(非可行性必要): 完整 benchmark 出 HTML(卡 fake-node §24, 已解耦); gcp_gvnic network variant 真机(需 N2/C3 机型)
+- **甲方案可行性 = 完全坐实**。下一步实施: 修 §25.2 bug + 打镜像跑 Job(§22.6)+ 处置现有 DaemonSet(§22.6.5)。
+
+## 26. ⚠️ config env-override 治理 — 扩大精读后发现远比"加 :-"复杂(2026-06-01, 用户要求 token-level 再确认, 挖出真盲区)
+
+> 起点: §25.2 LEDGER_DEVICE 被 user_config 硬编码覆盖。用户要求"config 下所有配置都该支持 env 覆盖(VM+k8s 双生效),
+> 否则别人改了没覆盖的项很难定位 bug"。我先给方案A/B(凭顶层vs分支分类), 用户质疑"你确认准确?需扩大 token-level 再确认"。
+> 扩大精读(全仓 .sh/.py 追每个候选变量的赋值链)后, 确认 A/B 都有真错误 —— 简单"全改 :-"会制造用户担心的隐藏 bug。
+
+### 26.1 🔴 扩大精读挖出的真问题(推翻"全改 :- 即可")
+变量的真实"优先级/覆盖语义"在框架里**不统一**, 分 5 类, 不能一刀切加 :-:
+| 类 | 例 | 真实语义 | 加 :- 是否对 |
+|---|---|---|---|
+| **A. env-overridable 配置** | QPS 全套/VOL_SIZE/VOL_MAX_IOPS/阈值/ACCOUNT_*/日志子目录/metadata endpoint(40个单处赋值) | 用户/系统配, 该尊重 env, VM 无 env 回退默认 | ✅ 对(加 :-) |
+| **B. provider 派生(非配置)** | `ENA_MONITOR_ENABLED` | config_loader L179-209 按 DEPLOYMENT_PLATFORM 无条件 case 设值(aws=true/gcp=false)。user_config L45 死值**永远被覆盖** | ❌ 加 :- 无意义; L45 是误导性死值(用户以为能配实则没用)= 用户担心的 bug 源 |
+| **C. 计算派生(非独立配置)** | `DATA/ACCOUNTS_VOL_MAX_THROUGHPUT` | io2 盘时 user_config L103/L117 用 calculate_io2_throughput 自动算并无条件覆盖。throughput 对 io2 是 IOPS 的派生量 | ⚠️ 加 :- 仅非-io2 场景生效; io2 场景仍被覆盖(env 设了没用)|
+| **D. 命令行参数可覆盖** | `BLOCK_HEIGHT_*`(block_height_monitor.sh `="$2"`)| 优先级: 命令行参数 > env > config 默认 > 下游 :- 兜底 | ✅ config 加 :- 对, 但勿破坏 $2 那条 |
+| **E. 下游默认值不一致(既存隐患)** | `MONITOR_INTERVAL` | user_config=5, coordinator=5, 其他 4 个 monitor=`:-10`。独立启动路径下各用各的默认 | ⚠️ 加 :- 不够, 本身默认值不统一 = 另一个 bug |
+
+### 26.2 上一轮(方案A/B)的分类错误(诚实记录)
+- ❌ 把 `ENA_MONITOR_ENABLED` 当 user_config 配置项 → 实为 provider 派生(B类), 改了无效。
+- ❌ 没看到 `VOL_MAX_THROUGHPUT` 的 L103/L117 io2 auto 覆盖(C类)。
+- ❌ 没发现 `MONITOR_INTERVAL` 下游 5 处默认值不一致(E类)。
+- 根因: 凭"顶层赋值=配置项"的形分类, 没追每个变量的跨文件赋值链 + 下游消费方覆盖。= token-level AP5(凭分类标签判断没读实现)。
+
+### 26.3 csv schema / 契约类(已读懂, 确认不改)
+- `_CSV_REGISTRY_*`(csv_schema_registry.sh): CSV schema SSOT, 全仓 0 外部引用, **与 utils/csv_schema_registry.py 字节对称**。env 覆盖→打破双实现对称→静默破坏 CSV。不改。
+- `OVERHEAD_CSV_HEADER`(system_config.sh): 是 CSV 字段头定义(20列), unified_monitor.sh 写 header + 校验列数(wc -l)。env 覆盖→writer/reader 列数失配→静默坏数据。不改。
+- `CHAIN_CONFIG`(config_loader.sh:594): 运行时从 chains/<chain>.json 由 jq 派生→export 给 fetch_active_accounts.py/target_generator.sh。每次须从 json 重算, env 固定会用陈旧值。不改。
+
+### 26.4 范围判断(待用户定方向, 不自决)
+本治理真实工作量 = 不是"批量加 :-", 而是**逐变量确认优先级语义并分类处理**:
+- A 类(~40个): 加 :- (低风险, VM 回归安全)
+- B/C 类: 不是简单加 :-, 要么保持(provider/计算派生本就不该 env 配)、要么删 user_config 里的误导性死值 + 文档说明"此项由 X 决定不可配"
+- D 类: 加 :- 但保命令行参数链
+- E 类: 统一下游默认值(独立 bug, 可单列)
+- 契约类: 不改 + 加注释说明为何不 env 化
+未完成: 40 个"单处赋值"候选还需逐个确认下游无消费方覆盖(本轮只确认了多处赋值的13个)。
+
+## 27. ✅ config 治理 第1组完成: 设备名(LEDGER/ACCOUNTS_DEVICE)— 删过度设计 + env 化 + 真机验
+
+> 用户定边界: 设备名必须用户配, 框架不自动判定(节点多盘, 框架无法知道测哪块)。
+> → k8s_device_resolver(自动解析 PVC→设备名)= 过度设计, 删除; 设备名回归纯用户配置 + 支持 env。
+
+### 27.1 改动(3 处, 工作区未→已 commit)
+- **删 `config/k8s_device_resolver.sh`**: 自动设备解析, 过度设计。顺带消除其 POD_NAME=自己的已知 bug(§19.6)。
+- **改 `config/config_loader.sh`**: 删 source+调用 resolver 的 if 块(L425-432)。
+- **改 `config/user_config.sh:17/19`**: `LEDGER_DEVICE="${LEDGER_DEVICE:-sda}"` / `ACCOUNTS_DEVICE="${ACCOUNTS_DEVICE:-}"` + 注释补强边界(多盘/框架不判定/VM 改文件 k8s 经 ConfigMap)。
+
+### 27.2 无技术债确认(parallel-entry 5 步 + Gate3)
+- resolver 单一调用点(config_loader 一处), 删后变量由 user_config:129 `export LEDGER_DEVICE ACCOUNTS_DEVICE` 兜底, 无断链。
+- 全仓无代码残留引用(grep 仅命中 EXEC-TRACKER 文档)。
+- pod_device_mapper.py 保留(甲方案: 作诊断工具, s5_diag 用; resolver 删除不碰它)。
+
+### 27.3 验证(全绿)
+- 语法: bash -n config_loader.sh + user_config.sh ✅
+- VM 回归(本地 env -i): 无 device env → LEDGER=sda/ACCOUNTS=空, 行为不变 ✅
+- k8s env(本地): LEDGER_DEVICE=sdb ACCOUNTS_DEVICE=sdc → 经完整 config_loader 链正确保留 ✅
+- **真机端到端(GKE bench-verify)**: env 传 sdb/sdc 经正常 source 链(不再手动覆盖)→ 采集采到 sdb %util=97.5%/1788iops, sdc %util=91.1%/1392iops(fio 真实负载)✅
+
+### 27.4 治理剩余(选项1 完整治理, 继续)
+- A 类 ~37 个纯配置项(QPS全套/VOL_SIZE/VOL_MAX_IOPS/阈值/ACCOUNT_*/日志子目录/metadata endpoint): 加 :- (零风险), 待做。
+- B 类 ENA_MONITOR_ENABLED: provider 派生, user_config L45 死值误导 → 加注释或移除(不加 :-)。
+- C 类 VOL_MAX_THROUGHPUT: io2 计算派生 → 加注释说明(非 io2 才独立配)。
+- E 类 MONITOR_INTERVAL: 下游 5 处默认值不一致(5 vs 10)→ 统一。
+- 契约类(_CSV_REGISTRY_*/OVERHEAD_CSV_HEADER/CHAIN_CONFIG): 不改 + 加注释说明为何不 env 化。
+
 
 
 

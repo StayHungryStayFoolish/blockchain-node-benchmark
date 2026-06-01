@@ -13,10 +13,14 @@
 CLOUD_PROVIDER="${CLOUD_PROVIDER:-auto}"
 
 # ----- Disk Device Configuration -----
-# DATA device (LEDGER data storage)
-LEDGER_DEVICE="sda"
-# ACCOUNTS device (optional, for account data storage)
-ACCOUNTS_DEVICE=""
+# ⚠️ 设备名必须由用户按实际部署配置 —— 框架不自动判定。
+# 一个节点可能挂多块磁盘(如 5 块), 节点只使用其中 1-2 块跑区块链, 框架无法确认
+# 用户要测哪块, 故设备名由用户自己负责。VM: 直接改本文件; k8s: 经 ConfigMap/env 注入
+# (写法 ${VAR:-默认} 保证 env/ConfigMap 设了就尊重, 没设回退默认值, VM/k8s 双生效)。
+# DATA device (LEDGER data storage) —— 用 lsblk 查节点实际设备名(如 sda/sdb/nvme1n1)
+LEDGER_DEVICE="${LEDGER_DEVICE:-sda}"
+# ACCOUNTS device (optional, for account data storage; 单盘部署留空)
+ACCOUNTS_DEVICE="${ACCOUNTS_DEVICE:-}"
 
 # Use unified naming convention {logical_name}_{device_name}_{metric}
 # DATA device uses data prefix, ACCOUNTS device uses accounts prefix

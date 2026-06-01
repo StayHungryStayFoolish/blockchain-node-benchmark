@@ -422,15 +422,6 @@ if declare -F resolve_k8s_paths >/dev/null 2>&1; then
     resolve_k8s_paths
 fi
 
-# K8s 模式磁盘设备解析 (§18): k8s* 时把本 Pod 的 data/accounts 卷解析成 node 块设备名,
-# 填充 LEDGER_DEVICE/ACCOUNTS_DEVICE → 下游 iostat 链零改动复用。非 k8s 模式整段跳过
-# (VM 路径保留 user_config 硬配值, 回归零影响)。须在 DEPLOYMENT_MODE + HOST_ROOT 就绪后。
-if [[ -f "${CONFIG_DIR}/k8s_device_resolver.sh" ]]; then
-    # shellcheck source=/dev/null
-    source "${CONFIG_DIR}/k8s_device_resolver.sh"
-    declare -F resolve_k8s_disk_devices >/dev/null 2>&1 && resolve_k8s_disk_devices
-fi
-
 # Execute network interface detection
 detect_network_interface
 
