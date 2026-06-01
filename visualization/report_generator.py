@@ -1654,6 +1654,34 @@ class ReportGenerator:
         prefix = f'{device_prefix}_'
         return [col for col in df.columns if col.startswith(prefix) and col.endswith(suffix)]
 
+    def _sizing_iops_peak(self, df, device_prefix, adjusted_iops_col):
+        """Hyperdisk/Provisioned 共桶 sizing 峰值兜底 (Worst-Case Envelope)。
+
+        见 references/aws-gcp-sizing-rules-and-variant-taxonomy.md §2.2。
+        返回 max(峰值 provider-adjusted total IOPS, 峰值 r_s + 峰值 w_s)。
+
+        GCP Provisioned 盘 (hyperdisk-* / pd-extreme / AWS io2) 读写共享 IOPS 桶,
+        read 峰与 write 峰可能不在同一采样刻 → 同刻 total 低估真实并发。取读写各自
+        时间窗峰值之和与 total 峰值的较大者, 作最悲观上界, 不漏 sizing 告警。
+
+        量纲约束: r_s/w_s 是原始速率, adjusted 是 provider-adjusted。GCP/other passthrough
+        (adjusted==raw) 时量纲一致, 兜底完整生效; AWS ceil(256) 拆分盘 adjusted 已放大而
+        r_s/w_s 未拆 → r+w 峰值之和小于 adjusted 峰值, max() 自然退化为 adjusted (不在此处
+        二次拆分 r/w, 避免与 writer disk_converter.sh 形成计算逻辑双源)。
+
+        r_s/w_s 列缺失 (老 CSV / 解析失败) 时优雅退回纯 adjusted 峰值, 不报错。
+        """
+        adjusted_peak = df[adjusted_iops_col].max()
+        try:
+            r_cols = self._resolve_disk_columns(df, device_prefix, 'disk_r_s')
+            w_cols = self._resolve_disk_columns(df, device_prefix, 'disk_w_s')
+            if r_cols and w_cols:
+                rw_peak = df[r_cols[0]].max() + df[w_cols[0]].max()
+                return max(adjusted_peak, rw_peak)
+        except (KeyError, TypeError, ValueError):
+            pass
+        return adjusted_peak
+
     def generate_disk_analysis_section(self, warnings, performance_metrics):
         """Generate Disk analysis report HTML section - enhanced version with dual-layer statistics"""
         if not warnings and not performance_metrics:
@@ -1799,7 +1827,17 @@ class ReportGenerator:
                 # Filter out noise values (< 10 IOPS) for Min calculation
                 meaningful_data = df[df[data_iops_col[0]] >= 10][data_iops_col[0]]
                 stats_data['DATA_IOPS_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
-                stats_data['DATA_IOPS_Max'] = df[data_iops_col[0]].max()
+                # Hyperdisk/Provisioned 共桶 sizing 兜底 (Worst-Case Envelope, 见
+                # references/aws-gcp-sizing-rules-and-variant-taxonomy.md §2.2):
+                # GCP Provisioned 盘 (hyperdisk-* / pd-extreme / AWS io2) 读写共享 IOPS 桶,
+                # 监控采样时 read 峰与 write 峰可能不在同一刻 → 同刻 total 会低估真实并发压力。
+                # 取 max(峰值total_adjusted, 峰值r + 峰值w) 作最悲观上界, 不漏 sizing 告警。
+                # 量纲约束: r_s/w_s 是原始速率, total_adjusted 是 provider-adjusted。GCP/other
+                # 走 passthrough (adjusted==raw) 时两者量纲一致, 兜底完整生效; AWS ceil(256) 拆分盘
+                # adjusted 已放大而 r_s/w_s 未拆 → 兜底退化为 total_adjusted (不在此处二次拆分 r/w,
+                # 避免与 writer disk_converter.sh 形成计算逻辑双源)。Hyperdisk 共桶本就是 GCP 场景。
+                stats_data['DATA_IOPS_Max'] = self._sizing_iops_peak(
+                    df, 'data', data_iops_col[0])
                 stats_data['DATA_IOPS_Avg'] = df[data_iops_col[0]].mean()
             
             if data_throughput_col:
@@ -1817,7 +1855,9 @@ class ReportGenerator:
                 # Filter out noise values (< 10 IOPS) for Min calculation
                 meaningful_data = df[df[accounts_iops_col[0]] >= 10][accounts_iops_col[0]]
                 stats_data['ACCOUNTS_IOPS_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
-                stats_data['ACCOUNTS_IOPS_Max'] = df[accounts_iops_col[0]].max()
+                # Hyperdisk/Provisioned 共桶 sizing 兜底 (同 DATA, 见 §2.2 Worst-Case Envelope)。
+                stats_data['ACCOUNTS_IOPS_Max'] = self._sizing_iops_peak(
+                    df, 'accounts', accounts_iops_col[0])
                 stats_data['ACCOUNTS_IOPS_Avg'] = df[accounts_iops_col[0]].mean()
             
             if accounts_throughput_col:
