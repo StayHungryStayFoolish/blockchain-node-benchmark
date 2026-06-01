@@ -351,3 +351,39 @@
 ### 9.5 遗留(非 bug)
 - mixed_weighted 5 method 中 fake-node 仅 getAccountInfo/getBalance 进 targets(target_generator 只生成有 fixture 的)→ 真节点会全 5 个。fake-node 范围。
 - CP-2 config 业务中立化(GCP 磁盘类型可切)未做。
+
+## 10. CP-2 磁盘类型 → IOPS 计算规则 + GCP 磁盘配置中立化(2026-06-01 本会话)
+
+> 触发: 用户执行方向1(config 中立化)。用户多次澄清收窄范围:
+>   - "不需要查各种实例类型"→ 删 vm 双天花板/machine-type 查表(实例存储带宽是用户自己该清楚的)
+>   - "关心磁盘类型用什么规则算 iops/throughput"→ B 真实核心 = 磁盘类型决定 IOPS 计算规则
+>   - 要求先确认沉淀计算规则准确性再执行。
+> 依据: analysis-notes/aws-gcp-io-counting-rules-verified.md(4 云厂商官方文档实证, 逐条核验
+>   出处具体/示例自洽/与 skill aws-gcp-sizing reference 交叉一致, 准确性通过; 局限: 沙盒无外网
+>   未重抓官方页, 凭文档内部一致性+双沉淀源互证)。
+
+### 10.1 磁盘类型 → IOPS 计算规则(权威文档核验后定案)
+| 磁盘类型 | io_cap | IOPS 规则 | 出处 |
+|---|---|---|---|
+| AWS EBS SSD (gp3/io2) | 256 KiB | (r/s+w/s)×ceil(io_size/256) | ebs-io-characteristics.html "capped at 256 KiB for SSD" |
+| AWS EBS HDD (st1/sc1) | 1024 KiB | (r/s+w/s)×ceil(io_size/1024) | 同文档 "1,024 KiB for HDD" + st1/sc1 IOPS 按 1MiB |
+| GCP 全盘型 (pd-*/hyperdisk-*) | 0(不拆) | r/s+w/s passthrough | optimizing-pd-performance "throughput=IOPS×IOsize" 独立轴 |
+| instance-store/other | 0(不拆) | passthrough | — |
+| throughput(三云) | — | 实测 MiB/s passthrough | convert_to_standard_throughput 已 passthrough |
+
+### 10.2 改动
+- config/user_config.sh: 加 CLOUD_PROVIDER(auto/aws/gcp/other) + DATA/ACCOUNTS_VOL_TYPE 注释列全 8 GCP 盘型;
+  configure_io2_volumes 加注释说明 io2 是 AWS 专属, GCP 盘型 VOL_TYPE≠io2 天然跳过(provider-aware by VOL_TYPE)。
+- utils/disk_converter.sh: 新增 disk_iops_io_cap_kib(vol_type)→io_cap 映射(gp3/io2=256, st1/sc1=1024, 其余=0);
+  convert_to_standard_iops 加 io_cap=0 强制 passthrough 守卫(磁盘类型优先于 provider, 即 AWS 也可不拆)。
+- monitoring/iostat_collector.sh: get_iostat_data 按 logical_name 选 DATA/ACCOUNTS_VOL_TYPE →
+  disk_iops_io_cap_kib 求 io_cap → 传 convert_to_standard_iops 第3参。删旧 BUG-2 latent NOTE(已根治)。
+
+### 10.3 验证(实测)
+- 7 盘型 io_cap 规则实测全对(1000iops@1024KiB): gp3/io2→4000(×4) / st1/sc1→1000(×1) / pd-ssd/hyperdisk/instance-store→1000(passthrough)。
+- iops 单测 13/13, R0 12/12, symmetry 7/7 全绿。
+- **BUG-2(AWS HDD io_cap 恒 256)随此根治**: 现按 vol_type 选 1024。
+
+### 10.4 范围澄清(用户明确不做)
+- vm 双天花板 min(disk,vm) / VM_MAX_* / machine-type 查表: **不做**(实例存储带宽是用户自己该清楚的, 与框架无关)。
+- 仅做"磁盘类型→IOPS/throughput 计算规则"(框架职责)。

@@ -21,10 +21,26 @@ fi
 #   GCP PD/Hyperdisk + other: passthrough (不按 I/O size 拆分,直接用 r/s+w/s).
 # 分流键来自 config/providers/{aws,gcp,other}_provider.sh 的 get_iops_conversion_func.
 
+# 磁盘类型 → IOPS 拆分上限 io_cap (KiB). B 核心: 计算规则按磁盘类型定, 不只按 provider.
+# 依据 analysis-notes/aws-gcp-io-counting-rules-verified.md (4 云厂商官方文档实证 2026-05-19):
+#   AWS EBS SSD (gp3/io2)   → 256 KiB  (官方: "I/O size capped at 256 KiB for SSD")
+#   AWS EBS HDD (st1/sc1)   → 1024 KiB (官方: "1,024 KiB for HDD volumes"; st1/sc1 IOPS 按 1MiB 算)
+#   GCP 全盘型 (pd-*/hyperdisk-*) / other / instance-store → 不拆分 (passthrough, 返 0 表示 N/A)
+# 返回: io_cap KiB (256/1024) 供 AWS 拆分; 0 = 不拆分(passthrough 盘型)。
+disk_iops_io_cap_kib() {
+    local vol_type="${1:-}"
+    case "$vol_type" in
+        gp3|io2)        echo "256" ;;    # AWS EBS SSD
+        st1|sc1)        echo "1024" ;;   # AWS EBS HDD
+        *)              echo "0" ;;      # GCP 盘型/instance-store/other/未配 → 不拆分
+    esac
+}
+
 # Convert actual IOPS to provider-standard IOPS
 # Parameters: actual_iops              - Actual IOPS (r/s + w/s)
 #             actual_avg_io_size_kib   - Average I/O size in KiB (used for AWS split)
 #             io_cap_kib (optional)    - I/O size cap: 256 (SSD, default) | 1024 (HDD)
+#                                        由 caller 经 disk_iops_io_cap_kib "$DATA_VOL_TYPE" 求得
 # Returns: provider-standard IOPS
 #   AWS:        actual_iops * ceil(avg_io_size_kib / cap)   (保守上界,见官方 merge/split 语义)
 #   GCP/other:  actual_iops (passthrough)
@@ -44,6 +60,14 @@ convert_to_standard_iops() {
     local conv_func="passthrough"
     if declare -F get_iops_conversion_func >/dev/null 2>&1; then
         conv_func=$(get_iops_conversion_func)
+    fi
+
+    # B 核心: 磁盘类型优先. io_cap_kib=0 表示该盘型不按 io_size 拆分
+    # (GCP pd-*/hyperdisk-* / instance-store / other), 直接 passthrough —
+    # 即使 provider=aws 也不拆 (盘型决定规则, 不是 provider 一刀切).
+    if [[ "$io_cap_kib" == "0" ]]; then
+        echo "$actual_iops"
+        return
     fi
 
     case "$conv_func" in
@@ -165,6 +189,7 @@ is_accounts_configured() {
 }
 # Export functions
 export -f convert_to_standard_iops
+export -f disk_iops_io_cap_kib
 export -f convert_to_standard_throughput
 export -f calculate_io2_throughput
 export -f recommend_ebs_type

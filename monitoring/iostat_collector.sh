@@ -118,15 +118,21 @@ get_iostat_data() {
     fi
     
     # Calculate provider-standard IOPS (based on real-time data)
-    # NOTE(latent, HDD 未覆盖): convert_to_standard_iops 第3参 io_cap 默认 256 (SSD).
-    #   AWS EBS HDD (st1/sc1) 官方按 1024 KiB 拆分,需传 io_cap=1024; 但当前 provider 层
-    #   get_iops_conversion_func 固定返 aws_ssd_ceil_256, 未按卷类型 (DATA_VOL_TYPE) 区分 SSD/HDD.
-    #   现实: 区块链节点几乎不用 HDD (st1 ~500 IOPS 跑不动), 故此路径低优先未实现.
-    #   若将来支持 HDD: provider 层加 aws_hdd_ceil_1024 分支 + 此处按 $DATA_VOL_TYPE 传 io_cap.
-    #   对 SSD (gp3/io2, 区块链实际用) 当前完全正确.
+    # B: IOPS 拆分规则按【磁盘类型】定 (不再 provider 一刀切). 按 logical_name 选对应卷型,
+    #   经 disk_iops_io_cap_kib 求 io_cap: AWS SSD(gp3/io2)=256 / AWS HDD(st1/sc1)=1024 /
+    #   GCP 盘型+instance-store+other=0(passthrough 不拆). 依据 aws-gcp-io-counting-rules-verified.md。
+    local _vol_type
+    case "$logical_name" in
+        accounts) _vol_type="${ACCOUNTS_VOL_TYPE:-}" ;;
+        *)        _vol_type="${DATA_VOL_TYPE:-}" ;;
+    esac
+    local _io_cap=256
+    if declare -F disk_iops_io_cap_kib >/dev/null 2>&1; then
+        _io_cap=$(disk_iops_io_cap_kib "$_vol_type")
+    fi
     local standard_iops
     if [[ $(awk "BEGIN {print ($avg_io_kib > 0) ? 1 : 0}") -eq 1 ]]; then
-        standard_iops=$(convert_to_standard_iops "$total_iops" "$avg_io_kib")
+        standard_iops=$(convert_to_standard_iops "$total_iops" "$avg_io_kib" "$_io_cap")
     else
         standard_iops="$total_iops"
     fi

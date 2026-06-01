@@ -7,6 +7,11 @@
 # Modification frequency: Frequently modified
 # =====================================================================
 
+# ----- Cloud Provider Configuration -----
+# 云平台: "auto" 自动探测(metadata) | "aws" | "gcp" | "other" 强制指定.
+# auto 时由 config/cloud_provider.sh detect_platform() 探测; 探测不准可显式指定.
+CLOUD_PROVIDER="${CLOUD_PROVIDER:-auto}"
+
 # ----- Disk Device Configuration -----
 # DATA device (LEDGER data storage)
 LEDGER_DEVICE="sda"
@@ -16,16 +21,21 @@ ACCOUNTS_DEVICE=""
 # Use unified naming convention {logical_name}_{device_name}_{metric}
 # DATA device uses data prefix, ACCOUNTS device uses accounts prefix
 # Data volume configuration
-DATA_VOL_TYPE="io2"                    # Options: "gp3" | "io2" | "instance-store"
+# DATA_VOL_TYPE 选项随云平台不同 (config/providers/<provider>.sh get_disk_type_options):
+#   AWS:   "gp3" | "io2" | "instance-store"
+#   GCP:   "pd-standard" | "pd-balanced" | "pd-ssd" | "pd-extreme" |
+#          "hyperdisk-balanced" | "hyperdisk-extreme" | "hyperdisk-throughput" | "local-ssd"
+#   GCP Provisioned 型盘 (pd-extreme / hyperdisk-*) 的 IOPS+Throughput 独立购买,
+#   sizing 用 max(read+write, total) 兜底 (见 analysis-notes/aws-gcp-io-counting-rules-verified.md)。
+DATA_VOL_TYPE="io2"                    # 按上面 CLOUD_PROVIDER 选对应云的盘类型
 DATA_VOL_SIZE="2000"                   # Current required data size to keep both snapshot archive and unarchived version of it
-DATA_VOL_MAX_IOPS="30000"              # Max IOPS for Disk volumes (REQUIRED for "instance-store")
-DATA_VOL_MAX_THROUGHPUT="700"          # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for "io2")
-
+DATA_VOL_MAX_IOPS="30000"              # Max IOPS for Disk volumes (REQUIRED for "instance-store"); GCP Provisioned 盘=购买的 IOPS 配额
+DATA_VOL_MAX_THROUGHPUT="700"          # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for AWS "io2"; GCP Provisioned 盘=购买的 throughput 配额)
 # Accounts volume configuration (optional)
-ACCOUNTS_VOL_TYPE="io2"                # Options: "gp3" | "io2" | "instance-store"
+ACCOUNTS_VOL_TYPE="io2"                # 同 DATA_VOL_TYPE, 按 CLOUD_PROVIDER 选对应云盘类型
 ACCOUNTS_VOL_SIZE="500"                # Current required data size to keep both snapshot archive and unarchived version of it
 ACCOUNTS_VOL_MAX_IOPS="30000"          # Max IOPS for Disk volumes (REQUIRED for "instance-store")
-ACCOUNTS_VOL_MAX_THROUGHPUT="700"      # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for "io2")
+ACCOUNTS_VOL_MAX_THROUGHPUT="700"      # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for AWS "io2")
 
 # ----- Network Monitoring Configuration -----
 # EC2 instance network bandwidth configuration (unit: Gbps) - User must set according to EC2 instance type
@@ -64,6 +74,11 @@ QPS_COOLDOWN=30      # Cooldown time between QPS levels (seconds)
 QPS_WARMUP_DURATION=60  # Warmup time (seconds)
 
 # ----- Disk io2 Type Automatic Throughput Calculation -----
+# 注意: io2 是 AWS EBS 专属盘型, calculate_io2_throughput 用 AWS io2 Block Express
+# 的 0.256 ratio 公式自动算 throughput。GCP 盘型 (pd-*/hyperdisk-*) VOL_TYPE 不等于
+# "io2", 天然跳过此函数, DATA_VOL_MAX_THROUGHPUT 保持用户手配值 (GCP Provisioned 盘的
+# IOPS/Throughput 是独立购买配额, 不存在 AWS io2 那种按 IOPS 自动推算 throughput 的关系)。
+# => 本函数对 GCP/other 是 no-op, provider-aware 由 VOL_TYPE 取值天然隔离, 无需显式分支。
 configure_io2_volumes() {
     echo "🔧 Checking Disk io2 type configuration..." >&2
 
