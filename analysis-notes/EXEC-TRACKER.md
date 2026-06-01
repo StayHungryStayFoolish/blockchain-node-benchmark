@@ -871,6 +871,76 @@ BLOCKCHAIN_PROCESS_NAMES (config_loader:23 既有)
 §18.7 写的 k8s_device_resolver 用 POD_NAME(自己)= §19.1 问题3 的目标身份错位。**已 commit(d9b31df)但有此 bug**,
 实施时按 19.5 步骤2 修正(改用目标发现的 TARGET_POD_NAME)。之前真机验证用 `-p bench-node-sim` 显式传, 掩盖了 bug。
 
+## 20. ✅ K8s 设计动机厘清 + 干净方案定案(2026-06-01, 用户最终澄清, 推翻 §19 部分弯路)
+
+> ⚠️ **本节是 §18/§19 的订正版。§19 有多处基于错误前提的弯路结论(下方"弯路清单"列出), 以本节为准。**
+> 触发: 用户最终澄清了 k8s 适配的**真正设计动机**(下方 20.1), 一句话闭环了之前 8+ 轮绕晕的逻辑。
+
+### 20.1 🎯 真正的设计动机(用户澄清, 这是主线, 之前绕丢了)
+完整逻辑链(三步, 缺一不可):
+1. **k8s pod 容器内拿不到磁盘 iops/throughput/util** — cgroup 只有累计 counter(rbytes/wbytes/rios/wios),
+   **物理拿不到 %util**(那是块设备忙时占比, cgroup 层没有)。这是出发点。
+2. **一个 node 只部署一个区块链节点 pod(独占)** — 成立前提(区块链全节点/验证者资源敏感, 生产独占整机)。
+3. **所以才"直接在 node 上获取"pod 内拿不到的信息** — 因独占, node 级 iostat 的 util/iops/throughput
+   ≈ 该 pod 的。这是 DaemonSet 在 node 上(hostPath 读 /proc /sys)的**真正职责**。
+
+**关键纠正**: DaemonSet **不是歧路**(§19 一度误判), 它是对的载体——它在 node 上、有 hostPath、能跑 iostat 拿
+node 级磁盘。只是它**现在只采了 cgroup(pod 内本就能拿的), 没补 iostat(pod 内拿不到、真正需要 node 级的)**。
+**补全 = 给 node 级 DaemonSet 采集加上 pod 内拿不到的: 磁盘 iostat(util/iops/throughput) + 物理网卡 ethtool。**
+
+### 20.2 ❌ §19 的弯路清单(本节推翻, 勿采信)
+- ❌ "DaemonSet 是歧路, 应废弃, 改用 Job/定向 Pod 跑整个 benchmark" — 错。DaemonSet 是对的载体(见 20.1)。
+- ❌ "node 上直接跑 blockchain_node_benchmark.sh 整体流程(VM式)" — 错。不是跑整个 benchmark, 是 node 级
+   **补采 pod 内拿不到的磁盘/网卡信息**, 跟 pod 内/主链路的数据合并。
+- ❌ "DaemonSet 改成跑 unified_monitor 主循环" — 错。unified 采主机级(mpstat/free 整 node), 且无脑采不筛目标。
+  正确是 DaemonSet 专职"node 级补 pod 拿不到的部分"。
+- ⚠️ §18.7 k8s_device_resolver(commit d9b31df)用 POD_NAME=自己 = bug, 但 node 直接跑场景 POD_NAME 空会
+  自动跳过(无害); DaemonSet 场景需用目标发现(20.4)。该代码定位对(解析 pod→设备)但目标身份获取方式要修。
+
+### 20.3 数据分工(谁采什么, 无重复无遗漏)
+| 数据 | pod 内能拿? | 采集方 | 说明 |
+|---|---|---|---|
+| 磁盘 util/iops/throughput | ❌ 拿不到(cgroup 无 util) | **node 级 iostat**(DaemonSet, 补) | 真机验证: iostat 按块设备隔离, sdb/sdc 各自 util/iops ✓ |
+| 磁盘 cgroup io counter | ✅ 能(rbytes/wbytes) | cgroup_collector(现有) | 已采, 但只是 counter 非速率/util |
+| CPU/MEM | ✅ cgroup 精确到 pod | cgroup_collector(现有) | 含 throttled |
+| network 物理网卡 | ❌ pod CNI 内看不到物理网卡 | **node 级 ethtool**(hostNetwork, 补) | 节点 pod 用 hostNetwork → node 网卡=pod 网卡 |
+**核心**: pod 内能拿的(cpu/mem/cgroup-io)用 cgroup_collector; pod 内拿不到的(磁盘 util/iops、物理网卡)用 node 级补。
+独占前提让 node 级 ≈ pod 级, 所以"补"是准确的。
+
+### 20.4 目标定位(DaemonSet 怎么知道采哪个设备/网卡)
+- 磁盘设备: node 上 lsblk 看到节点 pod 的 PVC 设备(sdb/sdc)。两种获取:
+  (a) 用户在 ConfigMap 手配 LEDGER_DEVICE/ACCOUNTS_DEVICE(跟 VM 一样, 最简);
+  (b) 自动: pod_device_mapper 解析(但需先定位目标 pod, 见目标发现链 §19.3)。
+  **独占前提下 (a) 手配最简无债**(node 上就一个区块链 pod, 设备固定)。
+- network: hostNetwork DaemonSet → ethtool 读 node 物理网卡(variant 探测 gcp_gvnic/gcp_virtio)。
+
+### 20.5 数据汇聚(node 级补的数据怎么进报告)
+- 关键缺口(现状): DaemonSet 采的数据现在到 **stdout 就没了**(04-daemonset L76-77 "for now stdout is fine"),
+  没进 performance CSV/报告主链路。这是 parallel-entry 半成品。
+- 补全: DaemonSet 采集(cgroup + 新增 node 级 iostat/ethtool)写进 performance CSV(或可被主链路消费的位置),
+  让磁盘 util/iops 段有数据 → 分析/报告/图表链复用(现有链路环境中立, grep 确认无 VM 硬编码)。
+- benchmark 有界性: 框架 QPS 爬坡到 MAX 或瓶颈检测停(config QUICK/STANDARD/INTENSIVE_MAX_QPS + AUTO_STOP),
+  DaemonSet 采集需跟随这个有界周期(靠 qps_test_status 信号, 所有监控组件统一生命周期, 见 §19.1 问题1)。
+
+### 20.6 真机验证已完成(GKE bench-k8s-test, 见 §18.9 账本)
+- ✅ iostat 按设备隔离(sda/sdb/sdc 同刻独立 util/iops)
+- ✅ pod_device_mapper 双盘解析(data→sdb/accounts→sdc)
+- ✅ /proc/PID/cgroup 提 pod UID(目标发现链可行)
+- 集群 + 测试 pod 仍在(账本 §18.9), 新会话可直接接续真机验证。
+
+### 20.7 DEPLOYMENT_MODE 事实(6 模式正交矩阵)
+deployment_mode_detector.sh 注释 L8-9: 6 模式 {vm_bare, vm_systemd, docker, k8s_eks, k8s_gke, k8s_other},
+与 DEPLOYMENT_PLATFORM(aws/gcp/other 云)**正交**, 组成 (运行时, 云) 矩阵。k8s_gke = 运行时GKE。
+DEPLOYMENT_MODE 只标识运行时做环境微调(cgroup 路径/设备探测), 不改 benchmark 有界本质。
+
+### 20.8 下一步(新会话实施)
+1. DaemonSet 采集补 node 级 iostat(磁盘 util/iops/throughput) + ethtool(物理网卡), 写进可被主链路消费的位置。
+2. 数据汇聚: DaemonSet 输出从 stdout → performance CSV(或主链路), 消除半成品。
+3. 目标定位优先用手配 LEDGER_DEVICE(独占前提最简); device_resolver 的 POD_NAME bug 按需修或回退。
+4. 镜像加 sysstat/ethtool/bc/jq/net-tools(K4); ConfigMap DEPLOYMENT_MODE/DATA_DIR 可写(emptyDir)。
+5. 真机端到端验证(集群已就绪 §18.9): DaemonSet 采到 sdb util/iops → CSV → 报告出磁盘图。
+6. 字段: 复用现有 performance CSV 段(disk 段已有 normalized_iops/util), 不新增字段(独占=单CSV, 无需 node_name)。
+
 
 
 
