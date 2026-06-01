@@ -417,10 +417,20 @@ generate_expected_csv_header() {
     fi
     
     full_header="$full_header,$overhead_header,$block_height_header,$qps_header"
+    # F5: 补 cgroup 段(19字段), 与 writer unified_monitor.sh generate_csv_header 的
+    # ...qps,cgroup,cloud_provider 顺序对齐(之前 expected 漏 cgroup → 与实际 CSV 差 19 列,
+    # validate 整串等值必失败)。cgroup 段 SSOT = monitoring/cgroup_collector.py --header,
+    # 与 writer get_cgroup_header 同源; collector 不可用/disabled 时 fail-soft 19字段占位(同 writer)。
+    local cgroup_header=""
+    local _cgroup_collector="${SCRIPT_DIR}/../monitoring/cgroup_collector.py"
+    local _cgroup_placeholder="cgroup_io_rbytes,cgroup_io_wbytes,cgroup_io_rios,cgroup_io_wios,cgroup_io_dbytes,cgroup_io_dios,cgroup_mem_anon,cgroup_mem_file,cgroup_mem_kernel,cgroup_mem_slab,cgroup_mem_sock,cgroup_mem_swap,cgroup_cpu_usage_usec,cgroup_cpu_user_usec,cgroup_cpu_system_usec,cgroup_cpu_nr_periods,cgroup_cpu_nr_throttled,cgroup_cpu_throttled_usec,cgroup_meta_source"
+    if [[ "${CGROUP_COLLECTOR_ENABLED:-true}" == "true" && -f "$_cgroup_collector" ]]; then
+        cgroup_header="$(python3 "$_cgroup_collector" --header 2>/dev/null || echo "$_cgroup_placeholder")"
+    else
+        cgroup_header="$_cgroup_placeholder"
+    fi
+    [[ -n "$cgroup_header" ]] && full_header="$full_header,$cgroup_header"
     # CP-1 双云对等: 实际 header 末尾追加 cloud_provider 列(见 unified_monitor.sh:generate_csv_header).
-    # 注意: 此 expected header 既有缺陷 — 未含 cgroup_header(19字段),与实际已不完全对齐;
-    #       该缺陷早于本次改动,超出 CP-1 范围,记录于 analysis-notes/CP-1-execution-tracker.md 待办.
-    #       本行仅同步本次新增的 cloud_provider 列,保持改动自洽.
     full_header="$full_header,cloud_provider"
     echo "$full_header"
 }
