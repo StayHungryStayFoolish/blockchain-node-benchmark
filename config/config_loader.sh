@@ -231,6 +231,16 @@ detect_deployment_platform() {
         fi
     fi
 
+    # ── 统一按最终 provider 设 ENA_MONITOR_ENABLED (修复 ENA-on-GCP bug, token-level Case-N) ──
+    # 此前 ENA 仅在 auto / 老式手动两分支的 case 里设, "显式 pin provider"分支(L148)漏设,
+    # 导致显式指定 gcp 时 ENA 沿用 user_config 的 true → GCP 误开 AWS 专属 ENA 监控。
+    # 修法: 在三分支汇合点(DEPLOYMENT_PLATFORM 已最终确定)统一设一次, 覆盖所有入口, 防再漏。
+    # ENA 是 AWS 专属网卡监控, 仅 aws=true, gcp/other 一律 false(GCP 用 gvnic monitor)。
+    case "$DEPLOYMENT_PLATFORM" in
+        aws) ENA_MONITOR_ENABLED=true ;;
+        *)   ENA_MONITOR_ENABLED=false ;;
+    esac
+
     # Output final configuration
     echo "📊 Deployment platform configuration:" >&2
     echo "   Platform type: $DEPLOYMENT_PLATFORM" >&2

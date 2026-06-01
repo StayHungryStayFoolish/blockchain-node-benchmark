@@ -1236,14 +1236,15 @@ hostPath 挂 /host/{proc,sys,dev} + privileged, 容器内 iostat 读 node 级设
 - **契约类注释**: OVERHEAD_CSV_HEADER(system_config) + _CSV_REGISTRY_*(csv_schema_registry)加"故意 NOT env-overridable + 原因"。
   CHAIN_CONFIG 不加注释(函数内派生变量, 不在用户配置区, 无误认风险)。
 
-### 29.2 🔴 独立 bug 发现: ENA-on-GCP(显式 pin provider 分支漏设 ENA)= token-level Case-N
+### 29.2 ✅ 独立 bug 已修: ENA-on-GCP(显式 pin provider 分支漏设 ENA)= token-level Case-N
 - **现象(真机验证)**: `DEPLOYMENT_PLATFORM=gcp` 时 `ENA_MONITOR_ENABLED=true`(应 false), 即 GCP 误开 AWS 专属 ENA 监控。
-- **根因(代码事实)**: config_loader.sh 的 provider 处理有两条分支:
-  - `if [[ -n "$_user_pinned" ]]`(L148, 显式指定 provider): 只 export CLOUD_PROVIDER + 探测 NIC, **完全没设 ENA_MONITOR_ENABLED** → 沿用 user_config 的 true。
-  - `elif [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]`(L177, 自动探测): 才有 `case` 按 aws/gcp 设 ENA。
-  - = Case-N(能力处理只挂在某一分支, 其他入口漏覆盖 → 静默退回旧值)。§23.3 记的"ENA-on-GCP 小问题"的根因。
-- **未修(独立 TODO, 不混进 config 治理)**: 修法 = pinned 分支也加 ENA 按 provider 分流(或抽成统一函数两分支都调)。
-  改的是监控逻辑, 需单独验证(aws pin→true / gcp pin→false / other pin→false)。已在 user_config 注释标注此 bug。
+- **根因(代码事实)**: config_loader.sh 三分支(pinned L148 / auto L158 / 老式手动 L192)中,
+  pinned 分支只 export CLOUD_PROVIDER + 探测 NIC, **没设 ENA**; ENA case 只在 auto + 老式手动两分支 → Case-N。
+- **修法(已落地)**: 在三分支汇合点(L233, getter 兜底之后/输出之前, DEPLOYMENT_PLATFORM 已最终确定)
+  统一 `case "$DEPLOYMENT_PLATFORM" in aws) true ;; *) false ;; esac`, 覆盖所有入口防再漏(Case-N 正解=汇合点统一)。
+  三分支原 ENA case 保留(echo 日志有价值, 值被统一段纠正, 无害)。
+- **验证(全绿)**: bash -n ✅; pin gcp→false / pin aws→true / pin other→false / auto→false(没改坏)。
+- user_config ENA 注释已更新为"由 provider 决定, 手配无效"(去掉 bug 标注)。
 
 ### 29.3 config env-override 治理 总结(3 组全done)
 - 第1组 设备名: 删 resolver + env 化 + 真机验(commit cf97822)

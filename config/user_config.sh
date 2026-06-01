@@ -46,10 +46,9 @@ ACCOUNTS_VOL_MAX_THROUGHPUT="700"      # Max throughput in MiB/s. ⚠️ io2 盘
 NETWORK_MAX_BANDWIDTH_GBPS="${NETWORK_MAX_BANDWIDTH_GBPS:-25}"       # Maximum network bandwidth (unit: Gbps) - User must set according to EC2 instance type
 
 # ENA network limitation monitoring configuration
-# ENA_MONITOR_ENABLED 设计上应由 CLOUD_PROVIDER 决定(ENA 是 AWS 专属网卡监控,
-# GCP/其他云无此概念)。⚠️ 已知 bug(待修, 见 EXEC-TRACKER §29): config_loader 仅在
-# "auto 探测"分支按 provider 设 ENA(aws=true/gcp=false), "显式 pin provider"分支漏设,
-# 故显式指定 gcp 时此处的 true 会被沿用 → GCP 误开 ENA。修复前请勿依赖此项自动关闭。
+# ENA_MONITOR_ENABLED 由 CLOUD_PROVIDER 自动决定(ENA 是 AWS 专属网卡监控, GCP/其他云
+# 无此概念, GCP 用 gvnic monitor)。config_loader 在三分支汇合点统一按最终 provider 设值:
+# aws=true, gcp/other=false。此处的值仅占位, 手动改/env 设均被覆盖, 无效。
 ENA_MONITOR_ENABLED=true
 
 # ----- Monitoring Configuration -----
