@@ -418,3 +418,26 @@
 | CP-2 GCP 磁盘类型 e2e 实跑验证 | TODO | config/规则代码已改+单测过, 但未实跑 GCP 盘型场景 e2e |
 | mixed_weighted 5 method 真节点验证 | TODO | fake-node 仅覆盖 2 method, 真节点全 5 个待验 |
 | S0/S1 PARTIAL-DONE 收尾(其余段 reader 全接 registry) | PARTIAL | network/overhead/qps 段 writer 仍字面量(§7.4 判定中性合规, 非紧急) |
+
+## 12. 框架本身问题修复 F1-F5(2026-06-01 本会话)
+
+> 触发: 用户"先将框架当前问题全部修复完善, GCP 真机测试后置"。做框架级问题全扫描(end-to-end
+> health audit + parallel-entry 全扫), 列 5 类问题逐个修。
+
+| ID | 问题 | 修复 | commit | 验证 |
+|---|---|---|---|---|
+| F1 | network/overhead/block/qps 4 段双源 header(unified_monitor + framework_data_quality_checker 各一份字面量) | registry 加 4 段 FieldDef(52字段)+ 两端经 csv_registry_segment_header | 0bf6a41 | symmetry 7/7; writer 端到端 4 段经 registry 出 |
+| F5 | generate_expected_csv_header 漏 cgroup 19 字段(与实际 CSV 差19列, validate 必失败) | expected 补 cgroup 段(调 cgroup_collector.py --header + fail-soft 占位) | d900d13 | expected 72列 == run_005 真实 CSV 72列 |
+| F3 | disk_chart_generator CSV 路径 timestamp 无守卫(与 DataFrame 路径不对称) | CSV 路径加 if 'timestamp' in columns 守卫 | cfc0a1b | AST OK; 双路径对称 |
+| F2 | 疑似 ~20 处 except 静默吞错 | **审计结论: 无真 bug**。34 except 仅 6 静默吞, 逐个 active-vs-latent triage 全是合理容错(JSON坏行skip/读文件失败continue/seaborn降级默认/timestamp多格式循环末尾有raise)。grep 粗数假象 | — | — |
+| F4 | ena_network_monitor 双源 header | **不修**(ADR-0003: ENA 是 AWS legacy, parallel-entry defer) | — | — |
+
+**回归**: symmetry 7/7 + R0 12/12 + iops 13/13 + per-method 17/17 全绿。
+
+**成果**: unified CSV 全部静态段(basic/disk/network/overhead/block/qps)经 registry 单源 +
+expected header 与实际 CSV 完全对齐(72列) — "改字段头断调用链"痛点在 unified CSV 层根治。
+
+### 12.1 §3 S 阶段状态更新(F1-F5 后)
+- S2: DONE(F1 补完 4 段双源收敛, 至此 framework_data_quality_checker 全段经 registry)
+- S4: 仍 TODO 守卫部分(F3 只修了 disk_chart timestamp 不对称, performance_visualizer 裸下标→registry 守卫未做; 但 F2 审计确认现有 except 容错合理, 无静默空图风险)
+- S6: DONE(F5 补 cgroup expected; cgroup 段 writer 本就经 get_cgroup_header/collector 单源, 无双源)
