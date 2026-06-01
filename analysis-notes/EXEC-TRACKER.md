@@ -92,11 +92,11 @@
 |---|---|---|---|
 | S0 | registry 骨架 + 契约测试 | PARTIAL-DONE | registry.py 仅 disk 段 21 字段;契约测试 tests/test_csv_*.sh 已有 |
 | S1 | disk 段 writer + 6类 reader 接入 registry | PARTIAL-DONE | 14 文件已引用 registry(E2);但停在 A/B 混血态,需 T 阶段扶正后才算真完成 |
-| S2 | framework_data_quality_checker 整串等值→字段集校验 | IN-PROGRESS | proposal §3.4。路子B(段感知统一registry)。.py+.sh 双侧段感知化完成,basic段 registry 录入+对称(2026-05-31,见§6)。待:writer 切 registry(S1 basic writer-first) |
-| S3 | basic/cpu/mem 段接入 + 统一 mem 列名分歧 | IN-PROGRESS | 与S2合并做(用户拍板S2+S3+S6一次性root)。basic段 FieldDef 已录入 .py+.sh 双侧,symmetry 测试 6/6 绿(见§6) |
-| S4 | performance_visualizer 裸下标→registry+守卫 | TODO | 最隐蔽静默空图 |
-| S5 | per_method(proxy_method.csv)接入 | TODO | — |
-| S6 | cgroup 段三处重复 header 收敛单源 | IN-PROGRESS | 与S2合并做(债B根治:消除L403自曝expected缺cgroup19字段缺陷) |
+| S2 | framework_data_quality_checker 整串等值→字段集校验 | DONE | 路子B 段感知 registry。basic writer-first 切换 DONE(§6/§8: L1 symmetry 7/7 + L2 + L3 整框架真出 CSV)。framework_data_quality_checker basic_header 经 registry 收敛双源(§8) |
+| S3 | basic/cpu/mem 段接入 + 统一 mem 列名分歧 | DONE | 与S2合并。basic 段 .py+.sh 双侧 registry + writer-first + L3 闭环(§6/§8)。mem 列名经 registry resolve 统一 |
+| S4 | performance_visualizer 裸下标→registry+守卫 | TODO | 最隐蔽静默空图。本会话仅去 aws 倾向(删 'aws' not in col 死过滤,§7),裸下标→registry 守卫仍 TODO |
+| S5 | per_method(proxy_method.csv)接入 | PARTIAL-DONE | per-method 链路本会话大幅推进(§9): P0-1 详细CSV落盘 + P0-2 静默异常修 + P0-3 proxy流量绕过根治 + single/mixed 双模式闭环。但 per_method 字段未纳入 csv_schema_registry 单源(独立 schema), 原义"接入registry"仍 TODO |
+| S6 | cgroup 段三处重复 header 收敛单源 | TODO | 本会话**未碰** cgroup(§7.4: generate_expected_csv_header L403 自曝未含 cgroup 19 字段, 预存缺陷待修) |
 
 ### 阶段 N — ebs→disk 纯命名收尾(非 CSV 字段部分,可独立)
 | ID | 任务 | 状态 | 备注 |
@@ -350,7 +350,7 @@
 
 ### 9.5 遗留(非 bug)
 - mixed_weighted 5 method 中 fake-node 仅 getAccountInfo/getBalance 进 targets(target_generator 只生成有 fixture 的)→ 真节点会全 5 个。fake-node 范围。
-- CP-2 config 业务中立化(GCP 磁盘类型可切)未做。
+- ~~CP-2 config 业务中立化(GCP 磁盘类型可切)未做~~ → **已做, 见 §10(commit 8ac8a87)**。
 
 ## 10. CP-2 磁盘类型 → IOPS 计算规则 + GCP 磁盘配置中立化(2026-06-01 本会话)
 
@@ -387,3 +387,34 @@
 ### 10.4 范围澄清(用户明确不做)
 - vm 双天花板 min(disk,vm) / VM_MAX_* / machine-type 查表: **不做**(实例存储带宽是用户自己该清楚的, 与框架无关)。
 - 仅做"磁盘类型→IOPS/throughput 计算规则"(框架职责)。
+
+## 11. 本会话(2026-05-31~06-01)任务状态总览 + 剩余清单
+
+> 一处汇总, 防 §3 总表与 §6-10 详情漂移(用户 2026-06-01 核对要求)。每项带 commit + 状态。
+
+### 11.1 已完成(DONE, 带 commit)
+| 任务 | 状态 | commit | 详情 |
+|---|---|---|---|
+| S2/S3 basic 段 writer-first(registry 双侧 + L3 闭环) | DONE | 9ed60e9 | §6/§8 |
+| 去 AWS 倾向性(performance_visualizer 死过滤 + report_generator i18n key) | DONE | 9ed60e9 | §7 |
+| BUG-1 proxy 僵尸进程 + trap 覆盖 | DONE | 9ed60e9 | §8.1 |
+| BUG-3 per-method 时间戳崩溃 | DONE | 9ed60e9 | §8.1 |
+| fake-node getSignaturesForAddress fixture | DONE | 9ed60e9 | §8.1 |
+| P0-1 per-method 详细 CSV 落盘 | DONE | dcfabc9 | §9 |
+| P0-2 per-method section 静默吞异常修 | DONE | dcfabc9 | §9 |
+| P1-1 single/mixed 文件名区分 | DONE | dcfabc9 | §9 |
+| P1-2 mixed 全链路闭环 | DONE | dcfabc9 | §9 |
+| P0-3 proxy 流量绕过(Phase 0.5 时序) | DONE | 73f56c7 | §9 |
+| single+mixed 双模式闭环验证(run_005/006) | DONE | 73f56c7 | §9.3/9.4 |
+| CP-2 磁盘类型→IOPS 规则 + GCP 磁盘配置中立化 | DONE | 8ac8a87 | §10 |
+| BUG-2 AWS HDD io_cap(随 CP-2 根治) | DONE | 8ac8a87 | §10.3 |
+
+### 11.2 剩余未做(下一轮候选, 按优先级)
+| 任务 | 状态 | 说明 |
+|---|---|---|
+| S4 performance_visualizer 裸下标→registry+守卫 | TODO | 最隐蔽静默空图; 本会话只去了 aws 倾向, 守卫未做 |
+| S5 per_method 字段纳入 csv_schema_registry 单源 | PARTIAL | 链路已闭环(§9), 但 per_method schema 仍独立未并入 registry |
+| S6 cgroup 段 header 收敛单源 + generate_expected_csv_header 补 cgroup 19 字段 | TODO | §7.4 预存缺陷, 本会话未碰 |
+| CP-2 GCP 磁盘类型 e2e 实跑验证 | TODO | config/规则代码已改+单测过, 但未实跑 GCP 盘型场景 e2e |
+| mixed_weighted 5 method 真节点验证 | TODO | fake-node 仅覆盖 2 method, 真节点全 5 个待验 |
+| S0/S1 PARTIAL-DONE 收尾(其余段 reader 全接 registry) | PARTIAL | network/overhead/qps 段 writer 仍字面量(§7.4 判定中性合规, 非紧急) |
