@@ -4269,10 +4269,31 @@ class ReportGenerator:
             )
 
             chain_name = self.config.get('BLOCKCHAIN_NODE', 'chain') if hasattr(self, 'config') else 'chain'
+            # rpc_mode (single/mixed) 区分: single 与 mixed 各跑一次时产物文件名带模式后缀,
+            # 避免互相覆盖, 两套数据/图可并存供对照 (用户需求: 各模式独立的资源利用图 + 数据文件).
+            rpc_mode = os.environ.get('RPC_MODE', '').strip().lower()
+            mode_suffix = f"_{rpc_mode}" if rpc_mode in ('single', 'mixed') else ""
+            chart_tag = f"{chain_name}{mode_suffix}"
+
+            # P0-1: 落盘 per-method 详细数据 CSV (供其他系统离线分析). 之前只出 SVG 图未落盘 —
+            # write_qps_csv/write_resource_csv 仅在单测被调, 生产渲染链漏调, 外部拿不到结构化数据.
+            from analysis.per_method_attribution import write_qps_csv, write_resource_csv
+            logs_dir = os.getenv('LOGS_DIR', self.output_dir)
+            try:
+                os.makedirs(logs_dir, exist_ok=True)
+                qps_csv_path = os.path.join(logs_dir, f"per_method_qps_{chart_tag}.csv")
+                res_csv_path = os.path.join(logs_dir, f"per_method_resource_{chart_tag}.csv")
+                write_qps_csv(qps_rows, qps_csv_path)
+                write_resource_csv(resource_rows, res_csv_path)
+            except Exception as _csv_e:
+                # 落盘失败不应阻断出图; 记录到 stderr 可见 (非静默吞)
+                import sys as _sys
+                print(f"[per_method] WARN: 详细 CSV 落盘失败: {_csv_e}", file=_sys.stderr)
+
             chart_dir = os.path.join(self.output_dir, 'per_method_charts')
             titles = get_chart_titles_for_language(self.language)
             paths = generate_all_charts(
-                qps_rows, resource_rows, chart_dir, chain_name=chain_name, titles=titles,
+                qps_rows, resource_rows, chart_dir, chain_name=chart_tag, titles=titles,
             )
             summary = compute_summary(qps_rows, resource_rows)
             # Use relative paths so report can be copied around
@@ -4281,6 +4302,12 @@ class ReportGenerator:
                 self.language, chain_name, rel_paths, summary,
             )
         except Exception as e:
+            # P0-2: 不静默吞异常. 之前仅 return HTML 注释, 导致 per-method section (框架核心)
+            # 任何异常都静默消失且无报错(如 BUG-3 时间戳崩溃曾被此吞掉). 现同时记 stderr + 完整
+            # traceback, 让运行日志可见, 再返回带原因的注释 (HTML 不崩, 但故障可追).
+            import sys as _sys, traceback as _tb
+            print(f"[per_method] ERROR: per-method section 生成失败: {e}", file=_sys.stderr)
+            _tb.print_exc()
             import html as _html_mod
             return f'<!-- per_method section skipped: {_html_mod.escape(str(e))} -->'
 

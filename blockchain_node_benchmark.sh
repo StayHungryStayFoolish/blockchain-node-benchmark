@@ -912,10 +912,12 @@ parse_rpc_mode_args() {
         case $1 in
             --single)
                 RPC_MODE="single"
+                export RPC_MODE   # 下游 report_generator (子进程) 据此区分 single/mixed 产物文件名
                 shift
                 ;;
             --mixed)
                 RPC_MODE="mixed"
+                export RPC_MODE   # 下游 report_generator (子进程) 据此区分 single/mixed 产物文件名
                 shift
                 ;;
             --no-proxy)
