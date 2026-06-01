@@ -18,7 +18,7 @@ fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/disk_converter.sh"
 
 # Initialize unified logger
 init_logger "unified_monitor" $LOG_LEVEL "${LOGS_DIR}/unified_monitor.log"
@@ -1256,7 +1256,7 @@ auto_performance_optimization_advisor() {
 
 }
 
-# Current dynamic monitoring interval (global variable) - use general monitoring interval, EBS-specific monitoring uses EBS_MONITOR_RATE through iostat background high-frequency collection
+# Current dynamic monitoring interval (global variable) - use general monitoring interval, disk-specific monitoring uses DISK_MONITOR_RATE through iostat background high-frequency collection
 CURRENT_MONITOR_INTERVAL=${MONITOR_INTERVAL}
 
 # System load assessment function
@@ -1860,7 +1860,7 @@ validate_monitoring_overhead_config() {
         validation_errors+=("OVERHEAD_CSV_HEADER variable not defined")
     fi
 
-    # Check EBS baseline configuration
+    # Check Disk baseline configuration
     if [[ -z "$DATA_VOL_MAX_IOPS" || -z "$DATA_VOL_MAX_THROUGHPUT" ]]; then
         validation_warnings+=("DATA device baseline not fully configured")
     fi
@@ -1924,7 +1924,16 @@ build_ena_header() {
 
 # Generate complete CSV header - support conditional ENA fields + cgroup fields
 generate_csv_header() {
-    local basic_header="timestamp,cpu_usage,cpu_usr,cpu_sys,cpu_iowait,cpu_soft,cpu_idle,mem_used,mem_total,mem_usage"
+    # basic 段 header 经 csv_schema_registry 单一事实源生成 (S2/S3: writer-first 切换).
+    # registry 由 iostat_collector.sh:16 硬 source 引入 (本文件 L204 source iostat_collector).
+    # 防御: registry 未 source 时回退字面量 (与 registry _BASIC_FIELDS 字节一致, symmetry Phase3.5 守护).
+    local basic_header
+    if declare -F csv_registry_basic_header >/dev/null 2>&1; then
+        basic_header="$(csv_registry_basic_header)"
+    else
+        log_warn "csv_registry_basic_header unavailable — fallback basic header 字面量"
+        basic_header="timestamp,cpu_usage,cpu_usr,cpu_sys,cpu_iowait,cpu_soft,cpu_idle,mem_used,mem_total,mem_usage"
+    fi
     local device_header=$(generate_all_devices_header)
     local network_header="net_interface,net_rx_mbps,net_tx_mbps,net_total_mbps,net_rx_gbps,net_tx_gbps,net_total_gbps,net_rx_pps,net_tx_pps,net_total_pps"
     local overhead_header="monitoring_iops_per_sec,monitoring_throughput_mibs_per_sec"
@@ -1933,11 +1942,13 @@ generate_csv_header() {
     local cgroup_header=$(get_cgroup_header)
 
     # Configuration-driven ENA header generation
+    # CP-1 双云对等: cloud_provider 列追加在末尾(纯追加,不影响任何按列号的现有 reader;
+    # unified CSV 全部 reader 按列名访问 df.columns,加列安全).
     if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
         local ena_header=$(build_ena_header)
-        echo "$basic_header,$device_header,$network_header,$ena_header,$overhead_header,$block_height_header,$qps_header,$cgroup_header"
+        echo "$basic_header,$device_header,$network_header,$ena_header,$overhead_header,$block_height_header,$qps_header,$cgroup_header,cloud_provider"
     else
-        echo "$basic_header,$device_header,$network_header,$overhead_header,$block_height_header,$qps_header,$cgroup_header"
+        echo "$basic_header,$device_header,$network_header,$overhead_header,$block_height_header,$qps_header,$cgroup_header,cloud_provider"
     fi
 }
 
@@ -2005,13 +2016,13 @@ generate_json_metrics() {
     # Limit to within 100%
     network_util=$(awk "BEGIN {printf \"%.2f\", ($network_util > 100) ? 100 : $network_util}" 2>/dev/null || echo "0")
 
-    # Extract EBS info from device data (simplified processing, take first device data)
-    local ebs_util=0
-    local ebs_latency=0
+    # Extract Disk info from device data (simplified processing, take first device data)
+    local disk_util=0
+    local disk_latency=0
     if [[ -n "$device_data" ]]; then
         # Device data format (21 fields): r_s,w_s,rkb_s,wkb_s,r_await,w_await,avg_await,aqu_sz,util...
-        ebs_util=$(echo "$device_data" | cut -d',' -f9 2>/dev/null || echo "0")      # f9=util
-        ebs_latency=$(echo "$device_data" | cut -d',' -f7 2>/dev/null || echo "0")   # f7=avg_await
+        disk_util=$(echo "$device_data" | cut -d',' -f9 2>/dev/null || echo "0")      # f9=util
+        disk_latency=$(echo "$device_data" | cut -d',' -f7 2>/dev/null || echo "0")   # f7=avg_await
     fi
 
     # Atomic write latest_metrics.json (core metrics)
@@ -2020,8 +2031,8 @@ generate_json_metrics() {
     "timestamp": "$timestamp",
     "cpu_usage": $cpu_usage,
     "memory_usage": $mem_usage,
-    "ebs_util": $ebs_util,
-    "ebs_latency": $ebs_latency,
+    "disk_util": $disk_util,
+    "disk_latency": $disk_latency,
     "network_util": $network_util,
     "error_rate": 0
 }
@@ -2035,8 +2046,8 @@ EOF
     "timestamp": "$timestamp",
     "cpu_usage": $cpu_usage,
     "memory_usage": $mem_usage,
-    "ebs_util": $ebs_util,
-    "ebs_latency": $ebs_latency,
+    "disk_util": $disk_util,
+    "disk_latency": $disk_latency,
     "network_util": $network_util,
     "error_rate": 0,
     "detailed_data": {
@@ -2063,6 +2074,15 @@ log_performance_data() {
     local overhead_data=$(get_monitoring_overhead)
     # v1.4.5 Step 3: cgroup_collector integration (fail-soft 19 fields)
     local cgroup_data=$(get_cgroup_data)
+    # CP-1 双云对等: 标记本行数据来自哪个云平台 (aws|gcp|other).
+    # getter 可用则用 provider 抽象层,否则回退 env CLOUD_PROVIDER,再不行 unknown.
+    local cloud_provider_val
+    if declare -F get_provider_name >/dev/null 2>&1; then
+        cloud_provider_val=$(get_provider_name)
+    else
+        cloud_provider_val="${CLOUD_PROVIDER:-unknown}"
+    fi
+    [[ -z "$cloud_provider_val" ]] && cloud_provider_val="unknown"
 
     # Collect current QPS test data
     local current_qps=0
@@ -2137,14 +2157,14 @@ except:
         rpc_latency_ms=$(echo "$rpc_latency_ms" | tr -d '\n\r' | head -c 20)
         qps_data_available=$(echo "$qps_data_available" | tr -d '\n\r' | head -c 10)
         
-        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available,$cgroup_data"
+        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$ena_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available,$cgroup_data,$cloud_provider_val"
     else
         # Clean newlines and special characters from all variables
         current_qps=$(echo "$current_qps" | tr -d '\n\r' | head -c 20)
         rpc_latency_ms=$(echo "$rpc_latency_ms" | tr -d '\n\r' | head -c 20)
         qps_data_available=$(echo "$qps_data_available" | tr -d '\n\r' | head -c 10)
         
-        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available,$cgroup_data"
+        local data_line="$timestamp,$cpu_data,$memory_data,$device_data,$network_data,$overhead_data,$block_height_data,$current_qps,$rpc_latency_ms,$qps_data_available,$cgroup_data,$cloud_provider_val"
     fi
     
     # Final data line validation
@@ -2494,7 +2514,7 @@ main() {
                 echo "Features:"
                 echo "  ✅ Unified monitoring entry, eliminate duplicate monitoring"
                 echo "  ✅ Standard time format: $TIMESTAMP_FORMAT"
-                echo "  ✅ Complete metric coverage: CPU, Memory, EBS, Network"
+                echo "  ✅ Complete metric coverage: CPU, Memory, Disk, Network"
                 echo "  ✅ Real monitoring overhead statistics"
                 echo "  ✅ Unified field naming convention"
                 echo "  ✅ Follow QPS test lifecycle"
@@ -2564,28 +2584,28 @@ basic_config_check() {
     
     echo "✅ Basic configuration validation passed"
     
-    # Execute EBS threshold validation
-    if ! validate_ebs_thresholds; then
+    # Execute Disk threshold validation
+    if ! validate_disk_thresholds; then
         return 1
     fi
     
     return 0
 }
 
-# EBS configuration validation
-validate_ebs_thresholds() {
+# Disk configuration validation
+validate_disk_thresholds() {
     local errors=()
     
-    # Validate EBS threshold configuration
-    if [[ -n "${BOTTLENECK_EBS_IOPS_THRESHOLD:-}" ]]; then
-        if ! [[ "$BOTTLENECK_EBS_IOPS_THRESHOLD" =~ ^[0-9]+$ ]] || [[ "$BOTTLENECK_EBS_IOPS_THRESHOLD" -lt 50 ]] || [[ "$BOTTLENECK_EBS_IOPS_THRESHOLD" -gt 100 ]]; then
-            errors+=("BOTTLENECK_EBS_IOPS_THRESHOLD value invalid: $BOTTLENECK_EBS_IOPS_THRESHOLD (should be 50-100)")
+    # Validate Disk threshold configuration
+    if [[ -n "${BOTTLENECK_DISK_IOPS_THRESHOLD:-}" ]]; then
+        if ! [[ "$BOTTLENECK_DISK_IOPS_THRESHOLD" =~ ^[0-9]+$ ]] || [[ "$BOTTLENECK_DISK_IOPS_THRESHOLD" -lt 50 ]] || [[ "$BOTTLENECK_DISK_IOPS_THRESHOLD" -gt 100 ]]; then
+            errors+=("BOTTLENECK_DISK_IOPS_THRESHOLD value invalid: $BOTTLENECK_DISK_IOPS_THRESHOLD (should be 50-100)")
         fi
     fi
     
-    if [[ -n "${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-}" ]]; then
-        if ! [[ "$BOTTLENECK_EBS_THROUGHPUT_THRESHOLD" =~ ^[0-9]+$ ]] || [[ "$BOTTLENECK_EBS_THROUGHPUT_THRESHOLD" -lt 50 ]] || [[ "$BOTTLENECK_EBS_THROUGHPUT_THRESHOLD" -gt 100 ]]; then
-            errors+=("BOTTLENECK_EBS_THROUGHPUT_THRESHOLD value invalid: $BOTTLENECK_EBS_THROUGHPUT_THRESHOLD (should be 50-100)")
+    if [[ -n "${BOTTLENECK_DISK_THROUGHPUT_THRESHOLD:-}" ]]; then
+        if ! [[ "$BOTTLENECK_DISK_THROUGHPUT_THRESHOLD" =~ ^[0-9]+$ ]] || [[ "$BOTTLENECK_DISK_THROUGHPUT_THRESHOLD" -lt 50 ]] || [[ "$BOTTLENECK_DISK_THROUGHPUT_THRESHOLD" -gt 100 ]]; then
+            errors+=("BOTTLENECK_DISK_THROUGHPUT_THRESHOLD value invalid: $BOTTLENECK_DISK_THROUGHPUT_THRESHOLD (should be 50-100)")
         fi
     fi
     
@@ -2596,12 +2616,12 @@ validate_ebs_thresholds() {
     fi
     
     if [[ ${#errors[@]} -gt 0 ]]; then
-        echo "❌ EBS threshold configuration validation failed:" >&2
+        echo "❌ Disk threshold configuration validation failed:" >&2
         printf '  - %s\n' "${errors[@]}" >&2
         return 1
     fi
     
-    echo "✅ EBS threshold configuration validation passed"
+    echo "✅ Disk threshold configuration validation passed"
     return 0
 }
 

@@ -26,13 +26,13 @@ graph TB
     subgraph "Analysis Layer"
         I[comprehensive_analysis.py<br/>Data Analysis]
         J[qps_analyzer.py<br/>QPS Analysis]
-        K[cpu_ebs_correlation_analyzer.py<br/>Correlation Analysis]
+        K[cpu_disk_correlation_analyzer.py<br/>Correlation Analysis]
     end
     
     subgraph "Visualization Layer"
         L[performance_visualizer.py<br/>Chart Generation]
         M[advanced_chart_generator.py<br/>Advanced Charts]
-        N[ebs_chart_generator.py<br/>EBS Charts]
+        N[disk_chart_generator.py<br/>Disk Charts]
         O[report_generator.py<br/>HTML Reports]
     end
     
@@ -88,7 +88,7 @@ flowchart LR
 ### Data Flow Stages
 
 1. **Test Execution** → QPS load generation using Vegeta
-2. **Real-time Monitoring** → System metrics collection (CPU, Memory, EBS, Network, ENA)
+2. **Real-time Monitoring** → System metrics collection (CPU, Memory, Disk, Network, ENA)
 3. **Data Collection** → CSV files with 73-79 performance metrics
 4. **Analysis** → Statistical analysis and correlation detection
 5. **Visualization** → 32 professional charts generation
@@ -201,7 +201,7 @@ graph TB
         B[unified_monitor.sh<br/>System Metrics<br/>73-79 fields]
         C[block_height_monitor.sh<br/>Blockchain Sync]
         D[ena_network_monitor.sh<br/>ENA Metrics]
-        E[iostat_collector.sh<br/>EBS I/O]
+        E[iostat_collector.sh<br/>Disk I/O]
     end
     
     subgraph "Analysis"
@@ -251,7 +251,7 @@ graph TB
 - `mem_total`: Total memory (MB)
 - `mem_usage`: Memory utilization (%)
 
-**EBS Storage Metrics (42 fields for 2 devices):**
+**Disk Storage Metrics (42 fields for 2 devices):**
 - Per-device IOPS (read/write/total)
 - Throughput (MiB/s)
 - Latency (r_await/w_await/avg_await)
@@ -304,7 +304,7 @@ graph TB
    - Threshold: 90%
    - Metrics: mem_usage
 
-3. **EBS Bottleneck (Weight: 30%)**
+3. **Disk Bottleneck (Weight: 30%)**
    - IOPS utilization > 90%
    - Latency > 50ms
    - Utilization > 90%
@@ -325,7 +325,7 @@ graph TB
 bottleneck_score = (
     cpu_score * 0.25 +
     memory_score * 0.20 +
-    ebs_score * 0.30 +
+    disk_score * 0.30 +
     network_score * 0.15 +
     ena_score * 0.05 +
     rpc_score * 0.05
@@ -430,11 +430,11 @@ See [Monitoring Mechanism](./monitoring-mechanism.md) for detailed architecture.
 - Throughput efficiency
 - Performance degradation points
 
-#### 3. cpu_ebs_correlation_analyzer.py
-**Purpose:** CPU-EBS correlation analysis
+#### 3. cpu_disk_correlation_analyzer.py
+**Purpose:** CPU-Disk correlation analysis
 
 **Key Correlations:**
-- CPU I/O wait vs EBS utilization
+- CPU I/O wait vs Disk utilization
 - CPU I/O wait vs I/O queue length
 - CPU I/O wait vs read/write latency
 - User CPU vs read requests
@@ -475,7 +475,7 @@ graph TB
     subgraph "Chart Generators"
         A[performance_visualizer.py<br/>Core Charts]
         B[advanced_chart_generator.py<br/>Advanced Analysis]
-        C[ebs_chart_generator.py<br/>EBS Professional]
+        C[disk_chart_generator.py<br/>Disk Professional]
     end
     
     subgraph "Support Modules"
@@ -519,18 +519,18 @@ graph TB
 8. `performance_trend_analysis.png` - Performance Trend Analysis
 9. `performance_correlation_heatmap.png` - Performance Correlation Heatmap
 
-#### EBS Professional Charts (7 charts)
-10. `ebs_aws_capacity_planning.png` - AWS Capacity Planning Analysis
-11. `ebs_iostat_performance.png` - Iostat Performance Analysis
-12. `ebs_bottleneck_correlation.png` - Bottleneck Correlation Analysis
-13. `ebs_performance_overview.png` - EBS Performance Overview
-14. `ebs_bottleneck_analysis.png` - EBS Bottleneck Analysis
-15. `ebs_aws_standard_comparison.png` - EBS AWS Standard Comparison
-16. `ebs_time_series_analysis.png` - EBS Time Series Analysis
+#### Disk Professional Charts (7 charts)
+10. `disk_capacity_planning.png` - AWS Capacity Planning Analysis
+11. `disk_iostat_performance.png` - Iostat Performance Analysis
+12. `disk_bottleneck_correlation.png` - Bottleneck Correlation Analysis
+13. `disk_performance_overview.png` - Disk Performance Overview
+14. `disk_bottleneck_analysis.png` - Disk Bottleneck Analysis
+15. `disk_normalized_comparison.png` - Disk Normalized Comparison
+16. `disk_time_series_analysis.png` - Disk Time Series Analysis
 
 #### Core Performance Charts (11 charts)
 17. `performance_overview.png` - Performance Overview
-18. `cpu_ebs_correlation_visualization.png` - CPU-EBS Correlation Analysis
+18. `cpu_disk_correlation_visualization.png` - CPU-Disk Correlation Analysis
 19. `device_performance_comparison.png` - Device Performance Comparison
 20. `await_threshold_analysis.png` - I/O Latency Threshold Analysis
 21. `monitoring_overhead_analysis.png` - Monitoring Overhead Analysis
@@ -573,7 +573,7 @@ graph TB
 - Bottleneck analysis
 - Configuration status
 - Monitoring overhead analysis
-- EBS baseline comparison
+- Disk baseline comparison
 - ENA network status
 - Block height sync status
 
@@ -581,12 +581,12 @@ graph TB
 1. Performance Summary
 2. Configuration Status
 3. Block Height Analysis
-4. EBS Performance Analysis
+4. Disk Performance Analysis
 5. Chart Gallery (32 charts)
 6. Monitoring Overhead Analysis
-7. EBS Baseline Analysis
+7. Disk Baseline Analysis
 8. ENA Network Analysis
-9. CPU-EBS Correlation
+9. CPU-Disk Correlation
 10. Production Resource Planning
 
 ## Integration Points
@@ -666,7 +666,7 @@ graph TB
 
 **Data Volume:**
 - Supports 1000+ data points per test
-- Handles multiple devices (2+ EBS volumes)
+- Handles multiple devices (2+ disk volumes)
 - Processes 73-79 metrics simultaneously
 
 **Test Duration:**

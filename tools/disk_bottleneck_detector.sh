@@ -1,6 +1,6 @@
 #!/bin/bash
-# EBS Real-time Bottleneck Detection, Console Output
-# High-frequency monitoring of EBS performance, real-time detection of IOPS and Throughput bottlenecks
+# Disk Real-time Bottleneck Detection, Console Output
+# High-frequency monitoring of Disk performance, real-time detection of IOPS and Throughput bottlenecks
 
 # Import dependencies
 # Safely load configuration file, avoid readonly variable conflicts
@@ -11,27 +11,29 @@ fi
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # Initialize unified logger manager
-init_logger "ebs_bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/ebs_bottleneck_detector.log"
+init_logger "disk_bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/disk_bottleneck_detector.log"
 
-source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/disk_converter.sh"
+# CSV Schema Registry (S1b: disk 段 reader 经 registry resolve 取物理列名, 不裸写)
+source "$(dirname "${BASH_SOURCE[0]}")/../config/csv_schema_registry.sh"
 
 # Bottleneck detection configuration
 # Use unified monitoring interval, loaded from config.sh
 # Threshold configuration (can be overridden by environment variables)
-BOTTLENECK_EBS_IOPS_THRESHOLD=${BOTTLENECK_EBS_IOPS_THRESHOLD:-90}      # IOPS utilization threshold (%)
-BOTTLENECK_EBS_THROUGHPUT_THRESHOLD=${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90}  # Throughput utilization threshold (%)
+BOTTLENECK_DISK_IOPS_THRESHOLD=${BOTTLENECK_DISK_IOPS_THRESHOLD:-90}      # IOPS utilization threshold (%)
+BOTTLENECK_DISK_THROUGHPUT_THRESHOLD=${BOTTLENECK_DISK_THROUGHPUT_THRESHOLD:-90}  # Throughput utilization threshold (%)
 
 # Threshold configuration
-readonly BOTTLENECK_IOPS_THRESHOLD=$(awk "BEGIN {printf \"%.4f\", ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} / 100}")
-readonly BOTTLENECK_THROUGHPUT_THRESHOLD=$(awk "BEGIN {printf \"%.4f\", ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} / 100}")
+readonly BOTTLENECK_IOPS_THRESHOLD=$(awk "BEGIN {printf \"%.4f\", ${BOTTLENECK_DISK_IOPS_THRESHOLD:-90} / 100}")
+readonly BOTTLENECK_THROUGHPUT_THRESHOLD=$(awk "BEGIN {printf \"%.4f\", ${BOTTLENECK_DISK_THROUGHPUT_THRESHOLD:-90} / 100}")
 
 # Global variables
 declare -A DEVICE_LIMITS
 declare -gA CSV_FIELD_MAP  # CSV field mapping: field name -> column index
 
-# Initialize EBS limits configuration
-init_ebs_limits() {
-    echo "🔧 Initializing EBS limits configuration..."
+# Initialize Disk limits configuration
+init_disk_limits() {
+    echo "🔧 Initializing Disk limits configuration..."
     
     # DATA volume limits (must exist)
     if [[ -n "$DATA_VOL_MAX_IOPS" ]]; then
@@ -104,8 +106,36 @@ init_csv_field_mapping() {
     return 0
 }
 
-# Extract EBS data from CSV row
-get_ebs_data_from_csv() {
+# 从 CSV 数据行的 cloud_provider 列取 provider (铁律: reader 取 provider 的唯一合法来源 =
+# CSV cloud_provider 列, 不做运行时探测 — 保证离线/跨环境分析时与写入该 CSV 的 writer 一致).
+# 入参: fields 数组名 (nameref). 取不到则中立兜底 other (passthrough, 不偏向).
+_disk_provider_from_row() {
+    local -n _fields_ref="$1"
+    local idx="${CSV_FIELD_MAP[cloud_provider]:-}"
+    local p=""
+    [[ -n "$idx" ]] && p="${_fields_ref[$idx]:-}"
+    p=$(echo "$p" | tr -d ' \t\r\n')
+    case "$p" in
+        aws|gcp|other) echo "$p" ;;
+        *) echo "other" ;;   # unknown/空 → 中立兜底
+    esac
+}
+
+# 经 registry 把逻辑名解析为物理列名 (与 writer 同一事实源, provider 一致才对齐).
+# 入参: logical_name prefix provider.
+# registry 在文件头硬 source (第18行, 无容错), 正常必然可用; 万一不可用返回空串,
+# 上层按"字段不存在→默认0"的既有安全路径处理 — 不自拼裸物理名 (避免引入第二解析源).
+_disk_resolve() {
+    local logical="$1" prefix="$2" provider="$3"
+    if declare -F csv_registry_resolve >/dev/null 2>&1; then
+        csv_registry_resolve "$logical" "$provider" "$prefix"
+    else
+        echo ""   # registry 缺失 → 空 → 上层走 0 兜底, 不绕过 registry 自拼物理名
+    fi
+}
+
+# Extract Disk data from CSV row
+get_disk_data_from_csv() {
     local device="$1"
     local csv_line="$2"
     
@@ -129,59 +159,66 @@ get_ebs_data_from_csv() {
         return
     fi
     
+    # provider 来自 CSV cloud_provider 列 (铁律), 经 registry 解析 provider-aware 物理列名,
+    # 与写入该 CSV 的 writer 严格对齐 (ADR-0002: 三云统一 normalized_* 物理列名, 经 registry 解析).
+    local provider
+    provider="$(_disk_provider_from_row fields)"
+    local std_iops_field std_throughput_field
+    std_iops_field="$(_disk_resolve disk_iops_provider_adjusted "$prefix" "$provider")"
+    std_throughput_field="$(_disk_resolve disk_throughput_provider_adjusted "$prefix" "$provider")"
+
     # Extract field values using CSV_FIELD_MAP
     local util_index="${CSV_FIELD_MAP["${prefix}_util"]:-}"
     local total_iops_index="${CSV_FIELD_MAP["${prefix}_total_iops"]:-}"
-    local aws_standard_iops_index="${CSV_FIELD_MAP["${prefix}_aws_standard_iops"]:-}"
-    local aws_standard_throughput_index="${CSV_FIELD_MAP["${prefix}_aws_standard_throughput_mibs"]:-}"
+    local std_iops_index="${CSV_FIELD_MAP["$std_iops_field"]:-}"
+    local std_throughput_index="${CSV_FIELD_MAP["$std_throughput_field"]:-}"
     local r_await_index="${CSV_FIELD_MAP["${prefix}_r_await"]:-}"
     local w_await_index="${CSV_FIELD_MAP["${prefix}_w_await"]:-}"
     
     # Safely extract field values, use default value 0
     local util="${fields[$util_index]:-0}"
     local total_iops="${fields[$total_iops_index]:-0}"
-    local aws_standard_iops="${fields[$aws_standard_iops_index]:-0}"
-    local aws_standard_throughput="${fields[$aws_standard_throughput_index]:-0}"
+    local std_iops="${fields[$std_iops_index]:-0}"
+    local std_throughput="${fields[$std_throughput_index]:-0}"
     local r_await="${fields[$r_await_index]:-0}"
     local w_await="${fields[$w_await_index]:-0}"
     
     # Numeric validation: ensure all values are valid numbers
     if ! [[ "$util" =~ ^[0-9]*\.?[0-9]+$ ]]; then util="0"; fi
     if ! [[ "$total_iops" =~ ^[0-9]*\.?[0-9]+$ ]]; then total_iops="0"; fi
-    if ! [[ "$aws_standard_iops" =~ ^[0-9]*\.?[0-9]+$ ]]; then aws_standard_iops="0"; fi
-    if ! [[ "$aws_standard_throughput" =~ ^[0-9]*\.?[0-9]+$ ]]; then aws_standard_throughput="0"; fi
+    if ! [[ "$std_iops" =~ ^[0-9]*\.?[0-9]+$ ]]; then std_iops="0"; fi
+    if ! [[ "$std_throughput" =~ ^[0-9]*\.?[0-9]+$ ]]; then std_throughput="0"; fi
     if ! [[ "$r_await" =~ ^[0-9]*\.?[0-9]+$ ]]; then r_await="0"; fi
     if ! [[ "$w_await" =~ ^[0-9]*\.?[0-9]+$ ]]; then w_await="0"; fi
     
-    # Return standardized format: util,total_iops,aws_standard_iops,aws_standard_throughput,r_await,w_await,avg_io_kib
-    echo "$util,$total_iops,$aws_standard_iops,$aws_standard_throughput,$r_await,$w_await,0"
+    # Return standardized format: util,total_iops,std_iops,std_throughput,r_await,w_await,avg_io_kib
+    echo "$util,$total_iops,$std_iops,$std_throughput,$r_await,$w_await,0"
 }
 
 # Validate required CSV fields exist
 validate_required_csv_fields() {
-    local required_fields=()
+    local required_fields=()           # provider-无关字段, 直接精确匹配
+    local provider_aware_prefixes=()   # provider-aware 字段所属 prefix, 经 registry 校验任一变体存在
     
     # Add required fields for LEDGER_DEVICE
     if [[ -n "$LEDGER_DEVICE" ]]; then
         required_fields+=("data_${LEDGER_DEVICE}_util")
         required_fields+=("data_${LEDGER_DEVICE}_total_iops")
-        required_fields+=("data_${LEDGER_DEVICE}_aws_standard_iops")
-        required_fields+=("data_${LEDGER_DEVICE}_aws_standard_throughput_mibs")
         required_fields+=("data_${LEDGER_DEVICE}_r_await")
         required_fields+=("data_${LEDGER_DEVICE}_w_await")
+        provider_aware_prefixes+=("data_${LEDGER_DEVICE}")
     fi
     
     # Add required fields for ACCOUNTS_DEVICE (if configured)
     if [[ -n "$ACCOUNTS_DEVICE" ]]; then
         required_fields+=("accounts_${ACCOUNTS_DEVICE}_util")
         required_fields+=("accounts_${ACCOUNTS_DEVICE}_total_iops")
-        required_fields+=("accounts_${ACCOUNTS_DEVICE}_aws_standard_iops")
-        required_fields+=("accounts_${ACCOUNTS_DEVICE}_aws_standard_throughput_mibs")
         required_fields+=("accounts_${ACCOUNTS_DEVICE}_r_await")
         required_fields+=("accounts_${ACCOUNTS_DEVICE}_w_await")
+        provider_aware_prefixes+=("accounts_${ACCOUNTS_DEVICE}")
     fi
     
-    # Validate each required field exists in CSV_FIELD_MAP
+    # Validate each provider-无关 field exists in CSV_FIELD_MAP
     for field in "${required_fields[@]}"; do
         if [[ -z "${CSV_FIELD_MAP[$field]:-}" ]]; then
             log_error "❌ Critical field missing: $field"
@@ -189,6 +226,28 @@ validate_required_csv_fields() {
             log_error "❌ Current configuration: LEDGER_DEVICE=$LEDGER_DEVICE, ACCOUNTS_DEVICE=$ACCOUNTS_DEVICE"
             return 1
         fi
+    done
+
+    # Validate provider-aware fields (iops/throughput): 物理列名三云统一 normalized (ADR-0002, 经 registry 解析).
+    # 不知道 CSV 来自哪个云时, 只要任一 provider 变体的物理名在 map 里即视为存在 (与 writer 对齐).
+    local pfx logical phys variant_found
+    for pfx in "${provider_aware_prefixes[@]}"; do
+        for logical in disk_iops_provider_adjusted disk_throughput_provider_adjusted; do
+            variant_found=0
+            for variant in aws gcp other; do
+                phys="$(_disk_resolve "$logical" "$pfx" "$variant")"
+                if [[ -n "${CSV_FIELD_MAP[$phys]:-}" ]]; then
+                    variant_found=1
+                    break
+                fi
+            done
+            if [[ $variant_found -eq 0 ]]; then
+                log_error "❌ Critical provider-aware field missing: ${pfx} / ${logical} (无任何 provider 变体在 CSV header)"
+                log_error "❌ CSV format may be incompatible or device configuration incorrect"
+                log_error "❌ Current configuration: LEDGER_DEVICE=$LEDGER_DEVICE, ACCOUNTS_DEVICE=$ACCOUNTS_DEVICE"
+                return 1
+            fi
+        done
     done
     
     log_info "✅ All critical fields validated, verified ${#required_fields[@]} fields"
@@ -257,20 +316,20 @@ start_csv_monitoring() {
             for device in "$LEDGER_DEVICE" "$ACCOUNTS_DEVICE"; do
                 [[ -z "$device" ]] && continue
                 
-                # Extract EBS data from CSV
-                local metrics=$(get_ebs_data_from_csv "$device" "$line")
+                # Extract Disk data from CSV
+                local metrics=$(get_disk_data_from_csv "$device" "$line")
                 
                 if [[ -n "$metrics" && "$metrics" != "0,0,0,0,0,0,0" ]]; then
-                    IFS=',' read -r util total_iops aws_standard_iops aws_standard_throughput r_await w_await _ <<< "$metrics"
+                    IFS=',' read -r util total_iops std_iops std_throughput r_await w_await _ <<< "$metrics"
                     
                     # Calculate average latency
                     local avg_latency=$(awk "BEGIN {printf "%.2f", ($r_await + $w_await) / 2}" 2>/dev/null || echo "0")
                     
-                    # Perform bottleneck detection (using correct AWS standardized parameters)
-                    detect_ebs_bottleneck "$device" "$total_iops" "$aws_standard_iops" "$aws_standard_throughput" "$avg_latency" "$timestamp"
+                    # Perform bottleneck detection (using provider-standardized parameters)
+                    detect_disk_bottleneck "$device" "$total_iops" "$std_iops" "$std_throughput" "$avg_latency" "$timestamp"
                     
                     local bottleneck_detected=$?
-                    log_info "$timestamp,$device,$total_iops,$aws_standard_throughput,$avg_latency,$bottleneck_detected"
+                    log_info "$timestamp,$device,$total_iops,$std_throughput,$avg_latency,$bottleneck_detected"
                 fi
             done
         done
@@ -294,20 +353,20 @@ start_csv_monitoring() {
             for device in "$LEDGER_DEVICE" "$ACCOUNTS_DEVICE"; do
                 [[ -z "$device" ]] && continue
                 
-                # Extract EBS data from CSV
-                local metrics=$(get_ebs_data_from_csv "$device" "$line")
+                # Extract Disk data from CSV
+                local metrics=$(get_disk_data_from_csv "$device" "$line")
                 
                 if [[ -n "$metrics" && "$metrics" != "0,0,0,0,0,0,0" ]]; then
-                    IFS=',' read -r util total_iops aws_standard_iops aws_standard_throughput r_await w_await _ <<< "$metrics"
+                    IFS=',' read -r util total_iops std_iops std_throughput r_await w_await _ <<< "$metrics"
                     
                     # Calculate average latency
                     local avg_latency=$(awk "BEGIN {printf "%.2f", ($r_await + $w_await) / 2}" 2>/dev/null || echo "0")
                     
-                    # Perform bottleneck detection (using correct AWS standardized parameters)
-                    detect_ebs_bottleneck "$device" "$total_iops" "$aws_standard_iops" "$aws_standard_throughput" "$avg_latency" "$timestamp"
+                    # Perform bottleneck detection (using provider-standardized parameters)
+                    detect_disk_bottleneck "$device" "$total_iops" "$std_iops" "$std_throughput" "$avg_latency" "$timestamp"
                     
                     local bottleneck_detected=$?
-                    log_info "$timestamp,$device,$total_iops,$aws_standard_throughput,$avg_latency,$bottleneck_detected"
+                    log_info "$timestamp,$device,$total_iops,$std_throughput,$avg_latency,$bottleneck_detected"
                 fi
             done
         done
@@ -366,8 +425,8 @@ wait_for_csv_ready() {
 
 
 
-# Detect EBS bottleneck
-detect_ebs_bottleneck() {
+# Detect Disk bottleneck
+detect_disk_bottleneck() {
     local device=$1
     local current_iops=$2
     local current_aws_iops=$3
@@ -394,8 +453,8 @@ detect_ebs_bottleneck() {
         bottleneck_type="${bottleneck_type}IOPS,"
         
         # Use configurable threshold instead of hardcoded value
-        local critical_threshold=$(awk "BEGIN {printf \"%.2f\", (${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} + 5) / 100}")
-        local high_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} / 100}")
+        local critical_threshold=$(awk "BEGIN {printf \"%.2f\", (${BOTTLENECK_DISK_IOPS_THRESHOLD:-90} + 5) / 100}")
+        local high_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_DISK_IOPS_THRESHOLD:-90} / 100}")
         
         if (( $(awk "BEGIN {print ($iops_utilization > $critical_threshold) ? 1 : 0}") )); then
             severity="CRITICAL"
@@ -413,8 +472,8 @@ detect_ebs_bottleneck() {
         bottleneck_type="${bottleneck_type}THROUGHPUT,"
         
         # Use configurable threshold instead of hardcoded value
-        local critical_threshold=$(awk "BEGIN {printf \"%.2f\", (${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} + 5) / 100}")
-        local high_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} / 100}")
+        local critical_threshold=$(awk "BEGIN {printf \"%.2f\", (${BOTTLENECK_DISK_THROUGHPUT_THRESHOLD:-90} + 5) / 100}")
+        local high_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_DISK_THROUGHPUT_THRESHOLD:-90} / 100}")
         
         if (( $(awk "BEGIN {print ($throughput_utilization > $critical_threshold) ? 1 : 0}") )); then
             severity="CRITICAL"
@@ -426,7 +485,7 @@ detect_ebs_bottleneck() {
     fi
     
     # Latency bottleneck detection
-    local latency_threshold=${BOTTLENECK_EBS_LATENCY_THRESHOLD:-50}
+    local latency_threshold=${BOTTLENECK_DISK_LATENCY_THRESHOLD:-50}
     if (( $(awk "BEGIN {print ($current_latency > $latency_threshold) ? 1 : 0}") )); then
         bottleneck_detected=true
         bottleneck_type="${bottleneck_type}LATENCY,"
@@ -446,7 +505,7 @@ detect_ebs_bottleneck() {
         log_info "$bottleneck_record"
         
         # Real-time warning
-        echo "⚠️  [$(date '+%H:%M:%S')] EBS BOTTLENECK DETECTED: $device - $bottleneck_type (Severity: $severity)"
+        echo "⚠️  [$(date '+%H:%M:%S')] Disk BOTTLENECK DETECTED: $device - $bottleneck_type (Severity: $severity)"
         echo "   IOPS: $current_aws_iops/$max_iops (${iops_utilization%.*}%), Throughput: $current_throughput/$max_throughput MiB/s (${throughput_utilization%.*}%)"
         
         return 1
@@ -465,13 +524,13 @@ start_high_freq_monitoring() {
         log_info "🔄 Continuous running mode (follow framework lifecycle)"
     fi
 
-    log_info "🚀 Starting EBS bottleneck detection (producer-consumer mode)"
+    log_info "🚀 Starting Disk bottleneck detection (producer-consumer mode)"
     log_info "   Duration: ${duration}s"
     log_info "   Data Source: iostat_collector.sh → unified_monitor.sh → performance_latest.csv"
     log_info "   Consumer Mode: Event-driven with dynamic field mapping"
     
-    # Initialize EBS limits configuration
-    init_ebs_limits
+    # Initialize Disk limits configuration
+    init_disk_limits
     
 
     # Try CSV event-driven mode
@@ -504,14 +563,14 @@ generate_monitoring_summary() {
     
     {
         echo "==============================================="
-        echo "EBS High-Frequency Monitoring Summary"
+        echo "Disk High-Frequency Monitoring Summary"
         echo "==============================================="
         echo "Generated: $(date)"
         echo "Data File: $data_file"
         echo "Bottleneck Log: $BOTTLENECK_LOG_FILE"
         echo ""
         
-        echo "=== EBS Configuration ==="
+        echo "=== Disk Configuration ==="
         for device in "$LEDGER_DEVICE" "$ACCOUNTS_DEVICE"; do
             if [[ -n "$device" && -n "${DEVICE_LIMITS["${device}_max_iops"]}" ]]; then
                 echo "$device:"
@@ -563,7 +622,7 @@ generate_monitoring_summary() {
             echo "  $device: Peak utilization ${peak_utilization}% (${peak_iops}/${max_iops} IOPS)"
             
             if (( $(awk "BEGIN {print ($peak_utilization > 85) ? 1 : 0}") )); then
-                echo "    ⚠️  HIGH UTILIZATION - Consider upgrading EBS configuration"
+                echo "    ⚠️  HIGH UTILIZATION - Consider upgrading Disk configuration"
             elif (( $(awk "BEGIN {print ($peak_utilization > 70) ? 1 : 0}") )); then
                 echo "    ⚠️  MODERATE UTILIZATION - Monitor closely"
             else
@@ -573,8 +632,8 @@ generate_monitoring_summary() {
     done
 }
 
-# Start EBS monitoring during QPS test
-start_ebs_monitoring_for_qps_test() {
+# Start Disk monitoring during QPS test
+start_disk_monitoring_for_qps_test() {
     local qps_duration="$1"
     local qps_start_time="$2"
     
@@ -583,49 +642,49 @@ start_ebs_monitoring_for_qps_test() {
         return 1
     fi
     
-    echo "🔗 Starting EBS bottleneck monitoring (QPS test mode)"
+    echo "🔗 Starting Disk bottleneck monitoring (QPS test mode)"
     echo "   QPS test duration: ${qps_duration}s"
     echo "   QPS start time: ${qps_start_time:-$(date +'%Y-%m-%d %H:%M:%S')}"
-    echo "   EBS monitoring will run synchronously with QPS test"
+    echo "   Disk monitoring will run synchronously with QPS test"
     echo ""
     
     # Record QPS test time range
     export QPS_TEST_START_TIME="${qps_start_time:-$(date +'%Y-%m-%d %H:%M:%S')}"
     export QPS_TEST_DURATION="$qps_duration"
     
-    # Start EBS monitoring synchronized with QPS test
+    # Start Disk monitoring synchronized with QPS test
     start_high_freq_monitoring "$qps_duration" "true"
 }
 
-# Stop EBS monitoring - new function
-stop_ebs_monitoring() {
-    echo "🛑 Stopping EBS bottleneck monitoring..."
+# Stop Disk monitoring - new function
+stop_disk_monitoring() {
+    echo "🛑 Stopping Disk bottleneck monitoring..."
     
     # Terminate all related monitoring processes
-    pkill -f "ebs_bottleneck_detector" 2>/dev/null || true
+    pkill -f "disk_bottleneck_detector" 2>/dev/null || true
     pkill -f "iostat.*${MONITOR_INTERVAL}" 2>/dev/null || true
     
-    echo "✅ EBS monitoring stopped"
+    echo "✅ Disk monitoring stopped"
     
     # Generate monitoring summary
     if [[ -f "$BOTTLENECK_LOG_FILE" ]]; then
         local bottleneck_count=$(wc -l < "$BOTTLENECK_LOG_FILE" 2>/dev/null || echo "0")
-        echo "📊 Detected $bottleneck_count EBS bottleneck events during monitoring"
+        echo "📊 Detected $bottleneck_count Disk bottleneck events during monitoring"
         
         if [[ $bottleneck_count -gt 0 ]]; then
-            echo "⚠️  EBS bottleneck details see: $BOTTLENECK_LOG_FILE"
+            echo "⚠️  Disk bottleneck details see: $BOTTLENECK_LOG_FILE"
         fi
     fi
 }
 
 # Main function
 main() {
-    echo "🔧 EBS Bottleneck Detector"
+    echo "🔧 Disk Bottleneck Detector"
     echo "=========================="
     echo ""
     
     # Initialize
-    init_ebs_limits
+    init_disk_limits
     echo ""
     
     # Parse arguments
@@ -661,11 +720,11 @@ main() {
     if [[ "$background" == "true" ]]; then
         echo "🚀 Starting in background mode..."
         echo "🔄 Framework lifecycle integration mode"
-        echo "📝 Logging to: ${LOGS_DIR}/ebs_bottleneck_detector.log"
+        echo "📝 Logging to: ${LOGS_DIR}/disk_bottleneck_detector.log"
         # Directly call monitoring function, don't restart process
         # duration=0 means continuous running, follow framework lifecycle
         # Redirect output to log file
-        exec > "${LOGS_DIR}/ebs_bottleneck_detector.log" 2>&1
+        exec > "${LOGS_DIR}/disk_bottleneck_detector.log" 2>&1
         start_high_freq_monitoring 0
     else
         start_high_freq_monitoring "$duration"

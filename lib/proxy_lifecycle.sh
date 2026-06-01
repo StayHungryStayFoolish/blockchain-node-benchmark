@@ -55,6 +55,69 @@ _proxy_try_build() {
     return $?
 }
 
+# Reap any orphaned proxy processes left by a previous run that did not reach
+# stop_rpc_proxy (crash / SIGKILL / lost PROXY_PID / interrupted session).
+# Root-cause fix for the "zombie proxy holds :18545 → next run bind fails →
+# per-method attribution silently disabled" bug.
+#
+# Strategy (precise, never kills unrelated processes):
+#   1. Match ONLY our own proxy binary by ABSOLUTE path via `pgrep -f`.
+#   2. Additionally free the listen port via `fuser` as a belt-and-suspenders
+#      step (covers the rare case the binary was copied/renamed).
+# Both are best-effort and silent on "nothing to clean".
+_proxy_reap_orphans() {
+    local bin="$1"
+    local port="${2:-$PROXY_LISTEN_PORT}"
+    local reaped=0
+
+    # (1) Kill by exact binary path. pgrep -f matches full cmdline; anchor on
+    #     the absolute path so we never hit an unrelated process that merely
+    #     mentions "proxy".
+    if command -v pgrep >/dev/null 2>&1; then
+        local pids
+        pids="$(pgrep -f "$bin" 2>/dev/null | grep -v "^$$\$" || true)"
+        if [[ -n "$pids" ]]; then
+            echo "🧹 Reaping orphaned proxy process(es) from previous run: $(echo "$pids" | tr '\n' ' ')" >&2
+            # SIGTERM first, then SIGKILL stragglers.
+            echo "$pids" | xargs -r kill -TERM 2>/dev/null || true
+            sleep 1
+            local still
+            still="$(pgrep -f "$bin" 2>/dev/null | grep -v "^$$\$" || true)"
+            [[ -n "$still" ]] && echo "$still" | xargs -r kill -KILL 2>/dev/null || true
+            reaped=1
+        fi
+    fi
+
+    # (2) Belt-and-suspenders: free the listen port if anything still holds it.
+    if command -v fuser >/dev/null 2>&1; then
+        if fuser "${port}/tcp" >/dev/null 2>&1; then
+            echo "🧹 Port ${port}/tcp still held — freeing it (fuser -k)" >&2
+            fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+            sleep 1
+            reaped=1
+        fi
+    fi
+
+    # Give the kernel a moment to release the socket (TIME_WAIT/close).
+    [[ $reaped -eq 1 ]] && sleep 1
+    return 0
+}
+
+# Return 0 (true) if the listen port is currently in use.
+_proxy_port_in_use() {
+    local port="${1:-$PROXY_LISTEN_PORT}"
+    if command -v ss >/dev/null 2>&1; then
+        ss -tlnH "( sport = :${port} )" 2>/dev/null | grep -q . && return 0
+        return 1
+    fi
+    # Fallback: bash /dev/tcp probe (connect success => something listening).
+    if (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+        exec 3<&- 3>&- 2>/dev/null || true
+        return 0
+    fi
+    return 1
+}
+
 start_rpc_proxy() {
     if proxy_should_skip; then
         echo "⏭️  RPC proxy disabled (NO_PROXY_LAYER/SKIP_RPC_PROXY set) — skipping Phase 2.5"
@@ -83,6 +146,17 @@ start_rpc_proxy() {
 
     # Clear any stale sink so the > 1 line check in stop is meaningful.
     rm -f "$sink_csv" "$self_csv" 2>/dev/null || true
+
+    # Root-cause fix: reap orphaned proxy from a previous run BEFORE starting,
+    # otherwise a zombie holding :PROXY_LISTEN_PORT makes our bind fail and the
+    # framework silently degrades to "no per-method attribution".
+    _proxy_reap_orphans "$bin" "$PROXY_LISTEN_PORT"
+    if _proxy_port_in_use "$PROXY_LISTEN_PORT"; then
+        echo "⚠️  Port :${PROXY_LISTEN_PORT} still in use after reap attempt — proxy cannot bind." >&2
+        echo "    Inspect with: ss -tlnp '( sport = :${PROXY_LISTEN_PORT} )'  /  lsof -i:${PROXY_LISTEN_PORT}" >&2
+        echo "    Continuing without proxy (per-method attribution disabled)." >&2
+        return 0
+    fi
 
     echo "🚀 Starting RPC proxy: listen=:${PROXY_LISTEN_PORT} upstream=${LOCAL_RPC_URL} chain=${BLOCKCHAIN_NODE:-solana}"
 
@@ -143,6 +217,11 @@ stop_rpc_proxy() {
             kill -9 "$PROXY_PID" 2>/dev/null || true
         fi
     fi
+
+    # Belt-and-suspenders: even if PROXY_PID was lost/wrong, reap any proxy
+    # process still running from this framework so it never becomes an orphan
+    # that blocks the next run's bind. Precise match by absolute binary path.
+    _proxy_reap_orphans "$(_proxy_binary_path)" "$PROXY_LISTEN_PORT"
 
     # Restore upstream URL for any later phases.
     if [[ -n "${ORIGINAL_LOCAL_RPC_URL:-}" ]]; then

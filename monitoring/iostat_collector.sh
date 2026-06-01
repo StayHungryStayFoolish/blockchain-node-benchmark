@@ -11,7 +11,9 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
     echo "Warning: Configuration file loading failed, using default configuration"
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
-source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/disk_converter.sh"
+# CSV Schema Registry (S1: disk 段 header 单一事实源, 替代手工字符串拼接)
+source "$(dirname "${BASH_SOURCE[0]}")/../config/csv_schema_registry.sh"
 
 # Load logging functions
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh" 2>/dev/null || {
@@ -31,7 +33,7 @@ get_iostat_data() {
     fi
     
     # Implement true iostat continuous sampling
-    local monitor_rate=${EBS_MONITOR_RATE:-1}
+    local monitor_rate=${DISK_MONITOR_RATE:-1}
     local iostat_pid_file="/tmp/iostat_${device}_${logical_name}.pid"
     local iostat_data_file="/tmp/iostat_${device}_${logical_name}.data"
     
@@ -84,9 +86,9 @@ get_iostat_data() {
     local read_throughput_mibs=$(awk "BEGIN {printf \"%.2f\", $rkb_s / 1024}" 2>/dev/null || echo "0")
     local write_throughput_mibs=$(awk "BEGIN {printf \"%.2f\", $wkb_s / 1024}" 2>/dev/null || echo "0")
     
-    # Calculate AWS standard throughput
-    local aws_standard_throughput_mibs="0"
-    if command -v convert_to_aws_standard_throughput >/dev/null 2>&1; then
+    # Calculate provider-standard throughput
+    local standard_throughput_mibs="0"
+    if command -v convert_to_standard_throughput >/dev/null 2>&1; then
         # Calculate weighted average IO size
         local weighted_avg_io_kib
         if [[ $(awk "BEGIN {print ($total_iops > 0) ? 1 : 0}") -eq 1 ]]; then
@@ -96,13 +98,13 @@ get_iostat_data() {
         fi
         
         if [[ "$weighted_avg_io_kib" != "0" ]]; then
-            aws_standard_throughput_mibs=$(convert_to_aws_standard_throughput "$total_throughput_mibs" "$weighted_avg_io_kib")
+            standard_throughput_mibs=$(convert_to_standard_throughput "$total_throughput_mibs" "$weighted_avg_io_kib")
         else
-            aws_standard_throughput_mibs="$total_throughput_mibs"  # Use raw value if average IO size cannot be calculated
+            standard_throughput_mibs="$total_throughput_mibs"  # Use raw value if average IO size cannot be calculated
         fi
     else
-        log_debug "convert_to_aws_standard_throughput function unavailable, using raw throughput value"
-        aws_standard_throughput_mibs="$total_throughput_mibs"
+        log_debug "convert_to_standard_throughput function unavailable, using raw throughput value"
+        standard_throughput_mibs="$total_throughput_mibs"
     fi
     
     local avg_await=$(awk "BEGIN {printf \"%.2f\", ($r_await + $w_await) / 2}" 2>/dev/null || echo "0")
@@ -115,23 +117,41 @@ get_iostat_data() {
         avg_io_kib="0"
     fi
     
-    # Calculate AWS standard IOPS (based on real-time data)
-    local aws_standard_iops
+    # Calculate provider-standard IOPS (based on real-time data)
+    # NOTE(latent, HDD 未覆盖): convert_to_standard_iops 第3参 io_cap 默认 256 (SSD).
+    #   AWS EBS HDD (st1/sc1) 官方按 1024 KiB 拆分,需传 io_cap=1024; 但当前 provider 层
+    #   get_iops_conversion_func 固定返 aws_ssd_ceil_256, 未按卷类型 (DATA_VOL_TYPE) 区分 SSD/HDD.
+    #   现实: 区块链节点几乎不用 HDD (st1 ~500 IOPS 跑不动), 故此路径低优先未实现.
+    #   若将来支持 HDD: provider 层加 aws_hdd_ceil_1024 分支 + 此处按 $DATA_VOL_TYPE 传 io_cap.
+    #   对 SSD (gp3/io2, 区块链实际用) 当前完全正确.
+    local standard_iops
     if [[ $(awk "BEGIN {print ($avg_io_kib > 0) ? 1 : 0}") -eq 1 ]]; then
-        aws_standard_iops=$(convert_to_aws_standard_iops "$total_iops" "$avg_io_kib")
+        standard_iops=$(convert_to_standard_iops "$total_iops" "$avg_io_kib")
     else
-        aws_standard_iops="$total_iops"
+        standard_iops="$total_iops"
     fi
     
     # Return complete data (21 fields)
-    echo "$r_s,$w_s,$rkb_s,$wkb_s,$r_await,$w_await,$avg_await,$aqu_sz,$util,$rrqm_s,$wrqm_s,$rrqm_pct,$wrqm_pct,$rareq_sz,$wareq_sz,$total_iops,$aws_standard_iops,$read_throughput_mibs,$write_throughput_mibs,$total_throughput_mibs,$aws_standard_throughput_mibs"
+    echo "$r_s,$w_s,$rkb_s,$wkb_s,$r_await,$w_await,$avg_await,$aqu_sz,$util,$rrqm_s,$wrqm_s,$rrqm_pct,$wrqm_pct,$rareq_sz,$wareq_sz,$total_iops,$standard_iops,$read_throughput_mibs,$write_throughput_mibs,$total_throughput_mibs,$standard_throughput_mibs"
 }
 
 # Generate CSV header for device
+# 列名由 csv_schema_registry 单一事实源生成 (替代手工字符串拼接).
+# 方案甲(中立命名): provider_aware 字段三云统一 normalized_iops/normalized_throughput_mibs (ADR-0002),
+#   物理名不含云厂商烙印; provider 信息由 CSV cloud_provider 列承载 (与配置一致).
+# 第 3 参 provider: 仅作 registry 接口透传 (当前三云同名, 留作将来某云特殊命名挂点).
+#   不传则用 get_provider_name (配置驱动: CLOUD_PROVIDER 配置优先, 未配则探测).
 generate_device_header() {
     local device="$1"
     local logical_name="$2"
-    
+    local provider="${3:-}"
+    if [[ -z "$provider" ]]; then
+        if declare -F get_provider_name >/dev/null 2>&1; then
+            provider="$(get_provider_name 2>/dev/null)"
+        fi
+        provider="${provider:-other}"   # getter 不可用时中立兜底, 不偏向任何云
+    fi
+
     # Use unified naming convention {logical_name}_{device_name}_{metric}
     # DATA device uses data prefix, ACCOUNTS device uses accounts prefix
     local prefix
@@ -140,8 +160,18 @@ generate_device_header() {
         "accounts") prefix="accounts_${device}" ;;
         *) prefix="${logical_name}_${device}" ;;
     esac
-    
-    echo "${prefix}_r_s,${prefix}_w_s,${prefix}_rkb_s,${prefix}_wkb_s,${prefix}_r_await,${prefix}_w_await,${prefix}_avg_await,${prefix}_aqu_sz,${prefix}_util,${prefix}_rrqm_s,${prefix}_wrqm_s,${prefix}_rrqm_pct,${prefix}_wrqm_pct,${prefix}_rareq_sz,${prefix}_wareq_sz,${prefix}_total_iops,${prefix}_aws_standard_iops,${prefix}_read_throughput_mibs,${prefix}_write_throughput_mibs,${prefix}_total_throughput_mibs,${prefix}_aws_standard_throughput_mibs"
+
+    # 从 registry 生成整段 21 列 header (单一事实源, reader 经 registry resolve 对齐)
+    if declare -F csv_registry_disk_header >/dev/null 2>&1; then
+        csv_registry_disk_header "$prefix" "$provider"
+    else
+        # 防御: registry 未 source 时回退. 用 get_disk_field_prefix 保持与 provider 一致,
+        # 仍不硬编码 aws (无倾向兜底). 默认值与三云统一前缀 normalized 对齐.
+        local dfp="normalized"
+        declare -F get_disk_field_prefix >/dev/null 2>&1 && dfp="$(get_disk_field_prefix 2>/dev/null || echo normalized)"
+        log_warn "csv_registry_disk_header unavailable — fallback header (dfp=$dfp)"
+        echo "${prefix}_r_s,${prefix}_w_s,${prefix}_rkb_s,${prefix}_wkb_s,${prefix}_r_await,${prefix}_w_await,${prefix}_avg_await,${prefix}_aqu_sz,${prefix}_util,${prefix}_rrqm_s,${prefix}_wrqm_s,${prefix}_rrqm_pct,${prefix}_wrqm_pct,${prefix}_rareq_sz,${prefix}_wareq_sz,${prefix}_total_iops,${prefix}_${dfp}_iops,${prefix}_read_throughput_mibs,${prefix}_write_throughput_mibs,${prefix}_total_throughput_mibs,${prefix}_${dfp}_throughput_mibs"
+    fi
 }
 
 # Get data for all configured devices
@@ -186,13 +216,22 @@ get_all_devices_data() {
 generate_all_devices_header() {
     local device_header=""
 
+    # S1(方案甲): provider 随云变. writer 端 provider 唯一合法源 = get_provider_name (运行时探测);
+    # reader 端则必须从 CSV cloud_provider 列取 (见 proposal §4.5 铁律). 二者不可混用.
+    # 此处解析一次, 4 处 generate_device_header 同源传入, 保证 device 列名与 cloud_provider 列值自洽.
+    local provider="aws"
+    if declare -F get_provider_name >/dev/null 2>&1; then
+        local _p; _p=$(get_provider_name 2>/dev/null)
+        [[ -n "$_p" ]] && provider="$_p"
+    fi
+
     # Degraded mode: use "NA" as device-name placeholder so header column count is stable
     if [[ "${DEVICE_VALIDATION_DEGRADED:-0}" == "1" ]]; then
         local data_dev="${LEDGER_DEVICE:-NA}"
-        device_header=$(generate_device_header "$data_dev" "data")
+        device_header=$(generate_device_header "$data_dev" "data" "$provider")
         if is_accounts_configured; then
             local acc_dev="${ACCOUNTS_DEVICE:-NA}"
-            local accounts_header=$(generate_device_header "$acc_dev" "accounts")
+            local accounts_header=$(generate_device_header "$acc_dev" "accounts" "$provider")
             device_header="${device_header},$accounts_header"
         fi
         echo "$device_header"
@@ -201,7 +240,7 @@ generate_all_devices_header() {
 
     # DATA device header - use data as logical name prefix (required)
     if [[ -n "$DATA_VOL_TYPE" ]]; then
-        device_header=$(generate_device_header "$LEDGER_DEVICE" "data")
+        device_header=$(generate_device_header "$LEDGER_DEVICE" "data" "$provider")
     else
         log_error "DATA_VOL_TYPE not configured - this is required"
         return 1
@@ -209,7 +248,7 @@ generate_all_devices_header() {
 
     # ACCOUNTS device header - use accounts as logical name prefix
     if is_accounts_configured; then
-        local accounts_header=$(generate_device_header "$ACCOUNTS_DEVICE" "accounts")
+        local accounts_header=$(generate_device_header "$ACCOUNTS_DEVICE" "accounts" "$provider")
         if [[ -n "$device_header" ]]; then
             device_header="${device_header},$accounts_header"
         else

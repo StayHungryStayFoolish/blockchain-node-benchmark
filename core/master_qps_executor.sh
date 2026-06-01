@@ -9,6 +9,8 @@
 QPS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${QPS_SCRIPT_DIR}/common_functions.sh"
 source "${QPS_SCRIPT_DIR}/../config/config_loader.sh"
+# CSV Schema Registry (reader 经 registry resolve 取 provider-aware 物理列名, 不裸写)
+source "${QPS_SCRIPT_DIR}/../config/csv_schema_registry.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
 # Initialize unified logger
@@ -170,6 +172,13 @@ parse_arguments() {
                 RPC_MODE="mixed"
                 shift
                 ;;
+            --fake-node|--no-proxy)
+                # CP-1: 这两个参数由主入口 parse_rpc_mode_args 消费
+                # (--fake-node→FAKE_NODE_MODE, --no-proxy→SKIP_RPC_PROXY),
+                # 但 main() 把原始参数整体透传给本 executor。executor 不需要它们,
+                # 容忍忽略即可(否则撞 default 分支 hard fail,整框架 e2e EXIT=1)。
+                shift
+                ;;
             --initial-qps)
                 INITIAL_QPS="$2"
                 CUSTOM_PARAMS=true
@@ -274,6 +283,26 @@ pre_check() {
     echo "✅ Pre-check passed"
     return 0
 }
+
+# 从 monitoring JSON 取 provider-aware 字段值 (reader 经 registry resolve, 与 writer 同一事实源).
+#   provider 来自 JSON 的 cloud_provider 字段 (铁律: 唯一合法来源 = CSV/JSON 自带, 不运行时探测).
+#   logical: disk_iops_provider_adjusted | disk_throughput_provider_adjusted
+#   prefix:  data_<device> | accounts_<device>
+# registry 与 writer 同源 → 物理列名严格对齐; jq // 0 仅在该列真不存在时归零 (非列名拼错).
+_mqe_provider_field() {
+    local json="$1" logical="$2" prefix="$3"
+    local provider
+    provider=$(echo "$json" | jq -r '.cloud_provider // "other"' 2>/dev/null || echo "other")
+    case "$provider" in aws|gcp|other) : ;; *) provider="other" ;; esac
+    local col=""
+    if declare -F csv_registry_resolve >/dev/null 2>&1; then
+        col="$(csv_registry_resolve "$logical" "$provider" "$prefix" 2>/dev/null || echo "")"
+    fi
+    if [[ -z "$col" ]]; then
+        echo "0"; return
+    fi
+    echo "$json" | jq -r ".\"${col}\" // 0" 2>/dev/null || echo "0"
+}
 # Check bottleneck status
 check_bottleneck_during_test() {
     local current_qps=$1
@@ -312,55 +341,55 @@ check_bottleneck_during_test() {
         bottleneck_reasons+=("Memory usage: ${mem_usage}% > ${BOTTLENECK_MEMORY_THRESHOLD}% ($severity)")
     fi
     
-    # Check DATA device AWS Standard IOPS bottleneck
-    local data_aws_iops=$(echo "$latest_data" | jq -r ".data_${LEDGER_DEVICE}_aws_standard_iops // 0" 2>/dev/null || echo "0")
-    local data_baseline_iops=${DATA_VOL_MAX_IOPS:-30000}
-    local data_iops_util=$(awk "BEGIN {printf \"%.2f\", ($data_aws_iops / $data_baseline_iops) * 100}")
+    # Check DATA device disk-standardized IOPS bottleneck
+    local data_adjusted_iops=$(_mqe_provider_field "$latest_data" disk_iops_provider_adjusted "data_${LEDGER_DEVICE}")
+    local data_provisioned_iops=${DATA_VOL_MAX_IOPS:-30000}
+    local data_iops_util=$(awk "BEGIN {printf \"%.2f\", ($data_adjusted_iops / $data_provisioned_iops) * 100}")
     
-    if (( $(awk "BEGIN {print ($data_iops_util > $BOTTLENECK_EBS_IOPS_THRESHOLD) ? 1 : 0}") )); then
+    if (( $(awk "BEGIN {print ($data_iops_util > $BOTTLENECK_DISK_IOPS_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
-        bottleneck_reasons+=("DATA AWS IOPS: ${data_aws_iops}/${data_baseline_iops} (${data_iops_util}%)")
+        bottleneck_reasons+=("DATA Disk IOPS: ${data_adjusted_iops}/${data_provisioned_iops} (${data_iops_util}%)")
     fi
     
-    # Check DATA device AWS Standard Throughput bottleneck
-    local data_aws_throughput=$(echo "$latest_data" | jq -r ".data_${LEDGER_DEVICE}_aws_standard_throughput_mibs // 0" 2>/dev/null || echo "0")
-    local data_baseline_throughput=${DATA_VOL_MAX_THROUGHPUT:-4000}
-    local data_throughput_util=$(awk "BEGIN {printf \"%.2f\", ($data_aws_throughput / $data_baseline_throughput) * 100}")
+    # Check DATA device disk-standardized Throughput bottleneck
+    local data_adjusted_throughput=$(_mqe_provider_field "$latest_data" disk_throughput_provider_adjusted "data_${LEDGER_DEVICE}")
+    local data_provisioned_throughput=${DATA_VOL_MAX_THROUGHPUT:-4000}
+    local data_throughput_util=$(awk "BEGIN {printf \"%.2f\", ($data_adjusted_throughput / $data_provisioned_throughput) * 100}")
     
-    if (( $(awk "BEGIN {print ($data_throughput_util > $BOTTLENECK_EBS_THROUGHPUT_THRESHOLD) ? 1 : 0}") )); then
+    if (( $(awk "BEGIN {print ($data_throughput_util > $BOTTLENECK_DISK_THROUGHPUT_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
-        bottleneck_reasons+=("DATA AWS Throughput: ${data_aws_throughput}/${data_baseline_throughput} MiB/s (${data_throughput_util}%)")
+        bottleneck_reasons+=("DATA Disk Throughput: ${data_adjusted_throughput}/${data_provisioned_throughput} MiB/s (${data_throughput_util}%)")
     fi
     
     # Check ACCOUNTS device (if configured)
     if [[ -n "${ACCOUNTS_DEVICE:-}" && -n "${ACCOUNTS_VOL_TYPE:-}" && -n "${ACCOUNTS_VOL_MAX_IOPS:-}" ]]; then
-        # ACCOUNTS device AWS Standard IOPS bottleneck
-        local accounts_aws_iops=$(echo "$latest_data" | jq -r ".accounts_${ACCOUNTS_DEVICE}_aws_standard_iops // 0" 2>/dev/null || echo "0")
-        local accounts_baseline_iops=${ACCOUNTS_VOL_MAX_IOPS:-30000}
-        local accounts_iops_util=$(awk "BEGIN {printf \"%.2f\", ($accounts_aws_iops / $accounts_baseline_iops) * 100}")
+        # ACCOUNTS device disk-standardized IOPS bottleneck
+        local accounts_adjusted_iops=$(_mqe_provider_field "$latest_data" disk_iops_provider_adjusted "accounts_${ACCOUNTS_DEVICE}")
+        local accounts_provisioned_iops=${ACCOUNTS_VOL_MAX_IOPS:-30000}
+        local accounts_iops_util=$(awk "BEGIN {printf \"%.2f\", ($accounts_adjusted_iops / $accounts_provisioned_iops) * 100}")
         
-        if (( $(awk "BEGIN {print ($accounts_iops_util > $BOTTLENECK_EBS_IOPS_THRESHOLD) ? 1 : 0}") )); then
+        if (( $(awk "BEGIN {print ($accounts_iops_util > $BOTTLENECK_DISK_IOPS_THRESHOLD) ? 1 : 0}") )); then
             bottleneck_found=true
-            bottleneck_reasons+=("ACCOUNTS AWS IOPS: ${accounts_aws_iops}/${accounts_baseline_iops} (${accounts_iops_util}%)")
+            bottleneck_reasons+=("ACCOUNTS Disk IOPS: ${accounts_adjusted_iops}/${accounts_provisioned_iops} (${accounts_iops_util}%)")
         fi
         
-        # ACCOUNTS device AWS Standard Throughput bottleneck
-        local accounts_aws_throughput=$(echo "$latest_data" | jq -r ".accounts_${ACCOUNTS_DEVICE}_aws_standard_throughput_mibs // 0" 2>/dev/null || echo "0")
-        local accounts_baseline_throughput=${ACCOUNTS_VOL_MAX_THROUGHPUT:-4000}
-        local accounts_throughput_util=$(awk "BEGIN {printf \"%.2f\", ($accounts_aws_throughput / $accounts_baseline_throughput) * 100}")
+        # ACCOUNTS device disk-standardized Throughput bottleneck
+        local accounts_adjusted_throughput=$(_mqe_provider_field "$latest_data" disk_throughput_provider_adjusted "accounts_${ACCOUNTS_DEVICE}")
+        local accounts_provisioned_throughput=${ACCOUNTS_VOL_MAX_THROUGHPUT:-4000}
+        local accounts_throughput_util=$(awk "BEGIN {printf \"%.2f\", ($accounts_adjusted_throughput / $accounts_provisioned_throughput) * 100}")
         
-        if (( $(awk "BEGIN {print ($accounts_throughput_util > $BOTTLENECK_EBS_THROUGHPUT_THRESHOLD) ? 1 : 0}") )); then
+        if (( $(awk "BEGIN {print ($accounts_throughput_util > $BOTTLENECK_DISK_THROUGHPUT_THRESHOLD) ? 1 : 0}") )); then
             bottleneck_found=true
-            bottleneck_reasons+=("ACCOUNTS AWS Throughput: ${accounts_aws_throughput}/${accounts_baseline_throughput} MiB/s (${accounts_throughput_util}%)")
+            bottleneck_reasons+=("ACCOUNTS Disk Throughput: ${accounts_adjusted_throughput}/${accounts_provisioned_throughput} MiB/s (${accounts_throughput_util}%)")
         fi
     fi
     
-    # Check EBS latency bottleneck
-    local ebs_latency=$(echo "$latest_data" | jq -r '.ebs_latency // 0' 2>/dev/null || echo "0")
-    if (( $(awk "BEGIN {print ($ebs_latency > $BOTTLENECK_EBS_LATENCY_THRESHOLD) ? 1 : 0}") )); then
+    # Check Disk latency bottleneck
+    local disk_latency=$(echo "$latest_data" | jq -r '.disk_latency // 0' 2>/dev/null || echo "0")
+    if (( $(awk "BEGIN {print ($disk_latency > $BOTTLENECK_DISK_LATENCY_THRESHOLD) ? 1 : 0}") )); then
         bottleneck_found=true
         bottleneck_severity="high"
-        bottleneck_reasons+=("EBS latency: ${ebs_latency}ms > ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms (Severe)")
+        bottleneck_reasons+=("Disk latency: ${disk_latency}ms > ${BOTTLENECK_DISK_LATENCY_THRESHOLD}ms (Severe)")
     fi
     
     # Check network bottleneck
@@ -524,8 +553,8 @@ get_realtime_metrics() {
     "timestamp": "$(date -Iseconds)",
     "cpu_usage": $cpu_usage,
     "memory_usage": $mem_usage,
-    "ebs_util": 0,
-    "ebs_latency": 0,
+    "disk_util": 0,
+    "disk_latency": 0,
     "network_util": 0,
     "error_rate": 0
 }
@@ -575,19 +604,19 @@ trigger_immediate_bottleneck_analysis() {
     fi
     
     # Check if already started via monitoring_coordinator.sh
-    if pgrep -f "ebs_bottleneck_detector.sh.*-b" >/dev/null 2>&1; then
-        echo "💾 EBS bottleneck detector already started via monitoring coordinator, skipping duplicate start"
+    if pgrep -f "disk_bottleneck_detector.sh.*-b" >/dev/null 2>&1; then
+        echo "💾 Disk bottleneck detector already started via monitoring coordinator, skipping duplicate start"
     else
-        # Call EBS bottleneck detector
-        if [[ -f "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" ]]; then
-            echo "💾 Performing EBS bottleneck analysis..."
-            "${QPS_SCRIPT_DIR}/../tools/ebs_bottleneck_detector.sh" \
+        # Call Disk bottleneck detector
+        if [[ -f "${QPS_SCRIPT_DIR}/../tools/disk_bottleneck_detector.sh" ]]; then
+            echo "💾 Performing Disk bottleneck analysis..."
+            "${QPS_SCRIPT_DIR}/../tools/disk_bottleneck_detector.sh" \
                 --background &
-            local ebs_analysis_pid=$!
-            echo "📊 EBS bottleneck analysis process started (PID: $ebs_analysis_pid)"
+            local disk_analysis_pid=$!
+            echo "📊 Disk bottleneck analysis process started (PID: $disk_analysis_pid)"
             
             # Record PID to unified monitoring PID file
-            echo "ebs_analysis:$ebs_analysis_pid" >> "$MONITOR_PIDS_FILE"
+            echo "disk_analysis:$disk_analysis_pid" >> "$MONITOR_PIDS_FILE"
         fi
     fi
     
@@ -671,8 +700,8 @@ get_detailed_system_context() {
     # Extract fields from monitoring data
     local cpu_usage=$(echo "$latest_data" | jq -r '.cpu_usage // 0' 2>/dev/null || echo "0")
     local mem_usage=$(echo "$latest_data" | jq -r '.memory_usage // 0' 2>/dev/null || echo "0")
-    local ebs_util=$(echo "$latest_data" | jq -r '.ebs_util // 0' 2>/dev/null || echo "0")
-    local ebs_latency=$(echo "$latest_data" | jq -r '.ebs_latency // 0' 2>/dev/null || echo "0")
+    local disk_util=$(echo "$latest_data" | jq -r '.disk_util // 0' 2>/dev/null || echo "0")
+    local disk_latency=$(echo "$latest_data" | jq -r '.disk_latency // 0' 2>/dev/null || echo "0")
     local network_util=$(echo "$latest_data" | jq -r '.network_util // 0' 2>/dev/null || echo "0")
     
     # Get system static information
@@ -681,12 +710,12 @@ get_detailed_system_context() {
     local mem_total=$(free -g 2>/dev/null | awk '/^Mem:/ {print $2}' || echo "0")
     local mem_available=$(free -g 2>/dev/null | awk '/^Mem:/ {print $7}' || echo "0")
     
-    # Get AWS Standard IOPS and Throughput (consistent with bottleneck detection)
-    local aws_iops=0
-    local aws_throughput=0
+    # Get disk-standardized IOPS and Throughput (consistent with bottleneck detection)
+    local disk_adjusted_iops=0
+    local disk_adjusted_throughput=0
     if [[ -n "$LEDGER_DEVICE" ]]; then
-        aws_iops=$(echo "$latest_data" | jq -r ".data_${LEDGER_DEVICE}_aws_standard_iops // 0" 2>/dev/null || echo "0")
-        aws_throughput=$(echo "$latest_data" | jq -r ".data_${LEDGER_DEVICE}_aws_standard_throughput_mibs // 0" 2>/dev/null || echo "0")
+        disk_adjusted_iops=$(_mqe_provider_field "$latest_data" disk_iops_provider_adjusted "data_${LEDGER_DEVICE}")
+        disk_adjusted_throughput=$(_mqe_provider_field "$latest_data" disk_throughput_provider_adjusted "data_${LEDGER_DEVICE}")
     fi
     
     # Build JSON
@@ -703,10 +732,10 @@ get_detailed_system_context() {
         "total_gb": $mem_total
     },
     "disk_info": {
-        "ebs_util": $ebs_util,
-        "ebs_latency": $ebs_latency,
-        "iops": $aws_iops,
-        "throughput_mibs": $aws_throughput
+        "disk_util": $disk_util,
+        "disk_latency": $disk_latency,
+        "iops": $disk_adjusted_iops,
+        "throughput_mibs": $disk_adjusted_throughput
     },
     "network_info": {
         "utilization": $network_util,
@@ -735,8 +764,8 @@ generate_bottleneck_recommendations() {
         recommendations=$(echo "$recommendations" | jq '. + ["Consider upgrading to EC2 instance type with more memory", "Optimize memory usage patterns", "Check for memory leaks"]')
     fi
     
-    if echo "$reasons" | grep -q "EBS"; then
-        recommendations=$(echo "$recommendations" | jq '. + ["Consider upgrading EBS volume type to io2", "Increase EBS IOPS configuration", "Optimize I/O access patterns"]')
+    if echo "$reasons" | grep -q "Disk"; then
+        recommendations=$(echo "$recommendations" | jq '. + ["Consider upgrading Disk volume type to io2", "Increase Disk IOPS configuration", "Optimize I/O access patterns"]')
     fi
     
     if echo "$reasons" | grep -qi "Network"; then

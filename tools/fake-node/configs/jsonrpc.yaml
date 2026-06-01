@@ -43,6 +43,9 @@ methods:
   getTokenAccountBalance:
     fixture: getTokenAccountBalance.json
     tier: cheap
+  getSignaturesForAddress:
+    fixture: getSignaturesForAddress.json
+    tier: mid
 
   # ---- Ethereum / EVM methods (eth_*) ----
   eth_blockNumber:

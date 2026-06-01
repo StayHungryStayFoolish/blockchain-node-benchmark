@@ -84,6 +84,37 @@ detect_cloud_provider() {
             export CLOUD_PROVIDER_VARIANT="other_none"
             ;;
     esac
+
+    # === CP-1: 加载对应 provider 的 15 getter 契约实现 ===
+    # 依据 CLOUD_PROVIDER source providers/{aws,gcp,other}_provider.sh,
+    # 业务层通过 $(get_X) 消费,绝不硬编码 provider 值。
+    _load_provider_getters
+}
+
+# === _load_provider_getters: 按 CLOUD_PROVIDER source 对应 provider 文件 + export getter ===
+_load_provider_getters() {
+    local _prov_dir
+    _prov_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/providers" 2>/dev/null && pwd)"
+    local _prov_file
+    case "${CLOUD_PROVIDER:-other}" in
+        aws)   _prov_file="${_prov_dir}/aws_provider.sh" ;;
+        gcp)   _prov_file="${_prov_dir}/gcp_provider.sh" ;;
+        *)     _prov_file="${_prov_dir}/other_provider.sh" ;;
+    esac
+    if [[ -f "$_prov_file" ]]; then
+        # shellcheck source=/dev/null
+        source "$_prov_file"
+        # 批量 export 所有 getter,供子进程/业务脚本消费
+        export -f get_provider_name get_platform_display_name \
+            get_metadata_endpoint get_metadata_header get_metadata_api_path \
+            get_iops_conversion_func get_baseline_io_kib get_baseline_throughput_kib \
+            get_default_disk_type get_disk_type_options \
+            get_nic_driver get_nic_allowance_fields get_nic_monitor_process_name \
+            get_disk_field_prefix get_archive_dir_prefix get_bottleneck_label \
+            get_doc_url 2>/dev/null || true
+    else
+        echo "WARN: provider file not found: $_prov_file (getters unavailable)" >&2
+    fi
 }
 
 # === 自动执行 (source 时立即探测) ===

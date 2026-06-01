@@ -13,7 +13,7 @@ graph TD
     A --> D[internal_config.sh<br/>第3层：内部配置]
     A --> E[动态检测<br/>第4层：运行时配置]
     
-    B --> F[RPC端点<br/>EBS设备<br/>网络带宽<br/>测试参数]
+    B --> F[RPC端点<br/>磁盘设备<br/>网络带宽<br/>测试参数]
     C --> G[AWS设置<br/>日志配置<br/>错误处理<br/>高级阈值]
     D --> H[瓶颈阈值<br/>性能调优<br/>内部状态]
     E --> I[平台检测<br/>路径发现<br/>资源计算]
@@ -77,7 +77,7 @@ ENA_MONITOR_ENABLED=true
 ```bash
 # 统一监控间隔（秒）
 MONITOR_INTERVAL=5              # 所有监控任务使用相同间隔
-EBS_MONITOR_RATE=1              # EBS专用监控频率
+DISK_MONITOR_RATE=1            # 磁盘专用监控频率
 ```
 
 #### 4. QPS测试配置
@@ -183,11 +183,11 @@ ERROR_RECOVERY_DELAY=${ERROR_RECOVERY_DELAY:-10}
 BOTTLENECK_CPU_THRESHOLD=85               # CPU > 85% = 瓶颈
 BOTTLENECK_MEMORY_THRESHOLD=90            # 内存 > 90% = 瓶颈
 
-# EBS阈值
-BOTTLENECK_EBS_UTIL_THRESHOLD=90          # 利用率 > 90% = 瓶颈
-BOTTLENECK_EBS_LATENCY_THRESHOLD=50       # 延迟 > 50ms = 瓶颈
-BOTTLENECK_EBS_IOPS_THRESHOLD=90          # IOPS利用率 > 90% = 瓶颈
-BOTTLENECK_EBS_THROUGHPUT_THRESHOLD=90    # 吞吐量利用率 > 90% = 瓶颈
+# 磁盘阈值
+BOTTLENECK_DISK_UTIL_THRESHOLD=90          # 利用率 > 90% = 瓶颈
+BOTTLENECK_DISK_LATENCY_THRESHOLD=50       # 延迟 > 50ms = 瓶颈
+BOTTLENECK_DISK_IOPS_THRESHOLD=90          # IOPS利用率 > 90% = 瓶颈
+BOTTLENECK_DISK_THROUGHPUT_THRESHOLD=90    # 吞吐量利用率 > 90% = 瓶颈
 
 # 网络阈值
 BOTTLENECK_NETWORK_THRESHOLD=80           # 网络 > 80% = 瓶颈
@@ -250,7 +250,7 @@ AND
 ```bash
 # 每轮 QPS 测试后检查
 # 条件1: 资源限制超标
-if 检测到资源超标 (CPU/Memory/EBS/Network 超过阈值):
+if 检测到资源超标 (CPU/Memory/Disk/Network 超过阈值):
     BOTTLENECK_COUNT++
     
     # 条件2: 连续检测
@@ -285,11 +285,11 @@ if 检测到资源超标 (CPU/Memory/EBS/Network 超过阈值):
 
 框架针对不同目的使用不同的阈值级别：
 
-1. **实时瓶颈检测** (`ebs_bottleneck_detector.sh`)：
+1. **实时瓶颈检测** (`disk_bottleneck_detector.sh`)：
    - HIGH级别：基准阈值（90%，50ms）
    - CRITICAL级别：基准 + 5%（95%）或基准 × 2（100ms）
 
-2. **离线性能分析** (`ebs_analyzer.sh`)：
+2. **离线性能分析** (`disk_analyzer.sh`)：
    - WARNING级别：基准 × 0.8（72%利用率，20ms延迟）
 
 ### 何时修改
@@ -560,7 +560,7 @@ export NETWORK_INTERFACE="ens5"  # 指定您的网络接口
 
 | 功能 | AWS | 其他云 | IDC | 本地 Linux |
 |------|-----|--------|-----|-----------|
-| EBS 监控 | ✅ | ✅ | ✅ | ✅ |
+| 磁盘 监控 | ✅ | ✅ | ✅ | ✅ |
 | ENA 监控 | ✅ | ❌ | ❌ | ❌ |
 | AWS 基线对比 | ✅ | ❌ | ❌ | ❌ |
 | 区块高度监控 | ✅ | ✅ | ✅ | ✅ |

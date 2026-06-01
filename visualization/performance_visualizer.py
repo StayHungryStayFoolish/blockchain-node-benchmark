@@ -24,13 +24,13 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.insert(0, project_root)
 
-from visualization.ebs_chart_generator import EBSChartGenerator
+from visualization.disk_chart_generator import DiskChartGenerator
 from visualization.device_manager import DeviceManager
 from visualization.chart_style_config import UnifiedChartStyle, load_framework_config, create_chart_title
 from visualization.advanced_chart_generator import AdvancedChartGenerator
 from utils.csv_data_processor import CSVDataProcessor
 from utils.unit_converter import UnitConverter
-from analysis.cpu_ebs_correlation_analyzer import CPUEBSCorrelationAnalyzer
+from analysis.cpu_disk_correlation_analyzer import CPUDiskCorrelationAnalyzer
 
 def get_visualization_thresholds():
     temp_df = pd.DataFrame()
@@ -128,7 +128,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         # Initialize new tools
         try:
             self.unit_converter = UnitConverter()
-            self.correlation_analyzer = CPUEBSCorrelationAnalyzer(data_file)
+            self.correlation_analyzer = CPUDiskCorrelationAnalyzer(data_file)
             self.chart_generator = AdvancedChartGenerator(data_file, self.output_dir)
         except Exception as e:
             print(f"⚠️ Advanced tools initialization failed: {e}")
@@ -306,7 +306,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             ax2.text(0.5, 0.5, 'Memory data not found', ha='center', va='center', transform=ax2.transAxes)
             ax2.set_title('Memory Usage (No Data)')
         
-        # 3. EBS IOPS + Throughput (Bottom Left) - iostat raw data
+        # 3. Disk IOPS + Throughput (Bottom Left) - iostat raw data
         ax3 = axes[1, 0]
         if data_iops_cols and data_throughput_cols:
             # Dual Y-axis display IOPS and throughput
@@ -325,17 +325,17 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax3_twin.plot(self.df['timestamp'], self.df[accounts_throughput_cols[0]], 
                              label='ACCOUNTS Throughput (iostat)', linewidth=2, color='lightsalmon', linestyle='--')
             
-            ax3.set_title('EBS IOPS & Throughput (iostat data)')
+            ax3.set_title('Disk IOPS & Throughput (iostat data)')
             ax3.set_ylabel('IOPS')
             ax3_twin.set_ylabel('Throughput (MiB/s)')
             ax3.legend(loc='upper left')
             ax3_twin.legend(loc='upper right')
             ax3.grid(True, alpha=0.3)
         else:
-            ax3.text(0.5, 0.5, 'EBS IOPS/Throughput data not found', ha='center', va='center', transform=ax3.transAxes)
-            ax3.set_title('EBS IOPS & Throughput (No Data)')
+            ax3.text(0.5, 0.5, 'Disk IOPS/Throughput data not found', ha='center', va='center', transform=ax3.transAxes)
+            ax3.set_title('Disk IOPS & Throughput (No Data)')
         
-        # 4. EBS Utilization (Bottom Right) - iostat raw data
+        # 4. Disk Utilization (Bottom Right) - iostat raw data
         ax4 = axes[1, 1]
         if data_util_cols:
             ax4.plot(self.df['timestamp'], self.df[data_util_cols[0]], 
@@ -345,13 +345,13 @@ class PerformanceVisualizer(CSVDataProcessor):
                 ax4.plot(self.df['timestamp'], self.df[accounts_util_cols[0]], 
                         label='ACCOUNTS Utilization (iostat)', linewidth=2, color='orange')
             
-            ax4.set_title('EBS Utilization (iostat data)')
+            ax4.set_title('Disk Utilization (iostat data)')
             ax4.set_ylabel('Utilization (%)')
             ax4.legend()
             ax4.grid(True, alpha=0.3)
         else:
-            ax4.text(0.5, 0.5, 'EBS Utilization data not found', ha='center', va='center', transform=ax4.transAxes)
-            ax4.set_title('EBS Utilization (No Data)')
+            ax4.text(0.5, 0.5, 'Disk Utilization data not found', ha='center', va='center', transform=ax4.transAxes)
+            ax4.set_title('Disk Utilization (No Data)')
         
         # Format time axis
         for ax in axes.flat:
@@ -367,7 +367,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         return output_file
 
     def create_correlation_visualization_chart(self):
-        """CPU-EBS Performance Correlation Analysis - Dual Device Support"""
+        """CPU-Disk Performance Correlation Analysis - Dual Device Support"""
         
         # Check data availability (consistent with other methods)
         if not hasattr(self, 'df') or self.df is None:
@@ -384,7 +384,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             return None
         
         # Dynamic title
-        title = 'CPU-EBS Performance Correlation Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'CPU-EBS Performance Correlation Analysis - DATA Device Only'
+        title = 'CPU-Disk Performance Correlation Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'CPU-Disk Performance Correlation Analysis - DATA Device Only'
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
@@ -418,7 +418,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                        ha='center', va='center', transform=ax.transAxes, fontsize=12)
                 ax.set_title(f'Correlation Analysis {i+1} - Data Unavailable')
             
-            output_file = os.path.join(self.output_dir, 'cpu_ebs_correlation_visualization.png')
+            output_file = os.path.join(self.output_dir, 'cpu_disk_correlation_visualization.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
             plt.close()
             return output_file
@@ -499,7 +499,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             axes[1, 0].grid(True, alpha=0.3)
         
         # 4. Correlation Summary
-        summary_text = "CPU-EBS Correlation Summary:\n\n"
+        summary_text = "CPU-Disk Correlation Summary:\n\n"
         
         if cpu_iowait_col and data_util_cols:
             data_corr = self.df[cpu_iowait_col].corr(self.df[data_util_cols[0]])
@@ -526,12 +526,12 @@ class PerformanceVisualizer(CSVDataProcessor):
         
         UnifiedChartStyle.apply_layout('auto')
         
-        output_file = os.path.join(self.output_dir, 'cpu_ebs_correlation_visualization.png')
+        output_file = os.path.join(self.output_dir, 'cpu_disk_correlation_visualization.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         plt.close()
         
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
-        print(f"✅ CPU-EBS correlation visualization saved: {output_file} ({device_info} devices)")
+        print(f"✅ CPU-Disk correlation visualization saved: {output_file} ({device_info} devices)")
         
         return output_file
 
@@ -690,7 +690,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         accounts_await_col = accounts_await_cols[0] if accounts_await_cols else None
         
         # Intelligent threshold setting - use configuration variables and unified calculation rules
-        base_latency_threshold = int(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50'))
+        base_latency_threshold = int(os.getenv('BOTTLENECK_DISK_LATENCY_THRESHOLD', '50'))
         
         # DATA device thresholds - use unified calculation rules
         data_thresholds = {
@@ -945,16 +945,20 @@ Recommendations:
                     fontweight='bold')
         
         # Dynamically find fields
-        data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col and 'aws' not in col]
-        data_tp_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_throughput_mibs' in col and 'aws' not in col]
+        # 中立化(去 aws 倾向): 历史上物理名是 data_*_aws_standard_iops, 曾用 'aws' not in col
+        # 排除折算列. 现物理名已中立化为 normalized (ADR-0002), 折算列名 = *_normalized_iops/
+        # *_normalized_throughput_mibs, 与 *_total_iops/*_total_throughput_mibs 天然不同串,
+        # 'total_iops'/'total_throughput_mibs' 精确子串已足够区分, 不再需要 provider 倾向过滤.
+        data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col]
+        data_tp_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_throughput_mibs' in col]
         data_aqu_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_aqu_sz')]
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
         data_r_s_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_r_s')]
         data_w_s_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_w_s')]
         
-        accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_iops' in col and 'aws' not in col] if accounts_configured else []
-        accounts_tp_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_throughput_mibs' in col and 'aws' not in col] if accounts_configured else []
+        accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_iops' in col] if accounts_configured else []
+        accounts_tp_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_throughput_mibs' in col] if accounts_configured else []
         accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_aqu_sz')] if accounts_configured else []
         accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
@@ -1301,12 +1305,12 @@ Data Points: {len(overhead_df)}"""
                 if advanced_charts:
                     chart_files.extend(advanced_charts)
             
-            # Generate EBS professional analysis charts (high priority)
-            print("📊 Generating EBS professional analysis charts...")
-            ebs_charts = self.generate_all_ebs_charts()
-            if ebs_charts:
-                chart_files.extend(ebs_charts)
-                print(f"✅ Generated {len(ebs_charts)} EBS professional charts")
+            # Generate Disk professional analysis charts (high priority)
+            print("📊 Generating Disk professional analysis charts...")
+            disk_charts = self.generate_all_disk_charts()
+            if disk_charts:
+                chart_files.extend(disk_charts)
+                print(f"✅ Generated {len(disk_charts)} Disk professional charts")
             
             # Generate blockchain node analysis charts
             print("Generating blockchain node analysis charts...")
@@ -1495,7 +1499,7 @@ Data Points: {len(overhead_df)}"""
             ax2.grid(True, alpha=0.3)
             UnifiedChartStyle.format_time_axis(ax2, self.df['timestamp'])
             
-            # 3. EBS Latency trends
+            # 3. Disk Latency trends
             ax3 = axes[1, 0]
             
             data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
@@ -1505,24 +1509,24 @@ Data Points: {len(overhead_df)}"""
                 data_await_col = data_await_cols[0]
                 await_smooth = self.df[data_await_col].rolling(window=window_size, center=True).mean()
                 ax3.plot(self.df['timestamp'], await_smooth, 
-                        color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, label=f'DATA EBS Latency ({window_size}-point avg)')
+                        color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, label=f'DATA Disk Latency ({window_size}-point avg)')
                 
                 accounts_configured = DeviceManager.is_accounts_configured(self.df)
                 if accounts_configured and accounts_await_cols:
                     accounts_await_col = accounts_await_cols[0]
                     accounts_await_smooth = self.df[accounts_await_col].rolling(window=window_size, center=True).mean()
                     ax3.plot(self.df['timestamp'], accounts_await_smooth,
-                            color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, label=f'ACCOUNTS EBS Latency ({window_size}-point avg)')
+                            color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, label=f'ACCOUNTS Disk Latency ({window_size}-point avg)')
                 
-                ax3.set_title('EBS Latency Trends (Smoothed)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+                ax3.set_title('Disk Latency Trends (Smoothed)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax3.set_ylabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
                 ax3.grid(True, alpha=0.3)
                 UnifiedChartStyle.format_time_axis(ax3, self.df['timestamp'])
             else:
-                ax3.text(0.5, 0.5, 'EBS Latency data not found', ha='center', va='center', transform=ax3.transAxes,
+                ax3.text(0.5, 0.5, 'Disk Latency data not found', ha='center', va='center', transform=ax3.transAxes,
                         fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
-                ax3.set_title('EBS Latency Trends (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+                ax3.set_title('Disk Latency Trends (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             
             # 4. Network bandwidth trends
             if 'net_rx_mbps' in self.df.columns:
@@ -1827,7 +1831,7 @@ Data Points: {len(overhead_df)}"""
             summary_lines.append("Note on IOPS/Throughput Efficiency:")
             summary_lines.append("- Higher = More QPS per IOPS/MiB/s")
             summary_lines.append("- Spikes = Low IOPS/Throughput usage")
-            summary_lines.append("- See EBS charts for detailed analysis")
+            summary_lines.append("- See Disk charts for detailed analysis")
             
             UnifiedChartStyle.add_text_summary(ax4, "\n".join(summary_lines), "Efficiency Summary")
             
@@ -1946,12 +1950,12 @@ Data Points: {len(overhead_df)}"""
         if 'mem_usage' in self.df.columns:
             system_resources['Memory'] = self.df['mem_usage']
         
-        # EBS I/O data - DATA device
+        # Disk I/O data - DATA device
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         if data_util_cols:
             system_resources['DATA_IO'] = self.df[data_util_cols[0]]
         
-        # EBS I/O data - ACCOUNTS device
+        # Disk I/O data - ACCOUNTS device
         if accounts_configured:
             accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
             if accounts_util_cols:
@@ -1961,8 +1965,8 @@ Data Points: {len(overhead_df)}"""
         bottleneck_thresholds = {
             'CPU': int(os.getenv('BOTTLENECK_CPU_THRESHOLD', '85')),
             'Memory': int(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', '90')),
-            'DATA_IO': int(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90')),
-            'ACCOUNTS_IO': int(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90'))
+            'DATA_IO': int(os.getenv('BOTTLENECK_DISK_UTIL_THRESHOLD', '90')),
+            'ACCOUNTS_IO': int(os.getenv('BOTTLENECK_DISK_UTIL_THRESHOLD', '90'))
         }
         
         # System bottleneck detection function
@@ -2260,23 +2264,23 @@ Data Points: {len(overhead_df)}"""
         
         return output_file
 
-    # EBS delegation methods - delegate to EBS specialized module
-    def generate_ebs_bottleneck_analysis(self):
-        """Delegate to EBS specialized module"""
+    # Disk delegation methods - delegate to Disk specialized module
+    def generate_disk_bottleneck_analysis(self):
+        """Delegate to Disk specialized module"""
         try:
-            ebs_generator = EBSChartGenerator(self.df, self.output_dir)
-            return ebs_generator.generate_ebs_bottleneck_analysis()
+            disk_generator = DiskChartGenerator(self.df, self.output_dir)
+            return disk_generator.generate_disk_bottleneck_analysis()
         except Exception as e:
-            print(f"⚠️ EBS bottleneck analysis failed: {e}")
+            print(f"⚠️ Disk bottleneck analysis failed: {e}")
             return None
     
-    def generate_ebs_time_series(self):
-        """Delegate to EBS specialized module"""
+    def generate_disk_time_series(self):
+        """Delegate to Disk specialized module"""
         try:
-            ebs_generator = EBSChartGenerator(self.df, self.output_dir)
-            return ebs_generator.generate_ebs_time_series()
+            disk_generator = DiskChartGenerator(self.df, self.output_dir)
+            return disk_generator.generate_disk_time_series()
         except Exception as e:
-            print(f"⚠️ EBS time series analysis failed: {e}")
+            print(f"⚠️ Disk time series analysis failed: {e}")
             return None
     
     def create_block_height_sync_chart(self):
@@ -2530,13 +2534,13 @@ Data Points: {len(overhead_df)}"""
         
         return "\n".join(summary_lines)
 
-    def generate_all_ebs_charts(self):
-        """Generate all EBS charts"""
+    def generate_all_disk_charts(self):
+        """Generate all Disk charts"""
         try:
-            ebs_generator = EBSChartGenerator(self.df, self.output_dir)
-            return ebs_generator.generate_all_ebs_charts()
+            disk_generator = DiskChartGenerator(self.df, self.output_dir)
+            return disk_generator.generate_all_disk_charts()
         except Exception as e:
-            print(f"⚠️ EBS chart generation failed: {e}")
+            print(f"⚠️ Disk chart generation failed: {e}")
             return []
 
 def main():

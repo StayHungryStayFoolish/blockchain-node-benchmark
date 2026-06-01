@@ -125,7 +125,7 @@ def _extract_ebs_csi(pv_spec: Dict[str, Any], host_root: str) -> Tuple[str, str]
     handle = csi.get("volumeHandle", "")
     if not handle:
         return "?", "csi"
-    # EBS NVMe naming: nvme-Amazon_Elastic_Block_Store_vol<hexid>
+    # Disk NVMe naming: nvme-Amazon_Elastic_Block_Store_vol<hexid>
     # (NVMe instances strip the dash from vol-xxx → volxxx)
     by_id = (Path(host_root) / "dev/disk/by-id"
              / f"nvme-Amazon_Elastic_Block_Store_{handle.replace('-', '')}")
@@ -384,7 +384,7 @@ def map_pod_volumes(
                 device, kind, handle, driver = _resolve_pv_device(pv, host_root)
                 # Fallback: if CSI/legacy extraction gave us "?" or a tagged
                 # placeholder like "vol-xxx@xen", try /proc/mounts via pv_name
-                # + pod uid. This rescues unknown CSI drivers and xen EBS.
+                # + pod uid. This rescues unknown CSI drivers and xen Disk.
                 if device == "?" or "@" in device:
                     fallback = _resolve_via_kubelet_mounts(
                         pv_name, pod_uid, host_root,

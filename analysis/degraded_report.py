@@ -274,7 +274,7 @@ MISSING_CAPABILITIES = [
     "Disk I/O analysis (iostat-derived metrics)",
     "System resource trends (CPU / memory / network from sar/mpstat)",
     "Per-method system-resource attribution charts",
-    "EBS bottleneck detector correlation",
+    "Disk bottleneck detector correlation",
     "Bottleneck root-cause ML analysis",
 ]
 

@@ -21,7 +21,7 @@ graph TB
     B1 --> B2[unified_monitor.sh<br/>统一监控器]
     B1 --> B3[block_height_monitor.sh<br/>区块高度监控]
     B1 --> B4[ena_network_monitor.sh<br/>ENA网络监控]
-    B1 --> B5[ebs_bottleneck_detector.sh<br/>EBS瓶颈检测]
+    B1 --> B5[disk_bottleneck_detector.sh<br/>磁盘瓶颈检测]
     
     C --> C1[master_qps_executor.sh<br/>QPS测试引擎]
     C1 --> C2[Vegeta压力测试]
@@ -56,7 +56,7 @@ graph LR
     end
     
     subgraph "数据消费层"
-        C1[ebs_bottleneck_detector.sh<br/>实时检测]
+        C1[disk_bottleneck_detector.sh<br/>实时检测]
         C2[comprehensive_analysis.py<br/>分析处理]
         C3[report_generator.py<br/>报告生成]
         C4[performance_visualizer.py<br/>可视化]
@@ -116,7 +116,7 @@ sequenceDiagram
     participant Unified as unified_monitor.sh
     participant Block as block_height_monitor.sh
     participant ENA as ena_network_monitor.sh
-    participant EBS as ebs_bottleneck_detector.sh
+    participant Disk as disk_bottleneck_detector.sh
     
     Main->>+Coord: start_monitoring_system()
     Note over Main,Coord: 导出环境变量<br/>MONITOR_PIDS_FILE<br/>MONITOR_STATUS_FILE
@@ -124,7 +124,7 @@ sequenceDiagram
     Coord->>+Unified: start unified_monitor.sh
     Coord->>+Block: start block_height_monitor.sh
     Coord->>+ENA: start ena_network_monitor.sh (条件性)
-    Coord->>+EBS: start ebs_bottleneck_detector.sh
+    Coord->>+Disk: start disk_bottleneck_detector.sh
     
     Note over Unified: 创建performance_*.csv<br/>创建符号链接performance_latest.csv
     Note over Block: 创建block_height_*.csv
@@ -138,12 +138,12 @@ sequenceDiagram
     Unified->>Block: tail -1 BLOCK_HEIGHT_DATA_FILE
     Block-->>Unified: 最新区块高度数据
     
-    Note over EBS: 实时监听performance_latest.csv
-    EBS->>Unified: tail -F performance_latest.csv
-    Unified-->>EBS: 实时数据流
+    Note over Disk: 实时监听performance_latest.csv
+    Disk->>Unified: tail -F performance_latest.csv
+    Unified-->>Disk: 实时数据流
     
-    EBS->>EBS: 动态字段映射<br/>init_csv_field_mapping()
-    EBS->>EBS: 瓶颈检测<br/>detect_ebs_bottleneck()
+    Disk->>Disk: 动态字段映射<br/>init_csv_field_mapping()
+    Disk->>Disk: 瓶颈检测<br/>detect_disk_bottleneck()
 ```
 
 ### 5. 数据处理和分析流程
@@ -152,7 +152,7 @@ sequenceDiagram
 graph TB
     subgraph "数据收集阶段"
         A1[系统指标<br/>CPU, Memory, Network]
-        A2[存储指标<br/>EBS IOPS, Throughput, Latency]
+        A2[存储指标<br/>磁盘 IOPS, Throughput, Latency]
         A3[区块链指标<br/>Block Height, RPC Status]
         A4[网络指标<br/>ENA Allowance, Bandwidth]
         A5[QPS测试数据<br/>Vegeta Results, Bottleneck Events]
@@ -166,7 +166,7 @@ graph TB
     end
     
     subgraph "实时分析阶段"
-        C1[EBS瓶颈检测<br/>动态字段映射]
+        C1[磁盘瓶颈检测<br/>动态字段映射]
         C2[QPS瓶颈检测<br/>6维度评估]
         C3[事件记录<br/>JSON格式日志]
     end
@@ -225,7 +225,7 @@ graph LR
     subgraph "实时数据流"
         B1[数据收集循环<br/>log performance data]
         B2[写入时间戳文件<br/>safe write csv]
-        B3[EBS检测器监听<br/>tail -F performance_latest.csv]
+        B3[磁盘检测器监听<br/>tail -F performance_latest.csv]
         B4[动态字段映射<br/>CSV_FIELD_MAP]
     end
     
@@ -295,8 +295,8 @@ archives/run_*_YYYYMMDD_HHMMSS/
 | **时间戳** | 1 | 数据采集时间戳 |
 | **CPU指标** | 6 | cpu_usage, cpu_usr, cpu_sys, cpu_iowait, cpu_soft, cpu_idle |
 | **内存指标** | 3 | mem_used, mem_total, mem_usage |
-| **DATA设备EBS** | 21 | IOPS, 吞吐量, 延迟, 利用率, AWS标准指标 |
-| **ACCOUNTS设备EBS** | 21 | 与DATA设备相同结构 |
+| **DATA设备磁盘** | 21 | IOPS, 吞吐量, 延迟, 利用率, 折算指标 |
+| **ACCOUNTS设备磁盘** | 21 | 与DATA设备相同结构 |
 | **网络指标** | 10 | 接口, 带宽 (Mbps/Gbps), 每秒包数 |
 | **ENA网络** | 6 | 配额超限计数器, 连接跟踪 |
 | **监控开销** | 2 | IOPS和吞吐量开销 |
@@ -335,7 +335,7 @@ archives/run_*_YYYYMMDD_HHMMSS/
     "max_successful_qps": 5000,
     "bottleneck_detected": false,
     "bottleneck_types": [],
-    "bottleneck_summary": "none|cpu|memory|ebs|network",
+    "bottleneck_summary": "none|cpu|memory|disk|network",
     "test_parameters": {
         "initial_qps": 1000,
         "max_qps": 5000,

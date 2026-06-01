@@ -33,7 +33,7 @@ show_framework_info() {
     echo ""
     echo "🔍 Monitoring capabilities:"
     echo "   • 73 - 79 performance metrics real-time monitoring"
-    echo "   • CPU, Memory, EBS storage, Network, ENA limitations"
+    echo "   • CPU, Memory, Disk storage, Network, ENA limitations"
     echo "   • Intelligent bottleneck detection and root cause analysis"
     echo "   • Bottleneck-log time correlation analysis"
     echo ""
@@ -104,6 +104,15 @@ cleanup_framework() {
     # Stop RPC proxy (no-op if Phase 2.5 didn't run)
     if declare -F stop_rpc_proxy >/dev/null 2>&1; then
         stop_rpc_proxy || true
+    fi
+    
+    # Stop fake-node if started (--fake-node mode). Merged here instead of a
+    # separate `trap` so it does NOT override this cleanup (bash trap replaces,
+    # not appends — a separate fake-node trap was silently dropping the proxy +
+    # monitoring cleanup, orphaning the proxy on :18545).
+    if [[ -n "${FAKE_NODE_PID:-}" ]] && kill -0 "${FAKE_NODE_PID}" 2>/dev/null; then
+        echo "🧹 Stopping fake-node (pid=${FAKE_NODE_PID})"
+        kill "${FAKE_NODE_PID}" 2>/dev/null || true
     fi
     
     # Stop monitoring system
@@ -336,12 +345,12 @@ process_test_results() {
     
     # AWS baseline conversion
     echo "📊 Executing AWS baseline conversion..."
-    if [[ -f "${SCRIPT_DIR}/utils/ebs_converter.sh" ]]; then
-        # Note: ebs_converter.sh is a function library, does not support direct parameter execution
-        # Actual EBS conversion is implemented through source call in iostat_collector.sh
-        echo "✅ EBS conversion library loaded, conversion executed automatically during data collection"
+    if [[ -f "${SCRIPT_DIR}/utils/disk_converter.sh" ]]; then
+        # Note: disk_converter.sh is a function library, does not support direct parameter execution
+        # Actual Disk conversion is implemented through source call in iostat_collector.sh
+        echo "✅ Disk conversion library loaded, conversion executed automatically during data collection"
     else
-        echo "⚠️ EBS conversion script does not exist, skipping conversion"
+        echo "⚠️ Disk conversion script does not exist, skipping conversion"
     fi
     
     # Unit conversion
@@ -458,7 +467,7 @@ execute_data_analysis() {
     
     # Warning: If no device fields, some analysis may be limited
     if [[ "$has_data_device" == "false" && "$has_accounts_device" == "false" ]]; then
-        echo "[WARN] No EBS device fields detected - storage analysis may be limited"
+        echo "[WARN] No Disk device fields detected - storage analysis may be limited"
     fi
     
     echo "[INFO] Using monitoring data file: $(basename "$latest_csv")"
@@ -480,10 +489,10 @@ execute_data_analysis() {
             echo "📊 Bottleneck details: QPS=$bottleneck_qps, Max successful QPS=$max_qps, Severity=$severity"
         fi
         
-        # EBS bottleneck-specific analysis completed through real-time monitoring
-        # ebs_bottleneck_detector.sh runs in real-time through monitoring_coordinator.sh during testing
-        # Bottleneck detection results recorded in ebs_analyzer.log, no need to call again
-        echo "💾 EBS bottleneck detection completed through real-time monitoring"
+        # Disk bottleneck-specific analysis completed through real-time monitoring
+        # disk_bottleneck_detector.sh runs in real-time through monitoring_coordinator.sh during testing
+        # Bottleneck detection results recorded in disk_analyzer.log, no need to call again
+        echo "💾 Disk bottleneck detection completed through real-time monitoring"
         
         # Bottleneck time window analysis
         execute_bottleneck_window_analysis "$latest_csv" "$bottleneck_details"
@@ -492,20 +501,20 @@ execute_data_analysis() {
         execute_performance_cliff_analysis "$latest_csv" "$bottleneck_details"
     fi
     
-    # Execute EBS performance analysis (generate ebs_analyzer.log)
-    if [[ -f "${SCRIPT_DIR}/tools/ebs_analyzer.sh" ]]; then
-        echo "🔍 Executing EBS performance analysis: ebs_analyzer.sh"
-        if ! bash "${SCRIPT_DIR}/tools/ebs_analyzer.sh" "$latest_csv"; then
-            echo "⚠️ EBS analysis execution failed, HTML report may be missing EBS analysis section"
+    # Execute Disk performance analysis (generate disk_analyzer.log)
+    if [[ -f "${SCRIPT_DIR}/tools/disk_analyzer.sh" ]]; then
+        echo "🔍 Executing Disk performance analysis: disk_analyzer.sh"
+        if ! bash "${SCRIPT_DIR}/tools/disk_analyzer.sh" "$latest_csv"; then
+            echo "⚠️ Disk analysis execution failed, HTML report may be missing Disk analysis section"
         fi
     else
-        echo "⚠️ EBS analysis script does not exist: tools/ebs_analyzer.sh"
+        echo "⚠️ Disk analysis script does not exist: tools/disk_analyzer.sh"
     fi
     
     # Execute all standard analysis scripts
     local analysis_scripts=(
         "analysis/comprehensive_analysis.py"
-        "analysis/cpu_ebs_correlation_analyzer.py"
+        "analysis/cpu_disk_correlation_analyzer.py"
         "analysis/qps_analyzer.py"
         "analysis/rpc_deep_analyzer.py"
     )
@@ -913,12 +922,83 @@ parse_rpc_mode_args() {
                 export SKIP_RPC_PROXY=1
                 shift
                 ;;
+            --fake-node)
+                # CP-1 C: 可选本地 fake-node 测试模式(默认关).
+                # 自动编译+启动 tools/fake-node,把 LOCAL_RPC_URL 指向它,跑完自动清理.
+                # 用途: 无真实节点时快速验证框架端到端链路 / 新增链快速冒烟.
+                export FAKE_NODE_MODE=1
+                shift
+                ;;
             *)
                 # Other parameters continue to pass
                 shift
                 ;;
         esac
     done
+}
+
+# CP-1 C: 启动本地 fake-node 用于框架端到端测试 (仅 --fake-node 模式触发).
+# 设计原则:
+#   - 默认关 (FAKE_NODE_MODE!=1 直接返回,零影响现流程)
+#   - 编译+后台启动 fake-node,把 LOCAL_RPC_URL 指向它
+#   - 注册 trap 在脚本退出时自动 kill,不残留进程
+#   - 失败 fail-fast (编译/启动失败直接 exit,不静默继续打真节点)
+# 用途: 无真实节点时验证整框架链路;新增链快速冒烟.
+start_fake_node_for_testing() {
+    [[ "${FAKE_NODE_MODE:-0}" != "1" ]] && return 0
+
+    local fake_node_root="${SCRIPT_DIR}/tools/fake-node"
+    local fake_node_bin="${FAKE_NODE_BIN:-/tmp/fake-node-framework}"
+    local chain="${BLOCKCHAIN_NODE:-solana}"
+    local port="${FAKE_NODE_PORT:-8899}"
+
+    if [[ ! -d "$fake_node_root" ]]; then
+        echo "❌ --fake-node: tools/fake-node 目录不存在: $fake_node_root" >&2
+        exit 1
+    fi
+    if ! command -v go >/dev/null 2>&1; then
+        echo "❌ --fake-node: 需要 go 工具链编译 fake-node,未找到 go" >&2
+        exit 1
+    fi
+
+    echo "🧪 --fake-node: 编译 fake-node -> $fake_node_bin"
+    if ! (cd "$fake_node_root" && go build -o "$fake_node_bin" .); then
+        echo "❌ --fake-node: fake-node 编译失败" >&2
+        exit 1
+    fi
+
+    echo "🧪 --fake-node: 启动 fake-node (chain=$chain port=$port)"
+    BLOCKCHAIN_NODE="$chain" "$fake_node_bin" \
+        -chains-dir "${SCRIPT_DIR}/config/chains" \
+        -configs-dir "${fake_node_root}/configs" \
+        -fixtures-dir "${fake_node_root}/fixtures" \
+        -port "$port" \
+        > "/tmp/fake-node-framework-${chain}.log" 2>&1 &
+    FAKE_NODE_PID=$!
+
+    # fake-node 清理已合并进主 cleanup_framework()(读全局 FAKE_NODE_PID),
+    # 不再单独 trap — bash trap 是覆盖式, 独立 trap 会顶掉 cleanup_framework
+    # 导致 proxy + monitoring 清理被跳过, proxy 残留占端口(已根治的 zombie bug)。
+
+    # 等待就绪 (最多 5s)
+    local ready=0
+    for _ in 1 2 3 4 5; do
+        sleep 1
+        if curl -sf "http://127.0.0.1:${port}/stats" >/dev/null 2>&1; then
+            ready=1
+            break
+        fi
+    done
+    if [[ "$ready" != "1" ]]; then
+        echo "❌ --fake-node: fake-node 5s 内未就绪,日志:" >&2
+        cat "/tmp/fake-node-framework-${chain}.log" >&2 || true
+        kill "${FAKE_NODE_PID}" 2>/dev/null || true
+        exit 1
+    fi
+
+    # 把框架 RPC 目标指向 fake-node
+    export LOCAL_RPC_URL="http://127.0.0.1:${port}"
+    echo "✅ --fake-node: 就绪,LOCAL_RPC_URL=$LOCAL_RPC_URL (pid=$FAKE_NODE_PID)"
 }
 
 # Install vegeta v12.13.0 binary (--install-vegeta)
@@ -990,7 +1070,11 @@ main() {
     
     # Parse RPC mode parameters
     parse_rpc_mode_args "$@"
-    
+
+    # CP-1 C: 可选 fake-node 测试模式 (默认关,仅 --fake-node 触发).
+    # 必须在 check_deployment 之前: 它会把 LOCAL_RPC_URL 指向本地 fake-node.
+    start_fake_node_for_testing
+
     echo "🚀 Starting Blockchain Node Performance Benchmark Framework"
     echo "   RPC mode: $RPC_MODE"
     echo "   Test session ID: $TEST_SESSION_ID"

@@ -21,7 +21,7 @@ graph TB
     B1 --> B2[unified_monitor.sh<br/>Unified Monitor]
     B1 --> B3[block_height_monitor.sh<br/>Block Height Monitor]
     B1 --> B4[ena_network_monitor.sh<br/>ENA Network Monitor]
-    B1 --> B5[ebs_bottleneck_detector.sh<br/>EBS Bottleneck Detector]
+    B1 --> B5[disk_bottleneck_detector.sh<br/>Disk Bottleneck Detector]
     
     C --> C1[master_qps_executor.sh<br/>QPS Test Engine]
     C1 --> C2[Vegeta Load Testing]
@@ -56,7 +56,7 @@ graph LR
     end
     
     subgraph "Data Consumption Layer"
-        C1[ebs_bottleneck_detector.sh<br/>Real-time Detection]
+        C1[disk_bottleneck_detector.sh<br/>Real-time Detection]
         C2[comprehensive_analysis.py<br/>Analysis Processing]
         C3[report_generator.py<br/>Report Generation]
         C4[performance_visualizer.py<br/>Visualization]
@@ -116,7 +116,7 @@ sequenceDiagram
     participant Unified as unified_monitor.sh
     participant Block as block_height_monitor.sh
     participant ENA as ena_network_monitor.sh
-    participant EBS as ebs_bottleneck_detector.sh
+    participant Disk as disk_bottleneck_detector.sh
     
     Main->>+Coord: start_monitoring_system()
     Note over Main,Coord: Export environment variables<br/>MONITOR_PIDS_FILE<br/>MONITOR_STATUS_FILE
@@ -124,7 +124,7 @@ sequenceDiagram
     Coord->>+Unified: start unified_monitor.sh
     Coord->>+Block: start block_height_monitor.sh
     Coord->>+ENA: start ena_network_monitor.sh (conditional)
-    Coord->>+EBS: start ebs_bottleneck_detector.sh
+    Coord->>+Disk: start disk_bottleneck_detector.sh
     
     Note over Unified: Create performance_*.csv<br/>Create symlink performance_latest.csv
     Note over Block: Create block_height_*.csv
@@ -138,12 +138,12 @@ sequenceDiagram
     Unified->>Block: tail -1 BLOCK_HEIGHT_DATA_FILE
     Block-->>Unified: Latest block height data
     
-    Note over EBS: Real-time monitoring performance_latest.csv
-    EBS->>Unified: tail -F performance_latest.csv
-    Unified-->>EBS: Real-time data stream
+    Note over Disk: Real-time monitoring performance_latest.csv
+    Disk->>Unified: tail -F performance_latest.csv
+    Unified-->>Disk: Real-time data stream
     
-    EBS->>EBS: Dynamic field mapping<br/>init_csv_field_mapping()
-    EBS->>EBS: Bottleneck detection<br/>detect_ebs_bottleneck()
+    Disk->>Disk: Dynamic field mapping<br/>init_csv_field_mapping()
+    Disk->>Disk: Bottleneck detection<br/>detect_disk_bottleneck()
 ```
 
 ### 5. Data Processing and Analysis Flow
@@ -152,7 +152,7 @@ sequenceDiagram
 graph TB
     subgraph "Data Collection Stage"
         A1[System Metrics<br/>CPU, Memory, Network]
-        A2[Storage Metrics<br/>EBS IOPS, Throughput, Latency]
+        A2[Storage Metrics<br/>Disk IOPS, Throughput, Latency]
         A3[Blockchain Metrics<br/>Block Height, RPC Status]
         A4[Network Metrics<br/>ENA Allowance, Bandwidth]
         A5[QPS Test Data<br/>Vegeta Results, Bottleneck Events]
@@ -166,7 +166,7 @@ graph TB
     end
     
     subgraph "Real-time Analysis Stage"
-        C1[EBS Bottleneck Detection<br/>Dynamic field mapping]
+        C1[Disk Bottleneck Detection<br/>Dynamic field mapping]
         C2[QPS Bottleneck Detection<br/>6-dimensional evaluation]
         C3[Event Recording<br/>JSON format logging]
     end
@@ -225,7 +225,7 @@ graph LR
     subgraph "Real-time Data Stream"
         B1[Data collection loop<br/>log performance data]
         B2[Write to timestamped file<br/>safe write csv]
-        B3[EBS detector monitoring<br/>tail -F performance_latest.csv]
+        B3[Disk detector monitoring<br/>tail -F performance_latest.csv]
         B4[Dynamic field mapping<br/>CSV_FIELD_MAP]
     end
     
@@ -295,8 +295,8 @@ archives/run_*_YYYYMMDD_HHMMSS/
 | **Timestamp** | 1 | Data collection timestamp |
 | **CPU Metrics** | 6 | cpu_usage, cpu_usr, cpu_sys, cpu_iowait, cpu_soft, cpu_idle |
 | **Memory Metrics** | 3 | mem_used, mem_total, mem_usage |
-| **DATA Device EBS** | 21 | IOPS, throughput, latency, utilization, AWS standard metrics |
-| **ACCOUNTS Device EBS** | 21 | Same structure as DATA device |
+| **DATA Device Disk** | 21 | IOPS, throughput, latency, utilization, normalized metrics |
+| **ACCOUNTS Device Disk** | 21 | Same structure as DATA device |
 | **Network Metrics** | 10 | Interface, bandwidth (Mbps/Gbps), packets per second |
 | **ENA Network** | 6 | Allowance exceeded counters, connection tracking |
 | **Monitoring Overhead** | 2 | IOPS and throughput overhead |
@@ -335,7 +335,7 @@ archives/run_*_YYYYMMDD_HHMMSS/
     "max_successful_qps": 5000,
     "bottleneck_detected": false,
     "bottleneck_types": [],
-    "bottleneck_summary": "none|cpu|memory|ebs|network",
+    "bottleneck_summary": "none|cpu|memory|disk|network",
     "test_parameters": {
         "initial_qps": 1000,
         "max_qps": 5000,

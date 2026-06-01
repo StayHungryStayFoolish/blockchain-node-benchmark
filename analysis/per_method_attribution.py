@@ -100,27 +100,51 @@ def read_monitor_csv(
     """读 unified monitor CSV.
 
     列名可配 (项目内不同 collector 列名各异). 默认按 cgroup_collector 输出.
-    timestamp 列接受: epoch int/float, 或 ISO 字符串 (留 future, 当前只支持 epoch).
+    timestamp 列接受两种格式 (自动识别):
+      1. epoch int/float (秒/毫秒/微秒/纳秒, 按数量级判断单位)
+      2. ISO/datetime 字符串 (如 '2026-05-31 19:19:50' 或 ISO8601) — unified_monitor.sh
+         的 timestamp 列就是这种本地时间字符串. 解析为本地时区 epoch 秒,
+         与 proxy sink 的 epoch 秒对齐 (二者都在同一主机同一次运行内产生).
     """
+    import datetime as _dt
+
+    def _parse_ts_to_epoch_s(ts_raw: str) -> int:
+        ts_raw = (ts_raw or "").strip()
+        # 优先尝试纯数字 epoch (秒/ms/us/ns 按数量级)
+        try:
+            ts_int = int(float(ts_raw))
+        except (ValueError, TypeError):
+            ts_int = None
+        if ts_int is not None:
+            if ts_int > 10**17:    # ns
+                return ts_int // 1_000_000_000
+            elif ts_int > 10**14:  # us
+                return ts_int // 1_000_000
+            elif ts_int > 10**11:  # ms
+                return ts_int // 1000
+            else:                  # seconds
+                return ts_int
+        # 字符串日期时间: unified_monitor 用 '%Y-%m-%d %H:%M:%S'; 也兼容 ISO8601 'T' 分隔.
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                dt = _dt.datetime.strptime(ts_raw, fmt)
+                return int(dt.timestamp())  # 本地时区 → epoch 秒
+            except ValueError:
+                continue
+        # 最后尝试 fromisoformat (覆盖带微秒/时区的变体)
+        try:
+            dt = _dt.datetime.fromisoformat(ts_raw)
+            return int(dt.timestamp())
+        except ValueError:
+            raise ValueError(
+                f"read_monitor_csv: 无法解析 timestamp {ts_raw!r} "
+                f"(既非 epoch 数字也非已知日期格式)"
+            )
+
     with open(path, newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            ts_raw = row[timestamp_col]
-            # epoch seconds or nanoseconds — 长度判断
-            ts_int = int(float(ts_raw))
-            # 长度判断 epoch 单位:
-            # seconds  ~1e9 (10 digits, year 2001-2286)
-            # millis   ~1e12 (13 digits)
-            # micros   ~1e15 (16 digits)
-            # nanos    ~1e18 (19 digits)
-            if ts_int > 10**17:    # ns
-                ts_s = ts_int // 1_000_000_000
-            elif ts_int > 10**14:  # us
-                ts_s = ts_int // 1_000_000
-            elif ts_int > 10**11:  # ms
-                ts_s = ts_int // 1000
-            else:                  # seconds
-                ts_s = ts_int
+            ts_s = _parse_ts_to_epoch_s(row[timestamp_col])
             yield MonitorRecord(
                 timestamp_s=ts_s,
                 cpu_pct=float(row.get(cpu_col, 0) or 0),

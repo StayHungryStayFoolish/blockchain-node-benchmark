@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-CPU-EBS Correlation Analyzer
-Implements complete correlation analysis based on CPU and EBS Performance Correlation Analysis.md document requirements
+CPU-Disk Correlation Analyzer
+Implements complete correlation analysis based on CPU and Disk Performance Correlation Analysis.md document requirements
 """
 
 import sys
@@ -29,15 +29,15 @@ from utils.unified_logger import get_logger
 logger = get_logger(__name__)
 
 
-class CPUEBSCorrelationAnalyzer:
-    """CPU-EBS Correlation Analyzer - Implements 18 analysis methods from the document"""
+class CPUDiskCorrelationAnalyzer:
+    """CPU-Disk Correlation Analyzer - Implements 18 analysis methods from the document"""
     
     def __init__(self, data_file: str):
         """
         Initialize analyzer
         
         Args:
-            data_file: CSV file path containing CPU and EBS data
+            data_file: CSV file path containing CPU and Disk data
         """
         self.data_file = data_file
         self.df = None
@@ -60,13 +60,13 @@ class CPUEBSCorrelationAnalyzer:
             
             # Verify required columns exist
             required_cpu_cols = ['cpu_iowait', 'cpu_usr', 'cpu_sys', 'cpu_idle', 'cpu_soft']
-            required_ebs_cols = []
+            required_disk_cols = []
             
-            # Find EBS device columns - use unified field format matching
+            # Find Disk device columns - use unified field format matching
             for col in self.df.columns:
                 if (col.startswith('data_') and col.endswith('_util')) or \
                    (col.startswith('accounts_') and col.endswith('_util')):
-                    required_ebs_cols.append(col)
+                    required_disk_cols.append(col)
                     
             missing_cols = []
             for col in required_cpu_cols:
@@ -77,11 +77,11 @@ class CPUEBSCorrelationAnalyzer:
                 logger.error(f"❌ Missing required CPU columns: {missing_cols}")
                 return False
                 
-            if not required_ebs_cols:
-                logger.error("❌ No EBS device data columns found")
+            if not required_disk_cols:
+                logger.error("❌ No Disk device data columns found")
                 return False
                 
-            logger.info(f"✅ Data validation passed, found {len(required_ebs_cols)} EBS devices")
+            logger.info(f"✅ Data validation passed, found {len(required_disk_cols)} Disk devices")
             return True
             
         except Exception as e:
@@ -93,7 +93,7 @@ class CPUEBSCorrelationAnalyzer:
         if not self.load_and_prepare_data():
             return {}
             
-        print("🔍 Starting CPU-EBS Complete Correlation Analysis (18 methods)")
+        print("🔍 Starting CPU-Disk Complete Correlation Analysis (18 methods)")
         print("=" * 60)
         
         # 1. Pearson correlation analysis (8 methods)
@@ -536,7 +536,7 @@ class CPUEBSCorrelationAnalyzer:
             return "❌ Analysis not executed, cannot generate report"
         
         report = f"""
-# CPU-EBS Performance Correlation Complete Analysis Report
+# CPU-Disk Performance Correlation Complete Analysis Report
 Generation time: {pd.Timestamp.now()}
 
 ## Analysis Overview
@@ -606,7 +606,7 @@ Generation time: {pd.Timestamp.now()}
 
 # Usage example
 if __name__ == "__main__":
-    print("📋 CPU-EBS Correlation Analyzer usage example:")
-    print("analyzer = CPUEBSCorrelationAnalyzer('performance_data.csv')")
+    print("📋 CPU-Disk Correlation Analyzer usage example:")
+    print("analyzer = CPUDiskCorrelationAnalyzer('performance_data.csv')")
     print("results = analyzer.run_complete_analysis()")
     print("report = analyzer.generate_comprehensive_report()")

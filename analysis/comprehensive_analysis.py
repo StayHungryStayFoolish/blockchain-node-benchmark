@@ -369,20 +369,20 @@ class ComprehensiveAnalyzer:
             axes[1, 0].set_title('RPC Latency vs QPS (No Data)', 
                                 fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
-        # 4. EBS IOPS vs QPS
-        ebs_iops_fields = [col for col in df.columns if 'total_iops' in col]
-        if 'current_qps' in df.columns and ebs_iops_fields:
-            total_iops = df[ebs_iops_fields].sum(axis=1)
+        # 4. Disk IOPS vs QPS
+        disk_iops_fields = [col for col in df.columns if 'total_iops' in col]
+        if 'current_qps' in df.columns and disk_iops_fields:
+            total_iops = df[disk_iops_fields].sum(axis=1)
             axes[1, 1].scatter(df['current_qps'], total_iops, 
                               alpha=0.6, color=UnifiedChartStyle.COLORS['warning'])
-            axes[1, 1].set_title('EBS IOPS vs QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[1, 1].set_title('Disk IOPS vs QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             axes[1, 1].set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             axes[1, 1].set_ylabel('Total IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             axes[1, 1].grid(True, alpha=0.3)
         else:
-            axes[1, 1].text(0.5, 0.5, 'EBS IOPS Data\nNot Available', ha='center', va='center',
+            axes[1, 1].text(0.5, 0.5, 'Disk IOPS Data\nNot Available', ha='center', va='center',
                            transform=axes[1, 1].transAxes, fontsize=12)
-            axes[1, 1].set_title('EBS IOPS vs QPS (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[1, 1].set_title('Disk IOPS vs QPS (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
 
         # 5. RPC Latency Distribution
         if 'rpc_latency_ms' in df.columns and df['rpc_latency_ms'].notna().any():
@@ -536,7 +536,7 @@ class ComprehensiveAnalyzer:
             resource_score += 0.3 * (1.5 if avg_cpu > 90 else 1.0)
         if 'Memory' in bottleneck_types:
             resource_score += 0.3 * (1.5 if avg_mem > 95 else 1.0)
-        if 'EBS' in bottleneck_types:
+        if 'Disk' in bottleneck_types:
             resource_score += 0.1
         
         # RPC performance score (weight: 0.3) - based on actual RPC latency monitoring data
@@ -585,8 +585,8 @@ class ComprehensiveAnalyzer:
                 recommendations.append("🔧 CPU bottleneck: Consider upgrading CPU or optimizing compute-intensive processes")
             if 'Memory' in bottleneck_types:
                 recommendations.append("🔧 Memory bottleneck: Consider increasing memory or optimizing memory usage")
-            if 'EBS' in bottleneck_types:
-                recommendations.append("🔧 Storage bottleneck: Consider upgrading EBS type or optimizing I/O patterns")
+            if 'Disk' in bottleneck_types:
+                recommendations.append("🔧 Storage bottleneck: Consider upgrading Disk type or optimizing I/O patterns")
             
             # Optimization recommendations based on actual RPC latency
             if avg_rpc > 1000:
@@ -633,7 +633,7 @@ class ComprehensiveAnalyzer:
         cpu_bottleneck = 'Detected' if 'CPU' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
         memory_bottleneck = 'Detected' if 'Memory' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
         network_bottleneck = 'Detected' if 'Network' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
-        ebs_bottleneck = 'Detected' if 'EBS' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
+        disk_bottleneck = 'Detected' if 'Disk' in bottlenecks.get('detected_bottlenecks', []) else 'None detected'
         
         max_cpu = DataProcessor.safe_calculate_max(df, 'cpu_usage')
         max_mem = DataProcessor.safe_calculate_max(df, 'mem_usage')
@@ -681,7 +681,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - **CPU Bottlenecks**: {cpu_bottleneck}
 - **Memory Bottlenecks**: {memory_bottleneck}
 - **Network Bottlenecks**: {network_bottleneck}
-- **EBS Bottlenecks**: {ebs_bottleneck}
+- **Disk Bottlenecks**: {disk_bottleneck}
 
 ### Performance Trend Analysis
 - **QPS Stability**: Analyzed from {len(df)} monitoring data points

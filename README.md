@@ -15,7 +15,7 @@ A professional multi blockchain node performance benchmarking framework with com
 - **Cross-Platform Compatibility**: Supports 8 mainstream blockchain nodes (Solana, Ethereum, BSC, Base, Polygon, Scroll, Starknet, Sui) on AWS, other clouds, IDC, or local Linux environments
 - **Real Transaction Data Testing**: Fetches active accounts from your blockchain node and generates test targets using single or mixed RPC methods
 - **[Multi-Layered Performance Monitoring](#-monitoring-metrics)**: Professional monitoring system with 4 specialized data streams
-  - Unified metrics (79 fields): CPU, Memory, EBS, Network, ENA, Block Height, QPS
+  - Unified metrics (79 fields): CPU, Memory, Disk, Network, ENA, Block Height, QPS
   - Monitoring overhead tracking (20 fields): Self-monitoring and impact analysis
   - ENA deep monitoring (15 fields): AWS-specific network performance analysis
   - Blockchain health tracking (7 fields): Node sync status and data loss detection
@@ -29,8 +29,8 @@ A professional multi blockchain node performance benchmarking framework with com
   - **Offline Analysis**: Multi-dimensional deep analysis after test completion
     - Time window analysis (±30 seconds around bottleneck) for focused root cause investigation
     - Performance cliff analysis to identify QPS degradation patterns
-    - EBS performance deep dive with AWS baseline comparison
-    - CPU-EBS correlation analysis for resource bottleneck identification
+    - Disk performance deep dive with AWS baseline comparison
+    - CPU-Disk correlation analysis for resource bottleneck identification
     - RPC method performance profiling and optimization recommendations
 - **AWS Deep Integration**: EBS performance baselines, ENA network monitoring
 - **Professional Visualization**: [32 professional charts](#-generated-reports) and [comprehensive HTML reports](./docs/image/performance_report_en_20251030_171541.html)
@@ -235,7 +235,7 @@ blockchain-node-benchmark/
 │   └── advanced_chart_generator.py     # Advanced chart generator
 └── 🛠️ Tools & Utilities
     ├── benchmark_archiver.sh           # Test result archiver
-    ├── ebs_bottleneck_detector.sh      # EBS bottleneck detector
+    ├── disk_bottleneck_detector.sh      # Disk bottleneck detector
     └── target_generator.sh             # Test target generator
 ```
 
@@ -321,8 +321,8 @@ NETWORK_MAX_BANDWIDTH_GBPS=25        # Gbps
 ```bash
 BOTTLENECK_CPU_THRESHOLD=85
 BOTTLENECK_MEMORY_THRESHOLD=90
-BOTTLENECK_EBS_UTIL_THRESHOLD=90
-BOTTLENECK_EBS_LATENCY_THRESHOLD=50
+BOTTLENECK_DISK_UTIL_THRESHOLD=90
+BOTTLENECK_DISK_LATENCY_THRESHOLD=50
 NETWORK_UTILIZATION_THRESHOLD=80
 ```
 
@@ -351,7 +351,7 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # Ultra-high-frequency monitoring interval
 - **Timestamp**: Unified timestamp (1 field)
 - **CPU**: Usage, I/O wait, system calls (6 fields)
 - **Memory**: Usage, available memory, cache (3 fields)
-- **EBS Storage**: IOPS, throughput, latency, utilization (21 fields per device, 42 fields for 2 devices)
+- **Disk Storage**: IOPS, throughput, latency, utilization (21 fields per device, 42 fields for 2 devices)
 - **Network**: Bandwidth utilization, PPS, connections (10 fields)
 - **ENA Network**: Allowance exceeded, bandwidth limits (6 fields, AWS only)
 - **Monitoring Overhead**: System impact metrics (2 fields)
@@ -391,7 +391,7 @@ The framework generates multiple specialized CSV files for fine-grained analysis
 ### Bottleneck Detection (8 Dimensions)
 1. **CPU Bottleneck**: Threshold 85%
 2. **Memory Bottleneck**: Threshold 90%
-3. **EBS Bottleneck**: IOPS/Throughput/Utilization > 90% baseline
+3. **Disk Bottleneck**: IOPS/Throughput/Utilization > 90% baseline
 4. **Network Bottleneck**: Bandwidth/PPS utilization > 80%
 5. **ENA Bottleneck**: Allowance limits exceeded
 6. **RPC Success Rate**: < 95% (Necessary Condition)
@@ -423,20 +423,20 @@ View complete sample reports generated from real test data (Standard mode, 90+ m
 8. `performance_trend_analysis.png` - Performance Trend Analysis
 9. `performance_correlation_heatmap.png` - Performance Correlation Heatmap
 
-**EBS Professional Charts (7 charts)**:
+**Disk Professional Charts (7 charts)**:
 
-10. `ebs_aws_capacity_planning.png` - AWS Capacity Planning Analysis
-11. `ebs_iostat_performance.png` - Iostat Performance Analysis
-12. `ebs_bottleneck_correlation.png` - Bottleneck Correlation Analysis
-13. `ebs_performance_overview.png` - EBS Performance Overview
-14. `ebs_bottleneck_analysis.png` - EBS Bottleneck Analysis
-15. `ebs_aws_standard_comparison.png` - EBS AWS Standard Comparison
-16. `ebs_time_series_analysis.png` - EBS Time Series Analysis
+10. `disk_capacity_planning.png` - AWS Capacity Planning Analysis
+11. `disk_iostat_performance.png` - Iostat Performance Analysis
+12. `disk_bottleneck_correlation.png` - Bottleneck Correlation Analysis
+13. `disk_performance_overview.png` - Disk Performance Overview
+14. `disk_bottleneck_analysis.png` - Disk Bottleneck Analysis
+15. `disk_normalized_comparison.png` - Disk Normalized Comparison
+16. `disk_time_series_analysis.png` - Disk Time Series Analysis
 
 **Core Performance Charts (11 charts)**:
 
 17. `performance_overview.png` - Performance Overview
-18. `cpu_ebs_correlation_visualization.png` - CPU-EBS Correlation Analysis
+18. `cpu_disk_correlation_visualization.png` - CPU-Disk Correlation Analysis
 19. `device_performance_comparison.png` - Device Performance Comparison
 20. `await_threshold_analysis.png` - I/O Latency Threshold Analysis
 21. `monitoring_overhead_analysis.png` - Monitoring Overhead Analysis
@@ -460,10 +460,10 @@ View complete sample reports generated from real test data (Standard mode, 90+ m
 - **Performance Summary**: Test overview and key performance metrics
 - **Configuration Status Check**: System configuration validation
 - **Blockchain Node Sync Analysis**: Block height monitoring and sync status
-- **EBS Performance Analysis Results**: Storage performance deep dive with AWS baseline comparison
+- **Disk Performance Analysis Results**: Storage performance deep dive with AWS baseline comparison
 - **Performance Chart Gallery**: All 32 professional visualization charts organized by category
 - **Monitoring Overhead Analysis**: Comprehensive monitoring system impact analysis
-- **CPU-EBS Correlation Analysis**: Resource correlation and bottleneck identification
+- **CPU-Disk Correlation Analysis**: Resource correlation and bottleneck identification
 
 
 
@@ -478,7 +478,7 @@ View complete sample reports generated from real test data (Standard mode, 90+ m
 ls reports/
 # comprehensive_analysis_report.html
 # performance_overview.png
-# cpu_ebs_correlation_visualization.png
+# cpu_disk_correlation_visualization.png
 # ... (other chart files)
 ```
 
@@ -573,7 +573,7 @@ All logs are stored in `blockchain-node-benchmark-result/current/logs/`:
 - **QPS Test Log**: `master_qps_executor.log` - QPS test progress and results
 - **Monitoring Log**: `unified_monitor.log` - System monitoring data
 - **Bottleneck Detection**: `bottleneck_detector.log` - Bottleneck detection events
-- **EBS Analysis**: `ebs_bottleneck_detector.log` - EBS performance analysis
+- **Disk Analysis**: `disk_bottleneck_detector.log` - Disk performance analysis
 - **Performance Data**: `performance_YYYYMMDD_HHMMSS.csv` - Raw performance metrics (79 fields)
 - **Monitoring Overhead**: `monitoring_overhead_YYYYMMDD_HHMMSS.csv` - Monitoring system overhead (20 fields)
 - **ENA Network**: `ena_network_YYYYMMDD_HHMMSS.csv` - ENA network detailed metrics (15 fields, AWS only)

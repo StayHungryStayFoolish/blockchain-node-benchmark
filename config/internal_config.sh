@@ -13,25 +13,25 @@
 # Bottleneck detection thresholds (for extreme testing)
 BOTTLENECK_CPU_THRESHOLD=85               # CPU usage exceeding 85% is considered a bottleneck
 BOTTLENECK_MEMORY_THRESHOLD=90            # Memory usage exceeding 90% is considered a bottleneck
-# EBS bottleneck detection thresholds (for bottleneck detection system)
-BOTTLENECK_EBS_UTIL_THRESHOLD=90          # EBS utilization exceeding 90% is considered a bottleneck
-BOTTLENECK_EBS_LATENCY_THRESHOLD=50       # EBS latency exceeding 50ms is considered a bottleneck
+# Disk bottleneck detection thresholds (for bottleneck detection system)
+BOTTLENECK_DISK_UTIL_THRESHOLD=90          # Disk utilization exceeding 90% is considered a bottleneck
+BOTTLENECK_DISK_LATENCY_THRESHOLD=50       # Disk latency exceeding 50ms is considered a bottleneck
 BOTTLENECK_NETWORK_THRESHOLD=80           # Network utilization exceeding 80% is considered a bottleneck
 BOTTLENECK_ERROR_RATE_THRESHOLD=5         # Error rate exceeding 5% is considered a bottleneck
-BOTTLENECK_EBS_IOPS_THRESHOLD=90          # EBS IOPS utilization exceeding 90% is considered a bottleneck
-BOTTLENECK_EBS_THROUGHPUT_THRESHOLD=90    # EBS Throughput utilization exceeding 90% is considered a bottleneck
+BOTTLENECK_DISK_IOPS_THRESHOLD=90          # Disk IOPS utilization exceeding 90% is considered a bottleneck
+BOTTLENECK_DISK_THROUGHPUT_THRESHOLD=90    # Disk Throughput utilization exceeding 90% is considered a bottleneck
 
 # Multi-level monitoring threshold explanation:
-# - ebs_bottleneck_detector.sh (real-time bottleneck detection):
+# - disk_bottleneck_detector.sh (real-time bottleneck detection):
 #   * HIGH level: Uses above baseline thresholds (90%, 50ms)
 #   * CRITICAL level: Baseline threshold + 5% (95%) or Baseline threshold * 2 (100ms)
-# - ebs_analyzer.sh (offline performance analysis):
-#   * WARNING level: Utilization = BOTTLENECK_EBS_UTIL_THRESHOLD * 0.8 (72%)
-#   * WARNING level: Latency = BOTTLENECK_EBS_LATENCY_THRESHOLD * 0.4 (20ms)
+# - disk_analyzer.sh (offline performance analysis):
+#   * WARNING level: Utilization = BOTTLENECK_DISK_UTIL_THRESHOLD * 0.8 (72%)
+#   * WARNING level: Latency = BOTTLENECK_DISK_LATENCY_THRESHOLD * 0.4 (20ms)
 # 
-# Note: EBS performance analyzer (ebs_analyzer.sh) uses calculation method to avoid variable bloat:
-# Utilization warning level = BOTTLENECK_EBS_UTIL_THRESHOLD * 0.8 (90% * 0.8 = 72%)
-# Latency warning level = BOTTLENECK_EBS_LATENCY_THRESHOLD * 0.4 (50ms * 0.4 = 20ms)
+# Note: Disk performance analyzer (disk_analyzer.sh) uses calculation method to avoid variable bloat:
+# Utilization warning level = BOTTLENECK_DISK_UTIL_THRESHOLD * 0.8 (90% * 0.8 = 72%)
+# Latency warning level = BOTTLENECK_DISK_LATENCY_THRESHOLD * 0.4 (50ms * 0.4 = 20ms)
 
 
 # Bottleneck detection consecutive count (avoid sporadic fluctuations)
@@ -67,8 +67,8 @@ LOG_CONSOLE=${LOG_CONSOLE:-true}       # Console output
 LOG_FILE=${LOG_FILE:-true}             # File output
 
 # Export internal configuration variables
-export BOTTLENECK_CPU_THRESHOLD BOTTLENECK_MEMORY_THRESHOLD BOTTLENECK_EBS_UTIL_THRESHOLD
-export BOTTLENECK_EBS_LATENCY_THRESHOLD BOTTLENECK_NETWORK_THRESHOLD BOTTLENECK_ERROR_RATE_THRESHOLD BOTTLENECK_EBS_IOPS_THRESHOLD BOTTLENECK_EBS_THROUGHPUT_THRESHOLD
+export BOTTLENECK_CPU_THRESHOLD BOTTLENECK_MEMORY_THRESHOLD BOTTLENECK_DISK_UTIL_THRESHOLD
+export BOTTLENECK_DISK_LATENCY_THRESHOLD BOTTLENECK_NETWORK_THRESHOLD BOTTLENECK_ERROR_RATE_THRESHOLD BOTTLENECK_DISK_IOPS_THRESHOLD BOTTLENECK_DISK_THROUGHPUT_THRESHOLD
 export BOTTLENECK_CONSECUTIVE_COUNT BOTTLENECK_ANALYSIS_WINDOW
 export PERFORMANCE_MONITORING_ENABLED MAX_COLLECTION_TIME_MS MAX_CONSECUTIVE_ERRORS
 export SUCCESS_RATE_THRESHOLD MAX_LATENCY_THRESHOLD
