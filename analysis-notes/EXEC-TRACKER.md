@@ -1211,6 +1211,22 @@ hostPath 挂 /host/{proc,sys,dev} + privileged, 容器内 iostat 读 node 级设
 - E 类 MONITOR_INTERVAL: 下游 5 处默认值不一致(5 vs 10)→ 统一。
 - 契约类(_CSV_REGISTRY_*/OVERHEAD_CSV_HEADER/CHAIN_CONFIG): 不改 + 加注释说明为何不 env 化。
 
+## 28. ✅ config 治理 第2组完成: A 类 47 个纯配置项 env 化(2026-06-01)
+> 用 execute_code 脚本批量改(scan→精确改顶层定义行→保留行内注释→验语法), 不手写47个patch。
+### 28.1 改动(4 文件, 47 处, VAR="x" → VAR="${VAR:-x}")
+- user_config.sh 24: DATA/ACCOUNTS_VOL_TYPE/SIZE/MAX_IOPS, NETWORK_MAX_BANDWIDTH_GBPS, MONITOR_INTERVAL, DISK_MONITOR_RATE, QUICK/STANDARD/INTENSIVE 全套 QPS/STEP/DURATION/AUTO_STOP, QPS_COOLDOWN/WARMUP
+- internal_config.sh 12: BOTTLENECK_* 9 阈值 + BLOCK_HEIGHT_* 3
+- system_config.sh 6: ERROR_LOG_SUBDIR/PYTHON_ERROR_LOG_SUBDIR/TEMP_FILE_PREFIX/AWS_METADATA_ENDPOINT/AWS_METADATA_API_VERSION/TIMESTAMP_FORMAT
+- config_loader.sh 5: ACCOUNT_COUNT/MAX_SIGNATURES/TX_BATCH_SIZE/SEMAPHORE_LIMIT/OUTPUT_FILE
+### 28.2 验证(全绿)
+- 语法 bash -n 4 文件 ✅
+- VM 无 env(env -i): 抽样 QUICK_MAX=1500/STD_DUR=600/CPU_TH=85/ACCT=1000/ERR=error_logs/VOL=io2/MON=5 = 文件默认, 行为不变 ✅
+- k8s env 覆盖: QUICK_MAX=8888/CPU_TH=70/ACCT=500/VOL=pd-ssd/MON=3 生效, 未设的仍默认 ✅
+### 28.3 治理剩余(第3组, B/C/E/契约类 = 加注释/统一默认, 非加 :-)
+- B ENA_MONITOR_ENABLED(provider 派生) / C VOL_MAX_THROUGHPUT(io2 派生): 加注释说明"非直接配置, 由 X 决定"
+- E MONITOR_INTERVAL 下游默认 5 vs 10 不一致: 统一(独立 bug)
+- 契约类 _CSV_REGISTRY_*/OVERHEAD_CSV_HEADER/CHAIN_CONFIG: 加注释说明为何不 env 化
+
 
 
 

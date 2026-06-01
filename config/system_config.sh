@@ -44,9 +44,9 @@ ERROR_RECOVERY_DELAY=${ERROR_RECOVERY_DELAY:-10}          # Error recovery delay
 
 # ----- Error Handling and Log Configuration -----
 # Error handling directory based on unified path structure (full path will be set in detect_deployment_paths)
-ERROR_LOG_SUBDIR="error_logs"                                  # Error log subdirectory name
-PYTHON_ERROR_LOG_SUBDIR="python_logs"                         # Python error log subdirectory name
-TEMP_FILE_PREFIX="blockchain-node-qps"                                 # Temporary file prefix
+ERROR_LOG_SUBDIR="${ERROR_LOG_SUBDIR:-error_logs}"                                  # Error log subdirectory name
+PYTHON_ERROR_LOG_SUBDIR="${PYTHON_ERROR_LOG_SUBDIR:-python_logs}"                         # Python error log subdirectory name
+TEMP_FILE_PREFIX="${TEMP_FILE_PREFIX:-blockchain-node-qps}"                                 # Temporary file prefix
 
 # ----- AWS Related Configuration -----
 # AWS EBS baseline configuration
@@ -54,9 +54,9 @@ AWS_EBS_BASELINE_IO_SIZE_KIB=16                               # AWS EBS baseline
 AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB=128                      # AWS EBS baseline Throughput size (KiB)
 
 # AWS metadata service endpoint configuration
-AWS_METADATA_ENDPOINT="http://169.254.169.254"                # AWS instance metadata endpoint
+AWS_METADATA_ENDPOINT="${AWS_METADATA_ENDPOINT:-http://169.254.169.254}"                # AWS instance metadata endpoint
 AWS_METADATA_TOKEN_TTL=21600                                  # Metadata token TTL (6 hours)
-AWS_METADATA_API_VERSION="latest"                             # API version
+AWS_METADATA_API_VERSION="${AWS_METADATA_API_VERSION:-latest}"                             # API version
 
 # ----- Monitoring Process Configuration -----
 # Monitoring process name configuration (for monitoring overhead calculation)
@@ -76,7 +76,7 @@ MONITORING_PROCESS_NAMES=(
 )
 
 # Time format standard
-TIMESTAMP_FORMAT="%Y-%m-%d %H:%M:%S"
+TIMESTAMP_FORMAT="${TIMESTAMP_FORMAT:-%Y-%m-%d %H:%M:%S}"
 
 get_unified_timestamp() {
     date +"$TIMESTAMP_FORMAT"

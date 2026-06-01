@@ -28,13 +28,13 @@ BLOCKCHAIN_PROCESS_NAMES=(
 )
 
 # Account and target file configuration
-ACCOUNT_COUNT=1000                                                    # Default account count
+ACCOUNT_COUNT="${ACCOUNT_COUNT:-1000}"                                                    # Default account count
 
 # ----- Account Fetching Tool Configuration -----
 # Detailed configuration parameters for account fetching tool
-ACCOUNT_MAX_SIGNATURES=50000                                          # Maximum signature count
-ACCOUNT_TX_BATCH_SIZE=100                                             # Transaction batch size
-ACCOUNT_SEMAPHORE_LIMIT=10                                            # Concurrency limit
+ACCOUNT_MAX_SIGNATURES="${ACCOUNT_MAX_SIGNATURES:-50000}"                                          # Maximum signature count
+ACCOUNT_TX_BATCH_SIZE="${ACCOUNT_TX_BATCH_SIZE:-100}"                                             # Transaction batch size
+ACCOUNT_SEMAPHORE_LIMIT="${ACCOUNT_SEMAPHORE_LIMIT:-10}"                                            # Concurrency limit
 
 # ----- RPC Mode Configuration -----
 RPC_MODE="${RPC_MODE:-single}"      # RPC mode: single/mixed (default single)
@@ -276,7 +276,7 @@ detect_network_interface() {
 }
 
 # ----- Path Detection and Configuration Function -----
-ACCOUNT_OUTPUT_FILE="active_accounts.txt"                             # Output filename
+ACCOUNT_OUTPUT_FILE="${ACCOUNT_OUTPUT_FILE:-active_accounts.txt}"                             # Output filename
 
 # Detect deployment environment and set paths
 detect_deployment_paths() {

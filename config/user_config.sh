@@ -31,51 +31,51 @@ ACCOUNTS_DEVICE="${ACCOUNTS_DEVICE:-}"
 #          "hyperdisk-balanced" | "hyperdisk-extreme" | "hyperdisk-throughput" | "local-ssd"
 #   GCP Provisioned 型盘 (pd-extreme / hyperdisk-*) 的 IOPS+Throughput 独立购买,
 #   sizing 用 max(read+write, total) 兜底 (见 analysis-notes/aws-gcp-io-counting-rules-verified.md)。
-DATA_VOL_TYPE="io2"                    # 按上面 CLOUD_PROVIDER 选对应云的盘类型
-DATA_VOL_SIZE="2000"                   # Current required data size to keep both snapshot archive and unarchived version of it
-DATA_VOL_MAX_IOPS="30000"              # Max IOPS for Disk volumes (REQUIRED for "instance-store"); GCP Provisioned 盘=购买的 IOPS 配额
+DATA_VOL_TYPE="${DATA_VOL_TYPE:-io2}"                    # 按上面 CLOUD_PROVIDER 选对应云的盘类型
+DATA_VOL_SIZE="${DATA_VOL_SIZE:-2000}"                   # Current required data size to keep both snapshot archive and unarchived version of it
+DATA_VOL_MAX_IOPS="${DATA_VOL_MAX_IOPS:-30000}"              # Max IOPS for Disk volumes (REQUIRED for "instance-store"); GCP Provisioned 盘=购买的 IOPS 配额
 DATA_VOL_MAX_THROUGHPUT="700"          # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for AWS "io2"; GCP Provisioned 盘=购买的 throughput 配额)
 # Accounts volume configuration (optional)
-ACCOUNTS_VOL_TYPE="io2"                # 同 DATA_VOL_TYPE, 按 CLOUD_PROVIDER 选对应云盘类型
-ACCOUNTS_VOL_SIZE="500"                # Current required data size to keep both snapshot archive and unarchived version of it
-ACCOUNTS_VOL_MAX_IOPS="30000"          # Max IOPS for Disk volumes (REQUIRED for "instance-store")
+ACCOUNTS_VOL_TYPE="${ACCOUNTS_VOL_TYPE:-io2}"                # 同 DATA_VOL_TYPE, 按 CLOUD_PROVIDER 选对应云盘类型
+ACCOUNTS_VOL_SIZE="${ACCOUNTS_VOL_SIZE:-500}"                # Current required data size to keep both snapshot archive and unarchived version of it
+ACCOUNTS_VOL_MAX_IOPS="${ACCOUNTS_VOL_MAX_IOPS:-30000}"          # Max IOPS for Disk volumes (REQUIRED for "instance-store")
 ACCOUNTS_VOL_MAX_THROUGHPUT="700"      # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for AWS "io2")
 
 # ----- Network Monitoring Configuration -----
 # EC2 instance network bandwidth configuration (unit: Gbps) - User must set according to EC2 instance type
-NETWORK_MAX_BANDWIDTH_GBPS=25       # Maximum network bandwidth (unit: Gbps) - User must set according to EC2 instance type
+NETWORK_MAX_BANDWIDTH_GBPS="${NETWORK_MAX_BANDWIDTH_GBPS:-25}"       # Maximum network bandwidth (unit: Gbps) - User must set according to EC2 instance type
 
 # ENA network limitation monitoring configuration
 ENA_MONITOR_ENABLED=true
 
 # ----- Monitoring Configuration -----
 # Unified monitoring interval (seconds) - All monitoring tasks use the same interval
-MONITOR_INTERVAL=5              # Unified monitoring interval, applicable to system resources, blockchain node, and monitoring overhead statistics
-DISK_MONITOR_RATE=1            # Disk separate monitoring frequency
+MONITOR_INTERVAL="${MONITOR_INTERVAL:-5}"              # Unified monitoring interval, applicable to system resources, blockchain node, and monitoring overhead statistics
+DISK_MONITOR_RATE="${DISK_MONITOR_RATE:-1}"            # Disk separate monitoring frequency
 
 # ----- QPS Benchmark Configuration -----
 # Quick benchmark mode (verify basic QPS capability)
-QUICK_INITIAL_QPS=1000
-QUICK_MAX_QPS=1500
-QUICK_QPS_STEP=500
-QUICK_DURATION=60   # Test 1 minute per QPS level (avoid resource issues from long-running tests)
+QUICK_INITIAL_QPS="${QUICK_INITIAL_QPS:-1000}"
+QUICK_MAX_QPS="${QUICK_MAX_QPS:-1500}"
+QUICK_QPS_STEP="${QUICK_QPS_STEP:-500}"
+QUICK_DURATION="${QUICK_DURATION:-60}"   # Test 1 minute per QPS level (avoid resource issues from long-running tests)
 
 # Standard benchmark mode (standard performance testing)
-STANDARD_INITIAL_QPS=2000
-STANDARD_MAX_QPS=50000
-STANDARD_QPS_STEP=500
-STANDARD_DURATION=600
+STANDARD_INITIAL_QPS="${STANDARD_INITIAL_QPS:-2000}"
+STANDARD_MAX_QPS="${STANDARD_MAX_QPS:-50000}"
+STANDARD_QPS_STEP="${STANDARD_QPS_STEP:-500}"
+STANDARD_DURATION="${STANDARD_DURATION:-600}"
 
 # Intensive benchmark mode (automatically find system bottlenecks)
-INTENSIVE_INITIAL_QPS=50000
-INTENSIVE_MAX_QPS=9999999      # No practical upper limit, until bottleneck detected
-INTENSIVE_QPS_STEP=250
-INTENSIVE_DURATION=600
-INTENSIVE_AUTO_STOP=true      # Enable automatic bottleneck detection stop
+INTENSIVE_INITIAL_QPS="${INTENSIVE_INITIAL_QPS:-50000}"
+INTENSIVE_MAX_QPS="${INTENSIVE_MAX_QPS:-9999999}"      # No practical upper limit, until bottleneck detected
+INTENSIVE_QPS_STEP="${INTENSIVE_QPS_STEP:-250}"
+INTENSIVE_DURATION="${INTENSIVE_DURATION:-600}"
+INTENSIVE_AUTO_STOP="${INTENSIVE_AUTO_STOP:-true}"      # Enable automatic bottleneck detection stop
 
 # Benchmark interval configuration
-QPS_COOLDOWN=30      # Cooldown time between QPS levels (seconds)
-QPS_WARMUP_DURATION=60  # Warmup time (seconds)
+QPS_COOLDOWN="${QPS_COOLDOWN:-30}"      # Cooldown time between QPS levels (seconds)
+QPS_WARMUP_DURATION="${QPS_WARMUP_DURATION:-60}"  # Warmup time (seconds)
 
 # ----- Disk io2 Type Automatic Throughput Calculation -----
 # 注意: io2 是 AWS EBS 专属盘型, calculate_io2_throughput 用 AWS io2 Block Express

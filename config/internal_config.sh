@@ -11,15 +11,15 @@
 
 # ----- Bottleneck Detection Configuration -----
 # Bottleneck detection thresholds (for extreme testing)
-BOTTLENECK_CPU_THRESHOLD=85               # CPU usage exceeding 85% is considered a bottleneck
-BOTTLENECK_MEMORY_THRESHOLD=90            # Memory usage exceeding 90% is considered a bottleneck
+BOTTLENECK_CPU_THRESHOLD="${BOTTLENECK_CPU_THRESHOLD:-85}"               # CPU usage exceeding 85% is considered a bottleneck
+BOTTLENECK_MEMORY_THRESHOLD="${BOTTLENECK_MEMORY_THRESHOLD:-90}"            # Memory usage exceeding 90% is considered a bottleneck
 # Disk bottleneck detection thresholds (for bottleneck detection system)
-BOTTLENECK_DISK_UTIL_THRESHOLD=90          # Disk utilization exceeding 90% is considered a bottleneck
-BOTTLENECK_DISK_LATENCY_THRESHOLD=50       # Disk latency exceeding 50ms is considered a bottleneck
-BOTTLENECK_NETWORK_THRESHOLD=80           # Network utilization exceeding 80% is considered a bottleneck
-BOTTLENECK_ERROR_RATE_THRESHOLD=5         # Error rate exceeding 5% is considered a bottleneck
-BOTTLENECK_DISK_IOPS_THRESHOLD=90          # Disk IOPS utilization exceeding 90% is considered a bottleneck
-BOTTLENECK_DISK_THROUGHPUT_THRESHOLD=90    # Disk Throughput utilization exceeding 90% is considered a bottleneck
+BOTTLENECK_DISK_UTIL_THRESHOLD="${BOTTLENECK_DISK_UTIL_THRESHOLD:-90}"          # Disk utilization exceeding 90% is considered a bottleneck
+BOTTLENECK_DISK_LATENCY_THRESHOLD="${BOTTLENECK_DISK_LATENCY_THRESHOLD:-50}"       # Disk latency exceeding 50ms is considered a bottleneck
+BOTTLENECK_NETWORK_THRESHOLD="${BOTTLENECK_NETWORK_THRESHOLD:-80}"           # Network utilization exceeding 80% is considered a bottleneck
+BOTTLENECK_ERROR_RATE_THRESHOLD="${BOTTLENECK_ERROR_RATE_THRESHOLD:-5}"         # Error rate exceeding 5% is considered a bottleneck
+BOTTLENECK_DISK_IOPS_THRESHOLD="${BOTTLENECK_DISK_IOPS_THRESHOLD:-90}"          # Disk IOPS utilization exceeding 90% is considered a bottleneck
+BOTTLENECK_DISK_THROUGHPUT_THRESHOLD="${BOTTLENECK_DISK_THROUGHPUT_THRESHOLD:-90}"    # Disk Throughput utilization exceeding 90% is considered a bottleneck
 
 # Multi-level monitoring threshold explanation:
 # - disk_bottleneck_detector.sh (real-time bottleneck detection):
@@ -35,7 +35,7 @@ BOTTLENECK_DISK_THROUGHPUT_THRESHOLD=90    # Disk Throughput utilization exceedi
 
 
 # Bottleneck detection consecutive count (avoid sporadic fluctuations)
-BOTTLENECK_CONSECUTIVE_COUNT=3      # Stop only after detecting bottleneck 3 consecutive times
+BOTTLENECK_CONSECUTIVE_COUNT="${BOTTLENECK_CONSECUTIVE_COUNT:-3}"      # Stop only after detecting bottleneck 3 consecutive times
 
 # Bottleneck analysis time window configuration
 BOTTLENECK_ANALYSIS_WINDOW=30       # Analysis window before and after bottleneck time point (seconds)
@@ -56,11 +56,11 @@ MAX_LATENCY_THRESHOLD=1000   # Maximum latency threshold (ms)
 
 # ----- Block Node Height Monitoring Configuration -----
 # Block height difference threshold, triggers warning
-BLOCK_HEIGHT_DIFF_THRESHOLD=50
+BLOCK_HEIGHT_DIFF_THRESHOLD="${BLOCK_HEIGHT_DIFF_THRESHOLD:-50}"
 # Block height time threshold (seconds), triggers warning
-BLOCK_HEIGHT_TIME_THRESHOLD=300
+BLOCK_HEIGHT_TIME_THRESHOLD="${BLOCK_HEIGHT_TIME_THRESHOLD:-300}"
 # Block height monitoring frequency (monitoring times per second)
-BLOCK_HEIGHT_MONITOR_RATE=1
+BLOCK_HEIGHT_MONITOR_RATE="${BLOCK_HEIGHT_MONITOR_RATE:-1}"
 
 # ----- Log Output Configuration -----
 LOG_CONSOLE=${LOG_CONSOLE:-true}       # Console output
