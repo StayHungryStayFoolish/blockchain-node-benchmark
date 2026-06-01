@@ -30,3 +30,8 @@ analysis-notes/*.sh
 analysis-notes/*.py
 analysis-notes/worker-prompt-*.md
 analysis-notes/COVERAGE_AUDIT.json
+
+# proxy 运行时在 cwd 生成的 per-method sink 产物(测试/运行残留, 不入仓库)
+/proxy_per_method.csv
+/proxy_self.csv
+proxy_method.csv
