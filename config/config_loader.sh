@@ -127,14 +127,41 @@ NETWORK_MAX_BANDWIDTH_MBPS=$((NETWORK_MAX_BANDWIDTH_GBPS * 1000))
 # ----- Deployment Platform Detection Function -----
 # Automatically detect deployment platform and adjust ENA monitoring configuration
 detect_deployment_platform() {
-    if [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]; then
+    # ── Provider 解析统一入口 (single source of truth = config/cloud_provider.sh) ──
+    # 修复 (2026-06-01): 旧实现把 cloud_provider.sh 的 source + provider getter 加载
+    # 只挂在 DEPLOYMENT_PLATFORM=="auto" 分支, 导致用户【手动指定】(CLOUD_PROVIDER=aws
+    # 或 DEPLOYMENT_PLATFORM=aws) 时 getter 不加载 → convert_to_standard_iops 退化
+    # passthrough → AWS IOPS 公式静默失效 (回退 7 个月前 bug)。现统一为:
+    #   ① 用户显式 CLOUD_PROVIDER=aws/gcp/other → 尊重 (不 unset, cloud_provider.sh
+    #      内 ${CLOUD_PROVIDER:-} 短路保留用户值)
+    #   ② CLOUD_PROVIDER 为空/auto → 强制重探测 (cloudtop 沙盒可能继承脏值, 82c2722 诉求)
+    #   ③ 无论哪条路, 函数末尾都确保 provider getter 已加载 (覆盖 auto + 手动 + 子进程继承缺失)
+    # 决策: "auto/空 = 重探测" vs "显式值 = 尊重用户" (用户 2026-06-01 拍板)。
+    local _cp_sh="${CONFIG_DIR}/cloud_provider.sh"
+    # 用户显式意图判定: CLOUD_PROVIDER 或 DEPLOYMENT_PLATFORM 被设为非 auto 的具体云值
+    local _user_pinned=""
+    case "${CLOUD_PROVIDER:-}" in aws|gcp|other) _user_pinned="$CLOUD_PROVIDER" ;; esac
+    if [[ -z "$_user_pinned" ]]; then
+        case "${DEPLOYMENT_PLATFORM:-}" in aws|gcp|other) _user_pinned="$DEPLOYMENT_PLATFORM" ;; esac
+    fi
+
+    if [[ -n "$_user_pinned" ]]; then
+        echo "🔧 Using pinned cloud provider: $_user_pinned (探测跳过, 尊重用户显式配置)" >&2
+        export CLOUD_PROVIDER="$_user_pinned"
+        if [[ -f "$_cp_sh" ]]; then
+            # source 后 cloud_provider.sh 的 ${CLOUD_PROVIDER:-} 短路保留 $_user_pinned,
+            # 仅补探测 NIC/interface, 并经 _load_provider_getters 加载对应 provider getter。
+            # shellcheck source=/dev/null
+            source "$_cp_sh"
+        fi
+        DEPLOYMENT_PLATFORM="${CLOUD_PROVIDER:-$_user_pinned}"
+    elif [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]; then
         echo "🔍 Auto-detecting deployment platform..." >&2
 
         # Delegate to config/cloud_provider.sh (single source of truth for aws/gcp/other).
         # 关键 bug 修复: 之前这里只用裸 IMDSv1 探测,无 GCP 分支,且 169.254 在
         # GCP/cloudtop 沙盒下被代理拦截返回 HTML → curl exit 0 → 误判 AWS。
         # 现在统一走 cloud_provider.sh 的 detect_platform(),它做内容校验且 GCP 优先。
-        local _cp_sh="${CONFIG_DIR}/cloud_provider.sh"
         if [[ -f "$_cp_sh" ]]; then
             # 强制重探测: 清空 CLOUD_PROVIDER 避免 cloud_provider.sh 里 :- 短路
             unset CLOUD_PROVIDER NIC_DRIVER CLOUD_PROVIDER_VARIANT
@@ -184,6 +211,26 @@ detect_deployment_platform() {
         esac
     fi
     
+    # ── ③ 无条件兜底: 确保 provider getter 已加载 (修复核心) ──
+    # 防御所有路径 (auto / 显式 pinned / cloud_provider.sh 缺失 / 子进程未继承 export -f):
+    # 若 get_iops_conversion_func 此刻仍未定义, 说明上面没成功 source cloud_provider.sh
+    # (例如 DEPLOYMENT_PLATFORM=aws 老式手动指定但 CLOUD_PROVIDER 未同步), 这里按最终
+    # DEPLOYMENT_PLATFORM 同步 CLOUD_PROVIDER 后补加载, 避免 convert_to_standard_iops
+    # 静默退化 passthrough (AWS IOPS 公式失效)。幂等: getter 已在则跳过。
+    if ! declare -F get_iops_conversion_func >/dev/null 2>&1; then
+        local _cp_sh2="${CONFIG_DIR}/cloud_provider.sh"
+        if [[ -f "$_cp_sh2" ]]; then
+            case "$DEPLOYMENT_PLATFORM" in
+                aws|gcp|other) export CLOUD_PROVIDER="$DEPLOYMENT_PLATFORM" ;;
+            esac
+            # shellcheck source=/dev/null
+            source "$_cp_sh2"
+            declare -F get_iops_conversion_func >/dev/null 2>&1 \
+                && echo "   provider getter loaded (fallback): conv_func=$(get_iops_conversion_func)" >&2 \
+                || echo "⚠️  provider getter still unavailable after fallback source" >&2
+        fi
+    fi
+
     # Output final configuration
     echo "📊 Deployment platform configuration:" >&2
     echo "   Platform type: $DEPLOYMENT_PLATFORM" >&2
