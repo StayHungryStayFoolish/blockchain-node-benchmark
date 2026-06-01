@@ -1092,6 +1092,20 @@ main() {
     
     # Note: Directory initialization completed in config.sh, no need to repeat
     
+    # Phase 0.5: Start RPC proxy BEFORE Phase 1 (per-method attribution, optional/non-fatal).
+    # 必须先于 Phase 1: prepare_benchmark_data 生成的 vegeta targets 会把当时的 LOCAL_RPC_URL
+    # 内嵌进每条 target 的 url 字段. proxy 启动会把 LOCAL_RPC_URL 从 fake-node(8899) 改写为
+    # proxy(18545), 于是 targets 指向 proxy → vegeta 流量全程经 proxy → per-method 数据可采.
+    # (P0-3 修复: 之前 proxy 在 Phase 2.5 启动, targets 已用 8899 固化, vegeta 绕过 proxy,
+    #  proxy 只采到自身健康检查 getHealth, mixed/single per-method 数据全空.)
+    # proxy upstream = 当前 LOCAL_RPC_URL(此刻是 fake-node 8899 或真实节点), 不依赖 accounts/targets.
+    echo "📋 Phase 0.5: Start RPC proxy (before target generation)"
+    if declare -F start_rpc_proxy >/dev/null 2>&1; then
+        start_rpc_proxy || true
+    else
+        echo "⚠️  proxy_lifecycle.sh not loaded — skipping proxy"
+    fi
+    
     # Phase 1: Prepare Benchmark data
     echo "📋 Phase 1: Prepare Benchmark data"
     if ! prepare_benchmark_data; then
@@ -1104,14 +1118,6 @@ main() {
     if ! start_monitoring_system; then
         echo "❌ Monitoring system startup failed"
         exit 1
-    fi
-    
-    # Phase 2.5: Start RPC proxy (per-method attribution, optional/non-fatal)
-    echo "📋 Phase 2.5: Start RPC proxy"
-    if declare -F start_rpc_proxy >/dev/null 2>&1; then
-        start_rpc_proxy || true
-    else
-        echo "⚠️  proxy_lifecycle.sh not loaded — skipping Phase 2.5"
     fi
     
     # Phase 3: Execute core QPS test
