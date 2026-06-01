@@ -1103,23 +1103,37 @@ hostPath 挂 /host/{proc,sys,dev} + privileged, 容器内 iostat 读 node 级设
 - **测试残留**: mini-rpc pod(ns=default, hostNetwork :19000) + bench-verify 里 /opt/bnb 代码 + 装的依赖。验完整端到端前可保留(bench-verify 已是装好依赖的现成验证环境); 彻底放弃时按 §18.9 清理 + `kubectl delete pod mini-rpc -n default`。
 - 落盘文件留工作区未 commit(用户偏好)。
 
-## 24. 🐞 独立 TODO: fake-node 容器内 fixture 加载 404(与 k8s 适配解耦, 框架既有问题)
+## 24. 🔧 订正: 不是 fake-node bug, 是 proxy per-method 转发 404(本地实测翻案, 与 k8s 无关)
 
-> 2026-06-01 验 k8s 端到端时撞到, 但**这是 fake-node 自测夹具自身的 bug, 与 k8s 适配无关**(VM 上同样会因 cwd/相对路径触发)。
-> 用户决定: 记下来, 不在 k8s 适配任务里修, 单独立项。
+> ⚠️ **本节标题/根因已被 2026-06-01 本地实测推翻。原记录(下方"原始误判")的"fake-node fixture
+> 加载 404 / 相对路径 cwd"全错。真相: fake-node 无 bug, 404 来自 proxy 层转发。**
 
-**现象**: `--fake-node --quick --single` 跑到 Phase1, fake-node 编译启动成功(family=jsonrpc, :8899),
-但所有 method 经它都返 **404**(连已声明的 getAccountInfo 也 404, 不只 getSignaturesForAddress)。
-**静态定位(读代码, 非缺数据)**:
-- method 声明 ✅: `configs/jsonrpc.yaml` 明确有 `getAccountInfo: {fixture: getAccountInfo.json, tier: cheap}`
-- fixture 文件 ✅: `fixtures/solana/getAccountInfo.json` 等 9 个 method 文件都在
-- 404 来源 = fake_node.go handleRPC L291(methods map 无此 method)或 L298(fixtures map 无此 fixture)
-- → **运行时 methods/fixtures map 加载为空**, 根因疑似 fake-node 默认 `-chains-dir/-configs-dir/-fixtures-dir`
-  是相对路径(defaultChainsDir/defaultConfigsDir/defaultFixturesDir), 容器内 cwd 不对 → loadConfig/loadFixtures 加载空。
-**未修(独立 TODO)**: 待单独验证 — 用绝对路径 flag(`-chains-dir /opt/bnb/config/chains -configs-dir
-/opt/bnb/tools/fake-node/configs -fixtures-dir /opt/bnb/tools/fake-node/fixtures`)起 fake-node 看是否解 404;
-若是, 是 fake-node 路径解析对 cwd 敏感的 bug, 修 defaultXxxDir 用 SCRIPT 相对定位而非 cwd 相对。
-**不影响 k8s 适配结论**: k8s 命门(网络/块设备/iostat/source链)已全真机验通(§23.1), fake-node 仅是"完整端到端"的验证工具。
+### 24.0 ✅ 真相(本地 go 编译 + 框架确切启动方式实测)
+- **fake-node 本身没 bug**: 本地用框架确切的绝对路径 flag 启动
+  (`-chains-dir $PWD/config/chains -configs-dir .../configs -fixtures-dir .../fixtures`),
+  getSignaturesForAddress + getAccountInfo **全返回 HTTP 200 + 正常 fixture**。method 声明 + fixture 都齐。
+- **fake-node 路径解析是健壮的**: fake_node.go 有三重解析(runtime.Caller 编译时源路径 → executableDir → 相对 fallback),
+  且框架 start_fake_node_for_testing(blockchain_node_benchmark.sh:973-977)**本就传绝对路径 flag**, 不存在 cwd 问题。
+- **容器那次 404 来自 proxy, 非 fake-node**: 容器 `--fake-node` 跑时 proxy 在前(LOCAL_RPC_URL=localhost:18545=proxy,
+  upstream :8899=fake-node), fetch 报错 url=**localhost:18545(proxy)**。即 proxy 转发 getSignaturesForAddress → 404。
+  = **proxy per-method 转发层的独立 bug, 与 fake-node 无关, 更与 k8s 适配无关**(proxy 是框架通用 per-method attribution 组件)。
+- **绕过法**: proxy 是 optional/non-fatal(Phase0.5 `start_rpc_proxy || true`)。proxy 二进制没编译时自动跳过,
+  LOCAL_RPC_URL 直连 fake-node:8899 → 完整端到端可验(vegeta→fake-node 直连, 不经 proxy)。
+
+### 24.1 教训(为何 §24 原记录全错)
+- 连续 3 个根因推断全错(相对路径→method缺失→实为 proxy 层), 根因是**没在能跑的环境用框架确切方式实测就静态推断**。
+- 我手动 `/tmp/fn -chain solana`(没带绝对路径 flag)看到的 404 是我自己测试方法错, 不是 fake-node bug。
+- 定位 404 的正路 = 本地 go 编译(cloudtop 有 go+源码) + 框架确切启动方式复现, 而非在反复重启丢依赖的容器里折腾。
+
+### 24.2 proxy per-method 404(新独立 TODO, 真问题, 与 k8s 无关)
+- proxy(tools/proxy/)转发 getSignaturesForAddress 返回 404, 待单独定位(可能 method extractor 或转发逻辑)。
+- 不阻塞 k8s: 完整端到端验证可关 proxy 绕过。proxy 是 per-method attribution 通用组件, 单独立项修。
+
+---
+**(以下为原始误判记录, 已被 §24.0 推翻, 保留作过程留痕)**
+原现象: `--fake-node --quick` 跑到 Phase1 报 getSignaturesForAddress 404, 误判为 fake-node fixture 加载失败/相对路径 cwd。
+原"未修 TODO"(用绝对路径 flag 起 fake-node)= 实测证明 fake-node 带绝对路径本就 200, 误判不成立。
+**不影响 k8s 适配结论**: k8s 命门(网络/块设备/iostat/source链 + Phase2 磁盘采集)已全真机验通(§23/§25)。
 
 ## 25. ✅ 主线收口: Phase2 磁盘采集容器内端到端验通 + 发现真 bug(2026-06-01, GKE 硬证)
 
