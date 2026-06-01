@@ -3,28 +3,28 @@
 # Blockchain Node Benchmark Framework - User Configuration Layer
 # =====================================================================
 # Target users: All users of the framework
-# Configuration content: RPC connection, test parameters, EBS devices, basic monitoring configuration
+# Configuration content: RPC connection, test parameters, Disk devices, basic monitoring configuration
 # Modification frequency: Frequently modified
 # =====================================================================
 
-# ----- EBS Device Configuration -----
+# ----- Disk Device Configuration -----
 # DATA device (LEDGER data storage)
-LEDGER_DEVICE="nvme1n1"
+LEDGER_DEVICE="sda"
 # ACCOUNTS device (optional, for account data storage)
-ACCOUNTS_DEVICE="nvme2n1"
+ACCOUNTS_DEVICE=""
 
 # Use unified naming convention {logical_name}_{device_name}_{metric}
 # DATA device uses data prefix, ACCOUNTS device uses accounts prefix
 # Data volume configuration
 DATA_VOL_TYPE="io2"                    # Options: "gp3" | "io2" | "instance-store"
 DATA_VOL_SIZE="2000"                   # Current required data size to keep both snapshot archive and unarchived version of it
-DATA_VOL_MAX_IOPS="30000"              # Max IOPS for EBS volumes (REQUIRED for "instance-store")
+DATA_VOL_MAX_IOPS="30000"              # Max IOPS for Disk volumes (REQUIRED for "instance-store")
 DATA_VOL_MAX_THROUGHPUT="700"          # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for "io2")
 
 # Accounts volume configuration (optional)
 ACCOUNTS_VOL_TYPE="io2"                # Options: "gp3" | "io2" | "instance-store"
 ACCOUNTS_VOL_SIZE="500"                # Current required data size to keep both snapshot archive and unarchived version of it
-ACCOUNTS_VOL_MAX_IOPS="30000"          # Max IOPS for EBS volumes (REQUIRED for "instance-store")
+ACCOUNTS_VOL_MAX_IOPS="30000"          # Max IOPS for Disk volumes (REQUIRED for "instance-store")
 ACCOUNTS_VOL_MAX_THROUGHPUT="700"      # Max throughput in MiB/s (REQUIRED for "instance-store", auto-calculated for "io2")
 
 # ----- Network Monitoring Configuration -----
@@ -37,7 +37,7 @@ ENA_MONITOR_ENABLED=true
 # ----- Monitoring Configuration -----
 # Unified monitoring interval (seconds) - All monitoring tasks use the same interval
 MONITOR_INTERVAL=5              # Unified monitoring interval, applicable to system resources, blockchain node, and monitoring overhead statistics
-EBS_MONITOR_RATE=1              # EBS separate monitoring frequency
+DISK_MONITOR_RATE=1            # Disk separate monitoring frequency
 
 # ----- QPS Benchmark Configuration -----
 # Quick benchmark mode (verify basic QPS capability)
@@ -63,18 +63,18 @@ INTENSIVE_AUTO_STOP=true      # Enable automatic bottleneck detection stop
 QPS_COOLDOWN=30      # Cooldown time between QPS levels (seconds)
 QPS_WARMUP_DURATION=60  # Warmup time (seconds)
 
-# ----- EBS io2 Type Automatic Throughput Calculation -----
+# ----- Disk io2 Type Automatic Throughput Calculation -----
 configure_io2_volumes() {
-    echo "🔧 Checking EBS io2 type configuration..." >&2
+    echo "🔧 Checking Disk io2 type configuration..." >&2
 
-    # Load EBS converter (if needed)
+    # Load Disk converter (if needed)
     if [[ "$DATA_VOL_TYPE" == "io2" || "$ACCOUNTS_VOL_TYPE" == "io2" ]]; then
-        if [[ -f "${CONFIG_DIR}/../utils/ebs_converter.sh" ]]; then
-            source "${CONFIG_DIR}/../utils/ebs_converter.sh"
-            echo "✅ EBS converter loaded successfully" >&2
+        if [[ -f "${CONFIG_DIR}/../utils/disk_converter.sh" ]]; then
+            source "${CONFIG_DIR}/../utils/disk_converter.sh"
+            echo "✅ Disk converter loaded successfully" >&2
         else
-            echo "❌ Error: ebs_converter.sh does not exist, cannot process io2 type" >&2
-            echo "   Path: ${CONFIG_DIR}/../utils/ebs_converter.sh" >&2
+            echo "❌ Error: disk_converter.sh does not exist, cannot process io2 type" >&2
+            echo "   Path: ${CONFIG_DIR}/../utils/disk_converter.sh" >&2
             exit 1
         fi
     fi
@@ -114,7 +114,7 @@ configure_io2_volumes
 export LEDGER_DEVICE ACCOUNTS_DEVICE
 export DATA_VOL_TYPE DATA_VOL_SIZE DATA_VOL_MAX_IOPS DATA_VOL_MAX_THROUGHPUT
 export ACCOUNTS_VOL_TYPE ACCOUNTS_VOL_SIZE ACCOUNTS_VOL_MAX_IOPS ACCOUNTS_VOL_MAX_THROUGHPUT
-export NETWORK_MAX_BANDWIDTH_GBPS ENA_MONITOR_ENABLED MONITOR_INTERVAL EBS_MONITOR_RATE
+export NETWORK_MAX_BANDWIDTH_GBPS ENA_MONITOR_ENABLED MONITOR_INTERVAL DISK_MONITOR_RATE
 export QUICK_INITIAL_QPS QUICK_MAX_QPS QUICK_QPS_STEP QUICK_DURATION
 export STANDARD_INITIAL_QPS STANDARD_MAX_QPS STANDARD_QPS_STEP STANDARD_DURATION
 export INTENSIVE_INITIAL_QPS INTENSIVE_MAX_QPS INTENSIVE_QPS_STEP INTENSIVE_DURATION INTENSIVE_AUTO_STOP

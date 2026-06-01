@@ -13,6 +13,10 @@ if ! source "${SCRIPT_DIR}/../config/config_loader.sh" 2>/dev/null; then
     exit 1
 fi
 
+# CSV Schema Registry — disk 段 header 单一事实源 (与 writer iostat_collector 同源).
+# generate_expected_csv_header 经此生成 disk 段, 消除与 writer 重复的第二份 header 定义.
+source "${SCRIPT_DIR}/../config/csv_schema_registry.sh" 2>/dev/null || true
+
 # Validation result statistics
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
@@ -344,18 +348,34 @@ extract_log_warnings_errors() {
 
 # Generate expected CSV header
 generate_expected_csv_header() {
-    local basic_header="timestamp,cpu_usage,cpu_usr,cpu_sys,cpu_iowait,cpu_soft,cpu_idle,mem_used,mem_total,mem_usage"
-    
-    # Device header (synchronized with framework actual generation logic)
-    local device_header=""
-    if [[ -n "$LEDGER_DEVICE" ]]; then
-        device_header="data_${LEDGER_DEVICE}_r_s,data_${LEDGER_DEVICE}_w_s,data_${LEDGER_DEVICE}_rkb_s,data_${LEDGER_DEVICE}_wkb_s,data_${LEDGER_DEVICE}_r_await,data_${LEDGER_DEVICE}_w_await,data_${LEDGER_DEVICE}_avg_await,data_${LEDGER_DEVICE}_aqu_sz,data_${LEDGER_DEVICE}_util,data_${LEDGER_DEVICE}_rrqm_s,data_${LEDGER_DEVICE}_wrqm_s,data_${LEDGER_DEVICE}_rrqm_pct,data_${LEDGER_DEVICE}_wrqm_pct,data_${LEDGER_DEVICE}_rareq_sz,data_${LEDGER_DEVICE}_wareq_sz,data_${LEDGER_DEVICE}_total_iops,data_${LEDGER_DEVICE}_aws_standard_iops,data_${LEDGER_DEVICE}_read_throughput_mibs,data_${LEDGER_DEVICE}_write_throughput_mibs,data_${LEDGER_DEVICE}_total_throughput_mibs,data_${LEDGER_DEVICE}_aws_standard_throughput_mibs"
+    # basic 段 header — 经 csv_schema_registry 生成 (单一事实源, 与 writer unified_monitor.sh
+    # generate_csv_header 严格对齐; S2/S3 writer-first 收敛: 消除此处与 writer 重复的第二份 basic 定义).
+    # 防御: registry 未 source 时回退字面量 (与 registry _BASIC_FIELDS 字节一致, symmetry Phase3.5 守护).
+    local basic_header
+    if declare -F csv_registry_basic_header >/dev/null 2>&1; then
+        basic_header="$(csv_registry_basic_header)"
+    else
+        basic_header="timestamp,cpu_usage,cpu_usr,cpu_sys,cpu_iowait,cpu_soft,cpu_idle,mem_used,mem_total,mem_usage"
     fi
-    if [[ -n "$ACCOUNTS_DEVICE" && "$ACCOUNTS_DEVICE" != "$LEDGER_DEVICE" ]]; then
+    
+    # Device header — 经 csv_schema_registry 生成 (单一事实源, 与 writer iostat_collector 严格对齐).
+    # 方案甲(中立命名): provider_aware 字段三云统一 normalized_iops/normalized_throughput_mibs (ADR-0002).
+    # provider 取配置驱动 (get_provider_name); 选甲后三云同名, provider 仅作 registry 接口透传.
+    local _expect_provider="other"
+    if declare -F get_provider_name >/dev/null 2>&1; then
+        _expect_provider="$(get_provider_name 2>/dev/null || echo other)"
+    fi
+    local device_header=""
+    if [[ -n "$LEDGER_DEVICE" ]] && declare -F csv_registry_disk_header >/dev/null 2>&1; then
+        device_header="$(csv_registry_disk_header "data_${LEDGER_DEVICE}" "$_expect_provider")"
+    fi
+    if [[ -n "$ACCOUNTS_DEVICE" && "$ACCOUNTS_DEVICE" != "$LEDGER_DEVICE" ]] && declare -F csv_registry_disk_header >/dev/null 2>&1; then
+        local _acct_header
+        _acct_header="$(csv_registry_disk_header "accounts_${ACCOUNTS_DEVICE}" "$_expect_provider")"
         if [[ -n "$device_header" ]]; then
-            device_header="$device_header,accounts_${ACCOUNTS_DEVICE}_r_s,accounts_${ACCOUNTS_DEVICE}_w_s,accounts_${ACCOUNTS_DEVICE}_rkb_s,accounts_${ACCOUNTS_DEVICE}_wkb_s,accounts_${ACCOUNTS_DEVICE}_r_await,accounts_${ACCOUNTS_DEVICE}_w_await,accounts_${ACCOUNTS_DEVICE}_avg_await,accounts_${ACCOUNTS_DEVICE}_aqu_sz,accounts_${ACCOUNTS_DEVICE}_util,accounts_${ACCOUNTS_DEVICE}_rrqm_s,accounts_${ACCOUNTS_DEVICE}_wrqm_s,accounts_${ACCOUNTS_DEVICE}_rrqm_pct,accounts_${ACCOUNTS_DEVICE}_wrqm_pct,accounts_${ACCOUNTS_DEVICE}_rareq_sz,accounts_${ACCOUNTS_DEVICE}_wareq_sz,accounts_${ACCOUNTS_DEVICE}_total_iops,accounts_${ACCOUNTS_DEVICE}_aws_standard_iops,accounts_${ACCOUNTS_DEVICE}_read_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_write_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_total_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_aws_standard_throughput_mibs"
+            device_header="${device_header},${_acct_header}"
         else
-            device_header="accounts_${ACCOUNTS_DEVICE}_r_s,accounts_${ACCOUNTS_DEVICE}_w_s,accounts_${ACCOUNTS_DEVICE}_rkb_s,accounts_${ACCOUNTS_DEVICE}_wkb_s,accounts_${ACCOUNTS_DEVICE}_r_await,accounts_${ACCOUNTS_DEVICE}_w_await,accounts_${ACCOUNTS_DEVICE}_avg_await,accounts_${ACCOUNTS_DEVICE}_aqu_sz,accounts_${ACCOUNTS_DEVICE}_util,accounts_${ACCOUNTS_DEVICE}_rrqm_s,accounts_${ACCOUNTS_DEVICE}_wrqm_s,accounts_${ACCOUNTS_DEVICE}_rrqm_pct,accounts_${ACCOUNTS_DEVICE}_wrqm_pct,accounts_${ACCOUNTS_DEVICE}_rareq_sz,accounts_${ACCOUNTS_DEVICE}_wareq_sz,accounts_${ACCOUNTS_DEVICE}_total_iops,accounts_${ACCOUNTS_DEVICE}_aws_standard_iops,accounts_${ACCOUNTS_DEVICE}_read_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_write_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_total_throughput_mibs,accounts_${ACCOUNTS_DEVICE}_aws_standard_throughput_mibs"
+            device_header="$_acct_header"
         fi
     fi
     
@@ -387,6 +407,11 @@ generate_expected_csv_header() {
     fi
     
     full_header="$full_header,$overhead_header,$block_height_header,$qps_header"
+    # CP-1 双云对等: 实际 header 末尾追加 cloud_provider 列(见 unified_monitor.sh:generate_csv_header).
+    # 注意: 此 expected header 既有缺陷 — 未含 cgroup_header(19字段),与实际已不完全对齐;
+    #       该缺陷早于本次改动,超出 CP-1 范围,记录于 analysis-notes/CP-1-execution-tracker.md 待办.
+    #       本行仅同步本次新增的 cloud_provider 列,保持改动自洽.
+    full_header="$full_header,cloud_provider"
     echo "$full_header"
 }
 
@@ -435,7 +460,7 @@ validate_archive_files() {
         log_info "Checking errors and warnings in log files..."
         
         # Check various log files
-        for log_pattern in "ebs_bottleneck_detector.log" "ebs_analyzer.log" "master_qps_executor.log" "monitoring_performance_*.log" "monitoring_errors_*.log"; do
+        for log_pattern in "disk_bottleneck_detector.log" "disk_analyzer.log" "master_qps_executor.log" "monitoring_performance_*.log" "monitoring_errors_*.log"; do
             local log_files=$(find "$logs_dir" -name "$log_pattern" 2>/dev/null)
             if [[ -n "$log_files" ]]; then
                 while IFS= read -r log_file; do

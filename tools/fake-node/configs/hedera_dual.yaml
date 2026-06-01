@@ -1,0 +1,32 @@
+# fake-node v2 config — hedera_dual family (ADR-0005).
+#
+# Covers 1 chain: hedera.
+#
+# Dual-protocol routing: eth_* methods → JSON-RPC Relay fixtures (jsonrpc/),
+# anything else → Mirror REST fixtures (mirror/).
+# The framework's chain_adapters/hedera_dual.py decides which side each
+# method request goes to; fake-node serves whichever fixture path matches.
+
+family: hedera_dual
+
+methods:
+  # ---- JSON-RPC Relay (mainnet.hashio.io/api) ----
+  eth_blockNumber:
+    fixture: jsonrpc/eth_blockNumber.json
+    tier: cheap
+  eth_chainId:
+    fixture: jsonrpc/eth_chainId.json
+    tier: cheap
+
+  # ---- Mirror REST (mainnet-public.mirrornode.hedera.com) ----
+  GET_NETWORK_NODES:
+    fixture: mirror/network_nodes.json
+    tier: mid
+
+tiers:
+  cheap: 1ms
+  mid: 10ms
+  expensive: 50ms
+
+io:
+  enabled: true

@@ -81,7 +81,7 @@ mem_total      # 总内存（MB）
 mem_usage      # 内存利用率（%）
 ```
 
-#### 3. EBS存储指标（2个设备42个字段）
+#### 3. 磁盘存储指标（2个设备42个字段）
 
 **每设备指标（各21个字段）：**
 
@@ -390,7 +390,7 @@ graph TB
 
 **场景 A-Resource - 资源瓶颈 + 节点健康 → 误判**
 ```bash
-检测到资源瓶颈 (CPU/Memory/EBS/Network超标)
+检测到资源瓶颈 (CPU/Memory/Disk/Network超标)
     ↓
 BOTTLENECK_COUNT++
     ↓
@@ -429,7 +429,7 @@ BOTTLENECK_COUNT++
 
 **场景 C - 节点持续不健康（无瓶颈）→ 节点故障**
 ```bash
-资源指标正常 (CPU/Memory/EBS/Network 都 < 阈值)
+资源指标正常 (CPU/Memory/Disk/Network 都 < 阈值)
 RPC 性能正常 (成功率 >= 95% 且 延迟 <= 1000ms)
     ↓
 调用 bottleneck_detector.sh 检查节点健康
@@ -545,7 +545,7 @@ graph LR
 
 ```
 1. 瓶颈检测 (master_qps_executor.sh::check_bottleneck_during_test)
-   ├─ 检测资源瓶颈 (CPU/Memory/EBS/Network/QPS)
+   ├─ 检测资源瓶颈 (CPU/Memory/Disk/Network/QPS)
    ├─ 无条件调用 trigger_immediate_bottleneck_analysis()
    │   └─ 调用 bottleneck_detector.sh detect
    │       ├─ 检测资源瓶颈（7个维度）

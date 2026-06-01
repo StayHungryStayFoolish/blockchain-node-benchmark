@@ -1,0 +1,51 @@
+# fake-node v2 config — rest family (ADR-0005).
+#
+# Covers 5 chains under _meta.adapter_family=rest:
+#   cardano (ADR-0005 corrected from ogmios), algorand, aptos, tezos, ton.
+#
+# method NAME → fixture file mapping.
+# Fixtures stored per-chain under fixtures/<chain>/<fixture-name>.json.
+# Each chain's template (config/chains/<chain>.json:_meta.rest_paths) decides
+# which subset of this method list it uses.
+#
+# Coverage (R2): cardano fully wired (6 methods), 4 sister chains will be wired in step 9.
+
+family: rest
+
+methods:
+  # ---- Cardano (Koios) — 6 methods ----
+  GET_TIP:
+    fixture: tip.json
+    tier: cheap
+  GET_BLOCKS:
+    fixture: blocks.json
+    tier: cheap
+  POST_ADDRESS_INFO:
+    fixture: address_info.json
+    tier: mid
+  POST_TX_INFO:
+    fixture: tx_info.json
+    tier: mid
+  POST_BLOCK_TXS:
+    fixture: block_txs.json
+    tier: expensive
+  GET_EPOCH_INFO:
+    fixture: epoch_info.json
+    tier: cheap
+  # ---- Cardano (Koios) — additional —
+  POST_ASSET_INFO:
+    fixture: asset_info.json
+    tier: mid
+
+  # ---- Algorand / Aptos / Tezos / TON method placeholders ----
+  # (step 9 will record per-chain fixtures + add entries here as needed.
+  #  Templates already declare _meta.rest_paths; this yaml just needs the
+  #  per-method file mapping when fixtures are added.)
+
+tiers:
+  cheap: 1ms
+  mid: 10ms
+  expensive: 50ms
+
+io:
+  enabled: true

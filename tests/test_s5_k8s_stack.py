@@ -7,7 +7,7 @@ Covers (no real cluster, no PyPI deps):
   - k8s_api_client.K8sApiClient: token reading, TLS context, HTTP GET,
     error mapping, all object accessors
   - pod_device_mapper: 3-hop Pod→PVC→PV→device, 4 CSI drivers
-    (GCE/EBS/Azure/generic), legacy GCE/EBS, hostPath, local,
+    (GCE/Disk/Azure/generic), legacy GCE/Disk, hostPath, local,
     unbound PVC, missing PV
   - kubelet_stats_client: stats summary parsing, defensive accessors,
     CSV header + row stability
@@ -264,7 +264,7 @@ class TestCSIExtractors(unittest.TestCase):
         self.assertEqual(kind, "gcePersistentDisk")
         self.assertEqual(handle, "legacy-disk")
 
-        # legacy EBS
+        # legacy Disk
         pv = {"spec": {"awsElasticBlockStore": {"volumeID": "vol-xxx"}}}
         _, kind, handle, _ = _resolve_pv_device(pv, "/nonexistent")
         self.assertEqual(kind, "awsElasticBlockStore")

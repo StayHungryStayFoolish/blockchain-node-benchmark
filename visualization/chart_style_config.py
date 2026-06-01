@@ -354,8 +354,8 @@ class UnifiedChartStyle:
         'bottleneck': 'Reds',           # Bottleneck analysis
         'efficiency': 'plasma',         # Efficiency analysis
         'trend': 'coolwarm',            # Trend analysis
-        'latency': 'YlOrRd',            # Latency analysis - used by EBS charts
-        'utilization': 'viridis',       # Utilization analysis - used by EBS charts
+        'latency': 'YlOrRd',            # Latency analysis - used by Disk charts
+        'utilization': 'viridis',       # Utilization analysis - used by Disk charts
         'heatmap': 'RdYlBu_r',          # Heatmap - used by advanced analysis
     }
     
@@ -386,7 +386,7 @@ class UnifiedChartStyle:
     # Layout configuration for 32 charts
     LAYOUT_CONFIGS = {
         'performance_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
-        'ebs_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
+        'disk_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
         'correlation_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
         'trend_2x2': {'figsize': (16, 12), 'layout': (2, 2)},
         'comprehensive_3x2': {'figsize': (18, 15), 'layout': (3, 2)},
@@ -668,7 +668,7 @@ class UnifiedChartStyle:
     
     @classmethod
     def create_device_aware_layout(cls, layout_type, accounts_configured=False):
-        """Create device-aware layout - solve EBS device information missing issue"""
+        """Create device-aware layout - solve Disk device information missing issue"""
         fig, axes, config = cls.setup_subplot_layout(layout_type)
         
         # Adjust title based on device configuration

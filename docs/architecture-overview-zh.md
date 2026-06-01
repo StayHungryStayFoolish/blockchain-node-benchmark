@@ -26,13 +26,13 @@ graph TB
     subgraph "分析层"
         I[comprehensive_analysis.py<br/>数据分析]
         J[qps_analyzer.py<br/>QPS分析]
-        K[cpu_ebs_correlation_analyzer.py<br/>相关性分析]
+        K[cpu_disk_correlation_analyzer.py<br/>相关性分析]
     end
     
     subgraph "可视化层"
         L[performance_visualizer.py<br/>图表生成]
         M[advanced_chart_generator.py<br/>高级图表]
-        N[ebs_chart_generator.py<br/>EBS图表]
+        N[disk_chart_generator.py<br/>磁盘图表]
         O[report_generator.py<br/>HTML报告]
     end
     
@@ -88,7 +88,7 @@ flowchart LR
 ### 数据流阶段
 
 1. **测试执行** → 使用Vegeta生成QPS负载
-2. **实时监控** → 系统指标收集（CPU、内存、EBS、网络、ENA）
+2. **实时监控** → 系统指标收集（CPU、内存、磁盘、网络、ENA）
 3. **数据收集** → 包含73-79个性能指标的CSV文件
 4. **分析** → 统计分析和相关性检测
 5. **可视化** → 生成32个专业图表
@@ -154,7 +154,7 @@ flowchart LR
 - `mem_total`：总内存（MB）
 - `mem_usage`：内存利用率（%）
 
-**EBS存储指标（2个设备42个字段）：**
+**磁盘存储指标（2个设备42个字段）：**
 - 每设备IOPS（读/写/总计）
 - 吞吐量（MiB/s）
 - 延迟（r_await/w_await/avg_await）
@@ -202,7 +202,7 @@ flowchart LR
    - 阈值：90%
    - 指标：mem_usage
 
-3. **EBS瓶颈（权重：30%）**
+3. **磁盘瓶颈（权重：30%）**
    - IOPS利用率 > 90%
    - 延迟 > 50ms
    - 利用率 > 90%
@@ -280,11 +280,11 @@ graph LR
 - 吞吐量效率
 - 性能下降点
 
-#### 3. cpu_ebs_correlation_analyzer.py
-**用途：** CPU-EBS相关性分析
+#### 3. cpu_disk_correlation_analyzer.py
+**用途：** CPU-磁盘相关性分析
 
 **关键相关性：**
-- CPU I/O等待 vs EBS利用率
+- CPU I/O等待 vs 磁盘利用率
 - CPU I/O等待 vs I/O队列长度
 - CPU I/O等待 vs 读/写延迟
 - 用户CPU vs 读请求
@@ -305,18 +305,18 @@ graph LR
 8. `performance_trend_analysis.png` - 性能趋势分析
 9. `performance_correlation_heatmap.png` - 相关性热力图
 
-#### EBS专业图表（7个）
-10. `ebs_aws_capacity_planning.png` - AWS容量规划分析
-11. `ebs_iostat_performance.png` - Iostat性能分析
-12. `ebs_bottleneck_correlation.png` - 瓶颈相关性分析
-13. `ebs_performance_overview.png` - EBS性能概览
-14. `ebs_bottleneck_analysis.png` - EBS瓶颈分析
-15. `ebs_aws_standard_comparison.png` - EBS AWS标准对比
-16. `ebs_time_series_analysis.png` - EBS时间序列
+#### 磁盘专业图表（7个）
+10. `disk_capacity_planning.png` - AWS容量规划分析
+11. `disk_iostat_performance.png` - Iostat性能分析
+12. `disk_bottleneck_correlation.png` - 瓶颈相关性分析
+13. `disk_performance_overview.png` - 磁盘性能概览
+14. `disk_bottleneck_analysis.png` - 磁盘瓶颈分析
+15. `disk_normalized_comparison.png` - 磁盘 折算值对比
+16. `disk_time_series_analysis.png` - 磁盘时间序列
 
 #### 核心性能图表（11个）
 17. `performance_overview.png` - 性能概览图表
-18. `cpu_ebs_correlation_visualization.png` - CPU-EBS相关性分析
+18. `cpu_disk_correlation_visualization.png` - CPU-磁盘相关性分析
 19. `device_performance_comparison.png` - 设备性能对比
 20. `await_threshold_analysis.png` - I/O延迟阈值分析
 21. `monitoring_overhead_analysis.png` - 监控开销分析
@@ -359,7 +359,7 @@ graph LR
 - 瓶颈分析
 - 配置状态
 - 监控开销分析
-- EBS基准对比
+- 磁盘基准对比
 - ENA网络状态
 - 区块高度同步状态
 
@@ -382,7 +382,7 @@ graph LR
 
 **数据量：**
 - 支持每次测试1000+数据点
-- 处理多个设备（2+ EBS卷）
+- 处理多个设备（2+ 磁盘卷）
 - 同时处理73-79个指标
 
 **测试持续时间：**

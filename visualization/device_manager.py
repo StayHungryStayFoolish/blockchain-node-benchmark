@@ -8,23 +8,44 @@ import re
 import os
 from typing import Dict, List, Optional, Any
 
+from utils.csv_schema_registry import CSVSchemaRegistry
+
 class DeviceManager:
     """Unified device manager - supports field mapping and device detection for 32 charts"""
-    
+
+    # provider_aware disk 逻辑名 (物理列名随 cloud_provider 变, reader 只认逻辑名).
+    # 经 CSVSchemaRegistry 解析为物理列后缀, 不在本文件硬编码任何 aws_standard 字面量.
+    _DISK_IOPS_LOGICAL = 'disk_iops_provider_adjusted'
+    _DISK_THROUGHPUT_LOGICAL = 'disk_throughput_provider_adjusted'
+
     def __init__(self, df: pd.DataFrame):
         self.df = df
         self._device_cache = {}
         self._field_cache = {}
-        
+
+        # 铁律: provider 从 CSV cloud_provider 列取 (不猜不硬编码、不读环境变量).
+        # 用于经 CSVSchemaRegistry 解析 provider_aware disk 物理列后缀.
+        self.cloud_provider = self._read_cloud_provider_from_csv()
+
+        # 经 registry 解析出的 provider_aware disk 物理列后缀 (如 '_standard_iops').
+        # 注意: 这是 CSV 字段名 (物理列), 区别于 get_threshold_values() 里的
+        #       *_provisioned_iops / *_provisioned_throughput —— 那些是业务配置变量 (磁盘额定能力上限,
+        #       来自卷规格环境变量 DATA_VOL_MAX_*, 利用率公式分母; ADR-0002 层3 定名 provisioned),
+        #       不是 CSV 列名, 不经 registry 解析.
+        self._disk_iops_suffix = self._resolve_disk_suffix(self._DISK_IOPS_LOGICAL)
+        self._disk_throughput_suffix = self._resolve_disk_suffix(self._DISK_THROUGHPUT_LOGICAL)
+
         # Field mapping patterns - support all 32 charts' fields
         self.patterns = {
-            # EBS DATA fields
+            # Disk DATA fields
             'data_total_iops': r'data_.*_total_iops',
             'data_util': r'data_.*_util',
             'data_avg_await': r'data_.*_avg_await',
             'data_aqu_sz': r'data_.*_aqu_sz',
-            'data_aws_standard_iops': r'data_.*_aws_standard_iops',
-            'data_aws_standard_throughput_mibs': r'data_.*_aws_standard_throughput_mibs',
+            # provider_aware disk 列: 物理后缀由 CSVSchemaRegistry 解析 (随 cloud_provider 变),
+            # 逻辑键名用三云中立 *_normalized_* (调用方按此名取数), 不再硬编码物理后缀, 不带厂商烙印.
+            'data_normalized_iops': rf'data_.*{re.escape(self._disk_iops_suffix)}',
+            'data_normalized_throughput_mibs': rf'data_.*{re.escape(self._disk_throughput_suffix)}',
             'data_total_throughput_mibs': r'data_.*_total_throughput_mibs',
             'data_r_s': r'data_.*_r_s',
             'data_w_s': r'data_.*_w_s',
@@ -33,13 +54,14 @@ class DeviceManager:
             'data_r_await': r'data_.*_r_await',
             'data_w_await': r'data_.*_w_await',
             
-            # EBS ACCOUNTS fields
+            # Disk ACCOUNTS fields
             'accounts_total_iops': r'accounts_.*_total_iops',
             'accounts_util': r'accounts_.*_util',
             'accounts_avg_await': r'accounts_.*_avg_await',
             'accounts_aqu_sz': r'accounts_.*_aqu_sz',
-            'accounts_aws_standard_iops': r'accounts_.*_aws_standard_iops',
-            'accounts_aws_standard_throughput_mibs': r'accounts_.*_aws_standard_throughput_mibs',
+            # provider_aware disk 列 (ACCOUNTS): 物理后缀由 CSVSchemaRegistry 解析.
+            'accounts_normalized_iops': rf'accounts_.*{re.escape(self._disk_iops_suffix)}',
+            'accounts_normalized_throughput_mibs': rf'accounts_.*{re.escape(self._disk_throughput_suffix)}',
             'accounts_total_throughput_mibs': r'accounts_.*_total_throughput_mibs',
             'accounts_r_s': r'accounts_.*_r_s',
             'accounts_w_s': r'accounts_.*_w_s',
@@ -78,11 +100,6 @@ class DeviceManager:
             'pps_allowance_exceeded': r'pps_allowance_exceeded',
             'conntrack_allowance_exceeded': r'conntrack_allowance_exceeded',
             'linklocal_allowance_exceeded': r'linklocal_allowance_exceeded',
-            'ena_bw_in_allowance_exceeded': r'ena_bw_in_allowance_exceeded',
-            'ena_bw_out_allowance_exceeded': r'ena_bw_out_allowance_exceeded',
-            'ena_pps_allowance_exceeded': r'ena_pps_allowance_exceeded',
-            'ena_conntrack_allowance_available': r'ena_conntrack_allowance_available',
-            'ena_conntrack_allowance_exceeded': r'ena_conntrack_allowance_exceeded',
             
             # Monitoring overhead fields - use correct field names
             'monitoring_cpu_percent': r'monitoring_cpu',  # Actual field name
@@ -113,7 +130,7 @@ class DeviceManager:
             'qps_data_available': r'qps_data_available',
             
             # Extended field mapping - solve field requirements for 21 issues
-            # Read/write separation fields - solve EBS device info for issues 10,11,12
+            # Read/write separation fields - solve Disk device info for issues 10,11,12
             'data_read_iops': r'data_.*_r_s',
             'data_write_iops': r'data_.*_w_s', 
             'accounts_read_iops': r'accounts_.*_r_s',
@@ -132,6 +149,49 @@ class DeviceManager:
             'accounts_write_throughput': r'accounts_.*_wkb_s',
         }
     
+    def _read_cloud_provider_from_csv(self):
+        """从 CSV cloud_provider 列读取 provider (aws|gcp|other).
+
+        铁律: provider 来源是 CSV 数据本身, 不运行时探测、不读环境变量.
+        缺列或空值时回退 'other' (中立兜底, registry 三云同名, 不影响物理列名).
+        """
+        if self.df is not None and 'cloud_provider' in self.df.columns:
+            series = self.df['cloud_provider'].dropna()
+            if len(series) > 0:
+                val = str(series.iloc[-1]).strip().lower()
+                if val:
+                    return val
+        return 'other'
+
+    def _resolve_disk_suffix(self, logical_name):
+        """经 CSV Schema Registry 解析 provider_aware disk 逻辑名 -> 物理列后缀.
+
+        registry.resolve(logical_name, provider, '') 把模板 {prefix} 替换为空,
+        产出形如 '_standard_iops' / '_standard_throughput_mibs' 的物理后缀
+        (随 cloud_provider 变). 真实 CSV 列名含运行时设备名
+        (如 'data_nvme1n1_standard_iops'), 故只取后缀供正则匹配, 不保留任何裸字面量.
+        """
+        return CSVSchemaRegistry.resolve(logical_name, self.cloud_provider, '')
+
+    def _resolve_disk_field(self, logical_name, device_prefix):
+        """经 CSV Schema Registry 解析 provider_aware disk 字段 -> 实际 CSV 列名.
+
+        logical_name: 'disk_iops_provider_adjusted' 或 'disk_throughput_provider_adjusted'.
+        device_prefix: 逻辑设备前缀 'data' 或 'accounts'.
+        返回匹配的真实列名 (含运行时设备名); 无匹配返回 None.
+        """
+        if self.df is None:
+            return None
+        suffix = self._resolve_disk_suffix(logical_name)
+        physical = f'{device_prefix}{suffix}'  # 无运行时设备名拆分时的直接命中
+        if physical in self.df.columns:
+            return physical
+        pattern = re.compile(rf'^{re.escape(device_prefix)}_.*{re.escape(suffix)}$')
+        for col in self.df.columns:
+            if pattern.match(col):
+                return col
+        return None
+
     def get_mapped_field(self, field_name):
         """Get mapped field name - use patterns for precise matching"""
         # Use cache for performance
@@ -244,42 +304,36 @@ class DeviceManager:
     def get_threshold_values(self):
         """Get threshold configuration from config file"""
         # Base threshold configuration
+        # 注意 (区分业务变量与字段名):
+        #   *_provisioned_iops / *_provisioned_throughput 是【业务配置变量】(磁盘额定能力上限),
+        #   来自卷规格环境变量 (DATA_VOL_MAX_IOPS 等), 利用率公式的分母 (ADR-0002 层3 定名 provisioned).
+        #   它们与 CSV 物理列 *_<dfp>_iops (provider_aware, 经 CSVSchemaRegistry 解析) 是
+        #   两类不同概念, 不是 CSV 字段名, 故不经 registry.
         base_thresholds = {
-            'data_baseline_iops': int(float(os.getenv('DATA_VOL_MAX_IOPS', '20000'))),
-            'data_baseline_throughput': int(float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700'))),
+            'data_provisioned_iops': int(float(os.getenv('DATA_VOL_MAX_IOPS', '20000'))),
+            'data_provisioned_throughput': int(float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700'))),
             
             # Bottleneck thresholds
             'cpu_threshold': float(os.getenv('BOTTLENECK_CPU_THRESHOLD', '85')),
             'memory_threshold': float(os.getenv('BOTTLENECK_MEMORY_THRESHOLD', '90')),
-            'ebs_util_threshold': float(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90')),
-            'ebs_latency_threshold': float(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50')),
-            'ebs_iops_threshold': float(os.getenv('BOTTLENECK_EBS_IOPS_THRESHOLD', '90')),
-            'ebs_throughput_threshold': float(os.getenv('BOTTLENECK_EBS_THROUGHPUT_THRESHOLD', '90')),
+            'disk_util_threshold': float(os.getenv('BOTTLENECK_DISK_UTIL_THRESHOLD', '90')),
+            'disk_latency_threshold': float(os.getenv('BOTTLENECK_DISK_LATENCY_THRESHOLD', '50')),
+            'disk_iops_threshold': float(os.getenv('BOTTLENECK_DISK_IOPS_THRESHOLD', '90')),
+            'disk_throughput_threshold': float(os.getenv('BOTTLENECK_DISK_THROUGHPUT_THRESHOLD', '90')),
             
             # Calculate warning levels (80% and 40% of thresholds)
-            'ebs_util_warning': float(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90')) * 0.8,  # 72%
-            'ebs_latency_warning': float(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50')) * 0.4,  # 20ms
+            'disk_util_warning': float(os.getenv('BOTTLENECK_DISK_UTIL_THRESHOLD', '90')) * 0.8,  # 72%
+            'disk_latency_warning': float(os.getenv('BOTTLENECK_DISK_LATENCY_THRESHOLD', '50')) * 0.4,  # 20ms
         }
         
-        # If ACCOUNTS device configured, add ACCOUNTS baseline values
+        # If ACCOUNTS device configured, add ACCOUNTS provisioned-ceiling values
         if self.is_accounts_configured():
             base_thresholds.update({
-                'accounts_baseline_iops': int(float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))),
-                'accounts_baseline_throughput': int(float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))),
+                'accounts_provisioned_iops': int(float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))),
+                'accounts_provisioned_throughput': int(float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))),
             })
         
         return base_thresholds
-    
-    def get_baseline_values(self):
-        """Get baseline configuration - for calculating utilization"""
-        thresholds = self.get_threshold_values()
-        
-        return {
-            'data_baseline_iops': thresholds['data_baseline_iops'],
-            'data_baseline_throughput': thresholds['data_baseline_throughput'],
-            'accounts_baseline_iops': thresholds['accounts_baseline_iops'],
-            'accounts_baseline_throughput': thresholds['accounts_baseline_throughput']
-        }
     
     def get_qps_display_value(self):
         """Get correct QPS display value"""
@@ -298,14 +352,14 @@ class DeviceManager:
         thresholds = self.get_threshold_values()
         
         # Calculate visualization-specific thresholds
-        ebs_latency_threshold = int(thresholds['ebs_latency_threshold'])
-        ebs_util_threshold = int(thresholds['ebs_util_threshold'])
+        disk_latency_threshold = int(thresholds['disk_latency_threshold'])
+        disk_util_threshold = int(thresholds['disk_util_threshold'])
         
         return {
             'warning': int(thresholds['cpu_threshold']),                     # CPU threshold (%)
-            'critical': ebs_util_threshold,                                  # EBS utilization threshold (%)
-            'io_warning': int(ebs_latency_threshold * 0.4),                 # I/O latency warning: 50ms * 0.4 = 20ms
-            'io_critical': ebs_latency_threshold,                           # I/O latency critical: 50ms
+            'critical': disk_util_threshold,                                  # Disk utilization threshold (%)
+            'io_warning': int(disk_latency_threshold * 0.4),                 # I/O latency warning: 50ms * 0.4 = 20ms
+            'io_critical': disk_latency_threshold,                           # I/O latency critical: 50ms
             'memory': int(thresholds['memory_threshold']),                  # Memory threshold (%)
             'network': int(os.getenv('BOTTLENECK_NETWORK_THRESHOLD', '80')) # Network threshold (%)
         }
@@ -336,16 +390,18 @@ class DeviceManager:
         
         return "\n".join(lines)
     
-    # === Field management methods extracted from EBS Generator ===
+    # === Field management methods extracted from Disk Generator ===
     
     def build_field_mapping(self):
-        """Build EBS field name mapping - supports ACCOUNTS device optionality"""
+        """Build Disk field name mapping - supports ACCOUNTS device optionality"""
         mapping = {}
         
-        # Complete field suffix list - based on actual CSV data structure
+        # Complete field suffix list - based on actual CSV data structure.
+        # 注意: provider_aware 的 IOPS/吞吐物理后缀不在此硬编码 (随云变),
+        #       由下方 _provider_aware_suffix_map 经 CSVSchemaRegistry 解析后单独并入.
         all_suffixes = [
-            # AWS and base fields
-            'aws_standard_iops', 'aws_standard_throughput_mibs', 'util', 'aqu_sz',
+            # base fields
+            'util', 'aqu_sz',
             # IOPS-related fields (r_s corresponds to read_iops, w_s corresponds to write_iops)
             'r_s', 'w_s', 'total_iops',
             # Latency-related fields
@@ -353,7 +409,14 @@ class DeviceManager:
             # Throughput-related fields
             'read_throughput_mibs', 'write_throughput_mibs', 'total_throughput_mibs'
         ]
-        
+
+        # provider_aware disk 字段: 业务别名(逻辑键) -> 物理后缀(经 registry 解析, 随云变).
+        # 区分: 左侧是业务变量名(调用方按此名取数), 右侧是 registry 给出的 CSV 物理列后缀.
+        provider_aware_suffix_map = {
+            'normalized_iops': self._disk_iops_suffix.lstrip('_'),
+            'normalized_throughput_mibs': self._disk_throughput_suffix.lstrip('_'),
+        }
+
         # Check device availability
         available_devices = []
         
@@ -373,6 +436,12 @@ class DeviceManager:
                 expected_field = f'{device}_{suffix}'
                 actual_field = self.find_field_by_pattern(f'{device}_.*_{suffix}')
                 if actual_field:  # Only map actually existing fields
+                    mapping[expected_field] = actual_field
+            # provider_aware 字段: 业务别名键固定, 物理后缀经 registry 解析后匹配真实列名
+            for alias, phys_suffix in provider_aware_suffix_map.items():
+                expected_field = f'{device}_{alias}'
+                actual_field = self.find_field_by_pattern(f'{device}_.*_{phys_suffix}')
+                if actual_field:
                     mapping[expected_field] = actual_field
         
         # Special mapping: map commonly used simplified field names to actual fields
@@ -416,9 +485,11 @@ class DeviceManager:
             'accounts': 'ACCOUNTS Device'
         }
         
+        # 业务层 metric_type -> 显示标签 (非 CSV 字段名). 这里的键是图表语义维度,
+        # 不参与 CSV 列解析, 故保持原样, 不经 CSVSchemaRegistry.
         metric_map = {
-            'aws_standard_iops': 'AWS Standard IOPS',
-            'aws_standard_throughput': 'AWS Standard Throughput', 
+            'normalized_iops': 'Normalized IOPS',
+            'normalized_throughput': 'Normalized Throughput', 
             'utilization': 'Utilization',
             'latency': 'Average Latency',
             'efficiency': 'Efficiency (MiB/IOPS)'
@@ -475,13 +546,13 @@ class DeviceManager:
         device_info = self.get_device_info_text()
         return f"{base_title} - {device_info['title_suffix']}"
     
-    def get_ebs_device_data(self, device_name, metric_type):
-        """Get EBS device data - unified EBS data retrieval"""
+    def get_disk_device_data(self, device_name, metric_type):
+        """Get Disk device data - unified Disk data retrieval"""
         field_name = f"{device_name}_{metric_type}"
         return self.get_field_data(field_name)
     
-    def validate_ebs_configuration(self):
-        """Validate EBS configuration integrity - solve configuration hardcoding for issue 8"""
+    def validate_disk_configuration(self):
+        """Validate Disk configuration integrity - solve configuration hardcoding for issue 8"""
         validation_result = {
             'data_configured': False,
             'accounts_configured': False,
@@ -490,21 +561,24 @@ class DeviceManager:
         }
         
         # Check DATA device
-        data_fields = ['data_aws_standard_iops', 'data_util', 'data_avg_await']
+        # 这些是业务逻辑别名 (经 get_mapped_field -> patterns -> CSVSchemaRegistry 解析为物理列),
+        # 不是裸 CSV 字段名; provider_aware 的 *_normalized_iops 物理后缀已随云解析.
+        data_fields = ['data_normalized_iops', 'data_util', 'data_avg_await']
         data_available, data_missing = self.check_data_availability(data_fields)
         validation_result['data_configured'] = len(data_available) > 0
         validation_result['missing_fields'].extend(data_missing)
         
         # Check ACCOUNTS device
         if self.is_accounts_configured():
-            accounts_fields = ['accounts_aws_standard_iops', 'accounts_util', 'accounts_avg_await']
+            # 同上: 业务别名, 经 registry 解析为物理列名.
+            accounts_fields = ['accounts_normalized_iops', 'accounts_util', 'accounts_avg_await']
             accounts_available, accounts_missing = self.check_data_availability(accounts_fields)
             validation_result['accounts_configured'] = len(accounts_available) > 0
             validation_result['missing_fields'].extend(accounts_missing)
         
         # Check configuration consistency
         thresholds = self.get_threshold_values()
-        if thresholds['data_baseline_iops'] == 20000:  # Default value, may be hardcoded
-            validation_result['config_issues'].append('DATA baseline IOPS may be hardcoded')
+        if thresholds['data_provisioned_iops'] == 20000:  # Default value, may be hardcoded
+            validation_result['config_issues'].append('DATA provisioned IOPS may be hardcoded')
         
         return validation_result

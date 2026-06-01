@@ -17,8 +17,30 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "eth_chainId",
-    "mixed": "eth_chainId,eth_blockNumber,eth_getBalance,eth_call,/status"
+    "single": "eth_getBalance",
+    "mixed": "eth_chainId,eth_blockNumber,eth_getBalance,eth_call,/status",
+    "mixed_weighted": [
+      {
+        "method": "eth_chainId",
+        "weight": 1
+      },
+      {
+        "method": "eth_blockNumber",
+        "weight": 1
+      },
+      {
+        "method": "eth_getBalance",
+        "weight": 1
+      },
+      {
+        "method": "eth_call",
+        "weight": 1
+      },
+      {
+        "method": "/status",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -62,5 +84,17 @@
     "adapter_required": true,
     "adapter_family": "tendermint",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split"
+      }
+    ]
   }
 }

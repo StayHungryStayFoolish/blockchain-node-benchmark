@@ -435,7 +435,7 @@
                         <h3 style="margin-top: 0;">&#128203; 系统级瓶颈判定条件</h3>
                         <p><strong>框架采用五场景逻辑与双重验证机制：</strong></p>
                         <ol style="margin: 10px 0; padding-left: 20px;">
-                            <li><strong>检测维度（8个指标）：</strong><br>&nbsp;&nbsp;• 资源指标：CPU>85%、内存>90%、EBS AWS标准IOPS/吞吐量>90%、网络>80%<br>&nbsp;&nbsp;• <strong>RPC性能（必要条件）：</strong>成功率&lt;95% 或 P99延迟>1000ms<br>&nbsp;&nbsp;• RPC错误：错误率>5%、连接失败</li>
+                            <li><strong>检测维度（8个指标）：</strong><br>&nbsp;&nbsp;• 资源指标：CPU>85%、内存>90%、磁盘折算IOPS/吞吐量>90%、网络>80%<br>&nbsp;&nbsp;• <strong>RPC性能（必要条件）：</strong>成功率&lt;95% 或 P99延迟>1000ms<br>&nbsp;&nbsp;• RPC错误：错误率>5%、连接失败</li>
                             <li><strong>五场景判断逻辑：</strong><br>&nbsp;&nbsp;• <strong>场景A-Resource：</strong>资源超标 + 节点健康 → 误判 → 重置计数器 → 继续测试<br>&nbsp;&nbsp;• <strong>场景A-RPC：</strong>RPC性能违规（必要条件）→ 真瓶颈 → 累积计数 → 连续3次 → 停止测试<br>&nbsp;&nbsp;• <strong>场景B：</strong>任意瓶颈 + 节点不健康 → 真瓶颈 → 累积计数 → 连续3次 → 停止测试<br>&nbsp;&nbsp;• <strong>场景C：</strong>无瓶颈 + 节点持续不健康 → 节点故障 → 立即停止<br>&nbsp;&nbsp;• <strong>场景D：</strong>全部指标正常 + 节点健康 → 继续测试</li>
                             <li><strong>节点健康验证：</strong><br>&nbsp;&nbsp;• 判定标准：区块高度差异 > 50 且 持续时间 > 300秒<br>&nbsp;&nbsp;• 验证目的：区分误判（场景A-Resource）与真瓶颈（场景B）<br>&nbsp;&nbsp;• <strong>关键说明：</strong>RPC性能违规是必要条件，无需节点健康验证</li>
                         </ol>
@@ -566,7 +566,7 @@
             
                     
         <div class="section">
-            <h2>&#128202; EBS性能分析结果</h2>
+            <h2>&#128202; 磁盘性能分析结果</h2>
             
             <div class="subsection">
                 <h3>&#9888; 性能警告</h3>
@@ -596,7 +596,7 @@
                     </tbody>
                 </table>
                 <p style="margin: 10px 0 0 0; font-size: 0.9em; color: #856404;">
-                    &#128202; 💡 提示：警告的时间分布可在下方"EBS 专业图表"部分查看 → 点击"EBS 瓶颈分析"和"EBS 时间序列分析"图表
+                    &#128202; 💡 提示：警告的时间分布可在下方"磁盘专业图表"部分查看 → 点击"磁盘瓶颈分析"和"磁盘时间序列分析"图表
                 </p>
             </div>
             <h4>详细警告 (All / 6)</h4>
@@ -802,18 +802,18 @@
                     </div>
                     
                     <div class="chart-item">
-                        <h4>CPU-EBS关联可视化</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">CPU使用率与EBS性能指标的关联性分析，帮助识别I/O瓶颈</p>
+                        <h4>CPU-磁盘关联可视化</h4>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">CPU使用率与磁盘性能指标的关联性分析，帮助识别I/O瓶颈</p>
                         <div class="chart-container">
-                            <img src="cpu_ebs_correlation_visualization.png" alt="CPU-EBS关联可视化" class="chart">
+                            <img src="cpu_disk_correlation_visualization.png" alt="CPU-磁盘关联可视化" class="chart">
                         </div>
                     </div>
                     
                     <div class="chart-item">
-                        <h4>EBS瓶颈关联分析</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">EBS瓶颈关联分析，展示AWS标准视角与iostat视角的关联关系</p>
+                        <h4>磁盘瓶颈关联分析</h4>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">磁盘瓶颈关联分析，展示折算值视角与iostat视角的关联关系</p>
                         <div class="chart-container">
-                            <img src="ebs_bottleneck_correlation.png" alt="EBS瓶颈关联分析" class="chart">
+                            <img src="disk_bottleneck_correlation.png" alt="磁盘瓶颈关联分析" class="chart">
                         </div>
                     </div>
                     
@@ -835,7 +835,7 @@
                     
                     <div class="chart-item">
                         <h4>Pearson相关性分析</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">CPU与EBS指标的Pearson相关性分析，量化指标间的线性关系</p>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">CPU与磁盘指标的Pearson相关性分析，量化指标间的线性关系</p>
                         <div class="chart-container">
                             <img src="pearson_correlation_analysis.png" alt="Pearson相关性分析" class="chart">
                         </div>
@@ -853,7 +853,7 @@
                 </div>
                 
                 <div class="chart-category">
-                    <h3 style="color: #2C3E50;">📈 EBS 专业图表 (7 charts)</h3>
+                    <h3 style="color: #2C3E50;">📈 磁盘专业图表 (7 charts)</h3>
                     <div class="chart-grid">
                 
                     <div class="chart-item">
@@ -865,50 +865,50 @@
                     </div>
                     
                     <div class="chart-item">
-                        <h4>EBS AWS容量规划分析</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">AWS EBS容量规划分析，包括IOPS和吞吐量利用率预测，支持容量规划决策</p>
+                        <h4>磁盘容量规划分析</h4>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">磁盘容量规划分析，包括IOPS和吞吐量利用率预测，支持容量规划决策</p>
                         <div class="chart-container">
-                            <img src="ebs_aws_capacity_planning.png" alt="EBS AWS容量规划分析" class="chart">
+                            <img src="disk_capacity_planning.png" alt="磁盘容量规划分析" class="chart">
                         </div>
                     </div>
                     
                     <div class="chart-item">
-                        <h4>EBS AWS标准对比</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">AWS标准值与原始iostat数据对比分析，评估性能标准化程度</p>
+                        <h4>磁盘折算值对比</h4>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">折算值与原始iostat数据对比分析，评估性能标准化程度</p>
                         <div class="chart-container">
-                            <img src="ebs_aws_standard_comparison.png" alt="EBS AWS标准对比" class="chart">
+                            <img src="disk_normalized_comparison.png" alt="磁盘折算值对比" class="chart">
                         </div>
                     </div>
                     
                     <div class="chart-item">
-                        <h4>EBS瓶颈检测分析</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">EBS瓶颈检测分析，自动识别IOPS、吞吐量和延迟瓶颈点</p>
+                        <h4>磁盘瓶颈检测分析</h4>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">磁盘瓶颈检测分析，自动识别IOPS、吞吐量和延迟瓶颈点</p>
                         <div class="chart-container">
-                            <img src="ebs_bottleneck_analysis.png" alt="EBS瓶颈检测分析" class="chart">
+                            <img src="disk_bottleneck_analysis.png" alt="磁盘瓶颈检测分析" class="chart">
                         </div>
                     </div>
                     
                     <div class="chart-item">
-                        <h4>EBS iostat性能分析</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">EBS设备的iostat性能分析，包括读写分离、延迟分析和队列深度监控</p>
+                        <h4>磁盘iostat性能分析</h4>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">磁盘设备的iostat性能分析，包括读写分离、延迟分析和队列深度监控</p>
                         <div class="chart-container">
-                            <img src="ebs_iostat_performance.png" alt="EBS iostat性能分析" class="chart">
+                            <img src="disk_iostat_performance.png" alt="磁盘iostat性能分析" class="chart">
                         </div>
                     </div>
                     
                     <div class="chart-item">
-                        <h4>EBS性能概览</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">EBS综合性能概览，包括AWS标准IOPS、吞吐量与基准线对比</p>
+                        <h4>磁盘性能概览</h4>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">磁盘综合性能概览，包括折算IOPS、吞吐量与基准线对比</p>
                         <div class="chart-container">
-                            <img src="ebs_performance_overview.png" alt="EBS性能概览" class="chart">
+                            <img src="disk_performance_overview.png" alt="磁盘性能概览" class="chart">
                         </div>
                     </div>
                     
                     <div class="chart-item">
-                        <h4>EBS时间序列分析</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">EBS性能时间序列分析，展示多指标时间维度变化趋势</p>
+                        <h4>磁盘时间序列分析</h4>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">磁盘性能时间序列分析，展示多指标时间维度变化趋势</p>
                         <div class="chart-container">
-                            <img src="ebs_time_series_analysis.png" alt="EBS时间序列分析" class="chart">
+                            <img src="disk_time_series_analysis.png" alt="磁盘时间序列分析" class="chart">
                         </div>
                     </div>
                     
@@ -945,7 +945,7 @@
                     
                     <div class="chart-item">
                         <h4>性能概览图表</h4>
-                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">系统整体性能概览，包括CPU、内存、EBS等关键指标的时间序列展示</p>
+                        <p style="color: #666; font-size: 0.9em; margin: 8px 0;">系统整体性能概览，包括CPU、内存、磁盘等关键指标的时间序列展示</p>
                         <div class="chart-container">
                             <img src="performance_overview.png" alt="性能概览图表" class="chart">
                         </div>
@@ -1201,7 +1201,7 @@
                         <p>此图表分析了监控开销与系统性能指标之间的相关性:</p>
                         <ul>
                             <li><strong>监控CPU开销 vs QPS</strong>: 监控CPU使用与系统吞吐量的关系</li>
-                            <li><strong>监控I/O开销 vs EBS性能</strong>: 监控I/O与存储性能的关系</li>
+                            <li><strong>监控I/O开销 vs 磁盘性能</strong>: 监控I/O与存储性能的关系</li>
                         </ul>
                     </div>
                 </div>
@@ -1316,7 +1316,7 @@
                     
                     
                     
-                    <h2>&#128202; CPU-EBS相关性分析</h2>
+                    <h2>&#128202; CPU-磁盘相关性分析</h2>
                     
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
             <thead>

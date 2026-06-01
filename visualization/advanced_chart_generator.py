@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Advanced Chart Generator - Generate CPU-EBS correlation charts according to documentation requirements
+Advanced Chart Generator - Generate CPU-Disk correlation charts according to documentation requirements
 Implement visualization of statistical analysis methods, including correlation heatmaps
 Fixed CSV field consistency issues, using unified field access interface
 """
@@ -236,35 +236,35 @@ class AdvancedChartGenerator(CSVDataProcessor):
             axes = axes.reshape(-1, 1)
         
         # Using English title directly
-        fig.suptitle('CPU-EBS Pearson Correlation Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
+        fig.suptitle('CPU-Disk Pearson Correlation Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
         
         # Generate each subplot
         plot_idx = 0
         for i in range(rows):
             for j in range(cols):
                 if plot_idx < len(plot_configs):
-                    cpu_col, ebs_col, title = plot_configs[plot_idx]
+                    cpu_col, disk_col, title = plot_configs[plot_idx]
                     ax: Axes = axes[i, j]
                     
                     try:
                         # Safely get data
                         cpu_data = self.df[cpu_col] if cpu_col in self.df.columns else pd.Series(dtype=float)
-                        ebs_data = self.df[ebs_col] if ebs_col in self.df.columns else pd.Series(dtype=float)
+                        disk_data = self.df[disk_col] if disk_col in self.df.columns else pd.Series(dtype=float)
                         
-                        if len(cpu_data) > 0 and len(ebs_data) > 0:
+                        if len(cpu_data) > 0 and len(disk_data) > 0:
                             # Calculate correlation
-                            corr, p_value = stats.pearsonr(cpu_data, ebs_data)
+                            corr, p_value = stats.pearsonr(cpu_data, disk_data)
                             
                             # Draw scatter plot
-                            ax.scatter(cpu_data, ebs_data, alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'])
+                            ax.scatter(cpu_data, disk_data, alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'])
                             
                             # Add trend line
-                            z = np.polyfit(cpu_data, ebs_data, 1)
+                            z = np.polyfit(cpu_data, disk_data, 1)
                             p = np.poly1d(z)
                             ax.plot(cpu_data, p(cpu_data), color=UnifiedChartStyle.COLORS['critical'], linestyle='--', alpha=0.8, linewidth=2)
                             
                             ax.set_xlabel('CPU I/O Wait (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
-                            ax.set_ylabel(ebs_col.replace('_', ' ').title(), fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                            ax.set_ylabel(disk_col.replace('_', ' ').title(), fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                             ax.set_title(f'{title}\nr={corr:.3f}, p={p_value:.3f}', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                             ax.grid(True, alpha=0.3)
                         else:
@@ -491,9 +491,9 @@ class AdvancedChartGenerator(CSVDataProcessor):
             if col in self.df.columns:
                 key_columns.append(col)
         
-        # EBS related columns
-        ebs_patterns = ['util', 'aqu_sz', 'avg_await', 'r_s', 'w_s', 'total_iops', 'throughput_mibs']
-        for pattern in ebs_patterns:
+        # Disk related columns
+        disk_patterns = ['util', 'aqu_sz', 'avg_await', 'r_s', 'w_s', 'total_iops', 'throughput_mibs']
+        for pattern in disk_patterns:
             matching_cols = [col for col in self.df.columns if pattern in col]
             # Filter ACCOUNTS device columns (if not configured)
             if not DeviceManager.is_accounts_configured(self.df):
@@ -530,7 +530,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
                    cbar_kws={"shrink": .8})
         
         # Using English title directly
-        plt.title('CPU-EBS Performance Metrics Correlation Matrix', 
+        plt.title('CPU-Disk Performance Metrics Correlation Matrix', 
                  fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], 
                  fontweight='bold', pad=20)
         plt.xticks(rotation=45, ha='right')
@@ -570,7 +570,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         accounts_configured = DeviceManager.is_accounts_configured(self.df)
         
         fig, axes = plt.subplots(3, 2, figsize=(18, 15))
-        fig.suptitle('CPU-EBS Performance Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
+        fig.suptitle('CPU-Disk Performance Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         # CPU Usage trends
         if 'cpu_iowait' in self.df.columns:
@@ -580,7 +580,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
             axes[0, 0].grid(True, alpha=0.3)
             UnifiedChartStyle.format_time_axis(axes[0, 0], self.df['timestamp'])
         
-        # EBS utilization trends - show DATA and ACCOUNTS
+        # Disk utilization trends - show DATA and ACCOUNTS
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
         
@@ -589,7 +589,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         if accounts_util_cols:
             axes[0, 1].plot(self.df['timestamp'], self.df[accounts_util_cols[0]], color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, alpha=0.7, label='ACCOUNTS')
         if data_util_cols or accounts_util_cols:
-            axes[0, 1].set_title('EBS Device Utilization Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
+            axes[0, 1].set_title('Disk Device Utilization Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             axes[0, 1].set_ylabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             axes[0, 1].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             axes[0, 1].grid(True, alpha=0.3)
@@ -1064,7 +1064,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
 
     def generate_all_charts(self) -> List[str]:
         """Generate all charts"""
-        print("🎨 Starting complete CPU-EBS correlation analysis chart generation...")
+        print("🎨 Starting complete CPU-Disk correlation analysis chart generation...")
         
         # 🎨 Refactor: apply unified style configuration
         try:

@@ -1,0 +1,3 @@
+# fixtures are recorded on-demand from public endpoints, not stored in git.
+# Run: bash scripts/record_solana_fixtures.sh
+fixtures/

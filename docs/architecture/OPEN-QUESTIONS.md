@@ -6,184 +6,122 @@
 
 ---
 
-## OQ-1:proxy 具体选型
+## OQ-1:proxy 具体选型 ✅ 已锁定(2026-05-27)
 
-**问题**:Q4-1 已定 proxy = 独立进程(VM + GKE),但**具体用什么实现?**
-
-| 候选 | 优点 | 缺点 | 适配 NS-3 declarative? |
-|---|---|---|---|
-| **envoy** | 工业级、稳定、HTTP filter chain 成熟、Wasm/Lua 扩展 | 部署重(配置 YAML 复杂)、二进制大 | ⚠️ 默认配置 YAML 偏 declarative,但 method extraction 需 Lua/Wasm 写一次性 filter |
-| **nginx + access_log custom format** | 轻、运维熟悉、URL path 提取直接 | EVM JSON-RPC body 提取需要 Lua 模块、不支持 gRPC | ❌ JSON body 提取需 Lua |
-| **mitmproxy(Python)** | 开发快、可编程性极强、单机 PoC 首选 | 生产场景吞吐有限(Python GIL)、不适合 36 链规模 | ✅ Python 脚本可读 chain template,但**违 NS-3 零代码**(脚本=代码) |
-| **自写 Go 小代理** | 轻(~200-500 行)、吞吐高、可控、原生支持 declarative DSL | 需要开发 + 维护 | ✅ 设计上完全 declarative,从 chain template 读取规则 |
-| **Caddy + custom handler** | 配置极简、HTTP/3、自动 TLS | method extraction 需要 Go plugin、生态比 nginx 小 | ⚠️ 同 nginx,需 Go plugin |
-
-**当前倾向**:**自写 Go 小代理**(理由:NS-3 零代码加链原则下,只有自写 + declarative 设计能完全满足;envoy/nginx 都需要为新协议写一次性 filter,违反 NS-3)
-
-**决策时点**:阶段 2 调研档 `07-per-method-resource-attribution-via-proxy.md` 完成后
-
-**决策依据需要**:
-- 36 链协议矩阵覆盖测试(declarative DSL 能表达多少链?)
-- 性能基准(自写 Go 小代理在 PoC 阶段吞吐能否撑 vegeta 压力?)
-- 维护成本评估(谁来 maintain Go 代理?)
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-8**。
+> **决策摘要**:**自写 Go 小代理(主方案)**,严格 declarative DSL,目标 ≤ 800 行;**envoy + Lua 兜底(failback)**仅在主方案 PoC 失败时启用。
+> **PoC 撤销条件**:性能 < 5k QPS @ p99 < 10ms,或 DSL 覆盖 < 32/36 链 → 启用 envoy + Lua 兜底(接受违 NS-3 但保证可用)。
+> **决策依据**:NS-3 零代码加链原则下,只有"自写 Go + chain template DSL"能完全满足"加链 = 改 JSON";envoy/nginx 需要为新协议写一次性 Lua filter,违 NS-3。完整反方论证见 `analysis-notes/research_notes/07-per-method-resource-attribution-via-proxy.md` §3。
+> **ADR 待写**:`docs/architecture/decisions/0002-proxy-implementation.md`(归阶段 4 PoC 启动前补)
 
 ---
 
-## OQ-2:proxy 部署形态细节
+## OQ-2:proxy 部署形态细节 ✅ 已锁定(2026-05-28)
 
-**问题**:Q4-1 已定独立进程,但部署细节?
-
-| 候选 | 适用场景 | 缺点 |
-|---|---|---|
-| **systemd unit**(Linux VM 直跑) | 虚拟机 + cloudtop 直接跑 | 不跨平台,Mac/Win 开发不友好 |
-| **docker container** | 跨平台、隔离、镜像可发布 | 多一层 docker daemon 依赖 |
-| **K8s pod / sidecar(同 namespace)** | GKE / K8s 生产环境 | PoC 阶段过重 |
-| **二进制裸跑**(./proxy &) | 开发调试最快 | 无生命周期管理 |
-
-**当前倾向**:**支持 systemd + docker 双部署**(同一二进制,部署方式按环境选);PoC 阶段允许裸跑
-
-**决策时点**:阶段 1-A 架构文档落地时(确定部署 spec 即可,实现归阶段 4)
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-11**。
+> **决策摘要**:**systemd + docker 双部署**(同一 Go 二进制),虚拟机/cloudtop 走 systemd unit,跨平台开发/CI 走 docker container;**PoC 阶段允许裸跑**(`./proxy &`);K8s 生产形态走 sidecar(Q4-10 已定)。
+> **决策依据**:运维场景全覆盖 + 跨平台兼容 + PoC 阻力最小化。
+> **ADR 待写**:`docs/architecture/decisions/0005-proxy-deployment.md`(归阶段 4 PoC 启动前补)
 
 ---
 
-## OQ-3:per-method 归因算法
+## OQ-3:per-method 归因算法 ✅ 已锁定(2026-05-27)
 
-**问题**:proxy 输出"每请求 method + timestamp + latency",monitor 输出"每秒资源时序",**如何归因?**
-
-| 算法候选 | 描述 | 优点 | 缺点 |
-|---|---|---|---|
-| **(a) 简单 group_by**(秒级时间窗) | 按 1s 窗口 group proxy 请求,统计每 method 占比,按比例分摊该秒的资源增量 | 简单、直观、运维易懂 | 假设资源消耗与请求数线性相关,不精确 |
-| **(b) 加权回归**(method 占比 → 资源消耗) | 线性回归 / 多元回归,各 method 占比为自变量,资源消耗为因变量 | 较精确 | 需大样本、有共线性风险、运维难解释 |
-| **(c) 蒙特卡洛 / 试验设计** | 不同 method 比例下多轮压测,反推每 method 单位资源消耗 | 最精确 | 时间成本高(每链多轮压测) |
-
-**用户原话(2026-05-27)**:"运维人员看 rpc method 相关的资源图可以快速理解,获取到运维人员希望获取的数据就可以"
-
-**当前倾向**:**(a) 简单 group_by + 秒级时间窗** — 符合"运维快速理解"原则,可解释性强,实施成本低;(b)(c) 作为后续增强,不在 PoC 范围
-
-**决策时点**:阶段 1-A 架构文档落地时
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-7**。
+> **决策摘要**:加权 group_by(秒级时间窗);权重源 = 公开资料先配粗粒度(`analysis-notes/research_notes/01-06` 各 method "典型延迟量级" → 映射 1/10/100 三档);后期实际使用根据真实压测数据迭代调整;PoC 撤销条件 = ground truth 误差 > 20% 才升级 (b) 加权回归。
+> **决策依据**:用户原话 "运维人员看 rpc method 相关的资源图可以快速理解" + 收敛于 `analysis-notes/research_notes/07-per-method-resource-attribution-via-proxy.md` §2。
+> **ADR 待写**:`docs/architecture/decisions/0001-per-method-attribution.md`(归阶段 4 PoC 启动前补)
 
 ---
 
-## OQ-4:sink 默认格式
+## OQ-4:sink 默认格式 ✅ 已锁定(2026-05-27)
 
-**问题**:Q4-3 已定 sink = CSV/JSONL,**默认用哪个?**
-
-| 候选 | 优点 | 缺点 |
-|---|---|---|
-| **CSV** | 与现有 unified_monitor CSV 格式一致,分析层 pandas join 简单 | 字段固定、扩展不灵活、转义麻烦 |
-| **JSONL**(每行一条 JSON) | 字段灵活、扩展友好、native 表达嵌套 | 解析慢、文件大、分析层需要额外 parse 步骤 |
-
-**当前倾向**:**JSONL**(理由:proxy 日志 schema 可能随 chain template 协议变化,JSONL 扩展性更好;CSV 适合固定 schema 的 monitor,proxy 是新增可演进数据源)
-
-**决策时点**:阶段 1-A 架构文档落地时
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-9**。
+> **决策摘要**:**默认 CSV** + 字段最小集 6 列(`timestamp, method, req_bytes, resp_bytes, latency_ms, status`);sink 抽象层支持 JSONL/Parquet 切换(环境变量 `PROXY_SINK_FORMAT`)。
+> **关键变化**:初始倾向是 JSONL(理由:扩展性),但 07 调研档 §4 反方论证 R9-R12 把倾向翻成 CSV — (R9) 嵌套字段不归 proxy 责任,(R10) CSV 加列也兼容 + JSONL 体积大 30%,(R11) 高 QPS 下文件体积压力,(R12) Parquet 学习成本高。**决策准则**:与 unified_monitor CSV 一致,pandas 友好,运维熟悉。
+> **撤销条件**:无强撤销条件,日志体积 > 100GB/天再评估切 Parquet。
+> **决策依据**:`analysis-notes/research_notes/07-per-method-resource-attribution-via-proxy.md` §4。
+> **ADR 待写**:`docs/architecture/decisions/0003-sink-format.md`(归阶段 4 PoC 启动前补)
 
 ---
 
-## OQ-5:chain template proxy_extraction DSL 完整 spec
+## OQ-5:chain template proxy_extraction DSL 完整 spec ✅ 已锁定(2026-05-28)
 
-**问题**:Q4-4 已定 declarative DSL,**4 种模式的完整字段定义?**
-
-**初稿(2026-05-27,待阶段 1-B 细化)**:
-
-```jsonc
-{
-  "proxy_extraction": {
-    "protocol": "json_rpc",  // 枚举: json_rpc | rest | bitcoin_rpc | grpc
-
-    // protocol=json_rpc / bitcoin_rpc:
-    "method_source": "body.method",     // JSON path,提取 method 名
-    "id_source": "body.id",             // 可选,提取 request id 做 latency 配对
-    "params_source": "body.params",     // 可选,统计 params 大小 / 复杂度
-
-    // protocol=rest:
-    "url_pattern": "^/v2/([^/]+)/.*$",  // 正则,提取 method 名
-    "url_method_group": 1,              // 捕获组索引
-    "method_normalize": {               // 可选,映射归一化
-      "transactions": "get_transactions",
-      "blocks": "get_blocks"
-    },
-
-    // protocol=grpc:
-    "grpc_service": "hedera.MirrorService",  // 全限定服务名
-    "grpc_method_field": "method"            // 通过 :method gRPC header 提取
-  }
-}
-```
-
-**决策时点**:阶段 1-B `chain-template-zero-code-spec-zh.md` 落地时(必须用 36 链全部协议**填表证明 DSL 够用**)
-
-**验证手段**:为 36 链每条都写出 `proxy_extraction` 配置,如果某链 4 种模式都表达不出,**反推扩充 DSL**(或将该链标 KNOWN_BROKEN_PROXY)
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-12**,完整 schema 落 `chain-template-zero-code-spec-zh.md` §1.7。
+> **决策摘要**:**2 模式(json_rpc + rest)+ `extractors:[]` 数组 + `batch_handling` 必填 + `auth` 可选**;100% 覆盖 36 链(jsonrpc/substrate/tendermint/bitcoin_jsonrpc 统一走 json_rpc,rest 走 rest,hedera dual 用 2 条 extractor 自然支持);**删 grpc 模式(36 链零 gRPC,YAGNI)+ 删 ogmios 模式(cardano 实测走 rest)**。
+> **关键变化**:初稿 4 模式(json_rpc / rest / bitcoin_rpc / grpc)经 6 family × 36 链对照实证后,有 2 BLOCKER(ogmios WS / hedera dual);改 2 模式 + extractors 数组 + url_patterns list + batch_handling 必填 后 0 BLOCKER 0 envoy 兜底。
+> **6 family 范例**:arbitrum (jsonrpc) / bch (bitcoin_jsonrpc) / acala (substrate) / algorand (rest) / celestia (tendermint) / hedera (hedera_dual) — 全部覆盖,见 spec §1.7。
+> **决策依据**:36 链 6 family 实证分布(`_meta.adapter_family` audit:jsonrpc=16, rest=5, substrate=5, tendermint=5, bitcoin_jsonrpc=4, hedera_dual=1, ogmios=0);batch_handling 来自 EVM batch JSON-RPC 真实生产场景。
+> **ADR 待写**:`docs/architecture/decisions/0006-proxy-extraction-dsl.md`(归阶段 4 PoC 启动前补)
 
 ---
 
-## OQ-6:proxy 与 fetcher 的边界
+## OQ-6:proxy 与 fetcher 的边界 ✅ 已锁定(2026-05-28)
 
-**问题**:fetcher (`tools/fetch_active_accounts.py`) 当前仅 8 链支持,**proxy 是否依赖 fetcher?**
-
-**已知**:
-- fetcher 产物 = `accounts.txt`(地址池),供 target_generator 拼 vegeta target body 用
-- proxy 不依赖 fetcher,只解 body / URL 抓 method 名
-- 但 e2e 跑 benchmark **需要** fetcher → target_generator → vegeta → proxy → 节点
-
-**当前倾向**:**fetcher 和 proxy 解耦,但 e2e 需要 fetcher 28 链扩展**(归阶段 5)。PoC(solana 1 链)fetcher 已支持,不阻塞。
-
-**决策时点**:阶段 1-C `migration-from-legacy-zh.md` 落地时(明确 fetcher 28 链补全的责任边界)
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-13**。
+> **决策摘要**:**proxy 与 fetcher 解耦** — proxy 只解 body / URL 抓 method 名,不依赖 fetcher;fetcher 28 链扩展归阶段 5 wave(非 S4 blocker);PoC solana 1 链 fetcher 已支持;e2e benchmark 链路 = fetcher → target_generator → vegeta → proxy → 节点。
+> **决策依据**:proxy 工作在 vegeta → 节点链路的中间层,只关心 wire format(body / URL),与 fetcher 取地址池逻辑完全正交;fetcher 28 链扩展是独立工作量,塞进 S4 会拖延 NS-2 主线。
+> **ADR 待写**:`docs/architecture/decisions/0007-proxy-fetcher-boundary.md`(归阶段 4 PoC 启动前补)
 
 ---
 
-## OQ-7:weight 配置的 chain template schema
+## OQ-7:weight 配置的 chain template schema ✅ 已锁定(2026-05-28)
 
-**问题**:NS-2 要求 mixed mode 支持 weight 配置,**chain template 怎么表达?**
-
-**候选 schema**:
-
-```jsonc
-// 候选 A: 扩展 mixed 字符串
-"rpc_methods": {
-  "single": "eth_getBalance",
-  "mixed": "eth_getBalance:40,eth_getTransactionCount:30,eth_blockNumber:20,eth_gasPrice:10"
-}
-
-// 候选 B: 新增 mixed_weighted 字段(向后兼容)
-"rpc_methods": {
-  "single": "eth_getBalance",
-  "mixed": "eth_getBalance,eth_getTransactionCount,eth_blockNumber,eth_gasPrice",  // 老格式保留
-  "mixed_weighted": [
-    {"method": "eth_getBalance", "weight": 40},
-    {"method": "eth_getTransactionCount", "weight": 30},
-    {"method": "eth_blockNumber", "weight": 20},
-    {"method": "eth_gasPrice", "weight": 10}
-  ]
-}
-
-// 候选 C: 完全替代 mixed
-"rpc_methods": {
-  "single": "eth_getBalance",
-  "mixed": [
-    {"method": "eth_getBalance", "weight": 40},  // 老格式废弃
-    ...
-  ]
-}
-```
-
-**当前倾向**:**B(新增 mixed_weighted)** — 向后兼容老 user_config,且新功能显式
-
-**决策时点**:阶段 1-B `chain-template-zero-code-spec-zh.md` 落地时
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-14**,完整 schema 落 `chain-template-zero-code-spec-zh.md` §1.8。
+> **决策摘要**:**候选 B(新增 `rpc_methods.mixed_weighted: [{method, weight}, ...]` 字段,向后兼容)**:旧 `mixed` 字符串字段保留,新增 `mixed_weighted` 时优先生效;weight 为正整数,target_generator 按 `weight_i / sum(weights)` 归一化;权重源参考 `analysis-notes/research_notes/01-06`。
+> **决策依据**:候选 A(扩展 mixed 字符串)语法不易扩展;候选 C(完全替代)破坏老用户配置;候选 B 兼容 + 显式,符合 W-4 渐进重构。
+> **验证手段**:pre-commit hook 校验 `mixed_weighted[].method` ⊂ `param_formats` keys + weight > 0 + integer。
+> **ADR 待写**:`docs/architecture/decisions/0008-mixed-weighted-schema.md`(归阶段 4 PoC 启动前补)
 
 ---
 
-## OQ-8:proxy 自身资源消耗如何排除?
+## OQ-8:proxy 自身资源消耗如何排除? ✅ 已锁定(2026-05-27)
 
-**问题**:proxy 与节点同机(Q4-1),proxy 自身的 CPU / MEM 消耗会被 unified_monitor 采到,**如何排除?**
+> **状态**:已锁定,合入 NORTH-STAR §3 **Q4-10**。
+> **决策摘要**:**默认透明记录 + 自报基线**(`proxy_self.csv`:每秒自报 cpu_pct / mem_mb);分析层从节点资源减去基线后再归因 method;K8s 生产用 sidecar 独立 pod 隔离。
+> **PoC 撤销条件**:proxy CPU > 节点 10% 或自报偏差 > 30% → 必须启用 cgroup 隔离。
+> **决策依据**:候选 (c) 透明 + 自报基线兼顾"运维知情"与"实施简单";(a) cgroup 隔离在 GKE pod 内难做,K8s 直接走 sidecar 形态更自然。完整反方论证见 `analysis-notes/research_notes/07-per-method-resource-attribution-via-proxy.md` §5。
+> **ADR 待写**:`docs/architecture/decisions/0004-proxy-overhead.md`(归阶段 4 PoC 启动前补)
+
+---
+
+## OQ-9:fake-node v2 — 5 个 stub handler 何时落地?
+
+**背景**(2026-05-27, R1 范式纠正):fake-node v2 实现了 7 个协议族的 handler 注册 + dispatch 架构,但 R1 只完整实现 2/7 (jsonrpc + bitcoin_jsonrpc, 覆盖 20/36 链),剩余 5/7 注册为 `NotImplementedHandler` stub (覆盖 16/36 链 startup,RPC 调用返回 loud error)。
+
+**待决问题**:5 个 stub handler 的实施时点与顺序。
+
+| Handler            | Chains | Coverage 链名                                   | 实施成本 (估)        | 触发优先级     |
+|--------------------|-------:|-------------------------------------------------|----------------------|----------------|
+| `substrate`        | 5      | polkadot, kusama, acala, astar, moonbeam        | ~250 行 Go + 5 fixtures | 中 (有商用流量) |
+| `tendermint`       | 5      | cosmos-hub, osmosis, celestia, injective, sei   | ~300 行 Go + 5 fixtures | 中             |
+| `rest`             | 4      | algorand, aptos, tezos, ton                     | ~200 行 Go + 4 fixtures | 低             |
+| `ogmios`           | 1      | cardano                                         | ~200 行 Go (websocket fixture replay) | 低 |
+| `hedera_dual`      | 1      | hedera                                          | ~250 行 Go (双协议)  | 低             |
+
+**当前倾向**:**按"商用使用率从高到低"实施**,而非按字母序。下一波:`substrate + tendermint`(5+5=10 链,商用流量大),再 `rest`,最后 `ogmios + hedera_dual` (各 1 链)。
+
+**安全网**:stub 已注册不静默失败 (smoke step 4 验过 cardano: HTTP 404, NOT 200)。R1 完成 = "20 链可 smoke + 36 链可 startup + 16 链 RPC 必失败有响"。
+
+**决策时点**:阶段 5 (36 链 weight + proxy 协议 dispatcher 全覆盖) 启动前必须给出实施顺序;`no-deferred-bugs` 4th 已检查过 (这是范围切分非 P0 推后)。
+
+---
+
+## OQ-10:fake-node fixture 录制流水线如何标准化?
+
+**背景**:R1 ethereum fixtures 当前是手写最小合法 JSON-RPC 响应 (字节假但格式真),非真 mainnet 录制。Solana fixtures 用 `scripts/record_solana_fixtures.sh` 录的,但 EVM/其他链没有等价脚本。
 
 **候选**:
-- **(a) cgroup 隔离 proxy 进程**,monitor 排除 proxy cgroup 数据 → 精确
-- **(b) proxy 自报资源(periodic stat)**,分析层减去 → 简单但有偏差
-- **(c) 不排除,记录 proxy 开销,在报告中说明**(运维知道 proxy 占了多少) → 最透明
 
-**当前倾向**:**(c) + 可选 (a)** — PoC 阶段先 (c) 透明记录,生产环境可启用 (a)
+| 选项 | 描述 | 利 | 弊 |
+|---|---|---|---|
+| (a) per-chain 手写 record_<chain>.sh | 复用 solana 模式 | 简单, 各链独立 | 36 个脚本维护成本 |
+| (b) 统一 `record_fixtures.py` + `config/chains/*.json:rpc_methods` 驱动 | 一份代码 36 链覆盖 | 加链零脚本 | 需先有 RPC endpoint config |
+| (c) 录制改为录 framework 真实 e2e 流量 (代理 tap) | 真实流量 fixture | 真实性最高 | 需 framework 已能压目标链 (鸡生蛋) |
 
-**决策时点**:阶段 1-A 架构文档落地时
+**当前倾向**:**(b)**,与 framework `_meta` 字段驱动一致 (parallel-entry-trap 既有结论 = 不要再造 ad-hoc 入口)。
+
+**决策时点**:阶段 5 前;blocker 程度低 (手写 stub fixture 也能 smoke 通)。
 
 ---
 
@@ -197,5 +135,5 @@
 
 ---
 
-**当前状态**:**8 个 OQ 待决**
-**下次预期更新**:阶段 1 架构文档 review 通过后(OQ-2 / OQ-3 / OQ-4 / OQ-5 / OQ-7 / OQ-8 部分应该可决);阶段 2 调研档完成后 OQ-1 可决
+**当前状态**:**2 个 OQ 待决**(OQ-9 / OQ-10;OQ-1 / OQ-2 / OQ-3 / OQ-4 / OQ-5 / OQ-6 / OQ-7 / OQ-8 已锁 → NORTH-STAR Q4-7~14)
+**下次预期更新**:阶段 5 启动前 OQ-9 (fake-node stub handler) / OQ-10 (fixture 录制流水线) 可决

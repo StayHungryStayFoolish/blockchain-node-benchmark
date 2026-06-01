@@ -33,7 +33,7 @@ init_event_manager() {
 
 # Record exception event start
 record_event_start() {
-    local event_type="$1"      # block_height_diff, cpu_high, ebs_bottleneck, etc.
+    local event_type="$1"      # block_height_diff, cpu_high, disk_bottleneck, etc.
     local event_source="$2"    # block_height_monitor, unified_monitor, bottleneck_detector
     local event_details="$3"   # Detailed information
     local current_qps="${4:-0}" # Current QPS (if applicable)
@@ -259,7 +259,7 @@ main() {
             echo "  block_height_diff        Block height difference exception"
             echo "  cpu_high                 High CPU usage"
             echo "  memory_high              High memory usage"
-            echo "  ebs_bottleneck           EBS performance bottleneck"
+            echo "  disk_bottleneck           Disk performance bottleneck"
             echo "  network_bottleneck       Network bottleneck"
             echo "  qps_failure              QPS test failure"
             echo ""

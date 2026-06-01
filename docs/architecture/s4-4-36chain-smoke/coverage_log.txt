@@ -1,0 +1,41 @@
+=== RUN   TestProxyDSLCoverage_All36Chains
+    dsl_coverage_test.go:225: === S4.4 DSL coverage: 36/36 PASS ===
+    dsl_coverage_test.go:227:   PASS acala                     method=system_chain
+    dsl_coverage_test.go:227:   PASS algorand                  method=GET /v2/accounts/{address}
+    dsl_coverage_test.go:227:   PASS aptos                     method=POST /v1/view
+    dsl_coverage_test.go:227:   PASS arbitrum                  method=eth_blockNumber
+    dsl_coverage_test.go:227:   PASS astar                     method=eth_chainId
+    dsl_coverage_test.go:227:   PASS avalanche-c               method=eth_blockNumber
+    dsl_coverage_test.go:227:   PASS avalanche-x               method=avm.getHeight
+    dsl_coverage_test.go:227:   PASS base                      method=eth_getBalance
+    dsl_coverage_test.go:227:   PASS bch                       method=getblockcount
+    dsl_coverage_test.go:227:   PASS bitcoin                   method=getblockcount
+    dsl_coverage_test.go:227:   PASS bsc                       method=eth_getBalance
+    dsl_coverage_test.go:227:   PASS cardano                   method=GET_TIP
+    dsl_coverage_test.go:227:   PASS celestia                  method=/status
+    dsl_coverage_test.go:227:   PASS cosmos-hub                method=GET /cosmos/bank/v1beta1/balances/{addr}
+    dsl_coverage_test.go:227:   PASS dogecoin                  method=getblockcount
+    dsl_coverage_test.go:227:   PASS ethereum                  method=eth_getBalance
+    dsl_coverage_test.go:227:   PASS hedera                    method=GET_ACCOUNT
+    dsl_coverage_test.go:227:   PASS injective                 method=/status
+    dsl_coverage_test.go:227:   PASS kusama                    method=chain_getHeader
+    dsl_coverage_test.go:227:   PASS linea                     method=eth_blockNumber
+    dsl_coverage_test.go:227:   PASS litecoin                  method=getblockcount
+    dsl_coverage_test.go:227:   PASS moonbeam                  method=eth_chainId
+    dsl_coverage_test.go:227:   PASS near                      method=query
+    dsl_coverage_test.go:227:   PASS optimism                  method=eth_blockNumber
+    dsl_coverage_test.go:227:   PASS osmosis                   method=/status
+    dsl_coverage_test.go:227:   PASS polkadot                  method=GET /accounts/{addr}/balance-info
+    dsl_coverage_test.go:227:   PASS polygon                   method=eth_getBalance
+    dsl_coverage_test.go:227:   PASS scroll                    method=eth_getBalance
+    dsl_coverage_test.go:227:   PASS sei                       method=eth_chainId
+    dsl_coverage_test.go:227:   PASS solana                    method=getAccountInfo
+    dsl_coverage_test.go:227:   PASS starknet                  method=starknet_getClassAt
+    dsl_coverage_test.go:227:   PASS sui                       method=sui_getObject
+    dsl_coverage_test.go:227:   PASS tezos                     method=GET /chains/main/blocks/head/context/contracts/{addr}/balance
+    dsl_coverage_test.go:227:   PASS ton                       method=getMasterchainInfo
+    dsl_coverage_test.go:227:   PASS tron                      method=/wallet/getaccount
+    dsl_coverage_test.go:227:   PASS zksync-era                method=eth_blockNumber
+--- PASS: TestProxyDSLCoverage_All36Chains (0.01s)
+PASS
+ok  	proxy/internal/config	(cached)

@@ -13,7 +13,7 @@ graph TD
     A --> D[internal_config.sh<br/>Layer 3: Internal Configuration]
     A --> E[Dynamic Detection<br/>Layer 4: Runtime Configuration]
     
-    B --> F[RPC Endpoint<br/>EBS Devices<br/>Network Bandwidth<br/>Test Parameters]
+    B --> F[RPC Endpoint<br/>Disk Devices<br/>Network Bandwidth<br/>Test Parameters]
     C --> G[AWS Settings<br/>Log Configuration<br/>Error Handling<br/>Advanced Thresholds]
     D --> H[Bottleneck Thresholds<br/>Performance Tuning<br/>Internal State]
     E --> I[Platform Detection<br/>Path Discovery<br/>Resource Calculation]
@@ -77,7 +77,7 @@ ENA_MONITOR_ENABLED=true
 ```bash
 # Unified monitoring interval (seconds)
 MONITOR_INTERVAL=5              # All monitoring tasks use same interval
-EBS_MONITOR_RATE=1              # EBS-specific monitoring frequency
+DISK_MONITOR_RATE=1            # Disk-specific monitoring frequency
 ```
 
 #### 4. QPS Test Configuration
@@ -183,11 +183,11 @@ Modify `system_config.sh` when you need to:
 BOTTLENECK_CPU_THRESHOLD=85               # CPU > 85% = bottleneck
 BOTTLENECK_MEMORY_THRESHOLD=90            # Memory > 90% = bottleneck
 
-# EBS thresholds
-BOTTLENECK_EBS_UTIL_THRESHOLD=90          # Utilization > 90% = bottleneck
-BOTTLENECK_EBS_LATENCY_THRESHOLD=50       # Latency > 50ms = bottleneck
-BOTTLENECK_EBS_IOPS_THRESHOLD=90          # IOPS utilization > 90% = bottleneck
-BOTTLENECK_EBS_THROUGHPUT_THRESHOLD=90    # Throughput utilization > 90% = bottleneck
+# Disk thresholds
+BOTTLENECK_DISK_UTIL_THRESHOLD=90          # Utilization > 90% = bottleneck
+BOTTLENECK_DISK_LATENCY_THRESHOLD=50       # Latency > 50ms = bottleneck
+BOTTLENECK_DISK_IOPS_THRESHOLD=90          # IOPS utilization > 90% = bottleneck
+BOTTLENECK_DISK_THROUGHPUT_THRESHOLD=90    # Throughput utilization > 90% = bottleneck
 
 # Network thresholds
 BOTTLENECK_NETWORK_THRESHOLD=80           # Network > 80% = bottleneck
@@ -250,7 +250,7 @@ Condition 1 AND Condition 2 met, but Condition 3 not met (node healthy)
 ```bash
 # Check after each QPS test round
 # Condition 1: Resource Limit Exceeded
-if Resource Exceeds Threshold (CPU/Memory/EBS/Network exceeds threshold):
+if Resource Exceeds Threshold (CPU/Memory/Disk/Network exceeds threshold):
     BOTTLENECK_COUNT++
     
     # Condition 2: Consecutive Detection
@@ -276,11 +276,11 @@ if Resource Exceeds Threshold (CPU/Memory/EBS/Network exceeds threshold):
 
 The framework uses different threshold levels for different purposes:
 
-1. **Real-time Bottleneck Detection** (`ebs_bottleneck_detector.sh`):
+1. **Real-time Bottleneck Detection** (`disk_bottleneck_detector.sh`):
    - HIGH level: Base thresholds (90%, 50ms)
    - CRITICAL level: Base + 5% (95%) or Base × 2 (100ms)
 
-2. **Offline Performance Analysis** (`ebs_analyzer.sh`):
+2. **Offline Performance Analysis** (`disk_analyzer.sh`):
    - WARNING level: Base × 0.8 (72% utilization, 20ms latency)
 
 ### When to Modify
@@ -551,7 +551,7 @@ export NETWORK_INTERFACE="ens5"  # Specify your network interface
 
 | Feature | AWS | Other Clouds | IDC | Local Linux |
 |---------|-----|--------------|-----|-------------|
-| EBS Monitoring | ✅ | ✅ | ✅ | ✅ |
+| Disk Monitoring | ✅ | ✅ | ✅ | ✅ |
 | ENA Monitoring | ✅ | ❌ | ❌ | ❌ |
 | AWS Baseline Comparison | ✅ | ❌ | ❌ | ❌ |
 | Block Height Monitoring | ✅ | ✅ | ✅ | ✅ |

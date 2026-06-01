@@ -6,7 +6,8 @@
     "eth_blockNumber": "no_params",
     "system_chain": "no_params",
     "chain_getHeader": "no_params",
-    "state_getRuntimeVersion": "no_params"
+    "state_getRuntimeVersion": "no_params",
+    "eth_getBalance": "address_latest"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -17,8 +18,30 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "eth_chainId",
-    "mixed": "eth_chainId,eth_blockNumber,system_chain,chain_getHeader,state_getRuntimeVersion"
+    "single": "eth_getBalance",
+    "mixed": "eth_chainId,eth_blockNumber,system_chain,chain_getHeader,state_getRuntimeVersion",
+    "mixed_weighted": [
+      {
+        "method": "eth_chainId",
+        "weight": 1
+      },
+      {
+        "method": "eth_blockNumber",
+        "weight": 1
+      },
+      {
+        "method": "system_chain",
+        "weight": 1
+      },
+      {
+        "method": "chain_getHeader",
+        "weight": 1
+      },
+      {
+        "method": "state_getRuntimeVersion",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -56,5 +79,17 @@
     "adapter_required": true,
     "adapter_family": "substrate",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split"
+      }
+    ]
   }
 }

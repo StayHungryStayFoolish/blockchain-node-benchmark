@@ -1,0 +1,29 @@
+# fake-node v2 config — tendermint family (ADR-0005).
+#
+# Covers 5 chains under _meta.adapter_family=tendermint:
+#   cosmos-hub, osmosis, celestia, injective, sei.
+#
+# Tendermint RPC: GET path style (e.g. /status, /block, /abci_info) or
+# JSON-RPC POST envelope (same body). Fixtures recorded from cosmos-hub
+# mainnet; sister chains will record per-chain fixtures in step 9.
+
+family: tendermint
+
+methods:
+  status:
+    fixture: status.json
+    tier: cheap
+  abci_info:
+    fixture: abci_info.json
+    tier: cheap
+  block:
+    fixture: block.json
+    tier: expensive
+
+tiers:
+  cheap: 1ms
+  mid: 10ms
+  expensive: 50ms
+
+io:
+  enabled: true

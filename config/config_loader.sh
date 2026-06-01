@@ -129,23 +129,49 @@ NETWORK_MAX_BANDWIDTH_MBPS=$((NETWORK_MAX_BANDWIDTH_GBPS * 1000))
 detect_deployment_platform() {
     if [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]; then
         echo "🔍 Auto-detecting deployment platform..." >&2
-        
-        # Check if in AWS environment (via AWS metadata service)
-        if curl -s --max-time 3 --connect-timeout 2 "${AWS_METADATA_ENDPOINT}/${AWS_METADATA_API_VERSION}/meta-data/instance-id" >/dev/null 2>&1; then
-            DEPLOYMENT_PLATFORM="aws"
-            ENA_MONITOR_ENABLED=true
-            echo "✅ AWS environment detected, ENA monitoring enabled" >&2
+
+        # Delegate to config/cloud_provider.sh (single source of truth for aws/gcp/other).
+        # 关键 bug 修复: 之前这里只用裸 IMDSv1 探测,无 GCP 分支,且 169.254 在
+        # GCP/cloudtop 沙盒下被代理拦截返回 HTML → curl exit 0 → 误判 AWS。
+        # 现在统一走 cloud_provider.sh 的 detect_platform(),它做内容校验且 GCP 优先。
+        local _cp_sh="${CONFIG_DIR}/cloud_provider.sh"
+        if [[ -f "$_cp_sh" ]]; then
+            # 强制重探测: 清空 CLOUD_PROVIDER 避免 cloud_provider.sh 里 :- 短路
+            unset CLOUD_PROVIDER NIC_DRIVER CLOUD_PROVIDER_VARIANT
+            # shellcheck source=/dev/null
+            source "$_cp_sh"
+            DEPLOYMENT_PLATFORM="${CLOUD_PROVIDER:-other}"
         else
+            echo "⚠️  cloud_provider.sh not found at $_cp_sh, falling back to legacy IMDSv1 probe" >&2
+            # Legacy fallback: 不要再误打 AWS,无法判定即 other。
             DEPLOYMENT_PLATFORM="other"
-            ENA_MONITOR_ENABLED=false
-            echo "ℹ️  Non-AWS environment detected (IDC/other cloud), ENA monitoring disabled" >&2
         fi
+
+        case "$DEPLOYMENT_PLATFORM" in
+            aws)
+                ENA_MONITOR_ENABLED=true
+                echo "✅ AWS environment detected, ENA monitoring enabled" >&2
+                ;;
+            gcp)
+                ENA_MONITOR_ENABLED=false
+                echo "✅ GCP environment detected, ENA monitoring disabled (use gvnic monitor instead)" >&2
+                ;;
+            *)
+                DEPLOYMENT_PLATFORM="other"
+                ENA_MONITOR_ENABLED=false
+                echo "ℹ️  Non-AWS/GCP environment detected (IDC/other cloud), ENA monitoring disabled" >&2
+                ;;
+        esac
     else
         echo "🔧 Using manually configured deployment platform: $DEPLOYMENT_PLATFORM" >&2
         case "$DEPLOYMENT_PLATFORM" in
             "aws")
                 ENA_MONITOR_ENABLED=true
                 echo "✅ AWS environment, ENA monitoring enabled" >&2
+                ;;
+            "gcp")
+                ENA_MONITOR_ENABLED=false
+                echo "✅ GCP environment, ENA monitoring disabled (use gvnic monitor instead)" >&2
                 ;;
             "other"|"idc")
                 ENA_MONITOR_ENABLED=false

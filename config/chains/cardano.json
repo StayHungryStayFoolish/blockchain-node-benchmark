@@ -2,23 +2,54 @@
   "chain_type": "cardano",
   "methods": {},
   "param_formats": {
-    "POST /address_info": "body_addresses_array",
-    "POST /tx_info": "body_tx_hashes_array",
-    "POST /address_assets": "body_addresses_array",
-    "POST /block_info": "body_block_hashes_array",
-    "POST /asset_info": "body_asset_list_array"
+    "GET_TIP": "no_params",
+    "GET_BLOCKS": "no_params",
+    "POST_ADDRESS_INFO": "body_addresses_array",
+    "POST_TX_INFO": "body_tx_hashes_array",
+    "POST_BLOCK_TXS": "body_block_hashes_array",
+    "GET_EPOCH_INFO": "query_epoch_int"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "addr1qxahjgt8c9fsjrc8g0937h5q2cqpyglq9kyy62834ngfyct0kzq5as673n2e05chwvsptgx0ngwtggj20shf84h4fx0qm4kw4a",
+    "target_address": "addr1q9hqwyelcx6l4kulh8lz3ztle90md90m96yjnu8ac8hvm8w7m3cdnhmznqdtwxs3pl7runf7g9yu86s900kh3ddpd8fquhawve",
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "GET /tip",
-    "mixed": "POST /address_info,POST /tx_info,POST /address_assets,POST /block_info,POST /asset_info"
+    "single": "POST_ADDRESS_INFO",
+    "mixed": "GET_TIP,GET_BLOCKS,POST_ADDRESS_INFO,POST_TX_INFO,POST_BLOCK_TXS,GET_EPOCH_INFO,POST_ASSET_INFO",
+    "mixed_weighted": [
+      {
+        "method": "GET_TIP",
+        "weight": 1
+      },
+      {
+        "method": "GET_BLOCKS",
+        "weight": 1
+      },
+      {
+        "method": "POST_ADDRESS_INFO",
+        "weight": 1
+      },
+      {
+        "method": "POST_TX_INFO",
+        "weight": 1
+      },
+      {
+        "method": "POST_BLOCK_TXS",
+        "weight": 1
+      },
+      {
+        "method": "GET_EPOCH_INFO",
+        "weight": 1
+      },
+      {
+        "method": "POST_ASSET_INFO",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -28,7 +59,7 @@
     "extracted_at": "2026-05-24T00:26:38Z",
     "extracted_by": "subagent_batch_S0-inv",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Extracted from research-md by subagent.",
     "normalized_at": "2026-05-24T04:43:09.937152+00:00",
     "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
     "original_rpc_protocol": "rest",
@@ -48,7 +79,88 @@
     ],
     "original_notes": "EUTXO 模型;cardano-node 无原生 HTTP,必经 middleware(Koios);多数 method 是 POST + JSON array body",
     "adapter_required": true,
-    "adapter_family": "ogmios",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family": "rest",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "adapter_family_corrected_at": "2026-05-28T00:00:00Z",
+    "adapter_family_correction_note": "ADR-0005: was 'ogmios' (mismatched, Ogmios = WebSocket, Dandelion public endpoint dead). Corrected to 'rest' per docs/zh/chains/06-cardano.md §11.8 推荐;EUTXO is a data-model concept (reader layer), not transport — Koios REST is just HTTP + JSON, same family as algorand/aptos/tezos/ton.",
+    "rest_paths": {
+      "GET_TIP": {
+        "method": "GET",
+        "path": "/tip"
+      },
+      "GET_BLOCKS": {
+        "method": "GET",
+        "path": "/blocks?limit=1"
+      },
+      "POST_ADDRESS_INFO": {
+        "method": "POST",
+        "path": "/address_info",
+        "body": {
+          "_addresses": [
+            "{address}"
+          ]
+        }
+      },
+      "POST_TX_INFO": {
+        "method": "POST",
+        "path": "/tx_info",
+        "body": {
+          "_tx_hashes": [
+            "{address}"
+          ]
+        }
+      },
+      "POST_BLOCK_TXS": {
+        "method": "POST",
+        "path": "/block_txs",
+        "body": {
+          "_block_hashes": [
+            "{address}"
+          ]
+        }
+      },
+      "GET_EPOCH_INFO": {
+        "method": "GET",
+        "path": "/epoch_info"
+      }
+    },
+    "health_probe": {
+      "method": "GET",
+      "path": "/tip",
+      "parse_jq": ".[0].block_height"
+    }
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "rest",
+        "url_patterns": [
+          {
+            "pattern": "^/tip$",
+            "method_name": "GET_TIP"
+          },
+          {
+            "pattern": "^/blocks$",
+            "method_name": "GET_BLOCKS"
+          },
+          {
+            "pattern": "^/address_info$",
+            "method_name": "POST_ADDRESS_INFO"
+          },
+          {
+            "pattern": "^/tx_info$",
+            "method_name": "POST_TX_INFO"
+          },
+          {
+            "pattern": "^/block_txs$",
+            "method_name": "POST_BLOCK_TXS"
+          },
+          {
+            "pattern": "^/epoch_info$",
+            "method_name": "GET_EPOCH_INFO"
+          }
+        ]
+      }
+    ]
   }
 }

@@ -78,112 +78,112 @@ class NodeQPSAnalyzer:
         """Dynamically get key metric fields, replacing hardcoded device names - full version"""
         base_metrics = ['cpu_usage', 'mem_usage']
         
-        # Dynamically find EBS utilization field (prioritize DATA device, then ACCOUNTS device)
-        ebs_util_field = None
+        # Dynamically find Disk utilization field (prioritize DATA device, then ACCOUNTS device)
+        disk_util_field = None
         # First find DATA device field (must exist)
         for col in df.columns:
             if col.startswith('data_') and col.endswith('_util'):
-                ebs_util_field = col
+                disk_util_field = col
                 break
         
         # If no DATA device field, find ACCOUNTS device field (optional)
-        if not ebs_util_field:
+        if not disk_util_field:
             for col in df.columns:
                 if col.startswith('accounts_') and col.endswith('_util'):
-                    ebs_util_field = col
+                    disk_util_field = col
                     break
         
-        # Dynamically find EBS latency field (prioritize DATA device's r_await)
-        ebs_latency_field = None
+        # Dynamically find Disk latency field (prioritize DATA device's r_await)
+        disk_latency_field = None
         # First find DATA device's r_await field
         for col in df.columns:
             if col.startswith('data_') and col.endswith('_r_await'):
-                ebs_latency_field = col
+                disk_latency_field = col
                 break
         
         # If no DATA device's r_await, find DATA device's avg_await
-        if not ebs_latency_field:
+        if not disk_latency_field:
             for col in df.columns:
                 if col.startswith('data_') and col.endswith('_avg_await'):
-                    ebs_latency_field = col
+                    disk_latency_field = col
                     break
         
         # If DATA device has none, find ACCOUNTS device latency field (optional)
-        if not ebs_latency_field:
+        if not disk_latency_field:
             for col in df.columns:
                 if col.startswith('accounts_') and col.endswith('_r_await'):
-                    ebs_latency_field = col
+                    disk_latency_field = col
                     break
         
-        if not ebs_latency_field:
+        if not disk_latency_field:
             for col in df.columns:
                 if col.startswith('accounts_') and col.endswith('_avg_await'):
-                    ebs_latency_field = col
+                    disk_latency_field = col
                     break
         
-        # Dynamically find other important EBS metrics (prioritize DATA device)
-        ebs_iops_field = None
+        # Dynamically find other important Disk metrics (prioritize DATA device)
+        disk_iops_field = None
         # First find DATA device field
         for col in df.columns:
             if col.startswith('data_') and col.endswith('_total_iops'):
-                ebs_iops_field = col
+                disk_iops_field = col
                 break
         # If no DATA device field, find ACCOUNTS device field (optional)
-        if not ebs_iops_field:
+        if not disk_iops_field:
             for col in df.columns:
                 if col.startswith('accounts_') and col.endswith('_total_iops'):
-                    ebs_iops_field = col
+                    disk_iops_field = col
                     break
         
-        ebs_throughput_field = None
+        disk_throughput_field = None
         # First find DATA device field
         for col in df.columns:
             if col.startswith('data_') and col.endswith('_throughput_mibs'):
-                ebs_throughput_field = col
+                disk_throughput_field = col
                 break
         # If no DATA device field, find ACCOUNTS device field (optional)
-        if not ebs_throughput_field:
+        if not disk_throughput_field:
             for col in df.columns:
                 if col.startswith('accounts_') and col.endswith('_throughput_mibs'):
-                    ebs_throughput_field = col
+                    disk_throughput_field = col
                     break
         
-        ebs_queue_field = None
+        disk_queue_field = None
         # First find DATA device field
         for col in df.columns:
             if col.startswith('data_') and col.endswith('_aqu_sz'):
-                ebs_queue_field = col
+                disk_queue_field = col
                 break
         # If no DATA device field, find ACCOUNTS device field (optional)
-        if not ebs_queue_field:
+        if not disk_queue_field:
             for col in df.columns:
                 if col.startswith('accounts_') and col.endswith('_aqu_sz'):
-                    ebs_queue_field = col
+                    disk_queue_field = col
                     break
         
         # Add discovered fields
-        if ebs_util_field:
-            base_metrics.append(ebs_util_field)
-            logger.info(f"✅ Dynamically discovered EBS utilization field: {ebs_util_field}")
+        if disk_util_field:
+            base_metrics.append(disk_util_field)
+            logger.info(f"✅ Dynamically discovered disk utilization field: {disk_util_field}")
         
-        if ebs_latency_field:
-            base_metrics.append(ebs_latency_field)
-            logger.info(f"✅ Dynamically discovered EBS latency field: {ebs_latency_field}")
+        if disk_latency_field:
+            base_metrics.append(disk_latency_field)
+            logger.info(f"✅ Dynamically discovered disk latency field: {disk_latency_field}")
         
-        if ebs_iops_field:
-            base_metrics.append(ebs_iops_field)
-            logger.info(f"✅ Dynamically discovered EBS IOPS field: {ebs_iops_field}")
+        if disk_iops_field:
+            base_metrics.append(disk_iops_field)
+            logger.info(f"✅ Dynamically discovered Disk IOPS field: {disk_iops_field}")
         
-        if ebs_throughput_field:
-            base_metrics.append(ebs_throughput_field)
-            logger.info(f"✅ Dynamically discovered EBS throughput field: {ebs_throughput_field}")
+        if disk_throughput_field:
+            base_metrics.append(disk_throughput_field)
+            logger.info(f"✅ Dynamically discovered disk throughput field: {disk_throughput_field}")
         
-        if ebs_queue_field:
-            base_metrics.append(ebs_queue_field)
-            logger.info(f"✅ Dynamically discovered EBS queue depth field: {ebs_queue_field}")
+        if disk_queue_field:
+            base_metrics.append(disk_queue_field)
+            logger.info(f"✅ Dynamically discovered Disk queue depth field: {disk_queue_field}")
         
-        if not any([ebs_util_field, ebs_latency_field, ebs_iops_field]):
-            logger.warning("⚠️ No EBS-related fields discovered, may affect bottleneck analysis accuracy")
+        if not any([disk_util_field, disk_latency_field, disk_iops_field]):
+            logger.warning("⚠️ No Disk-related fields discovered, may affect bottleneck analysis accuracy")
         
         logger.info(f"📊 Total dynamic metric fields: {len(base_metrics)}")
         return base_metrics
@@ -709,7 +709,7 @@ class NodeQPSAnalyzer:
                 else:
                     colors_scatter.append(UnifiedChartStyle.COLORS["critical"])
             
-            # Draw scatter points (reference EBS chart style: small dots, no black border)
+            # Draw scatter points (reference Disk chart style: small dots, no black border)
             ax5.scatter(success_df['qps'], success_df['success_rate'], 
                        c=colors_scatter, s=60, alpha=0.8, zorder=2)
             
@@ -961,7 +961,7 @@ class NodeQPSAnalyzer:
         bottleneck_weights = {
             'CPU': 0.2,
             'Memory': 0.25,
-            'EBS': 0.3,
+            'Disk': 0.3,
             'Network': 0.15,
             'RPC': 0.1
         }
@@ -1019,8 +1019,8 @@ class NodeQPSAnalyzer:
                 recommendations.append("🔧 CPU bottleneck: Consider upgrading CPU or optimizing compute-intensive processes")
             if 'Memory' in bottleneck_types:
                 recommendations.append("🔧 Memory bottleneck: Consider increasing memory or optimizing memory usage")
-            if 'EBS' in bottleneck_types:
-                recommendations.append("🔧 Storage bottleneck: Consider upgrading EBS type or optimizing I/O patterns")
+            if 'Disk' in bottleneck_types:
+                recommendations.append("🔧 Storage bottleneck: Consider upgrading Disk type or optimizing I/O patterns")
             if 'Network' in bottleneck_types:
                 recommendations.append("🔧 Network bottleneck: Consider upgrading network bandwidth or optimizing network configuration")
             if 'RPC' in bottleneck_types:

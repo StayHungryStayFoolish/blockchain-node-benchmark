@@ -17,8 +17,30 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "/status",
-    "mixed": "/status,/cosmos/bank/v1beta1/balances/{address},/injective/exchange/v1beta1/spot/markets,/injective/exchange/v1beta1/derivative/markets,/injective/oracle/v1beta1/params"
+    "single": "/cosmos/bank/v1beta1/balances/{address}",
+    "mixed": "/status,/cosmos/bank/v1beta1/balances/{address},/injective/exchange/v1beta1/spot/markets,/injective/exchange/v1beta1/derivative/markets,/injective/oracle/v1beta1/params",
+    "mixed_weighted": [
+      {
+        "method": "/status",
+        "weight": 1
+      },
+      {
+        "method": "/cosmos/bank/v1beta1/balances/{address}",
+        "weight": 1
+      },
+      {
+        "method": "/injective/exchange/v1beta1/spot/markets",
+        "weight": 1
+      },
+      {
+        "method": "/injective/exchange/v1beta1/derivative/markets",
+        "weight": 1
+      },
+      {
+        "method": "/injective/oracle/v1beta1/params",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [
@@ -52,5 +74,17 @@
     "adapter_required": true,
     "adapter_family": "tendermint",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split"
+      }
+    ]
   }
 }

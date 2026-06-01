@@ -62,7 +62,7 @@ The framework monitors itself to:
 graph LR
     A[unified_monitor.sh<br/>Main Collector] --> B[CPU Metrics]
     A --> C[Memory Metrics]
-    A --> D[EBS Metrics]
+    A --> D[Disk Metrics]
     A --> E[Network Metrics]
     A --> F[ENA Metrics]
     A --> G[Block Height]
@@ -115,7 +115,7 @@ mem_usage      # Memory utilization (%)
 free -m | awk '/Mem:/ {print $3,$2,($3/$2)*100}'
 ```
 
-#### 3. EBS Storage Metrics (42 fields for 2 devices)
+#### 3. Disk Storage Metrics (42 fields for 2 devices)
 
 **Per-Device Metrics (21 fields each):**
 
@@ -268,8 +268,8 @@ sequenceDiagram
         System-->>Monitor: CPU data
         Monitor->>System: free (Memory)
         System-->>Monitor: Memory data
-        Monitor->>System: iostat (EBS)
-        System-->>Monitor: EBS data
+        Monitor->>System: iostat (Disk)
+        System-->>Monitor: Disk data
         Monitor->>System: sar (Network)
         System-->>Monitor: Network data
         Monitor->>System: ethtool (ENA)
@@ -498,8 +498,8 @@ system_cached_gb,system_buffers_gb,system_anon_pages_gb,system_mapped_gb,system_
   "timestamp": "2025-10-26T00:00:00+08:00",
   "cpu_usage": 45.2,
   "mem_usage": 62.8,
-  "ebs_util": 78.5,
-  "ebs_latency": 12.3,
+  "disk_util": 78.5,
+  "disk_latency": 12.3,
   "network_util": 35.6,
   "current_qps": 5000,
   "monitoring_overhead": {
@@ -575,7 +575,7 @@ The framework uses `bottleneck_detector.sh` and `master_qps_executor.sh` to impl
 
 **Scenario A-Resource - Resource Bottleneck + Node Healthy → False Positive**
 ```bash
-Resource bottleneck detected (CPU/Memory/EBS/Network exceeded)
+Resource bottleneck detected (CPU/Memory/Disk/Network exceeded)
     ↓
 BOTTLENECK_COUNT++
     ↓
@@ -614,7 +614,7 @@ Accumulate count, stop after 3 consecutive times → Save bottleneck context
 
 **Scenario C - Node Persistently Unhealthy (No Bottleneck) → Node Failure**
 ```bash
-Resource metrics normal (CPU/Memory/EBS/Network all < threshold)
+Resource metrics normal (CPU/Memory/Disk/Network all < threshold)
 RPC performance normal (success rate >= 95% AND latency <= 1000ms)
     ↓
 Call bottleneck_detector.sh to check node health
@@ -665,7 +665,7 @@ Difference from resource bottlenecks:
 
 ```bash
 # Condition 1: Resource Limit Exceeded
-if Resource Exceeds Threshold (CPU>85% OR Memory>90% OR EBS>90% OR Network>80% OR Error>5%):
+if Resource Exceeds Threshold (CPU>85% OR Memory>90% OR Disk>90% OR Network>80% OR Error>5%):
     BOTTLENECK_COUNT++
     
     # Condition 2: Consecutive Detection
@@ -771,7 +771,7 @@ Using `BOTTLENECK_ANALYSIS_WINDOW=30` seconds:
 
 ```
 1. Bottleneck Detection (master_qps_executor.sh::check_bottleneck_during_test)
-   ├─ Detect resource bottlenecks (CPU/Memory/EBS/Network/QPS)
+   ├─ Detect resource bottlenecks (CPU/Memory/Disk/Network/QPS)
    ├─ Unconditionally call trigger_immediate_bottleneck_analysis()
    │   └─ Call bottleneck_detector.sh detect
    │       ├─ Detect resource bottlenecks (7 dimensions)

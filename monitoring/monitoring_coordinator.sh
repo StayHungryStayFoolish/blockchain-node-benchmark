@@ -34,7 +34,7 @@ declare -A MONITOR_TASKS=(
     ["block_height"]="block_height_monitor.sh"
     ["ena_network"]="ena_network_monitor.sh"
     ["network"]="network_monitor.sh"             # Y+ architecture (replaces ena_network for non-AWS)
-    ["ebs_bottleneck"]="ebs_bottleneck_detector.sh"
+    ["disk_bottleneck"]="disk_bottleneck_detector.sh"
     ["iostat"]="iostat_collector.sh"  # Managed by unified_monitor.sh
 )
 
@@ -162,7 +162,7 @@ start_monitor() {
                 cd "${script_dir}" && ./"${script_name}" start 0 "$MONITOR_INTERVAL"
             ) &
             ;;
-        "ebs_bottleneck")
+        "disk_bottleneck")
             # QPS test mode: no duration passed, run indefinitely
             # Set correct working directory and environment variables to ensure subprocess can load dependencies correctly
             (
@@ -228,7 +228,7 @@ start_all_monitors() {
     echo "🚀 Starting all monitoring tasks (monitoring interval: ${MONITOR_INTERVAL} seconds)"
     
     # Start monitoring tasks by priority - start all necessary monitoring scripts
-    local monitors_to_start=("unified" "ena_network" "network" "block_height" "ebs_bottleneck")
+    local monitors_to_start=("unified" "ena_network" "network" "block_height" "disk_bottleneck")
     
     for monitor in "${monitors_to_start[@]}"; do
         start_monitor "$monitor"
@@ -329,7 +329,7 @@ show_iostat_status() {
             local iostat_pid=$(pgrep -f "iostat -dx [0-9]+" | head -1)
             echo "  └─ iostat process: ✅ Running (PID: $iostat_pid)"
         else
-            echo "  └─ iostat process: ⚠️  Not detected (may be in non-Linux environment or EBS device not configured)"
+            echo "  └─ iostat process: ⚠️  Not detected (may be in non-Linux environment or Disk device not configured)"
         fi
         
         # Check iostat data files
@@ -416,7 +416,7 @@ cleanup_coordinator() {
     
     # Enhanced cleanup: ensure all related processes are cleaned
     echo "🔍 Cleaning up possible orphan processes..."
-    pkill -f "ebs_bottleneck_detector" 2>/dev/null || true
+    pkill -f "disk_bottleneck_detector" 2>/dev/null || true
     pkill -f "ena_network_monitor" 2>/dev/null || true
     pkill -f "^.*network_monitor.sh" 2>/dev/null || true  # Y+ architecture
     pkill -f "block_height_monitor" 2>/dev/null || true

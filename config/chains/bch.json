@@ -6,7 +6,8 @@
     "getnetworkinfo": "no_params",
     "getmempoolinfo": "no_params",
     "getblock": "[blockhash]",
-    "getrawtransaction": "[txhash,verbose]"
+    "getrawtransaction": "[txhash,verbose]",
+    "getreceivedbyaddress": "single_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -17,8 +18,30 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "getblockcount",
-    "mixed": "getblockcount,getnetworkinfo,getmempoolinfo,getblock,getrawtransaction"
+    "single": "getreceivedbyaddress",
+    "mixed": "getblockcount,getnetworkinfo,getmempoolinfo,getblock,getrawtransaction",
+    "mixed_weighted": [
+      {
+        "method": "getblockcount",
+        "weight": 1
+      },
+      {
+        "method": "getnetworkinfo",
+        "weight": 1
+      },
+      {
+        "method": "getmempoolinfo",
+        "weight": 1
+      },
+      {
+        "method": "getblock",
+        "weight": 1
+      },
+      {
+        "method": "getrawtransaction",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -50,5 +73,20 @@
     "adapter_required": true,
     "adapter_family": "bitcoin_jsonrpc",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split",
+        "auth": {
+          "type": "basic"
+        }
+      }
+    ]
   }
 }

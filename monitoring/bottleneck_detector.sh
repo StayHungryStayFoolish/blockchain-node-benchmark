@@ -23,7 +23,9 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/../utils/ebs_converter.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../utils/disk_converter.sh"
+# CSV Schema Registry (reader 经 registry resolve 取 provider-aware 物理列名, 不裸写)
+source "$(dirname "${BASH_SOURCE[0]}")/../config/csv_schema_registry.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh"
 
 # Initialize unified logger
@@ -33,7 +35,7 @@ init_logger "bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/bottleneck_detector.lo
 BOTTLENECK_LOG="${LOGS_DIR}/bottleneck_detector.log"
 # Dynamically build device field matching patterns - fix hardcoded device name issue
 build_device_field_patterns() {
-    local field_type="$1"  # util, r_await, avg_await, aws_standard_iops, throughput_mibs
+    local field_type="$1"  # util, r_await, avg_await, throughput_mibs (provider-aware iops 见 build_provider_aware_patterns)
     local patterns=()
     
     # DATA device pattern (required)
@@ -49,16 +51,60 @@ build_device_field_patterns() {
     echo "${patterns[*]}"
 }
 
+# === provider-aware 物理列名解析 (reader 经 registry, 与 writer 同一事实源) ===
+# 从 CSV header+data 行取 cloud_provider 列值定 provider (铁律: 唯一合法来源 = CSV 列, 不探测).
+# 入参: header 数组名, data 数组名 (nameref). 取不到→中立兜底 other.
+_bd_provider_from_csv() {
+    local -n _h_ref="$1"
+    local -n _d_ref="$2"
+    local p="" i
+    for i in "${!_h_ref[@]}"; do
+        if [[ "${_h_ref[i]}" == "cloud_provider" ]]; then
+            p="${_d_ref[i]:-}"
+            break
+        fi
+    done
+    p=$(echo "$p" | tr -d ' \t\r\n')
+    case "$p" in aws|gcp|other) echo "$p" ;; *) echo "other" ;; esac
+}
+
+# 经 registry 解析逻辑名→物理列名; registry 缺失返回空 (上层走既有 0 兜底, 不自拼裸名).
+_bd_resolve() {
+    local logical="$1" prefix="$2" provider="$3"
+    if declare -F csv_registry_resolve >/dev/null 2>&1; then
+        csv_registry_resolve "$logical" "$provider" "$prefix"
+    else
+        echo ""
+    fi
+}
+
+# 构造 provider-aware 字段全变体匹配模式 (模块加载时不知 CSV provider, 故含 aws/gcp/other 三变体,
+# 任一写入云的 CSV 列名都能命中). 用于 DISK_IOPS_PATTERNS 等模块级 pattern.
+build_provider_aware_patterns() {
+    local logical="$1"   # disk_iops_provider_adjusted | disk_throughput_provider_adjusted
+    local patterns=() variant phys
+    for variant in aws gcp other; do
+        phys="$(_bd_resolve "$logical" "data_${LEDGER_DEVICE}" "$variant")"
+        [[ -n "$phys" ]] && patterns+=("$phys")
+        if is_accounts_configured; then
+            phys="$(_bd_resolve "$logical" "accounts_${ACCOUNTS_DEVICE}" "$variant")"
+            [[ -n "$phys" ]] && patterns+=("$phys")
+        fi
+    done
+    local IFS='|'
+    echo "${patterns[*]}"
+}
+
 # Build all required field patterns
-EBS_UTIL_PATTERNS=$(build_device_field_patterns "util")
-EBS_R_AWAIT_PATTERNS=$(build_device_field_patterns "r_await")
-EBS_AVG_AWAIT_PATTERNS=$(build_device_field_patterns "avg_await")
-EBS_AWS_IOPS_PATTERNS=$(build_device_field_patterns "aws_standard_iops")
-EBS_THROUGHPUT_PATTERNS=$(build_device_field_patterns "throughput_mibs")
+DISK_UTIL_PATTERNS=$(build_device_field_patterns "util")
+DISK_R_AWAIT_PATTERNS=$(build_device_field_patterns "r_await")
+DISK_AVG_AWAIT_PATTERNS=$(build_device_field_patterns "avg_await")
+DISK_IOPS_PATTERNS=$(build_provider_aware_patterns "disk_iops_provider_adjusted")
+DISK_THROUGHPUT_PATTERNS=$(build_device_field_patterns "throughput_mibs")
 
 log_info "🔧 Dynamic field pattern construction completed:"
-log_info "   EBS utilization pattern: $EBS_UTIL_PATTERNS"
-log_info "   EBS latency pattern: $EBS_R_AWAIT_PATTERNS"
+log_info "   Disk utilization pattern: $DISK_UTIL_PATTERNS"
+log_info "   Disk latency pattern: $DISK_R_AWAIT_PATTERNS"
 
 # Error handling function
 handle_detector_error() {
@@ -80,10 +126,10 @@ readonly BOTTLENECK_COUNTERS_FILE="${MEMORY_SHARE_DIR}/bottleneck_counters.json"
 create_performance_metrics_json() {
     local cpu_usage="$1"
     local memory_usage="$2"
-    local ebs_util="$3"
-    local ebs_latency="$4"
-    local ebs_aws_iops="$5"
-    local ebs_throughput="$6"
+    local disk_util="$3"
+    local disk_latency="$4"
+    local disk_iops="$5"
+    local disk_throughput="$6"
     local network_util="$7"
     local error_rate="$8"
     
@@ -91,10 +137,10 @@ create_performance_metrics_json() {
 {
     "cpu_usage": ${cpu_usage:-null},
     "memory_usage": ${memory_usage:-null},
-    "ebs_util": ${ebs_util:-null},
-    "ebs_latency": ${ebs_latency:-null},
-    "ebs_aws_iops": ${ebs_aws_iops:-null},
-    "ebs_throughput": ${ebs_throughput:-null},
+    "disk_util": ${disk_util:-null},
+    "disk_latency": ${disk_latency:-null},
+    "disk_iops": ${disk_iops:-null},
+    "disk_throughput": ${disk_throughput:-null},
     "network_util": ${network_util:-null},
     "error_rate": ${error_rate:-null}
 }
@@ -113,10 +159,10 @@ generate_bottleneck_status_json() {
     # Extract values from JSON
     local cpu_usage=$(echo "$metrics_json" | jq -r '.cpu_usage // null' 2>/dev/null || echo "null")
     local memory_usage=$(echo "$metrics_json" | jq -r '.memory_usage // null' 2>/dev/null || echo "null")
-    local ebs_util=$(echo "$metrics_json" | jq -r '.ebs_util // null' 2>/dev/null || echo "null")
-    local ebs_latency=$(echo "$metrics_json" | jq -r '.ebs_latency // null' 2>/dev/null || echo "null")
-    local ebs_aws_iops=$(echo "$metrics_json" | jq -r '.ebs_aws_iops // null' 2>/dev/null || echo "null")
-    local ebs_throughput=$(echo "$metrics_json" | jq -r '.ebs_throughput // null' 2>/dev/null || echo "null")
+    local disk_util=$(echo "$metrics_json" | jq -r '.disk_util // null' 2>/dev/null || echo "null")
+    local disk_latency=$(echo "$metrics_json" | jq -r '.disk_latency // null' 2>/dev/null || echo "null")
+    local disk_iops=$(echo "$metrics_json" | jq -r '.disk_iops // null' 2>/dev/null || echo "null")
+    local disk_throughput=$(echo "$metrics_json" | jq -r '.disk_throughput // null' 2>/dev/null || echo "null")
     local network_util=$(echo "$metrics_json" | jq -r '.network_util // null' 2>/dev/null || echo "null")
     local error_rate=$(echo "$metrics_json" | jq -r '.error_rate // null' 2>/dev/null || echo "null")
     
@@ -144,26 +190,26 @@ generate_bottleneck_status_json() {
     "performance_metrics": {
         "cpu_usage": $cpu_usage,
         "memory_usage": $memory_usage,
-        "ebs_util": $ebs_util,
-        "ebs_latency": $ebs_latency,
-        "ebs_aws_iops": $ebs_aws_iops,
-        "ebs_throughput": $ebs_throughput,
+        "disk_util": $disk_util,
+        "disk_latency": $disk_latency,
+        "disk_iops": $disk_iops,
+        "disk_throughput": $disk_throughput,
         "network_util": $network_util,
         "error_rate": $error_rate
     },
-    "ebs_baselines": {
-        "data_baseline_iops": ${DATA_VOL_MAX_IOPS:-0},
-        "data_baseline_throughput": ${DATA_VOL_MAX_THROUGHPUT:-0},
-        "accounts_baseline_iops": ${ACCOUNTS_VOL_MAX_IOPS:-0},
-        "accounts_baseline_throughput": ${ACCOUNTS_VOL_MAX_THROUGHPUT:-0}
+    "disk_provisioned": {
+        "data_provisioned_iops": ${DATA_VOL_MAX_IOPS:-0},
+        "data_provisioned_throughput": ${DATA_VOL_MAX_THROUGHPUT:-0},
+        "accounts_provisioned_iops": ${ACCOUNTS_VOL_MAX_IOPS:-0},
+        "accounts_provisioned_throughput": ${ACCOUNTS_VOL_MAX_THROUGHPUT:-0}
     },
     "counters": {
         "cpu": ${BOTTLENECK_COUNTERS["cpu"]:-0},
         "memory": ${BOTTLENECK_COUNTERS["memory"]:-0},
-        "ebs_util": ${BOTTLENECK_COUNTERS["ebs_util"]:-0},
-        "ebs_latency": ${BOTTLENECK_COUNTERS["ebs_latency"]:-0},
-        "ebs_aws_iops": ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0},
-        "ebs_aws_throughput": ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0},
+        "disk_util": ${BOTTLENECK_COUNTERS["disk_util"]:-0},
+        "disk_latency": ${BOTTLENECK_COUNTERS["disk_latency"]:-0},
+        "disk_iops": ${BOTTLENECK_COUNTERS["disk_iops"]:-0},
+        "disk_throughput": ${BOTTLENECK_COUNTERS["disk_throughput"]:-0},
         "network": ${BOTTLENECK_COUNTERS["network"]:-0},
         "ena_limit": ${BOTTLENECK_COUNTERS["ena_limit"]:-0},
         "error_rate": ${BOTTLENECK_COUNTERS["error_rate"]:-0},
@@ -230,17 +276,17 @@ initialize_bottleneck_counters() {
     BOTTLENECK_COUNTERS["ena_limit"]=0
     
     # DATA device counters
-    BOTTLENECK_COUNTERS["ebs_util"]=0
-    BOTTLENECK_COUNTERS["ebs_latency"]=0
-    BOTTLENECK_COUNTERS["ebs_aws_iops"]=0
-    BOTTLENECK_COUNTERS["ebs_aws_throughput"]=0
+    BOTTLENECK_COUNTERS["disk_util"]=0
+    BOTTLENECK_COUNTERS["disk_latency"]=0
+    BOTTLENECK_COUNTERS["disk_iops"]=0
+    BOTTLENECK_COUNTERS["disk_throughput"]=0
     
     # ACCOUNTS device counters (if ACCOUNTS device is configured)
     if is_accounts_configured; then
-        BOTTLENECK_COUNTERS["accounts_ebs_util"]=0
-        BOTTLENECK_COUNTERS["accounts_ebs_latency"]=0
-        BOTTLENECK_COUNTERS["accounts_ebs_aws_iops"]=0
-        BOTTLENECK_COUNTERS["accounts_ebs_aws_throughput"]=0
+        BOTTLENECK_COUNTERS["accounts_disk_util"]=0
+        BOTTLENECK_COUNTERS["accounts_disk_latency"]=0
+        BOTTLENECK_COUNTERS["accounts_disk_iops"]=0
+        BOTTLENECK_COUNTERS["accounts_disk_throughput"]=0
         log_debug "ACCOUNTS device bottleneck counters initialized"
     fi
     
@@ -259,17 +305,17 @@ reset_resource_bottleneck_counters() {
     BOTTLENECK_COUNTERS["ena_limit"]=0
     
     # DATA device counters
-    BOTTLENECK_COUNTERS["ebs_util"]=0
-    BOTTLENECK_COUNTERS["ebs_latency"]=0
-    BOTTLENECK_COUNTERS["ebs_aws_iops"]=0
-    BOTTLENECK_COUNTERS["ebs_aws_throughput"]=0
+    BOTTLENECK_COUNTERS["disk_util"]=0
+    BOTTLENECK_COUNTERS["disk_latency"]=0
+    BOTTLENECK_COUNTERS["disk_iops"]=0
+    BOTTLENECK_COUNTERS["disk_throughput"]=0
     
     # ACCOUNTS device counters
     if is_accounts_configured; then
-        BOTTLENECK_COUNTERS["accounts_ebs_util"]=0
-        BOTTLENECK_COUNTERS["accounts_ebs_latency"]=0
-        BOTTLENECK_COUNTERS["accounts_ebs_aws_iops"]=0
-        BOTTLENECK_COUNTERS["accounts_ebs_aws_throughput"]=0
+        BOTTLENECK_COUNTERS["accounts_disk_util"]=0
+        BOTTLENECK_COUNTERS["accounts_disk_latency"]=0
+        BOTTLENECK_COUNTERS["accounts_disk_iops"]=0
+        BOTTLENECK_COUNTERS["accounts_disk_throughput"]=0
     fi
     
     # Preserve RPC counters:
@@ -295,14 +341,14 @@ init_bottleneck_detection() {
     echo "📊 Bottleneck detection thresholds:" | tee -a "$BOTTLENECK_LOG"
     echo "  CPU usage: ${BOTTLENECK_CPU_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
     echo "  Memory usage: ${BOTTLENECK_MEMORY_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
-    echo "  EBS utilization: ${BOTTLENECK_EBS_UTIL_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
-    echo "  EBS latency: ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms" | tee -a "$BOTTLENECK_LOG"
+    echo "  Disk utilization: ${BOTTLENECK_DISK_UTIL_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
+    echo "  Disk latency: ${BOTTLENECK_DISK_LATENCY_THRESHOLD}ms" | tee -a "$BOTTLENECK_LOG"
     echo "  Network utilization: ${BOTTLENECK_NETWORK_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
     echo "  Error rate: ${BOTTLENECK_ERROR_RATE_THRESHOLD}%" | tee -a "$BOTTLENECK_LOG"
     
-    # Display EBS baseline configuration
+    # Display disk provisioned configuration
     if [[ -n "$DATA_VOL_MAX_IOPS" ]]; then
-        echo "📋 EBS performance baselines:" | tee -a "$BOTTLENECK_LOG"
+        echo "📋 Disk provisioned limits:" | tee -a "$BOTTLENECK_LOG"
         echo "  DATA device baseline: ${DATA_VOL_MAX_IOPS} IOPS, ${DATA_VOL_MAX_THROUGHPUT} MiB/s" | tee -a "$BOTTLENECK_LOG"
         
         # Fix: Use complete ACCOUNTS check logic, consistent with other places
@@ -366,48 +412,48 @@ check_memory_bottleneck() {
     return 1  # No bottleneck detected
 }
 
-check_ebs_bottleneck() {
-    local ebs_aws_iops="$1"
-    local ebs_throughput="$2"
+check_disk_bottleneck() {
+    local disk_iops="$1"
+    local disk_throughput="$2"
     local device_type="${3:-data}" # Device type: "data" or "accounts", default is "data"
     
     local bottleneck_detected=false
     
     # Select correct baseline values and counter prefix based on device type
-    local baseline_iops="$DATA_VOL_MAX_IOPS"
-    local baseline_throughput="$DATA_VOL_MAX_THROUGHPUT"
-    local counter_prefix="ebs"
+    local provisioned_iops="$DATA_VOL_MAX_IOPS"
+    local provisioned_throughput="$DATA_VOL_MAX_THROUGHPUT"
+    local counter_prefix="disk"
     
     if [[ "$device_type" == "accounts" ]]; then
         # Check if ACCOUNTS device baseline values are configured
         if [[ -n "$ACCOUNTS_VOL_MAX_IOPS" && -n "$ACCOUNTS_VOL_MAX_THROUGHPUT" ]]; then
-            baseline_iops="$ACCOUNTS_VOL_MAX_IOPS"
-            baseline_throughput="$ACCOUNTS_VOL_MAX_THROUGHPUT"
-            counter_prefix="accounts_ebs"
-            log_debug "Using ACCOUNTS device baseline: IOPS=$baseline_iops, Throughput=$baseline_throughput"
+            provisioned_iops="$ACCOUNTS_VOL_MAX_IOPS"
+            provisioned_throughput="$ACCOUNTS_VOL_MAX_THROUGHPUT"
+            counter_prefix="accounts_disk"
+            log_debug "Using ACCOUNTS device baseline: IOPS=$provisioned_iops, Throughput=$provisioned_throughput"
         else
             log_debug "ACCOUNTS device baseline values not configured, using DATA device baseline values"
         fi
     else
-        log_debug "Using DATA device baseline: IOPS=$baseline_iops, Throughput=$baseline_throughput"
+        log_debug "Using DATA device baseline: IOPS=$provisioned_iops, Throughput=$provisioned_throughput"
     fi
     
     # Validate baseline values
-    if [[ -z "$baseline_iops" || -z "$baseline_throughput" ]]; then
+    if [[ -z "$provisioned_iops" || -z "$provisioned_throughput" ]]; then
         log_debug "Invalid baseline values, skipping AWS baseline bottleneck detection"
-        baseline_iops=""
-        baseline_throughput=""
+        provisioned_iops=""
+        provisioned_throughput=""
     fi
     
     # AWS baseline IOPS bottleneck detection (using device-specific baseline values)
-    if [[ -n "$ebs_aws_iops" && -n "$baseline_iops" ]]; then
-        local aws_iops_utilization=$(awk "BEGIN {printf \"%.4f\", $ebs_aws_iops / $baseline_iops}" 2>/dev/null || echo "0")
-        local aws_iops_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90} / 100}")
-        log_debug "EBS IOPS bottleneck detection threshold: ${BOTTLENECK_EBS_IOPS_THRESHOLD:-90}% (${aws_iops_threshold})"
+    if [[ -n "$disk_iops" && -n "$provisioned_iops" ]]; then
+        local iops_utilization=$(awk "BEGIN {printf \"%.4f\", $disk_iops / $provisioned_iops}" 2>/dev/null || echo "0")
+        local iops_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_DISK_IOPS_THRESHOLD:-90} / 100}")
+        log_debug "Disk IOPS bottleneck detection threshold: ${BOTTLENECK_DISK_IOPS_THRESHOLD:-90}% (${iops_threshold})"
         
-        if (( $(awk "BEGIN {print ($aws_iops_utilization > $aws_iops_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
+        if (( $(awk "BEGIN {print ($iops_utilization > $iops_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
             BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0} + 1))
-            echo "⚠️  EBS AWS baseline IOPS bottleneck (${device_type}): ${ebs_aws_iops}/${baseline_iops} (${aws_iops_utilization%.*}%) > ${aws_iops_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+            echo "⚠️  Disk provisioned IOPS bottleneck (${device_type}): ${disk_iops}/${provisioned_iops} (${iops_utilization%.*}%) > ${iops_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
             
             if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_detected=true
@@ -418,14 +464,14 @@ check_ebs_bottleneck() {
     fi
     
     # AWS baseline throughput bottleneck detection (using device-specific baseline values)
-    if [[ -n "$ebs_throughput" && -n "$baseline_throughput" ]]; then
-        local aws_throughput_utilization=$(awk "BEGIN {printf \"%.4f\", $ebs_throughput / $baseline_throughput}" 2>/dev/null || echo "0")
-        local aws_throughput_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90} / 100}")
-        log_debug "EBS Throughput bottleneck detection threshold: ${BOTTLENECK_EBS_THROUGHPUT_THRESHOLD:-90}% (${aws_throughput_threshold})"
+    if [[ -n "$disk_throughput" && -n "$provisioned_throughput" ]]; then
+        local throughput_utilization=$(awk "BEGIN {printf \"%.4f\", $disk_throughput / $provisioned_throughput}" 2>/dev/null || echo "0")
+        local throughput_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_DISK_THROUGHPUT_THRESHOLD:-90} / 100}")
+        log_debug "Disk Throughput bottleneck detection threshold: ${BOTTLENECK_DISK_THROUGHPUT_THRESHOLD:-90}% (${throughput_threshold})"
         
-        if (( $(awk "BEGIN {print ($aws_throughput_utilization > $aws_throughput_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
+        if (( $(awk "BEGIN {print ($throughput_utilization > $throughput_threshold) ? 1 : 0}" 2>/dev/null || echo 0) )); then
             BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]=$((${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0} + 1))
-            echo "⚠️  EBS AWS baseline throughput bottleneck (${device_type}): ${ebs_throughput}/${baseline_throughput} MiB/s (${aws_throughput_utilization%.*}%) > ${aws_throughput_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+            echo "⚠️  Disk provisioned throughput bottleneck (${device_type}): ${disk_throughput}/${provisioned_throughput} MiB/s (${throughput_utilization%.*}%) > ${throughput_threshold%.*}% (${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
             
             if [[ ${BOTTLENECK_COUNTERS["${counter_prefix}_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
                 bottleneck_detected=true
@@ -754,7 +800,7 @@ extract_performance_metrics() {
     local performance_csv="$1"
     
     if [[ ! -f "$performance_csv" ]]; then
-        echo "0,0,0,0,0,0"  # cpu,memory,ebs_util,ebs_latency,network,error_rate
+        echo "0,0,0,0,0,0"  # cpu,memory,disk_util,disk_latency,network,error_rate
         return
     fi
     
@@ -762,7 +808,7 @@ extract_performance_metrics() {
     local latest_data=$(tail -1 "$performance_csv" 2>/dev/null)
     
     if [[ -z "$latest_data" ]]; then
-        echo "0,0,0,0,0,0,0,0"  # cpu,memory,ebs_util,ebs_latency,ebs_aws_iops,ebs_throughput,network,error_rate
+        echo "0,0,0,0,0,0,0,0"  # cpu,memory,disk_util,disk_latency,disk_iops,disk_throughput,network,error_rate
         return
     fi
     
@@ -774,10 +820,10 @@ extract_performance_metrics() {
     # Dynamically find field positions
     local cpu_usage=0
     local memory_usage=0
-    local ebs_util=0
-    local ebs_latency=0
-    local ebs_aws_iops=0
-    local ebs_throughput=0
+    local disk_util=0
+    local disk_latency=0
+    local disk_iops=0
+    local disk_throughput=0
     local network_util=0
     local error_rate=0
     
@@ -801,40 +847,40 @@ extract_performance_metrics() {
                 ;;
         esac
         
-        # Use dynamic pattern matching for EBS fields
-        if [[ "$EBS_UTIL_PATTERNS" == *"$field_name"* ]]; then
-            ebs_util=${data_values[i]:-0}
-            log_debug "Matched EBS utilization field: $field_name = $ebs_util"
+        # Use dynamic pattern matching for disk fields
+        if [[ "$DISK_UTIL_PATTERNS" == *"$field_name"* ]]; then
+            disk_util=${data_values[i]:-0}
+            log_debug "Matched Disk utilization field: $field_name = $disk_util"
         fi
         
-        if [[ "$EBS_R_AWAIT_PATTERNS" == *"$field_name"* ]]; then
-            ebs_latency=${data_values[i]:-0}
-            log_debug "Matched EBS read latency field: $field_name = $ebs_latency"
-        elif [[ "$EBS_AVG_AWAIT_PATTERNS" == *"$field_name"* ]] && [[ "$ebs_latency" == "0" ]]; then
+        if [[ "$DISK_R_AWAIT_PATTERNS" == *"$field_name"* ]]; then
+            disk_latency=${data_values[i]:-0}
+            log_debug "Matched disk read latency field: $field_name = $disk_latency"
+        elif [[ "$DISK_AVG_AWAIT_PATTERNS" == *"$field_name"* ]] && [[ "$disk_latency" == "0" ]]; then
             # If latency value not set yet, use average latency
-            ebs_latency=${data_values[i]:-0}
-            log_debug "Matched EBS average latency field: $field_name = $ebs_latency"
+            disk_latency=${data_values[i]:-0}
+            log_debug "Matched disk average latency field: $field_name = $disk_latency"
         fi
         
-        if [[ "$EBS_AWS_IOPS_PATTERNS" == *"$field_name"* ]]; then
-            ebs_aws_iops=${data_values[i]:-0}
-            log_debug "Matched EBS AWS IOPS field: $field_name = $ebs_aws_iops"
+        if [[ "$DISK_IOPS_PATTERNS" == *"$field_name"* ]]; then
+            disk_iops=${data_values[i]:-0}
+            log_debug "Matched disk IOPS field: $field_name = $disk_iops"
         fi
         
-        if [[ "$EBS_THROUGHPUT_PATTERNS" == *"$field_name"* ]]; then
-            ebs_throughput=${data_values[i]:-0}
-            log_debug "Matched EBS throughput field: $field_name = $ebs_throughput"
+        if [[ "$DISK_THROUGHPUT_PATTERNS" == *"$field_name"* ]]; then
+            disk_throughput=${data_values[i]:-0}
+            log_debug "Matched disk throughput field: $field_name = $disk_throughput"
         fi
     done
     
     # This requires reading the latest QPS test report file
     error_rate=$(get_latest_qps_error_rate)
     
-    echo "$cpu_usage,$memory_usage,$ebs_util,$ebs_latency,$ebs_aws_iops,$ebs_throughput,$network_util,$error_rate"
+    echo "$cpu_usage,$memory_usage,$disk_util,$disk_latency,$disk_iops,$disk_throughput,$network_util,$error_rate"
 }
 
-# Multi-device EBS bottleneck detection coordinator
-detect_all_ebs_bottlenecks() {
+# Multi-device disk bottleneck detection coordinator
+detect_all_disk_bottlenecks() {
     local performance_csv="$1"
     local bottleneck_detected=false
     local bottleneck_info=()
@@ -855,6 +901,16 @@ detect_all_ebs_bottlenecks() {
     local header_line=$(head -n 1 "$performance_csv")
     IFS=',' read -ra field_names <<< "$header_line"
     IFS=',' read -ra data_values <<< "$latest_line"
+
+    # provider 来自 CSV cloud_provider 列 (铁律), 经 registry 解析 provider-aware 物理列名,
+    # 与写入该 CSV 的 writer 对齐 (ADR-0002: 三云统一 normalized_*, provider 由 cloud_provider 列承载).
+    local _bd_prov
+    _bd_prov="$(_bd_provider_from_csv field_names data_values)"
+    local data_std_iops_col data_std_tput_col acct_std_iops_col acct_std_tput_col
+    data_std_iops_col="$(_bd_resolve disk_iops_provider_adjusted "data_${LEDGER_DEVICE}" "$_bd_prov")"
+    data_std_tput_col="$(_bd_resolve disk_throughput_provider_adjusted "data_${LEDGER_DEVICE}" "$_bd_prov")"
+    acct_std_iops_col="$(_bd_resolve disk_iops_provider_adjusted "accounts_${ACCOUNTS_DEVICE}" "$_bd_prov")"
+    acct_std_tput_col="$(_bd_resolve disk_throughput_provider_adjusted "accounts_${ACCOUNTS_DEVICE}" "$_bd_prov")"
     
     # Detect DATA device
     local data_util=0 data_latency=0 data_aws_iops=0 data_throughput=0
@@ -869,15 +925,15 @@ detect_all_ebs_bottlenecks() {
             data_latency=${data_values[i]:-0}
         elif [[ "$field_name" == data_${LEDGER_DEVICE}_avg_await ]] && [[ "$data_latency" == "0" ]]; then
             data_latency=${data_values[i]:-0}
-        elif [[ "$field_name" == data_${LEDGER_DEVICE}_aws_standard_iops ]]; then
+        elif [[ -n "$data_std_iops_col" && "$field_name" == "$data_std_iops_col" ]]; then
             data_aws_iops=${data_values[i]:-0}
-        elif [[ "$field_name" == data_${LEDGER_DEVICE}_aws_standard_throughput_mibs ]]; then
+        elif [[ -n "$data_std_tput_col" && "$field_name" == "$data_std_tput_col" ]]; then
             data_throughput=${data_values[i]:-0}
         fi
     done
     
     # Detect DATA device bottleneck
-    if check_ebs_bottleneck "$data_aws_iops" "$data_throughput" "data"; then
+    if check_disk_bottleneck "$data_aws_iops" "$data_throughput" "data"; then
         bottleneck_detected=true
         bottleneck_info+=("DATA device bottleneck: AWS_IOPS=${data_aws_iops}, Throughput=${data_throughput}MiB/s")
     fi
@@ -896,15 +952,15 @@ detect_all_ebs_bottlenecks() {
                 accounts_latency=${data_values[i]:-0}
             elif [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_avg_await ]] && [[ "$accounts_latency" == "0" ]]; then
                 accounts_latency=${data_values[i]:-0}
-            elif [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_aws_standard_iops ]]; then
+            elif [[ -n "$acct_std_iops_col" && "$field_name" == "$acct_std_iops_col" ]]; then
                 accounts_aws_iops=${data_values[i]:-0}
-            elif [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_aws_standard_throughput_mibs ]]; then
+            elif [[ -n "$acct_std_tput_col" && "$field_name" == "$acct_std_tput_col" ]]; then
                 accounts_throughput=${data_values[i]:-0}
             fi
         done
         
         # Detect ACCOUNTS device bottleneck
-        if check_ebs_bottleneck "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
+        if check_disk_bottleneck "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
             bottleneck_detected=true
             bottleneck_info+=("ACCOUNTS device bottleneck: AWS_IOPS=${accounts_aws_iops}, Throughput=${accounts_throughput}MiB/s")
         fi
@@ -912,13 +968,13 @@ detect_all_ebs_bottlenecks() {
     
     # Output detection results
     if [[ "$bottleneck_detected" == "true" ]]; then
-        echo "🚨 EBS bottleneck detected:" | tee -a "$BOTTLENECK_LOG"
+        echo "🚨 Disk bottleneck detected:" | tee -a "$BOTTLENECK_LOG"
         for info in "${bottleneck_info[@]}"; do
             echo "   - $info" | tee -a "$BOTTLENECK_LOG"
         done
         return 0
     else
-        log_debug "No EBS bottleneck detected"
+        log_debug "No Disk bottleneck detected"
         return 1
     fi
 }
@@ -933,17 +989,17 @@ detect_bottleneck() {
     local metrics=$(extract_performance_metrics "$performance_csv")
     local cpu_usage=$(echo "$metrics" | cut -d',' -f1)
     local memory_usage=$(echo "$metrics" | cut -d',' -f2)
-    local ebs_util=$(echo "$metrics" | cut -d',' -f3)
-    local ebs_latency=$(echo "$metrics" | cut -d',' -f4)
-    local ebs_aws_iops=$(echo "$metrics" | cut -d',' -f5)
-    local ebs_throughput=$(echo "$metrics" | cut -d',' -f6)
+    local disk_util=$(echo "$metrics" | cut -d',' -f3)
+    local disk_latency=$(echo "$metrics" | cut -d',' -f4)
+    local disk_iops=$(echo "$metrics" | cut -d',' -f5)
+    local disk_throughput=$(echo "$metrics" | cut -d',' -f6)
     local network_util=$(echo "$metrics" | cut -d',' -f7)
     local error_rate=$(echo "$metrics" | cut -d',' -f8)
     
-    echo "📊 Current QPS: $current_qps, Performance metrics: CPU=${cpu_usage}%, MEM=${memory_usage}%, EBS=${ebs_util}%/${ebs_latency}ms, AWS_IOPS=${ebs_aws_iops}, THROUGHPUT=${ebs_throughput}MiB/s, NET=${network_util}%, ERR=${error_rate}%" | tee -a "$BOTTLENECK_LOG"
+    echo "📊 Current QPS: $current_qps, Performance metrics: CPU=${cpu_usage}%, MEM=${memory_usage}%, Disk=${disk_util}%/${disk_latency}ms, AWS_IOPS=${disk_iops}, THROUGHPUT=${disk_throughput}MiB/s, NET=${network_util}%, ERR=${error_rate}%" | tee -a "$BOTTLENECK_LOG"
     
     # Create performance metrics JSON
-    local metrics_json=$(create_performance_metrics_json "$cpu_usage" "$memory_usage" "$ebs_util" "$ebs_latency" "$ebs_aws_iops" "$ebs_throughput" "$network_util" "$error_rate")
+    local metrics_json=$(create_performance_metrics_json "$cpu_usage" "$memory_usage" "$disk_util" "$disk_latency" "$disk_iops" "$disk_throughput" "$network_util" "$error_rate")
     
     # Detect various bottlenecks
     local bottleneck_detected=false
@@ -963,20 +1019,20 @@ detect_bottleneck() {
         bottleneck_values+=("${memory_usage}%")
     fi
     
-    # Detect DATA device EBS bottleneck
-    if check_ebs_bottleneck "$ebs_aws_iops" "$ebs_throughput" "data"; then
+    # Detect DATA device disk bottleneck
+    if check_disk_bottleneck "$disk_iops" "$disk_throughput" "data"; then
         bottleneck_detected=true
-        if [[ ${BOTTLENECK_COUNTERS["ebs_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            bottleneck_types+=("EBS_AWS_IOPS")
-            bottleneck_values+=("${ebs_aws_iops}/${DATA_VOL_MAX_IOPS}")
+        if [[ ${BOTTLENECK_COUNTERS["disk_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+            bottleneck_types+=("DISK_IOPS")
+            bottleneck_values+=("${disk_iops}/${DATA_VOL_MAX_IOPS}")
         fi
-        if [[ ${BOTTLENECK_COUNTERS["ebs_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            bottleneck_types+=("EBS_AWS_Throughput")
-            bottleneck_values+=("${ebs_throughput}/${DATA_VOL_MAX_THROUGHPUT}MiB/s")
+        if [[ ${BOTTLENECK_COUNTERS["disk_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+            bottleneck_types+=("DISK_Throughput")
+            bottleneck_values+=("${disk_throughput}/${DATA_VOL_MAX_THROUGHPUT}MiB/s")
         fi
     fi
     
-    # Detect ACCOUNTS device EBS bottleneck (if configured)
+    # Detect ACCOUNTS device disk bottleneck (if configured)
     if is_accounts_configured; then
         # Get ACCOUNTS device performance metrics
         local accounts_util=0
@@ -985,6 +1041,20 @@ detect_bottleneck() {
         local accounts_throughput=0
         
         # Extract ACCOUNTS device metrics from CSV data
+        # provider 来自 CSV cloud_provider 列 (铁律), 经 registry 解析 provider-aware 物理列名.
+        # 自包含解析 header/data (本函数未自行解析 field_names, 历史依赖全局残留, 此处独立取以免脆弱).
+        local _bd_hdr _bd_dat
+        _bd_hdr="$(head -n 1 "$performance_csv" 2>/dev/null)"
+        _bd_dat="$(tail -n 1 "$performance_csv" 2>/dev/null)"
+        local _bd_fnames _bd_dvals
+        IFS=',' read -ra _bd_fnames <<< "$_bd_hdr"
+        IFS=',' read -ra _bd_dvals <<< "$_bd_dat"
+        local _bd_prov2
+        _bd_prov2="$(_bd_provider_from_csv _bd_fnames _bd_dvals)"
+        local acct_iops_col2 acct_tput_col2
+        acct_iops_col2="$(_bd_resolve disk_iops_provider_adjusted "accounts_${ACCOUNTS_DEVICE}" "$_bd_prov2")"
+        acct_tput_col2="$(_bd_resolve disk_throughput_provider_adjusted "accounts_${ACCOUNTS_DEVICE}" "$_bd_prov2")"
+
         for i in "${!field_names[@]}"; do
             local field_name="${field_names[i]}"
             
@@ -999,25 +1069,25 @@ detect_bottleneck() {
                 accounts_latency=${data_values[i]:-0}
             fi
             
-            if [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_aws_standard_iops ]]; then
+            if [[ -n "$acct_iops_col2" && "$field_name" == "$acct_iops_col2" ]]; then
                 accounts_aws_iops=${data_values[i]:-0}
             fi
             
-            if [[ "$field_name" == accounts_${ACCOUNTS_DEVICE}_aws_standard_throughput_mibs ]]; then
+            if [[ -n "$acct_tput_col2" && "$field_name" == "$acct_tput_col2" ]]; then
                 accounts_throughput=${data_values[i]:-0}
             fi
         done
         
         log_debug "ACCOUNTS device metrics: AWS_IOPS=${accounts_aws_iops}, Throughput=${accounts_throughput}MiB/s"
         
-        if check_ebs_bottleneck "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
+        if check_disk_bottleneck "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
             bottleneck_detected=true
-            if [[ ${BOTTLENECK_COUNTERS["accounts_ebs_aws_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-                bottleneck_types+=("ACCOUNTS_EBS_AWS_IOPS")
+            if [[ ${BOTTLENECK_COUNTERS["accounts_disk_iops"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+                bottleneck_types+=("ACCOUNTS_DISK_IOPS")
                 bottleneck_values+=("${accounts_aws_iops}/${ACCOUNTS_VOL_MAX_IOPS}")
             fi
-            if [[ ${BOTTLENECK_COUNTERS["accounts_ebs_aws_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-                bottleneck_types+=("ACCOUNTS_EBS_AWS_Throughput")
+            if [[ ${BOTTLENECK_COUNTERS["accounts_disk_throughput"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+                bottleneck_types+=("ACCOUNTS_DISK_Throughput")
                 bottleneck_values+=("${accounts_throughput}/${ACCOUNTS_VOL_MAX_THROUGHPUT}MiB/s")
             fi
         fi
@@ -1206,8 +1276,8 @@ main() {
             echo "Bottleneck detection types:"
             echo "  CPU usage > ${BOTTLENECK_CPU_THRESHOLD}%"
             echo "  Memory usage > ${BOTTLENECK_MEMORY_THRESHOLD}%"
-            echo "  EBS utilization > ${BOTTLENECK_EBS_UTIL_THRESHOLD}%"
-            echo "  EBS latency > ${BOTTLENECK_EBS_LATENCY_THRESHOLD}ms"
+            echo "  Disk utilization > ${BOTTLENECK_DISK_UTIL_THRESHOLD}%"
+            echo "  Disk latency > ${BOTTLENECK_DISK_LATENCY_THRESHOLD}ms"
             echo "  Network utilization > ${BOTTLENECK_NETWORK_THRESHOLD}%"
             echo "  Error rate > ${BOTTLENECK_ERROR_RATE_THRESHOLD}%"
             ;;

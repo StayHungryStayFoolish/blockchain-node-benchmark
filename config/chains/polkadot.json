@@ -6,7 +6,8 @@
     "GET /blocks/{n}": "path_height",
     "account_nextIndex": "single_address",
     "GET /pallets/staking/progress": "no_params",
-    "chain_getHeader": "no_params"
+    "chain_getHeader": "no_params",
+    "system_account": "single_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -17,8 +18,30 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "chain_getHeader",
-    "mixed": "GET /accounts/{addr}/balance-info,GET /blocks/{n},account_nextIndex,GET /pallets/staking/progress,chain_getHeader"
+    "single": "system_account",
+    "mixed": "GET /accounts/{addr}/balance-info,GET /blocks/{n},account_nextIndex,GET /pallets/staking/progress,chain_getHeader",
+    "mixed_weighted": [
+      {
+        "method": "GET /accounts/{addr}/balance-info",
+        "weight": 1
+      },
+      {
+        "method": "GET /blocks/{n}",
+        "weight": 1
+      },
+      {
+        "method": "account_nextIndex",
+        "weight": 1
+      },
+      {
+        "method": "GET /pallets/staking/progress",
+        "weight": 1
+      },
+      {
+        "method": "chain_getHeader",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [],
@@ -50,5 +73,17 @@
     "adapter_required": true,
     "adapter_family": "substrate",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split"
+      }
+    ]
   }
 }

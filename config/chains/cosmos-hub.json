@@ -17,8 +17,30 @@
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
-    "single": "GET /cosmos/base/tendermint/v1beta1/blocks/latest",
-    "mixed": "GET /cosmos/bank/v1beta1/balances/{addr},GET /cosmos/tx/v1beta1/txs/{hash},GET /cosmos/base/tendermint/v1beta1/blocks/{height},GET /cosmos/staking/v1beta1/validators,GET /cosmos/base/tendermint/v1beta1/blocks/latest"
+    "single": "GET /cosmos/bank/v1beta1/balances/{addr}",
+    "mixed": "GET /cosmos/bank/v1beta1/balances/{addr},GET /cosmos/tx/v1beta1/txs/{hash},GET /cosmos/base/tendermint/v1beta1/blocks/{height},GET /cosmos/staking/v1beta1/validators,GET /cosmos/base/tendermint/v1beta1/blocks/latest",
+    "mixed_weighted": [
+      {
+        "method": "GET /cosmos/bank/v1beta1/balances/{addr}",
+        "weight": 1
+      },
+      {
+        "method": "GET /cosmos/tx/v1beta1/txs/{hash}",
+        "weight": 1
+      },
+      {
+        "method": "GET /cosmos/base/tendermint/v1beta1/blocks/{height}",
+        "weight": 1
+      },
+      {
+        "method": "GET /cosmos/staking/v1beta1/validators",
+        "weight": 1
+      },
+      {
+        "method": "GET /cosmos/base/tendermint/v1beta1/blocks/latest",
+        "weight": 1
+      }
+    ]
   },
   "rpc_url": "LOCAL_RPC_URL",
   "system_addresses": [
@@ -55,5 +77,17 @@
     "adapter_required": true,
     "adapter_family": "tendermint",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+  },
+  "proxy_extraction": {
+    "extractors": [
+      {
+        "protocol": "json_rpc",
+        "method_source": "body.method",
+        "id_source": "body.id",
+        "params_source": "body.params",
+        "url_pattern": "^/$",
+        "batch_handling": "split"
+      }
+    ]
   }
 }

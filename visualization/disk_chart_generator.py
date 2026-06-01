@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-EBS Dedicated Chart Generator - Fully independent EBS performance analysis module
+Disk Dedicated Chart Generator - Fully independent disk performance analysis module
 Based on single responsibility principle and modular design
 """
 
@@ -12,6 +12,7 @@ import matplotlib.dates as mdates
 import numpy as np
 import os
 import sys
+import re
 from datetime import datetime
 from scipy.signal import find_peaks
 
@@ -22,17 +23,18 @@ sys.path.insert(0, project_root)
 
 from visualization.chart_style_config import UnifiedChartStyle, load_framework_config, create_chart_title
 from visualization.device_manager import DeviceManager
+from utils.csv_schema_registry import CSVSchemaRegistry
 
-class EBSChartGenerator:
-    # Unified EBS chart file naming convention
+class DiskChartGenerator:
+    # Unified disk chart file naming convention
     CHART_FILES = {
-        'capacity': 'ebs_aws_capacity_planning.png',
-        'performance': 'ebs_iostat_performance.png',
-        'correlation': 'ebs_bottleneck_correlation.png',
-        'overview': 'ebs_performance_overview.png',
-        'bottleneck': 'ebs_bottleneck_analysis.png',
-        'comparison': 'ebs_aws_standard_comparison.png',
-        'timeseries': 'ebs_time_series_analysis.png'
+        'capacity': 'disk_capacity_planning.png',
+        'performance': 'disk_iostat_performance.png',
+        'correlation': 'disk_bottleneck_correlation.png',
+        'overview': 'disk_performance_overview.png',
+        'bottleneck': 'disk_bottleneck_analysis.png',
+        'comparison': 'disk_normalized_comparison.png',
+        'timeseries': 'disk_time_series_analysis.png'
     }
     
     def __init__(self, data_source, output_dir=None):
@@ -58,36 +60,36 @@ class EBSChartGenerator:
             if 'timestamp' in self.df.columns:
                 self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
         
-        # AWS baseline configuration - use DeviceManager unified reading (fix issue 8)
+        # Provisioned ceiling configuration (VOL_MAX) - use DeviceManager unified reading (fix issue 8)
         temp_device_manager = DeviceManager(self.df) if hasattr(self, 'df') and self.df is not None else None
         if temp_device_manager:
             thresholds = temp_device_manager.get_threshold_values()
-            self.data_baseline_iops = thresholds['data_baseline_iops']
-            self.data_baseline_throughput = thresholds['data_baseline_throughput']
+            self.data_provisioned_iops = thresholds['data_provisioned_iops']
+            self.data_provisioned_throughput = thresholds['data_provisioned_throughput']
             
             # Only get ACCOUNTS thresholds when ACCOUNTS is configured
-            if 'accounts_baseline_iops' in thresholds:
-                self.accounts_baseline_iops = thresholds['accounts_baseline_iops']
-                self.accounts_baseline_throughput = thresholds['accounts_baseline_throughput']
+            if 'accounts_provisioned_iops' in thresholds:
+                self.accounts_provisioned_iops = thresholds['accounts_provisioned_iops']
+                self.accounts_provisioned_throughput = thresholds['accounts_provisioned_throughput']
             else:
                 # Use environment variable defaults when ACCOUNTS not configured
-                self.accounts_baseline_iops = float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))
-                self.accounts_baseline_throughput = float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))
+                self.accounts_provisioned_iops = float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))
+                self.accounts_provisioned_throughput = float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))
             
-            self.ebs_util_threshold = thresholds['ebs_util_threshold']
-            self.ebs_latency_threshold = thresholds['ebs_latency_threshold']
-            self.ebs_iops_threshold = thresholds['ebs_iops_threshold']
-            self.ebs_throughput_threshold = thresholds['ebs_throughput_threshold']
+            self.disk_util_threshold = thresholds['disk_util_threshold']
+            self.disk_latency_threshold = thresholds['disk_latency_threshold']
+            self.disk_iops_threshold = thresholds['disk_iops_threshold']
+            self.disk_throughput_threshold = thresholds['disk_throughput_threshold']
         else:
             # Fallback to environment variables (maintain compatibility)
-            self.data_baseline_iops = float(os.getenv('DATA_VOL_MAX_IOPS', '20000'))
-            self.data_baseline_throughput = float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700'))
-            self.accounts_baseline_iops = float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))
-            self.accounts_baseline_throughput = float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))
-            self.ebs_util_threshold = float(os.getenv('BOTTLENECK_EBS_UTIL_THRESHOLD', '90'))
-            self.ebs_latency_threshold = float(os.getenv('BOTTLENECK_EBS_LATENCY_THRESHOLD', '50'))
-            self.ebs_iops_threshold = float(os.getenv('BOTTLENECK_EBS_IOPS_THRESHOLD', '90'))
-            self.ebs_throughput_threshold = float(os.getenv('BOTTLENECK_EBS_THROUGHPUT_THRESHOLD', '90'))
+            self.data_provisioned_iops = float(os.getenv('DATA_VOL_MAX_IOPS', '20000'))
+            self.data_provisioned_throughput = float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700'))
+            self.accounts_provisioned_iops = float(os.getenv('ACCOUNTS_VOL_MAX_IOPS', '20000'))
+            self.accounts_provisioned_throughput = float(os.getenv('ACCOUNTS_VOL_MAX_THROUGHPUT', '700'))
+            self.disk_util_threshold = float(os.getenv('BOTTLENECK_DISK_UTIL_THRESHOLD', '90'))
+            self.disk_latency_threshold = float(os.getenv('BOTTLENECK_DISK_LATENCY_THRESHOLD', '50'))
+            self.disk_iops_threshold = float(os.getenv('BOTTLENECK_DISK_IOPS_THRESHOLD', '90'))
+            self.disk_throughput_threshold = float(os.getenv('BOTTLENECK_DISK_THROUGHPUT_THRESHOLD', '90'))
         
         # Add framework unified methods
         self._init_framework_methods()
@@ -103,55 +105,96 @@ class EBSChartGenerator:
         # Use DeviceManager for unified field mapping management
         self.device_manager = DeviceManager(self.df)
         self.field_mapping = self.device_manager.build_field_mapping()
-        
-        # 🔧 Fix: Dynamically recalculate aws_standard_iops (correct old data)
-        self._recalculate_aws_standard_metrics()
-    
-    def _recalculate_aws_standard_metrics(self):
-        """Recalculate AWS standard metrics (correct old linear scaling logic)"""
-        # Correct DATA device's aws_standard_iops
+
+        # 铁律: provider 从 CSV cloud_provider 列取, 不做运行时探测.
+        # 用于经 CSVSchemaRegistry 解析 provider_aware 物理字段名 (standard_iops / standard_throughput_mibs).
+        self.cloud_provider = self._read_cloud_provider_from_csv()
+
+        # 🔧 Fix: Dynamically recalculate provider-adjusted IOPS (correct old data)
+        self._recalculate_disk_standard_metrics()
+
+    def _read_cloud_provider_from_csv(self):
+        """从 CSV cloud_provider 列读取 provider (aws|gcp|other).
+
+        铁律: provider 来源是 CSV 数据本身, 不运行时探测、不读环境变量.
+        缺列或空值时回退 'other' (中立兜底, registry 三云同名, 不影响物理列名).
+        """
+        if 'cloud_provider' in self.df.columns:
+            series = self.df['cloud_provider'].dropna()
+            if len(series) > 0:
+                val = str(series.iloc[-1]).strip().lower()
+                if val:
+                    return val
+        return 'other'
+
+    def _resolve_disk_field(self, logical_name, device_prefix):
+        """经 CSV Schema Registry 解析 provider_aware disk 字段 -> 实际 CSV 列名.
+
+        logical_name: 'disk_iops_provider_adjusted' 或 'disk_throughput_provider_adjusted'.
+        device_prefix: 逻辑设备前缀 'data' 或 'accounts'.
+
+        registry 返回物理模板列名 (如 'data_standard_iops'), 但真实列名含运行时设备名
+        (如 'data_nvme1n1_standard_iops'), 故取 registry 解析出的物理 suffix 后, 在
+        self.df.columns 内按 '{device_prefix}_.*_{suffix}' 正则匹配真实列名.
+        返回匹配列名; 无匹配返回 None.
+        """
+        physical = CSVSchemaRegistry.resolve(logical_name, self.cloud_provider, device_prefix)
+        # physical 形如 'data_standard_iops' -> suffix='standard_iops'
+        suffix = physical[len(device_prefix) + 1:]
+        # 优先直接命中 (无运行时设备名拆分的场景)
+        if physical in self.df.columns:
+            return physical
+        pattern = re.compile(rf'^{re.escape(device_prefix)}_.*_{re.escape(suffix)}$')
+        for col in self.df.columns:
+            if pattern.match(col):
+                return col
+        return None
+
+    def _recalculate_disk_standard_metrics(self):
+        """Recalculate provider-adjusted disk metrics (correct old linear scaling logic)"""
+        # Correct DATA device's provider-adjusted IOPS
         data_total_iops_field = self.get_mapped_field('data_total_iops')
         data_rkb_field = self.get_mapped_field('data_rkb_s')
         data_wkb_field = self.get_mapped_field('data_wkb_s')
-        data_aws_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        data_std_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
         data_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
-        data_aws_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
-        
-        if all([data_total_iops_field, data_rkb_field, data_wkb_field, data_aws_iops_field]):
+        data_std_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'data')
+
+        if all([data_total_iops_field, data_rkb_field, data_wkb_field, data_std_iops_field]):
             # Calculate average IO size
             total_throughput_kbs = self.df[data_rkb_field] + self.df[data_wkb_field]
             avg_io_kib = total_throughput_kbs / self.df[data_total_iops_field].replace(0, 1)
-            
+
             # Apply corrected conversion logic: no scaling when avg_io > 16 KiB
-            self.df[data_aws_iops_field] = self.df[data_total_iops_field].where(
+            self.df[data_std_iops_field] = self.df[data_total_iops_field].where(
                 avg_io_kib > 16,
                 self.df[data_total_iops_field] * (avg_io_kib / 16)
             )
-            
+
             # Throughput doesn't need conversion
-            if data_throughput_field and data_aws_throughput_field:
-                self.df[data_aws_throughput_field] = self.df[data_throughput_field]
-        
-        # Correct ACCOUNTS device's aws_standard_iops
+            if data_throughput_field and data_std_throughput_field:
+                self.df[data_std_throughput_field] = self.df[data_throughput_field]
+
+        # Correct ACCOUNTS device's provider-adjusted IOPS
         if self.device_manager.is_accounts_configured():
             accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
             accounts_rkb_field = self.get_mapped_field('accounts_rkb_s')
             accounts_wkb_field = self.get_mapped_field('accounts_wkb_s')
-            accounts_aws_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
+            accounts_std_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'accounts')
             accounts_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
-            accounts_aws_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
-            
-            if all([accounts_total_iops_field, accounts_rkb_field, accounts_wkb_field, accounts_aws_iops_field]):
+            accounts_std_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'accounts')
+
+            if all([accounts_total_iops_field, accounts_rkb_field, accounts_wkb_field, accounts_std_iops_field]):
                 total_throughput_kbs = self.df[accounts_rkb_field] + self.df[accounts_wkb_field]
                 avg_io_kib = total_throughput_kbs / self.df[accounts_total_iops_field].replace(0, 1)
-                
-                self.df[accounts_aws_iops_field] = self.df[accounts_total_iops_field].where(
+
+                self.df[accounts_std_iops_field] = self.df[accounts_total_iops_field].where(
                     avg_io_kib > 16,
                     self.df[accounts_total_iops_field] * (avg_io_kib / 16)
                 )
-                
-                if accounts_throughput_field and accounts_aws_throughput_field:
-                    self.df[accounts_aws_throughput_field] = self.df[accounts_throughput_field]
+
+                if accounts_throughput_field and accounts_std_throughput_field:
+                    self.df[accounts_std_throughput_field] = self.df[accounts_throughput_field]
     
     def get_mapped_field(self, field_name):
         """Get mapped actual field name - delegate to DeviceManager"""
@@ -166,47 +209,50 @@ class EBSChartGenerator:
         return self.device_manager.has_field(field_name)
     
     def validate_data_completeness(self):
-        """EBS data integrity validation"""
-        required_columns = [
-            'data_aws_standard_iops', 'data_aws_standard_throughput_mibs',
-            'data_util', 'data_aqu_sz'
+        """Disk data integrity validation"""
+        # provider_aware 字段经 registry 解析物理列名 (不裸写 aws_standard_*)
+        required_resolved = [
+            self._resolve_disk_field('disk_iops_provider_adjusted', 'data'),
+            self._resolve_disk_field('disk_throughput_provider_adjusted', 'data'),
+            self.get_mapped_field('data_util'),
+            self.get_mapped_field('data_aqu_sz'),
         ]
-        missing_columns = [col for col in required_columns if self.get_mapped_field(col) not in self.df.columns]
+        missing_columns = [f for f in required_resolved if not f or f not in self.df.columns]
         if missing_columns:
-            print(f"⚠️ WARNING: Missing EBS data columns: {missing_columns}")
+            print(f"⚠️ WARNING: Missing disk data columns: {missing_columns}")
             return False
         return True
     
-    def generate_all_ebs_charts(self):
-        """Generate all EBS charts - unified entry point"""
+    def generate_all_disk_charts(self):
+        """Generate all disk charts - unified entry point"""
         try:
             # 🎨 Refactor: Apply unified style configuration
             unified_style = UnifiedChartStyle()
             unified_style.setup_matplotlib()
-            print("✅ Unified style applied to EBS charts")
+            print("✅ Unified style applied to disk charts")
             
             if not self.validate_data_completeness():
-                print("⚠️ EBS data validation failed, skipping EBS charts")
+                print("⚠️ Disk data validation failed, skipping disk charts")
                 return []
             
             charts = []
-            if self._has_ebs_data():
+            if self._has_disk_data():
                 charts.append(self._create_aws_capacity_analysis())
                 charts.append(self._create_iostat_performance_analysis())
                 charts.append(self._create_bottleneck_correlation_analysis())
-                charts.append(self.generate_ebs_performance_overview())
-                charts.append(self.generate_ebs_bottleneck_analysis())
-                charts.append(self.generate_ebs_aws_standard_comparison())
-                charts.append(self.generate_ebs_time_series())
+                charts.append(self.generate_disk_performance_overview())
+                charts.append(self.generate_disk_bottleneck_analysis())
+                charts.append(self.generate_disk_normalized_comparison())
+                charts.append(self.generate_disk_time_series())
         
             return [chart for chart in charts if chart]
         
         except Exception as e:
-            print(f"❌ EBS charts generation failed: {e}")
+            print(f"❌ Disk charts generation failed: {e}")
             return []
     
-    def _has_ebs_data(self):
-        """Check EBS data availability - use field mapping"""
+    def _has_disk_data(self):
+        """Check disk data availability - use field mapping"""
         required = ['data_total_iops', 'data_util', 'data_aqu_sz']
         for field in required:
             mapped_field = self.get_mapped_field(field)
@@ -215,9 +261,9 @@ class EBSChartGenerator:
         return True
     
     def _create_aws_capacity_analysis(self):
-        """AWS capacity planning analysis - multi-dimensional professional analysis (3×2 symmetric layout)"""
+        """Disk capacity planning analysis - multi-dimensional professional analysis (3×2 symmetric layout)"""
         fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
-        fig.suptitle('AWS EBS Capacity Planning Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
+        fig.suptitle('Disk Capacity Planning Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         # Check device configuration
         accounts_configured = self.device_manager.is_accounts_configured()
@@ -225,21 +271,21 @@ class EBSChartGenerator:
         # 1. Actual IOPS utilization analysis - for capacity planning decisions
         data_total_iops_field = self.get_mapped_field('data_total_iops')
         if data_total_iops_field and data_total_iops_field in self.df.columns:
-            # Use actual IOPS (not AWS standard conversion) to calculate utilization
-            utilization = (self.df[data_total_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
+            # Use actual IOPS (not provider-adjusted conversion) to calculate utilization
+            utilization = (self.df[data_total_iops_field] / self.data_provisioned_iops * 100).clip(lower=0)
             ax1.plot(self.df['timestamp'], utilization, label='DATA Actual IOPS Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             
             # ACCOUNTS device IOPS utilization
             if accounts_configured:
                 accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
                 if accounts_total_iops_field and accounts_total_iops_field in self.df.columns:
-                    accounts_utilization = (self.df[accounts_total_iops_field] / self.accounts_baseline_iops * 100).clip(lower=0)
+                    accounts_utilization = (self.df[accounts_total_iops_field] / self.accounts_provisioned_iops * 100).clip(lower=0)
                     ax1.plot(self.df['timestamp'], accounts_utilization, label='ACCOUNTS Actual IOPS Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
             
-            ax1.axhline(y=self.ebs_iops_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
-                       label=f'Critical: {self.ebs_iops_threshold}%')
-            ax1.axhline(y=self.ebs_iops_threshold * 0.8, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
-                       label=f'Warning: {self.ebs_iops_threshold * 0.8:.0f}%')
+            ax1.axhline(y=self.disk_iops_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Critical: {self.disk_iops_threshold}%')
+            ax1.axhline(y=self.disk_iops_threshold * 0.8, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
+                       label=f'Warning: {self.disk_iops_threshold * 0.8:.0f}%')
             ax1.set_title('Actual IOPS Capacity Utilization (for Capacity Planning)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             ax1.set_ylabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
@@ -248,21 +294,21 @@ class EBSChartGenerator:
         # 2. Actual Throughput utilization analysis - for capacity planning decisions
         data_total_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
         if data_total_throughput_field and data_total_throughput_field in self.df.columns:
-            # Use actual Throughput (not AWS standard conversion) to calculate utilization
-            throughput_util = (self.df[data_total_throughput_field] / self.data_baseline_throughput * 100).clip(lower=0)
+            # Use actual Throughput (not provider-adjusted conversion) to calculate utilization
+            throughput_util = (self.df[data_total_throughput_field] / self.data_provisioned_throughput * 100).clip(lower=0)
             ax2.plot(self.df['timestamp'], throughput_util, label='DATA Actual Throughput Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
             
             # ACCOUNTS device Throughput utilization
             if accounts_configured:
                 accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
                 if accounts_total_throughput_field and accounts_total_throughput_field in self.df.columns:
-                    accounts_tp_util = (self.df[accounts_total_throughput_field] / self.accounts_baseline_throughput * 100).clip(lower=0)
+                    accounts_tp_util = (self.df[accounts_total_throughput_field] / self.accounts_provisioned_throughput * 100).clip(lower=0)
                     ax2.plot(self.df['timestamp'], accounts_tp_util, label='ACCOUNTS Actual Throughput Utilization', linewidth=2, color='purple')
             
-            ax2.axhline(y=self.ebs_throughput_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
-                       label=f'Critical: {self.ebs_throughput_threshold}%')
-            ax2.axhline(y=self.ebs_throughput_threshold * 0.8, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
-                       label=f'Warning: {self.ebs_throughput_threshold * 0.8:.0f}%')
+            ax2.axhline(y=self.disk_throughput_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Critical: {self.disk_throughput_threshold}%')
+            ax2.axhline(y=self.disk_throughput_threshold * 0.8, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
+                       label=f'Warning: {self.disk_throughput_threshold * 0.8:.0f}%')
             ax2.set_title('Actual Throughput Capacity Utilization (for Capacity Planning)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             ax2.set_ylabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"])
@@ -282,8 +328,8 @@ class EBSChartGenerator:
                 
                 ax3.plot(self.df['timestamp'], iops_values, label='DATA Actual IOPS Trend (10-min avg)', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
                 ax3.plot(self.df['timestamp'], trend_line, label='DATA Linear Trend', linewidth=2, linestyle='--', color=UnifiedChartStyle.COLORS["critical"])
-                ax3.axhline(y=self.data_baseline_iops, color=UnifiedChartStyle.COLORS["warning"], linestyle=':', alpha=0.7, 
-                           label=f'DATA Baseline: {self.data_baseline_iops}')
+                ax3.axhline(y=self.data_provisioned_iops, color=UnifiedChartStyle.COLORS["warning"], linestyle=':', alpha=0.7, 
+                           label=f'DATA Provisioned: {self.data_provisioned_iops}')
                 
                 # ACCOUNTS device IOPS trend
                 if accounts_configured:
@@ -297,8 +343,8 @@ class EBSChartGenerator:
                             
                             ax3.plot(self.df['timestamp'], accounts_iops_values, label='ACCOUNTS Actual IOPS Trend (10-min avg)', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
                             ax3.plot(self.df['timestamp'], accounts_trend_line, label='ACCOUNTS Linear Trend', linewidth=2, linestyle='--', color='purple')
-                            ax3.axhline(y=self.accounts_baseline_iops, color='cyan', linestyle=':', alpha=0.7, 
-                                       label=f'ACCOUNTS Baseline: {self.accounts_baseline_iops}')
+                            ax3.axhline(y=self.accounts_provisioned_iops, color='cyan', linestyle=':', alpha=0.7, 
+                                       label=f'ACCOUNTS Provisioned: {self.accounts_provisioned_iops}')
                 
                 ax3.set_title('Actual IOPS Capacity Planning Forecast', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax3.set_ylabel('Actual IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
@@ -319,8 +365,8 @@ class EBSChartGenerator:
                 
                 ax4.plot(self.df['timestamp'], throughput_values, label='DATA Throughput Trend (10-min avg)', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
                 ax4.plot(self.df['timestamp'], trend_line, label='DATA Linear Trend', linewidth=2, linestyle='--', color=UnifiedChartStyle.COLORS["critical"])
-                ax4.axhline(y=self.data_baseline_throughput, color=UnifiedChartStyle.COLORS["warning"], linestyle=':', alpha=0.7, 
-                           label=f'DATA Baseline: {self.data_baseline_throughput} MiB/s')
+                ax4.axhline(y=self.data_provisioned_throughput, color=UnifiedChartStyle.COLORS["warning"], linestyle=':', alpha=0.7, 
+                           label=f'DATA Provisioned: {self.data_provisioned_throughput} MiB/s')
                 
                 # ACCOUNTS device Throughput trend
                 if accounts_configured:
@@ -334,17 +380,17 @@ class EBSChartGenerator:
                             
                             ax4.plot(self.df['timestamp'], accounts_tp_values, label='ACCOUNTS Throughput Trend (10-min avg)', linewidth=2, color='purple')
                             ax4.plot(self.df['timestamp'], accounts_trend_line, label='ACCOUNTS Linear Trend', linewidth=2, linestyle='--', color='darkviolet')
-                            ax4.axhline(y=self.accounts_baseline_throughput, color='cyan', linestyle=':', alpha=0.7, 
-                                       label=f'ACCOUNTS Baseline: {self.accounts_baseline_throughput} MiB/s')
+                            ax4.axhline(y=self.accounts_provisioned_throughput, color='cyan', linestyle=':', alpha=0.7, 
+                                       label=f'ACCOUNTS Provisioned: {self.accounts_provisioned_throughput} MiB/s')
                 
                 ax4.set_title('Throughput Capacity Planning Forecast', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-                ax4.set_ylabel('AWS Standard Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
+                ax4.set_ylabel('Disk Standard Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax4.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["text_size"], ncol=2)
                 ax4.grid(True, alpha=0.3)
         
         # 5. IOPS capacity utilization distribution analysis - supports dual devices
         if data_total_iops_field:
-            data_utilization = (self.df[data_total_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
+            data_utilization = (self.df[data_total_iops_field] / self.data_provisioned_iops * 100).clip(lower=0)
             ax5.hist(data_utilization, bins=20, alpha=0.7, color='skyblue', edgecolor='black', label='DATA Device')
             ax5.axvline(x=data_utilization.mean(), color=UnifiedChartStyle.COLORS["data_primary"], linestyle='--', 
                        label=f'DATA Mean: {data_utilization.mean():.1f}%')
@@ -353,13 +399,13 @@ class EBSChartGenerator:
             if accounts_configured:
                 accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
                 if accounts_total_iops_field and accounts_total_iops_field in self.df.columns:
-                    accounts_utilization = (self.df[accounts_total_iops_field] / self.accounts_baseline_iops * 100).clip(lower=0)
+                    accounts_utilization = (self.df[accounts_total_iops_field] / self.accounts_provisioned_iops * 100).clip(lower=0)
                     ax5.hist(accounts_utilization, bins=20, alpha=0.7, color='lightcoral', edgecolor='black', label='ACCOUNTS Device')
                     ax5.axvline(x=accounts_utilization.mean(), color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', 
                                label=f'ACCOUNTS Mean: {accounts_utilization.mean():.1f}%')
             
-            ax5.axvline(x=self.ebs_iops_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
-                       label=f'Threshold: {self.ebs_iops_threshold}%')
+            ax5.axvline(x=self.disk_iops_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Threshold: {self.disk_iops_threshold}%')
             ax5.set_title('IOPS Utilization Distribution', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             ax5.set_xlabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax5.set_ylabel('Frequency', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
@@ -368,7 +414,7 @@ class EBSChartGenerator:
         
         # 6. Throughput capacity utilization distribution analysis - supports dual devices
         if data_total_throughput_field:
-            data_tp_utilization = (self.df[data_total_throughput_field] / self.data_baseline_throughput * 100).clip(lower=0)
+            data_tp_utilization = (self.df[data_total_throughput_field] / self.data_provisioned_throughput * 100).clip(lower=0)
             ax6.hist(data_tp_utilization, bins=20, alpha=0.7, color='lightgreen', edgecolor='black', label='DATA Device')
             ax6.axvline(x=data_tp_utilization.mean(), color=UnifiedChartStyle.COLORS["success"], linestyle='--', 
                        label=f'DATA Mean: {data_tp_utilization.mean():.1f}%')
@@ -377,13 +423,13 @@ class EBSChartGenerator:
             if accounts_configured:
                 accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
                 if accounts_total_throughput_field and accounts_total_throughput_field in self.df.columns:
-                    accounts_tp_utilization = (self.df[accounts_total_throughput_field] / self.accounts_baseline_throughput * 100).clip(lower=0)
+                    accounts_tp_utilization = (self.df[accounts_total_throughput_field] / self.accounts_provisioned_throughput * 100).clip(lower=0)
                     ax6.hist(accounts_tp_utilization, bins=20, alpha=0.7, color='plum', edgecolor='black', label='ACCOUNTS Device')
                     ax6.axvline(x=accounts_tp_utilization.mean(), color='purple', linestyle='--', 
                                label=f'ACCOUNTS Mean: {accounts_tp_utilization.mean():.1f}%')
             
-            ax6.axvline(x=self.ebs_throughput_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
-                       label=f'Threshold: {self.ebs_throughput_threshold}%')
+            ax6.axvline(x=self.disk_throughput_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Threshold: {self.disk_throughput_threshold}%')
             ax6.set_title('Throughput Utilization Distribution', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             ax6.set_xlabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax6.set_ylabel('Frequency', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
@@ -407,7 +453,7 @@ class EBSChartGenerator:
         accounts_configured = self.device_manager.is_accounts_configured()
         
         # Use framework unified title function
-        title = create_chart_title('EBS iostat Performance Analysis', accounts_configured)
+        title = create_chart_title('Disk iostat Performance Analysis', accounts_configured)
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
@@ -500,8 +546,8 @@ class EBSChartGenerator:
                     ax3_twin.plot(self.df['timestamp'], self.df[accounts_aqu_field], 
                                  label='ACCOUNTS Queue Depth', linewidth=2, color='lightsalmon')
             
-            ax3.axhline(y=self.ebs_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
-                       label=f'Util Threshold: {self.ebs_util_threshold}%')
+            ax3.axhline(y=self.disk_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
+                       label=f'Util Threshold: {self.disk_util_threshold}%')
             ax3.set_ylabel('Utilization (%)', color=UnifiedChartStyle.COLORS["data_primary"])
             ax3.tick_params(axis='y', labelcolor=UnifiedChartStyle.COLORS["data_primary"])
             
@@ -548,8 +594,8 @@ class EBSChartGenerator:
                     ax4.plot(self.df['timestamp'], self.df[accounts_avg_await_field], 
                             label='ACCOUNTS Average Latency', linewidth=2, color='brown', linestyle='--')
             
-            ax4.axhline(y=self.ebs_latency_threshold, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.7,
-                       label=f'Latency Threshold: {self.ebs_latency_threshold}ms')
+            ax4.axhline(y=self.disk_latency_threshold, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.7,
+                       label=f'Latency Threshold: {self.disk_latency_threshold}ms')
             ax4.set_title('I/O Latency Analysis (Read/Write Breakdown)')
             ax4.set_ylabel('Latency (ms)')
             # Use compact legend layout
@@ -570,13 +616,13 @@ class EBSChartGenerator:
         accounts_configured = self.device_manager.is_accounts_configured()
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('EBS Bottleneck Correlation Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
+        fig.suptitle('Disk Bottleneck Correlation Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         # 1. Actual utilization vs device utilization correlation - supports dual devices
         data_iops_field = self.get_mapped_field('data_total_iops')
         data_util_field = self.get_mapped_field('data_util')
         if data_iops_field and data_iops_field in self.df.columns and data_util_field and data_util_field in self.df.columns:
-            actual_iops_util = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
+            actual_iops_util = (self.df[data_iops_field] / self.data_provisioned_iops * 100).clip(lower=0)
             
             # DATA device scatter plot
             data_avg_await_field = self.get_mapped_field('data_avg_await')
@@ -593,17 +639,17 @@ class EBSChartGenerator:
                 accounts_iops_field = self.get_mapped_field('accounts_total_iops')
                 accounts_util_field = self.get_mapped_field('accounts_util')
                 if accounts_iops_field and accounts_util_field and accounts_iops_field in self.df.columns and accounts_util_field in self.df.columns:
-                    accounts_actual_iops_util = (self.df[accounts_iops_field] / self.accounts_baseline_iops * 100).clip(lower=0)
+                    accounts_actual_iops_util = (self.df[accounts_iops_field] / self.accounts_provisioned_iops * 100).clip(lower=0)
                     ax1.scatter(accounts_actual_iops_util, self.df[accounts_util_field], 
                                alpha=0.6, s=30, marker='^', color=UnifiedChartStyle.COLORS["accounts_primary"], label='ACCOUNTS Device')
             
-            ax1.axhline(y=self.ebs_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
-                       label=f'Device Util Threshold: {self.ebs_util_threshold}%')
-            ax1.axvline(x=self.ebs_iops_threshold, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', 
-                       label=f'AWS IOPS Threshold: {self.ebs_iops_threshold}%')
-            ax1.set_xlabel('AWS EBS IOPS Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
+            ax1.axhline(y=self.disk_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Device Util Threshold: {self.disk_util_threshold}%')
+            ax1.axvline(x=self.disk_iops_threshold, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', 
+                       label=f'Disk IOPS Threshold: {self.disk_iops_threshold}%')
+            ax1.set_xlabel('Disk IOPS Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
             ax1.set_ylabel('Device Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
-            ax1.set_title('AWS IOPS vs Device Utilization', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+            ax1.set_title('Disk IOPS vs Device Utilization', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
             ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax1.grid(True, alpha=0.3)
         
@@ -628,8 +674,8 @@ class EBSChartGenerator:
                     ax2.scatter(self.df[accounts_aqu_field], self.df[accounts_avg_await_field], 
                                alpha=0.6, s=30, marker='^', color=UnifiedChartStyle.COLORS["accounts_primary"], label='ACCOUNTS Device')
             
-            ax2.axhline(y=self.ebs_latency_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
-                       label=f'Latency Threshold: {self.ebs_latency_threshold}ms')
+            ax2.axhline(y=self.disk_latency_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Latency Threshold: {self.disk_latency_threshold}ms')
             ax2.set_xlabel('Average Queue Size', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
             ax2.set_ylabel('Average Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
             ax2.set_title('Queue Depth vs Latency Correlation', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
@@ -672,7 +718,7 @@ class EBSChartGenerator:
             all(field in self.df.columns for field in [data_util_field, data_avg_await_field, data_aqu_field])):
             # Create bottleneck scoring matrix
             util_score = (self.df[data_util_field] / 100).clip(0, 1)
-            latency_score = (self.df[data_avg_await_field] / self.ebs_latency_threshold).clip(0, 2)
+            latency_score = (self.df[data_avg_await_field] / self.disk_latency_threshold).clip(0, 2)
             queue_score = (self.df[data_aqu_field] / 10).clip(0, 1)  # Assume queue depth 10 as high value
             
             # Composite bottleneck score
@@ -697,8 +743,8 @@ class EBSChartGenerator:
         plt.close()
         return chart_path
     
-    def generate_ebs_performance_overview(self):
-        """EBS performance overview chart - supports DATA and ACCOUNTS dual device dynamic display"""
+    def generate_disk_performance_overview(self):
+        """Disk performance overview chart - supports DATA and ACCOUNTS dual device dynamic display"""
         
         # Device configuration detection - use unified method
         data_configured = True
@@ -709,52 +755,52 @@ class EBSChartGenerator:
             return None
         
         # Dynamic title
-        title = 'EBS Performance Overview - DATA & ACCOUNTS Devices' if accounts_configured else 'EBS Performance Overview - DATA Device Only'
+        title = 'Disk Performance Overview - DATA & ACCOUNTS Devices' if accounts_configured else 'Disk Performance Overview - DATA Device Only'
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
-        # 1. AWS standard IOPS vs baseline (with utilization zones)
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        # 1. Provider-adjusted IOPS vs provisioned ceiling (with utilization zones)
+        data_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
         if data_iops_field and data_iops_field in self.df.columns:
             ax1.plot(self.df['timestamp'], self.df[data_iops_field], 
-                    label='DATA Device AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
-            ax1.axhline(y=self.data_baseline_iops, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7, 
-                       label=f'DATA Baseline: {self.data_baseline_iops}')
+                    label='DATA Device Disk Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
+            ax1.axhline(y=self.data_provisioned_iops, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7, 
+                       label=f'DATA Provisioned: {self.data_provisioned_iops}')
             
             # ACCOUNTS device data overlay
             if accounts_configured:
-                accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
+                accounts_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'accounts')
                 if accounts_iops_field and accounts_iops_field in self.df.columns:
                     ax1.plot(self.df['timestamp'], self.df[accounts_iops_field], 
-                            label='ACCOUNTS Device AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
-                    ax1.axhline(y=self.accounts_baseline_iops, color='purple', linestyle='--', alpha=0.7, 
-                               label=f'ACCOUNTS Baseline: {self.accounts_baseline_iops}')
+                            label='ACCOUNTS Device Disk Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
+                    ax1.axhline(y=self.accounts_provisioned_iops, color='purple', linestyle='--', alpha=0.7, 
+                               label=f'ACCOUNTS Provisioned: {self.accounts_provisioned_iops}')
             
-            ax1.set_title('AWS Standard IOPS Performance Overview')
-            ax1.set_ylabel('AWS Standard IOPS')
+            ax1.set_title('Disk Standard IOPS Performance Overview')
+            ax1.set_ylabel('Disk Standard IOPS')
             ax1.legend()
             ax1.grid(True, alpha=0.3)
         
-        # 2. AWS standard Throughput vs baseline
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
+        # 2. Provider-adjusted Throughput vs provisioned ceiling
+        data_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'data')
         if data_throughput_field and data_throughput_field in self.df.columns:
             ax2.plot(self.df['timestamp'], self.df[data_throughput_field], 
-                    label='DATA Device AWS Standard Throughput', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
-            ax2.axhline(y=self.data_baseline_throughput, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7, 
-                       label=f'DATA Baseline: {self.data_baseline_throughput} MiB/s')
+                    label='DATA Device Disk Standard Throughput', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
+            ax2.axhline(y=self.data_provisioned_throughput, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7, 
+                       label=f'DATA Provisioned: {self.data_provisioned_throughput} MiB/s')
             
             # ACCOUNTS device data overlay
             if accounts_configured:
-                accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
+                accounts_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'accounts')
                 if accounts_throughput_field and accounts_throughput_field in self.df.columns:
                     ax2.plot(self.df['timestamp'], self.df[accounts_throughput_field], 
-                            label='ACCOUNTS Device AWS Standard Throughput', linewidth=2, color='purple')
-                    ax2.axhline(y=self.accounts_baseline_throughput, color='purple', linestyle='--', alpha=0.7, 
-                               label=f'ACCOUNTS Baseline: {self.accounts_baseline_throughput} MiB/s')
+                            label='ACCOUNTS Device Disk Standard Throughput', linewidth=2, color='purple')
+                    ax2.axhline(y=self.accounts_provisioned_throughput, color='purple', linestyle='--', alpha=0.7, 
+                               label=f'ACCOUNTS Provisioned: {self.accounts_provisioned_throughput} MiB/s')
             
-            ax2.set_title('AWS Standard Throughput Performance Overview')
-            ax2.set_ylabel('AWS Standard Throughput (MiB/s)')
+            ax2.set_title('Disk Standard Throughput Performance Overview')
+            ax2.set_ylabel('Disk Standard Throughput (MiB/s)')
             ax2.legend()
             ax2.grid(True, alpha=0.3)
         
@@ -770,8 +816,8 @@ class EBSChartGenerator:
                     ax3.plot(self.df['timestamp'], self.df[accounts_util_field], 
                             label='ACCOUNTS Device Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
             
-            ax3.axhline(y=self.ebs_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
-                       label=f'Critical: {self.ebs_util_threshold}%')
+            ax3.axhline(y=self.disk_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Critical: {self.disk_util_threshold}%')
             ax3.set_title('Device Utilization Comparison')
             ax3.set_ylabel('Utilization (%)')
             ax3.legend()
@@ -779,29 +825,29 @@ class EBSChartGenerator:
         
         # 4. Performance summary - use text wrapping
         ax4.axis('off')
-        summary_lines = ["EBS Performance Summary:", ""]
+        summary_lines = ["Disk Performance Summary:", ""]
         
         if data_iops_field and data_iops_field in self.df.columns:
             iops_mean = self.df[data_iops_field].mean()
-            iops_util = (iops_mean / self.data_baseline_iops * 100)
+            iops_util = (iops_mean / self.data_provisioned_iops * 100)
             summary_lines.extend([
                 "DATA Device:",
                 f"  Avg IOPS: {iops_mean:.1f}",
                 f"  Utilization: {iops_util:.1f}%",
-                f"  Baseline: {self.data_baseline_iops}",
+                f"  Provisioned: {self.data_provisioned_iops}",
                 ""
             ])
         
         if accounts_configured:
-            accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
+            accounts_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'accounts')
             if accounts_iops_field and accounts_iops_field in self.df.columns:
                 accounts_iops_mean = self.df[accounts_iops_field].mean()
-                accounts_iops_util = (accounts_iops_mean / self.accounts_baseline_iops * 100)
+                accounts_iops_util = (accounts_iops_mean / self.accounts_provisioned_iops * 100)
                 summary_lines.extend([
                     "ACCOUNTS Device:",
                     f"  Avg IOPS: {accounts_iops_mean:.1f}",
                     f"  Utilization: {accounts_iops_util:.1f}%",
-                    f"  Baseline: {self.accounts_baseline_iops}"
+                    f"  Provisioned: {self.accounts_provisioned_iops}"
                 ])
         
         # Use line wrapping to avoid text overlap
@@ -817,7 +863,7 @@ class EBSChartGenerator:
         plt.close()
         
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
-        print(f"✅ EBS Performance Overview saved: {os.path.basename(chart_path)} ({device_info} devices)")
+        print(f"✅ Disk Performance Overview saved: {os.path.basename(chart_path)} ({device_info} devices)")
         return chart_path
         
     def _is_accounts_configured(self):
@@ -826,8 +872,8 @@ class EBSChartGenerator:
         accounts_cols = [col for col in self.df.columns if col.startswith('accounts_')]
         return len(accounts_cols) > 0
     
-    def generate_ebs_bottleneck_analysis(self):
-        """EBS Bottleneck Analysis Chart - Dual Device Support"""
+    def generate_disk_bottleneck_analysis(self):
+        """Disk Bottleneck Analysis Chart - Dual Device Support"""
         
         # Device configuration detection - use unified method
         data_configured = True
@@ -838,29 +884,29 @@ class EBSChartGenerator:
             return None
         
         # Dynamic title
-        title = 'EBS Bottleneck Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'EBS Bottleneck Analysis - DATA Device Only'
+        title = 'Disk Bottleneck Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Disk Bottleneck Analysis - DATA Device Only'
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         # 1. IOPS Bottleneck Detection
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        data_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
         if data_iops_field and data_iops_field in self.df.columns:
-            threshold_iops = self.data_baseline_iops * (self.ebs_iops_threshold / 100)
+            threshold_iops = self.data_provisioned_iops * (self.disk_iops_threshold / 100)
             ax1.plot(self.df['timestamp'], self.df[data_iops_field], 
-                    label='DATA Device AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
+                    label='DATA Device Disk Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             ax1.axhline(y=threshold_iops, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
                        label=f'DATA Critical: {threshold_iops:.0f}')
-            ax1.axhline(y=self.data_baseline_iops * 0.7, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.7,
-                       label=f'DATA Warning: {self.data_baseline_iops * 0.7:.0f}')
+            ax1.axhline(y=self.data_provisioned_iops * 0.7, color=UnifiedChartStyle.COLORS["accounts_primary"], linestyle='--', alpha=0.7,
+                       label=f'DATA Warning: {self.data_provisioned_iops * 0.7:.0f}')
             
             # ACCOUNTS device overlay
             if accounts_configured:
-                accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
+                accounts_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'accounts')
                 if accounts_iops_field and accounts_iops_field in self.df.columns:
-                    accounts_threshold_iops = self.accounts_baseline_iops * (self.ebs_iops_threshold / 100)
+                    accounts_threshold_iops = self.accounts_provisioned_iops * (self.disk_iops_threshold / 100)
                     ax1.plot(self.df['timestamp'], self.df[accounts_iops_field], 
-                            label='ACCOUNTS Device AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
+                            label='ACCOUNTS Device Disk Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
                     ax1.axhline(y=accounts_threshold_iops, color='purple', linestyle='--', 
                                label=f'ACCOUNTS Critical: {accounts_threshold_iops:.0f}')
             
@@ -872,31 +918,31 @@ class EBSChartGenerator:
                            color=UnifiedChartStyle.COLORS["critical"], s=30, alpha=0.7, label='DATA Bottleneck Points')
             
             ax1.set_title('IOPS Bottleneck Detection')
-            ax1.set_ylabel('AWS Standard IOPS')
+            ax1.set_ylabel('Disk Standard IOPS')
             ax1.legend()
             ax1.grid(True, alpha=0.3)
         
         # 2. Throughput Bottleneck Detection  
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
+        data_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'data')
         if data_throughput_field and data_throughput_field in self.df.columns:
-            threshold_throughput = self.data_baseline_throughput * (self.ebs_throughput_threshold / 100)
+            threshold_throughput = self.data_provisioned_throughput * (self.disk_throughput_threshold / 100)
             ax2.plot(self.df['timestamp'], self.df[data_throughput_field], 
-                    label='DATA Device AWS Standard Throughput', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
+                    label='DATA Device Disk Standard Throughput', linewidth=2, color=UnifiedChartStyle.COLORS["success"])
             ax2.axhline(y=threshold_throughput, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
                        label=f'DATA Critical: {threshold_throughput:.0f} MiB/s')
             
             # ACCOUNTS device overlay
             if accounts_configured:
-                accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
+                accounts_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'accounts')
                 if accounts_throughput_field and accounts_throughput_field in self.df.columns:
-                    accounts_threshold_throughput = self.accounts_baseline_throughput * (self.ebs_throughput_threshold / 100)
+                    accounts_threshold_throughput = self.accounts_provisioned_throughput * (self.disk_throughput_threshold / 100)
                     ax2.plot(self.df['timestamp'], self.df[accounts_throughput_field], 
-                            label='ACCOUNTS Device AWS Standard Throughput', linewidth=2, color='purple')
+                            label='ACCOUNTS Device Disk Standard Throughput', linewidth=2, color='purple')
                     ax2.axhline(y=accounts_threshold_throughput, color='purple', linestyle='--', 
                                label=f'ACCOUNTS Critical: {accounts_threshold_throughput:.0f} MiB/s')
             
             ax2.set_title('Throughput Bottleneck Detection')
-            ax2.set_ylabel('AWS Standard Throughput (MiB/s)')
+            ax2.set_ylabel('Disk Standard Throughput (MiB/s)')
             ax2.legend()
             ax2.grid(True, alpha=0.3)
         
@@ -905,10 +951,10 @@ class EBSChartGenerator:
         if data_util_field and data_util_field in self.df.columns:
             ax3.plot(self.df['timestamp'], self.df[data_util_field], 
                     label='DATA Device Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
-            ax3.axhline(y=self.ebs_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
-                       label=f'Critical: {self.ebs_util_threshold}%')
-            ax3.axhline(y=self.ebs_util_threshold * 0.8, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
-                       label=f'Warning: {self.ebs_util_threshold * 0.8:.0f}%')
+            ax3.axhline(y=self.disk_util_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Critical: {self.disk_util_threshold}%')
+            ax3.axhline(y=self.disk_util_threshold * 0.8, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
+                       label=f'Warning: {self.disk_util_threshold * 0.8:.0f}%')
             
             # ACCOUNTS device overlay
             if accounts_configured:
@@ -918,7 +964,7 @@ class EBSChartGenerator:
                             label='ACCOUNTS Device Utilization', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
             
             # Mark high utilization points
-            high_util_points = self.df[data_util_field] > self.ebs_util_threshold
+            high_util_points = self.df[data_util_field] > self.disk_util_threshold
             if high_util_points.any():
                 ax3.scatter(self.df.loc[high_util_points, 'timestamp'], 
                            self.df.loc[high_util_points, data_util_field], 
@@ -934,10 +980,10 @@ class EBSChartGenerator:
         if data_await_field and data_await_field in self.df.columns:
             ax4.plot(self.df['timestamp'], self.df[data_await_field], 
                     label='DATA Device Average Latency', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
-            ax4.axhline(y=self.ebs_latency_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
-                       label=f'Critical: {self.ebs_latency_threshold}ms')
-            ax4.axhline(y=self.ebs_latency_threshold * 0.4, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
-                       label=f'Warning: {self.ebs_latency_threshold * 0.4:.0f}ms')
+            ax4.axhline(y=self.disk_latency_threshold, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', 
+                       label=f'Critical: {self.disk_latency_threshold}ms')
+            ax4.axhline(y=self.disk_latency_threshold * 0.4, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7, 
+                       label=f'Warning: {self.disk_latency_threshold * 0.4:.0f}ms')
             
             # ACCOUNTS device overlay
             if accounts_configured:
@@ -963,86 +1009,86 @@ class EBSChartGenerator:
         plt.close()
         
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
-        print(f"✅ EBS Bottleneck Analysis saved: {os.path.basename(chart_path)} ({device_info} devices)")
+        print(f"✅ Disk Bottleneck Analysis saved: {os.path.basename(chart_path)} ({device_info} devices)")
         return chart_path
     
-    def generate_ebs_aws_standard_comparison(self):
-        """EBS AWS Standard Comparison Chart - Dual Device Support"""
+    def generate_disk_normalized_comparison(self):
+        """Disk Normalized Comparison Chart - Dual Device Support"""
         
         # Device configuration detection - use unified method
         accounts_configured = self.device_manager.is_accounts_configured()
         
         # Dynamic title
-        title = 'EBS AWS Standard Comparison - DATA & ACCOUNTS Devices' if accounts_configured else 'EBS AWS Standard Comparison - DATA Device Only'
+        title = 'Disk Normalized Comparison - DATA & ACCOUNTS Devices' if accounts_configured else 'Disk Normalized Comparison - DATA Device Only'
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         # 1. IOPS comparison analysis - supports dual devices
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        data_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
         data_total_iops_field = self.get_mapped_field('data_total_iops')
         if data_iops_field and data_total_iops_field and data_iops_field in self.df.columns and data_total_iops_field in self.df.columns:
             ax1.plot(self.df['timestamp'], self.df[data_total_iops_field], 
                     label='DATA Raw IOPS', linewidth=2, alpha=0.5, color=UnifiedChartStyle.COLORS["data_primary"])
             ax1.plot(self.df['timestamp'], self.df[data_iops_field], 
-                    label='DATA AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
+                    label='DATA Disk Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
             
             # ACCOUNTS device IOPS comparison
             if accounts_configured:
-                accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
+                accounts_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'accounts')
                 accounts_total_iops_field = self.get_mapped_field('accounts_total_iops')
                 if accounts_iops_field and accounts_total_iops_field and accounts_iops_field in self.df.columns and accounts_total_iops_field in self.df.columns:
                     ax1.plot(self.df['timestamp'], self.df[accounts_total_iops_field], 
                             label='ACCOUNTS Raw IOPS', linewidth=2, alpha=0.5, color=UnifiedChartStyle.COLORS["accounts_primary"])
                     ax1.plot(self.df['timestamp'], self.df[accounts_iops_field], 
-                            label='ACCOUNTS AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
+                            label='ACCOUNTS Disk Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["accounts_primary"])
             
-            ax1.axhline(y=self.data_baseline_iops, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
-                       label=f'DATA Baseline: {self.data_baseline_iops}')
+            ax1.axhline(y=self.data_provisioned_iops, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
+                       label=f'DATA Provisioned: {self.data_provisioned_iops}')
             if accounts_configured:
-                ax1.axhline(y=self.accounts_baseline_iops, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7,
-                           label=f'ACCOUNTS Baseline: {self.accounts_baseline_iops}')
+                ax1.axhline(y=self.accounts_provisioned_iops, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7,
+                           label=f'ACCOUNTS Provisioned: {self.accounts_provisioned_iops}')
             
-            ax1.set_title('IOPS: AWS Standard vs Raw Performance', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+            ax1.set_title('IOPS: Disk Standard vs Raw Performance', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
             ax1.set_ylabel('IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
             ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax1.grid(True, alpha=0.3)
             UnifiedChartStyle.format_time_axis(ax1, self.df['timestamp'])
         
         # 2. Throughput comparison analysis - supports dual devices
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
+        data_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'data')
         data_total_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
         if data_throughput_field and data_total_throughput_field and data_throughput_field in self.df.columns and data_total_throughput_field in self.df.columns:
             ax2.plot(self.df['timestamp'], self.df[data_total_throughput_field], 
                     label='DATA Raw Throughput', linewidth=2.5, linestyle='--', alpha=0.7, color=UnifiedChartStyle.COLORS["data_primary"])
             ax2.plot(self.df['timestamp'], self.df[data_throughput_field], 
-                    label='DATA AWS Standard Throughput', linewidth=2, linestyle='-', color=UnifiedChartStyle.COLORS["data_primary"])
+                    label='DATA Disk Standard Throughput', linewidth=2, linestyle='-', color=UnifiedChartStyle.COLORS["data_primary"])
             
             # ACCOUNTS device Throughput comparison
             if accounts_configured:
-                accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
+                accounts_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'accounts')
                 accounts_total_throughput_field = self.get_mapped_field('accounts_total_throughput_mibs')
                 if accounts_throughput_field and accounts_total_throughput_field and accounts_throughput_field in self.df.columns and accounts_total_throughput_field in self.df.columns:
                     ax2.plot(self.df['timestamp'], self.df[accounts_total_throughput_field], 
                             label='ACCOUNTS Raw Throughput', linewidth=2.5, linestyle='--', alpha=0.7, color=UnifiedChartStyle.COLORS["accounts_primary"])
                     ax2.plot(self.df['timestamp'], self.df[accounts_throughput_field], 
-                            label='ACCOUNTS AWS Standard Throughput', linewidth=2, linestyle='-', color=UnifiedChartStyle.COLORS["accounts_primary"])
+                            label='ACCOUNTS Disk Standard Throughput', linewidth=2, linestyle='-', color=UnifiedChartStyle.COLORS["accounts_primary"])
             
-            ax2.axhline(y=self.data_baseline_throughput, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
-                       label=f'DATA Baseline: {self.data_baseline_throughput} MiB/s')
+            ax2.axhline(y=self.data_provisioned_throughput, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
+                       label=f'DATA Provisioned: {self.data_provisioned_throughput} MiB/s')
             if accounts_configured:
-                ax2.axhline(y=self.accounts_baseline_throughput, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7,
-                           label=f'ACCOUNTS Baseline: {self.accounts_baseline_throughput} MiB/s')
+                ax2.axhline(y=self.accounts_provisioned_throughput, color=UnifiedChartStyle.COLORS["warning"], linestyle='--', alpha=0.7,
+                           label=f'ACCOUNTS Provisioned: {self.accounts_provisioned_throughput} MiB/s')
             
-            ax2.set_title('Throughput: AWS Standard vs Raw Performance', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
+            ax2.set_title('Throughput: Disk Standard vs Raw Performance', fontsize=UnifiedChartStyle.FONT_CONFIG["subtitle_size"])
             ax2.set_ylabel('Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG["label_size"])
             ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG["legend_size"])
             ax2.grid(True, alpha=0.3)
             UnifiedChartStyle.format_time_axis(ax2, self.df['timestamp'])
         
         # 3. Performance Efficiency Analysis
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
+        data_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
+        data_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'data')
         
         if data_iops_field and data_throughput_field and all(field in self.df.columns for field in [data_iops_field, data_throughput_field]):
             # Calculate efficiency ratio (MiB/s per IOPS)
@@ -1051,8 +1097,8 @@ class EBSChartGenerator:
             
             # ACCOUNTS device efficiency
             if accounts_configured:
-                accounts_iops_field = self.get_mapped_field('accounts_aws_standard_iops')
-                accounts_throughput_field = self.get_mapped_field('accounts_aws_standard_throughput_mibs')
+                accounts_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'accounts')
+                accounts_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'accounts')
                 if all(field and field in self.df.columns for field in [accounts_iops_field, accounts_throughput_field]):
                     accounts_efficiency = self.df[accounts_throughput_field] / (self.df[accounts_iops_field] + 1)
                     ax3.plot(self.df['timestamp'], accounts_efficiency, 
@@ -1066,9 +1112,9 @@ class EBSChartGenerator:
             UnifiedChartStyle.format_time_axis(ax3, self.df['timestamp'])
         
         # 4. Summary
-        summary_lines = ["AWS Standard vs Raw Comparison:", ""]
+        summary_lines = ["Disk Standard vs Raw Comparison:", ""]
         
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        data_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
         data_total_iops_field = self.get_mapped_field('data_total_iops')
         if data_iops_field and data_total_iops_field and all(f in self.df.columns for f in [data_iops_field, data_total_iops_field]):
             raw_mean = self.df[data_total_iops_field].mean()
@@ -1078,12 +1124,12 @@ class EBSChartGenerator:
             summary_lines.extend([
                 "IOPS Analysis:",
                 f"  Raw Average:          {raw_mean:.1f}",
-                f"  AWS Standard Average: {aws_mean:.1f}",
+                f"  Disk Standard Average: {aws_mean:.1f}",
                 f"  Difference:           {iops_diff_pct:+.1f}%",
                 ""
             ])
         
-        data_throughput_field = self.get_mapped_field('data_aws_standard_throughput_mibs')
+        data_throughput_field = self._resolve_disk_field('disk_throughput_provider_adjusted', 'data')
         data_total_throughput_field = self.get_mapped_field('data_total_throughput_mibs')
         if data_throughput_field and data_total_throughput_field and all(f in self.df.columns for f in [data_throughput_field, data_total_throughput_field]):
             raw_tp_mean = self.df[data_total_throughput_field].mean()
@@ -1093,17 +1139,17 @@ class EBSChartGenerator:
             summary_lines.extend([
                 "Throughput Analysis:",
                 f"  Raw Average:          {raw_tp_mean:.1f} MiB/s",
-                f"  AWS Standard Average: {aws_tp_mean:.1f} MiB/s",
+                f"  Disk Standard Average: {aws_tp_mean:.1f} MiB/s",
                 f"  Difference:           {tp_diff_pct:+.1f}%",
                 ""
             ])
         
-        # Baseline utilization comparison
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        # Provisioned-ceiling utilization comparison
+        data_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
         if data_iops_field and data_iops_field in self.df.columns:
-            aws_utilization = (self.df[data_iops_field] / self.data_baseline_iops * 100).mean()
+            aws_utilization = (self.df[data_iops_field] / self.data_provisioned_iops * 100).mean()
             summary_lines.extend([
-                "AWS Baseline Utilization:",
+                "Disk Provisioned Utilization:",
                 f"  Average: {aws_utilization:.1f}%"
             ])
             
@@ -1122,8 +1168,8 @@ class EBSChartGenerator:
         plt.close()
         return chart_path
     
-    def generate_ebs_time_series(self):
-        """EBS Time Series Analysis Chart - Dual Device Support"""
+    def generate_disk_time_series(self):
+        """Disk Time Series Analysis Chart - Dual Device Support"""
         
         # Device configuration detection - use unified method
         data_configured = True
@@ -1134,21 +1180,21 @@ class EBSChartGenerator:
             return None
         
         # Dynamic title
-        title = 'EBS Time Series Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'EBS Time Series Analysis - DATA Device Only'
+        title = 'Disk Time Series Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Disk Time Series Analysis - DATA Device Only'
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG["title_size"], fontweight='bold')
         
         # 1. Multi-metric time series (normalized display)
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        data_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
         data_util_field = self.get_mapped_field('data_util')
         data_avg_await_field = self.get_mapped_field('data_avg_await')
         
-        if data_iops_field and data_util_field and data_avg_await_field and all(self.get_mapped_field(f) in self.df.columns for f in ['data_aws_standard_iops', 'data_util', 'data_avg_await']):
+        if data_iops_field and data_util_field and data_avg_await_field and all(f in self.df.columns for f in [data_iops_field, data_util_field, data_avg_await_field]):
             # Normalize data to 0-100 range for comparison
-            iops_normalized = (self.df[data_iops_field] / self.data_baseline_iops * 100).clip(lower=0)
+            iops_normalized = (self.df[data_iops_field] / self.data_provisioned_iops * 100).clip(lower=0)
             util_normalized = self.df[data_util_field]
-            latency_normalized = (self.df[data_avg_await_field] / self.ebs_latency_threshold * 100).clip(0, 200)
+            latency_normalized = (self.df[data_avg_await_field] / self.disk_latency_threshold * 100).clip(0, 200)
             
             ax1.plot(self.df['timestamp'], iops_normalized, 
                     label='IOPS Utilization (%)', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
@@ -1164,7 +1210,7 @@ class EBSChartGenerator:
             ax1.grid(True, alpha=0.3)
         
         # 2. Moving average trend analysis
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        data_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
         if data_iops_field and data_iops_field in self.df.columns:
             window_size = min(20, len(self.df) // 5)  # Dynamic window size
             if window_size > 1:
@@ -1182,10 +1228,10 @@ class EBSChartGenerator:
                                rolling_mean + rolling_std,
                                alpha=0.2, color=UnifiedChartStyle.COLORS["data_primary"], label='±1 Std Dev')
                 
-                ax2.axhline(y=self.data_baseline_iops, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
-                           label=f'Baseline: {self.data_baseline_iops}')
+                ax2.axhline(y=self.data_provisioned_iops, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
+                           label=f'Provisioned: {self.data_provisioned_iops}')
                 ax2.set_title('IOPS Trend Analysis with Moving Average')
-                ax2.set_ylabel('AWS Standard IOPS')
+                ax2.set_ylabel('Disk Standard IOPS')
                 ax2.legend()
                 ax2.grid(True, alpha=0.3)
         
@@ -1201,7 +1247,7 @@ class EBSChartGenerator:
                                       distance=5)
                 
                 ax3.plot(self.df['timestamp'], self.df[data_iops_field], 
-                        label='AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
+                        label='Disk Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
                 
                 if len(peaks) > 0:
                     ax3.scatter(self.df.iloc[peaks]['timestamp'], 
@@ -1214,7 +1260,7 @@ class EBSChartGenerator:
                               color=UnifiedChartStyle.COLORS["success"], s=50, marker='v', label='Valleys', zorder=5)
                 
                 ax3.set_title('Performance Pattern Recognition')
-                ax3.set_ylabel('AWS Standard IOPS')
+                ax3.set_ylabel('Disk Standard IOPS')
                 ax3.legend()
                 ax3.grid(True, alpha=0.3)
                 
@@ -1227,7 +1273,7 @@ class EBSChartGenerator:
                 low_points = self.df[data_iops_field] < (mean_val - std_val)
                 
                 ax3.plot(self.df['timestamp'], self.df[data_iops_field], 
-                        label='AWS Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
+                        label='Disk Standard IOPS', linewidth=2, color=UnifiedChartStyle.COLORS["data_primary"])
                 ax3.axhline(y=mean_val + std_val, color=UnifiedChartStyle.COLORS["critical"], linestyle='--', alpha=0.7,
                            label='High Threshold')
                 ax3.axhline(y=mean_val - std_val, color=UnifiedChartStyle.COLORS["success"], linestyle='--', alpha=0.7,
@@ -1235,16 +1281,16 @@ class EBSChartGenerator:
                 
                 if high_points.any():
                     ax3.scatter(self.df.loc[high_points, 'timestamp'], 
-                              self.df.loc[high_points, 'data_aws_standard_iops'],
+                              self.df.loc[high_points, data_iops_field],
                               color=UnifiedChartStyle.COLORS["critical"], s=30, alpha=0.7, label='High Points')
                 
                 if low_points.any():
                     ax3.scatter(self.df.loc[low_points, 'timestamp'], 
-                              self.df.loc[low_points, 'data_aws_standard_iops'],
+                              self.df.loc[low_points, data_iops_field],
                               color=UnifiedChartStyle.COLORS["success"], s=30, alpha=0.7, label='Low Points')
                 
                 ax3.set_title('Performance Variation Analysis')
-                ax3.set_ylabel('AWS Standard IOPS')
+                ax3.set_ylabel('Disk Standard IOPS')
                 ax3.legend()
                 ax3.grid(True, alpha=0.3)
         
@@ -1252,7 +1298,7 @@ class EBSChartGenerator:
         ax4.axis('off')
         timeseries_text = "Time Series Analysis Summary:\n\n"
         
-        data_iops_field = self.get_mapped_field('data_aws_standard_iops')
+        data_iops_field = self._resolve_disk_field('disk_iops_provider_adjusted', 'data')
         if data_iops_field and data_iops_field in self.df.columns:
             iops_data = self.df[data_iops_field]
             timeseries_text += f"IOPS Statistics:\n"
@@ -1288,8 +1334,8 @@ class EBSChartGenerator:
         plt.close()
         return chart_path
     
-    def validate_ebs_integration(self):
-        """Validate EBS integration correctness after complete separation"""
+    def validate_disk_integration(self):
+        """Validate disk integration correctness after complete separation"""
         validation_results = {
             'data_completeness': self.validate_data_completeness(),
             'chart_files_defined': len(self.CHART_FILES) == 7,

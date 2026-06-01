@@ -15,7 +15,7 @@
 - **跨平台兼容性**：支持 8 个主流区块链节点（Solana、Ethereum、BSC、Base、Polygon、Scroll、Starknet、Sui）在 AWS、其他云、IDC 或本地 Linux 环境运行
 - **真实交易数据测试**：从区块链节点获取活跃账户地址，使用 single 或 mixed RPC 方法生成测试目标
 - **[多层次性能监控](#-监控指标)**：专业监控系统，4 个专业化数据流
-  - 统一指标（79 个字段）：CPU、内存、EBS、网络、ENA、区块高度、QPS
+  - 统一指标（79 个字段）：CPU、内存、磁盘、网络、ENA、区块高度、QPS
   - 监控开销跟踪（20 个字段）：自我监控和影响分析
   - ENA 深度监控（15 个字段）：AWS 专属网络性能分析
   - 区块链健康跟踪（7 个字段）：节点同步状态和数据丢失检测
@@ -29,8 +29,8 @@
   - **离线分析**：测试完成后的多维度深度分析
     - 时间窗口分析（瓶颈前后 ±30 秒）聚焦根因调查
     - 性能悬崖分析识别 QPS 降级模式
-    - EBS 性能深度剖析与 AWS 基线对比
-    - CPU-EBS 关联分析识别资源瓶颈
+    - 磁盘 性能深度剖析与 AWS 基线对比
+    - CPU-磁盘 关联分析识别资源瓶颈
     - RPC 方法性能剖析和优化建议
 - **AWS 深度集成**：EBS 性能基线、ENA 网络监控
 - **专业可视化**：[32 张专业图表](#-生成的报告)和[全面的 HTML 报告](./docs/image/performance_report_zh_20251030_171541.html)
@@ -235,7 +235,7 @@ blockchain-node-benchmark/
 │   └── advanced_chart_generator.py     # 高级图表生成器
 └── 🛠️ 工具与实用程序
     ├── benchmark_archiver.sh           # 测试结果归档器
-    ├── ebs_bottleneck_detector.sh      # EBS 瓶颈检测器
+    ├── disk_bottleneck_detector.sh      # 磁盘 瓶颈检测器
     └── target_generator.sh             # 测试目标生成器
 ```
 
@@ -321,8 +321,8 @@ NETWORK_MAX_BANDWIDTH_GBPS=25        # Gbps
 ```bash
 BOTTLENECK_CPU_THRESHOLD=85
 BOTTLENECK_MEMORY_THRESHOLD=90
-BOTTLENECK_EBS_UTIL_THRESHOLD=90
-BOTTLENECK_EBS_LATENCY_THRESHOLD=50
+BOTTLENECK_DISK_UTIL_THRESHOLD=90
+BOTTLENECK_DISK_LATENCY_THRESHOLD=50
 NETWORK_UTILIZATION_THRESHOLD=80
 ```
 
@@ -351,7 +351,7 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 - **时间戳**：统一时间戳（1 个字段）
 - **CPU**：使用率、I/O 等待、系统调用（6 个字段）
 - **内存**：使用率、可用内存、缓存（3 个字段）
-- **EBS 存储**：IOPS、吞吐量、延迟、利用率（每设备 21 个字段，2 个设备共 42 个字段）
+- **磁盘 存储**：IOPS、吞吐量、延迟、利用率（每设备 21 个字段，2 个设备共 42 个字段）
 - **网络**：带宽利用率、PPS、连接数（10 个字段）
 - **ENA 网络**：配额超限、带宽限制（6 个字段，仅 AWS）
 - **监控开销**：系统影响指标（2 个字段）
@@ -391,7 +391,7 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 ### 瓶颈检测（8 个维度）
 1. **CPU 瓶颈**：阈值 85%
 2. **内存瓶颈**：阈值 90%
-3. **EBS 瓶颈**：IOPS/吞吐量/利用率 > 90% 基线
+3. **磁盘 瓶颈**：IOPS/吞吐量/利用率 > 90% 基线
 4. **网络瓶颈**：带宽/PPS 利用率 > 80%
 5. **ENA 瓶颈**：配额限制超限
 6. **RPC 成功率**：< 95%（必要条件）
@@ -423,20 +423,20 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 8. `performance_trend_analysis.png` - 性能趋势分析
 9. `performance_correlation_heatmap.png` - 性能相关性热图
 
-**EBS 专业图表（7 张）**：
+**磁盘 专业图表（7 张）**：
 
-10. `ebs_aws_capacity_planning.png` - AWS 容量规划分析
-11. `ebs_iostat_performance.png` - Iostat 性能分析
-12. `ebs_bottleneck_correlation.png` - 瓶颈相关性分析
-13. `ebs_performance_overview.png` - EBS 性能概览
-14. `ebs_bottleneck_analysis.png` - EBS 瓶颈分析
-15. `ebs_aws_standard_comparison.png` - EBS AWS 标准对比
-16. `ebs_time_series_analysis.png` - EBS 时间序列分析
+10. `disk_capacity_planning.png` - AWS 容量规划分析
+11. `disk_iostat_performance.png` - Iostat 性能分析
+12. `disk_bottleneck_correlation.png` - 瓶颈相关性分析
+13. `disk_performance_overview.png` - 磁盘 性能概览
+14. `disk_bottleneck_analysis.png` - 磁盘 瓶颈分析
+15. `disk_normalized_comparison.png` - 磁盘 折算值对比
+16. `disk_time_series_analysis.png` - 磁盘 时间序列分析
 
 **核心性能图表（11 张）**：
 
 17. `performance_overview.png` - 性能概览
-18. `cpu_ebs_correlation_visualization.png` - CPU-EBS 相关性分析
+18. `cpu_disk_correlation_visualization.png` - CPU-磁盘 相关性分析
 19. `device_performance_comparison.png` - 设备性能对比
 20. `await_threshold_analysis.png` - I/O 延迟阈值分析
 21. `monitoring_overhead_analysis.png` - 监控开销分析
@@ -460,10 +460,10 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 - **性能摘要**：测试概览和关键性能指标
 - **配置状态检查**：系统配置验证
 - **区块链节点同步分析**：区块高度监控和同步状态
-- **EBS 性能分析结果**：存储性能深度分析与 AWS 基线对比
+- **磁盘 性能分析结果**：存储性能深度分析与 AWS 基线对比
 - **性能图表库**：所有 32 张专业可视化图表按类别组织
 - **监控开销分析**：监控系统影响的综合分析
-- **CPU-EBS 关联分析**：资源关联和瓶颈识别
+- **CPU-磁盘 关联分析**：资源关联和瓶颈识别
 
 
 
@@ -478,7 +478,7 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 ls reports/
 # comprehensive_analysis_report.html
 # performance_overview.png
-# cpu_ebs_correlation_visualization.png
+# cpu_disk_correlation_visualization.png
 # ...（其他图表文件）
 ```
 
@@ -573,7 +573,7 @@ chmod +x monitoring/monitoring_coordinator.sh
 - **QPS测试日志**：`master_qps_executor.log` - QPS测试进度和结果
 - **监控日志**：`unified_monitor.log` - 系统监控数据
 - **瓶颈检测**：`bottleneck_detector.log` - 瓶颈检测事件
-- **EBS分析**：`ebs_bottleneck_detector.log` - EBS性能分析
+- **磁盘分析**：`disk_bottleneck_detector.log` - 磁盘性能分析
 - **性能数据**：`performance_YYYYMMDD_HHMMSS.csv` - 原始性能指标（79 个字段）
 - **监控开销**：`monitoring_overhead_YYYYMMDD_HHMMSS.csv` - 监控系统开销（20 个字段）
 - **ENA 网络**：`ena_network_YYYYMMDD_HHMMSS.csv` - ENA 网络详细指标（15 个字段，仅 AWS）

@@ -19,7 +19,7 @@ P1c (L162 _extract_generic_csi): Returned the raw `volumeHandle` as `device`
      iostat lookups silently break.
 
 P1d (kubelet mount fallback): No /proc/mounts fallback when CSI extraction
-     fails. Unknown CSI drivers, xen EBS, and any provider-specific quirks
+     fails. Unknown CSI drivers, xen Disk, and any provider-specific quirks
      leave volumes unmonitored despite being clearly mounted on the host.
 
 Run: python3 tests/test_pod_device_mapper_v144_fixes.py
@@ -94,7 +94,7 @@ class TestLegacyAwsEbs(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_legacy_ebs_with_aws_prefix(self):
+    def test_legacy_disk_with_aws_prefix(self):
         """volumeID = 'aws://us-east-1a/vol-abc123' → resolves to nvme1n1."""
         pv = {"spec": {"awsElasticBlockStore": {
             "volumeID": "aws://us-east-1a/vol-abc123",
@@ -104,13 +104,13 @@ class TestLegacyAwsEbs(unittest.TestCase):
         self.assertEqual(kind, "awsElasticBlockStore")
         self.assertEqual(handle, "aws://us-east-1a/vol-abc123")
 
-    def test_legacy_ebs_bare_volid(self):
+    def test_legacy_disk_bare_volid(self):
         """volumeID = 'vol-abc123' (no aws:// prefix) → resolves."""
         pv = {"spec": {"awsElasticBlockStore": {"volumeID": "vol-abc123"}}}
         device, _, _, _ = pdm._resolve_pv_device(pv, str(self.host_root))
         self.assertEqual(device, "nvme1n1")
 
-    def test_legacy_ebs_no_by_id_link_xen_fallback(self):
+    def test_legacy_disk_no_by_id_link_xen_fallback(self):
         """When by-id link missing (xen), return tagged handle, not bare ?."""
         pv = {"spec": {"awsElasticBlockStore": {"volumeID": "vol-deadbeef"}}}
         device, kind, _, _ = pdm._resolve_pv_device(pv, str(self.host_root))
@@ -118,7 +118,7 @@ class TestLegacyAwsEbs(unittest.TestCase):
         self.assertEqual(device, "vol-deadbeef@xen")
         self.assertEqual(kind, "awsElasticBlockStore")
 
-    def test_legacy_ebs_empty_volid(self):
+    def test_legacy_disk_empty_volid(self):
         pv = {"spec": {"awsElasticBlockStore": {"volumeID": ""}}}
         device, kind, _, _ = pdm._resolve_pv_device(pv, str(self.host_root))
         self.assertEqual(device, "?")
@@ -142,10 +142,10 @@ class TestGenericCsi(unittest.TestCase):
         self.assertEqual(driver, "rook-ceph.csi.unknown.io")
 
     def test_handle_not_leaked_as_device(self):
-        """Even an EBS-looking handle on unknown driver → still ?."""
+        """Even an Disk-looking handle on unknown driver → still ?."""
         pv = {"spec": {"csi": {
             "driver": "custom.csi.example.com",
-            "volumeHandle": "vol-abc123",  # looks like EBS but driver isn't ebs.csi.aws.com
+            "volumeHandle": "vol-abc123",  # looks like Disk but driver isn't ebs.csi.aws.com
         }}}
         device, _, _, _ = pdm._resolve_pv_device(pv, "/host")
         self.assertEqual(device, "?",
