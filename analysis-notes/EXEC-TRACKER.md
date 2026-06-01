@@ -595,4 +595,46 @@ detect_deployment_platform` 的 `DEPLOYMENT_PLATFORM=="auto"` 分支(L142 source
 不同名, 但 **ADR-0002 已锁定三云统一 normalized(去厂商烙印)** → 断言与 ADR-0002 矛盾, 是 ADR-0002
 落地前写的过期 change-detector。未改(超本次范围, 改测试断言需确认 ADR-0002 终态)。待用户裁定是否修该测试。
 
+## 16. AWS 回归全审计: 基线 e843571(7个月前已测) vs HEAD 差分(2026-06-01)
+
+> 触发: 用户澄清 AWS 逻辑 7 个月前(e843571, 2025-11-02 最后一次提交)已亲测; 要求 token-level
+> 精读对比基线 vs 最新 commit, 确认这 6.5 个月新功能(GCP/registry/per-method/proxy)有没有破坏
+> AWS 已适配逻辑 + 修任务1(contract 过期断言)。用户无 AWS 机 → 基线代码当 oracle + cloudtop 差分。
+
+### 16.1 审计面(git diff e843571 HEAD, AWS 逻辑链 16 文件)
+关键改名迁移(ebs→disk 去厂商烙印, 非功能丢失, 已验证):
+- `utils/ebs_converter.sh`(155) → `utils/disk_converter.sh`(208)
+- `tools/ebs_bottleneck_detector.sh`(678) → `tools/disk_bottleneck_detector.sh`(737, 功能不减)
+- `tools/ebs_analyzer.sh` → `tools/disk_analyzer.sh`;`ebs_chart_generator.py` → `disk_chart_generator.py`
+- `analysis/cpu_ebs_correlation_analyzer.py` → `cpu_disk_correlation_analyzer.py`
+- 零残留旧名业务引用(grep 实证), caller 全指向新名(coordinator→tools/disk_bottleneck_detector ✓)
+- **自纠**: 一度误判 monitoring/disk_bottleneck_detector.sh 断引用, 实为文件在 tools/ (找错目录), coordinator L170 `cd ../tools` 引用正确。token-level 教训: 判断"文件不存在"前确认目录。
+
+### 16.2 AWS 路径逐项判定(预期修正 / 行为等价 / 潜在破坏)
+| AWS 逻辑 | 基线 e843571 | HEAD | 判定 |
+|---|---|---|---|
+| IOPS 公式 | `convert_to_aws_standard_iops` 直接 echo actual_iops(io_size 参数 unused, **不拆分=bug**) | provider-aware ceil(io_size/cap) 拆分 | ✅ **预期修正**(用户确认的已知 bug) |
+| throughput 公式 | passthrough(echo actual, 注释"不需转换") | passthrough(逐字节同逻辑, 仅改名) | ✅ 行为等价 |
+| io2 自动 throughput | `iops × 0.256 ratio + max cap` | 逐字节一致 | ✅ 等价(AWS io2 保留) |
+| CSV data 行字段 | 21 字段, 顺序 r_s..total_iops,aws_standard_iops,..,aws_standard_throughput | 21 字段, 同顺序, 列名 aws_standard→normalized | ✅ 等价(字段数/序不变, 仅列名中立化 ADR-0002) |
+| reader 读列名 | 硬编码 aws_standard | 经 registry resolve | ✅ 等价(AP4 检查: 0 reader 硬编码 aws_standard 物理列残留, 无 writer/reader skew) |
+| ENA 网络监控(AWS专属) | ena_network_monitor.sh 266 行 | 266 行, ENA_MONITOR_ENABLED AWS=true 保留 | ✅ 完整保留 |
+| sizing 阈值判定 | EBS_IOPS_THRESHOLD=90 利用率判定 | VOL_MAX 分母 + 90% 阈值, 经 registry 取 provider_adjusted | ✅ 框架等价(+ §14 Hyperdisk max 兜底增强) |
+| AWS 专属函数 | recommend_ebs_type/calculate_io2_throughput/analyze_instance_store | 全保留 export | ✅ 保留 |
+
+### 16.3 发现的真问题(已修)
+1. **§15 provider getter 加载漏手动指定路径** → AWS IOPS 静默失效。已修(commit 040c705)。
+   = 唯一一个"新功能引入的 AWS 回归"(本质: 公式修正生效条件不完整, 非破坏原逻辑)。
+2. **任务1: contract 测试过期断言**(test_provider_contract.sh `get_disk_field_prefix` 在防抄列表,
+   与 ADR-0002 三云统一 normalized 矛盾)。已修: 从 ANTI_PLAGIARISM_GETTERS 移除该 getter(它三云
+   应同名, 不是抄袭)。其余 7 个 getter 实测 aws≠gcp 真不同名, 保留。contract 测试 FAIL→PASS(61)。
+
+### 16.4 审计结论
+基线已测的 AWS 逻辑, 经 6.5 个月新功能后: **公式/字段/ENA/io2/sizing 全部行为等价或预期修正**,
+唯一真回归(getter 手动路径)已修。改名(ebs→disk/aws_standard→normalized)是去烙印, 经 AP4 验证无
+reader skew。无遗留破坏。回归全绿: iops 13/13 / throughput passthrough 等价 / symmetry 7/7 /
+R0 12/12 / contract 61 / sizing 5/5。
+- 注: 无 AWS 机, IOPS 拆分语义靠基线 oracle 差分 + 官方实证(aws-gcp-io-counting-rules-verified)验证;
+  真 AWS 端到端实跑仍待机会窗口(L4), 但纯计算逻辑已 cloudtop 全覆盖。
+
 

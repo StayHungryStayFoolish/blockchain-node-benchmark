@@ -52,8 +52,11 @@ for provider in aws gcp other; do
 done
 
 # ============================================================
-# Phase 2: AWS ≠ GCP 防抄断言（8 个关键 getter）
+# Phase 2: AWS ≠ GCP 防抄断言（7 个关键 getter）
 # 含 get_iops_conversion_func — 双云 IOPS 计量必须不同
+# 注意: get_disk_field_prefix 【不】在此列表 — ADR-0002 锁定三云统一中立名
+#   normalized(去厂商烙印, provider 信息由 CSV cloud_provider 列承载), 三云【应】同名,
+#   不是抄袭。把它放进防抄列表是 ADR-0002 落地前的过期断言(2026-06-01 移除)。
 # ============================================================
 echo ""
 echo "=== Phase 2: AWS≠GCP 防抄断言 ==="
@@ -61,7 +64,6 @@ ANTI_PLAGIARISM_GETTERS=(
     get_metadata_endpoint
     get_metadata_header
     get_iops_conversion_func
-    get_disk_field_prefix
     get_nic_driver
     get_archive_dir_prefix
     get_bottleneck_label
