@@ -11,11 +11,28 @@
 | 阶段 | 状态 | commit |
 |---|---|---|
 | B1 框架现状(阶段1) | ✅ 已完成(rpc-method-param-research.md 阶段1) | 3524d48 |
-| B2 36链 method 参数/响应规律(互联网+public endpoint) | ✅ 已完成(param位置语义代码实证 + publicnode double-check) | 本批 |
-| B3 调研结论(现状/风险/方案) | ✅ 已完成(rpc-method-param-research.md 阶段3, R1-R5 风险 + 方案) | 本批 |
-| C1 mixed weight 全链路追踪+修复 | 🔄 下一步 | - |
-| C2 proxy per-method 404 定位+修复 | ⬜ 待 | - |
-| A 完整端到端出 HTML(GKE Job + GCE 真机) | ⬜ 待 | - |
+| B2 36链 method 参数/响应规律(互联网+public endpoint) | ✅ 已完成(param位置语义代码实证 + publicnode double-check) | ec575c9 |
+| B3 调研结论(现状/风险/方案) | ✅ 已完成(rpc-method-param-research.md 阶段3, R1-R5 风险 + 方案) | ec575c9 |
+| C1 mixed weight 全链路追踪 | ✅ 已完成(两种weight厘清, 见下) | 本批 |
+| C2 proxy per-method 404 定位 | ✅ 已完成(proxy 无 bug, 404 是历史 fixture 状态) | 本批 |
+| A 完整端到端出 HTML(GKE Job + GCE 真机) | 🔄 下一步 | - |
+
+## C2 结论: proxy per-method 404 = proxy 无 bug(2026-06-01 本地实测)
+- proxy handler.go: 纯 `httputil.NewSingleHostReverseProxy` 透传(L34/70), 不改 method/params/path, 只记录 upstream status 给 per-method CSV。代码审查确认无 404 逻辑。
+- **本地实测(起 fake-node:8899 + proxy:18545)**: 经 proxy 打 getSignaturesForAddress → HTTP 200 + 正常结果; 直连 fake-node 同样 200 + 相同结果。**proxy 透传正确, 不 404。**
+- **结论**: 容器那次 getSignaturesForAddress 404 = 历史状态(skill §3: getSignaturesForAddress.json fixture 之前缺, 后续会话补全; 容器那次跑的是补全前状态), **非 proxy bug、非现在代码 bug**。现 fixture 齐, proxy+fake-node 全链路 200。
+- 连带澄清: 本地 --fake-node QPS test failed ≠ 404 导致(404 早不存在); 是 fake-node byte-correct 数据退化(target=2)。两件事分清。
+- §24.2 "proxy per-method 404 TODO" 可关闭(无 bug)。
+
+## C1 结论: mixed weight 全链路(2026-06-01, 纠正"死字段"初判)
+**两个不同的 weight, 必须区分**:
+1. **chain template `mixed_weighted` weight(配置目标权重)**: 生成端 target_generator round-robin 均权分配 method, **未按此 weight** → 缺口。
+2. **归因端 weight(per_method_attribution.py L14/231)**: = `method_count/total_count` = 运行时【实测】每 method 流量占比, 按此把 CPU/MEM 分摊。**在用, 是实测值不是配置值。**
+**结论(精确, 非死字段)**:
+- 归因逻辑本身【正确】(按实际打出的流量占比归因资源, 合理)。
+- 真缺口 = 【配置 weight → 生成端流量比例】这一环断了: round-robin 均权 → 实际打出的 method 比例 ≠ 用户配的 mixed_weighted weight → 归因端如实反映"均权"但那不是用户想要的分布。
+- 修法(温和, 明确): 生成端按 mixed_weighted 的 weight 比例分配 method(而非 round-robin 均权), 让实际流量比例 = 配置 weight, 归因端自然得到正确权重分布。NS-2"按权重归因"才真生效。
+- 严重度: 中(归因机制对, 只是流量比例没按配置)。待用户拍板是否修 + 优先级。
 
 ## B 阶段产出(给用户回来看)
 - 用户核心担心【已 public endpoint 真机证实】: 参数位置传错 → RPC 报错拿不到正确响应(publicnode EVM eth_getBalance [latest,addr] → error -32602)。
@@ -24,6 +41,12 @@
 - 最高优先低成本修复建议: 启动期 param_format 校验 fail-fast(防静默错)。待用户拍板。
 
 ## 执行日志(时间倒序, 最新在上)
+
+### C1 完成(mixed weight 全链路)
+- 全仓追 weight: 生成端(target_generator round-robin 均权, 未用配置 weight)+ 归因端(per_method_attribution 用实测 weight=count/total)。
+- 纠正初判: weight 非死字段 —— 归因端用实测 weight(对); 缺口在配置 weight 未驱动生成端流量比例。
+- 修法: 生成端按 mixed_weighted weight 分配 method 替代 round-robin。中严重度, 待拍板。
+- 下一步: C2 proxy per-method 404 定位。
 
 ### B 阶段完成
 - B1 现状 + B2 参数位置语义(代码 jsonrpc.py _build_params 实证 + publicnode EVM 实打 double-check 位置错=报错)+ B3 风险清单 R1-R5 + 处理方案。全落 rpc-method-param-research.md。

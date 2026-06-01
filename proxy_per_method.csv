@@ -1,0 +1,2 @@
+timestamp_ns,method_name,protocol,request_id,batch_idx,status_code,latency_ms,upstream,client_addr
+1780341731807219418,getSignaturesForAddress,json_rpc,1,0,200,11,http://127.0.0.1:8899,[::1]:38782
