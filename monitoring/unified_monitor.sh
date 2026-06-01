@@ -1935,10 +1935,22 @@ generate_csv_header() {
         basic_header="timestamp,cpu_usage,cpu_usr,cpu_sys,cpu_iowait,cpu_soft,cpu_idle,mem_used,mem_total,mem_usage"
     fi
     local device_header=$(generate_all_devices_header)
-    local network_header="net_interface,net_rx_mbps,net_tx_mbps,net_total_mbps,net_rx_gbps,net_tx_gbps,net_total_gbps,net_rx_pps,net_tx_pps,net_total_pps"
-    local overhead_header="monitoring_iops_per_sec,monitoring_throughput_mibs_per_sec"
-    local block_height_header="local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss"
-    local qps_header="current_qps,rpc_latency_ms,qps_data_available"
+    # network/overhead/block/qps 段 header 经 registry 单一事实源 (F1: 消除与
+    # framework_data_quality_checker 的双源字面量). registry 不可用时回退字面量(与
+    # registry 字节一致, symmetry 守护)。段名: registry 用 block(非 block_height)。
+    local network_header overhead_header block_height_header qps_header
+    if declare -F csv_registry_segment_header >/dev/null 2>&1; then
+        network_header="$(csv_registry_segment_header network)"
+        overhead_header="$(csv_registry_segment_header overhead)"
+        block_height_header="$(csv_registry_segment_header block)"
+        qps_header="$(csv_registry_segment_header qps)"
+    else
+        log_warn "csv_registry_segment_header unavailable — fallback 字面量 header"
+        network_header="net_interface,net_rx_mbps,net_tx_mbps,net_total_mbps,net_rx_gbps,net_tx_gbps,net_total_gbps,net_rx_pps,net_tx_pps,net_total_pps"
+        overhead_header="monitoring_iops_per_sec,monitoring_throughput_mibs_per_sec"
+        block_height_header="local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss"
+        qps_header="current_qps,rpc_latency_ms,qps_data_available"
+    fi
     local cgroup_header=$(get_cgroup_header)
 
     # Configuration-driven ENA header generation

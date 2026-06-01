@@ -66,6 +66,44 @@ _CSV_REGISTRY_DISK_LOGICAL=(
     disk_throughput_provider_adjusted
 )
 
+# ── network 段 10 字段 (unified CSV 通用 net 段; 与 python _NETWORK_FIELDS 严格一致) ──
+# 实证来源: monitoring/unified_monitor.sh:1938 network_header
+_CSV_REGISTRY_NETWORK_LOGICAL=(
+    net_interface
+    net_rx_mbps
+    net_tx_mbps
+    net_total_mbps
+    net_rx_gbps
+    net_tx_gbps
+    net_total_gbps
+    net_rx_pps
+    net_tx_pps
+    net_total_pps
+)
+
+# ── overhead 段 2 字段 (实证: unified_monitor.sh:1939 overhead_header) ──
+_CSV_REGISTRY_OVERHEAD_LOGICAL=(
+    monitoring_iops_per_sec
+    monitoring_throughput_mibs_per_sec
+)
+
+# ── block 段 6 字段 (实证: unified_monitor.sh:1940 block_height_header) ──
+_CSV_REGISTRY_BLOCK_LOGICAL=(
+    local_block_height
+    mainnet_block_height
+    block_height_diff
+    local_health
+    mainnet_health
+    data_loss
+)
+
+# ── qps 段 3 字段 (实证: unified_monitor.sh:1941 qps_header) ──
+_CSV_REGISTRY_QPS_LOGICAL=(
+    current_qps
+    rpc_latency_ms
+    qps_data_available
+)
+
 # provider_aware 逻辑名集合 (物理名随云变的 2 个字段)
 _CSV_REGISTRY_PROVIDER_AWARE="disk_iops_provider_adjusted disk_throughput_provider_adjusted"
 
@@ -79,19 +117,22 @@ csv_registry_basic_logical_names() {
     echo "${_CSV_REGISTRY_BASIC_LOGICAL[*]}"
 }
 
-# 列出全部静态段逻辑名 (basic + disk, 顺序 = 段顺序内各段录入序)
+# 列出全部静态段逻辑名 (basic+disk+network+overhead+block+qps, 顺序 = 段顺序内各段录入序)
 # 与 utils/csv_schema_registry.py CSVSchemaRegistry.all_logical_names() 对称.
 csv_registry_all_logical_names() {
-    echo "${_CSV_REGISTRY_BASIC_LOGICAL[*]} ${_CSV_REGISTRY_DISK_LOGICAL[*]}"
+    echo "${_CSV_REGISTRY_BASIC_LOGICAL[*]} ${_CSV_REGISTRY_DISK_LOGICAL[*]} ${_CSV_REGISTRY_NETWORK_LOGICAL[*]} ${_CSV_REGISTRY_OVERHEAD_LOGICAL[*]} ${_CSV_REGISTRY_BLOCK_LOGICAL[*]} ${_CSV_REGISTRY_QPS_LOGICAL[*]}"
 }
 
 # 列出某静态段逻辑名 (与 python segment_logical_names 对称).
 # 动态段 (device/ena) 无静态枚举 -> 返回空; 调用方应改用 writer 生成函数.
-# 未录入的静态段 (network/overhead/block/qps/meta, 后续波次) 同样返回空.
 csv_registry_segment_logical_names() {
     case "$1" in
-        basic) echo "${_CSV_REGISTRY_BASIC_LOGICAL[*]}" ;;
-        device) echo "${_CSV_REGISTRY_DISK_LOGICAL[*]}" ;;
+        basic)    echo "${_CSV_REGISTRY_BASIC_LOGICAL[*]}" ;;
+        device)   echo "${_CSV_REGISTRY_DISK_LOGICAL[*]}" ;;
+        network)  echo "${_CSV_REGISTRY_NETWORK_LOGICAL[*]}" ;;
+        overhead) echo "${_CSV_REGISTRY_OVERHEAD_LOGICAL[*]}" ;;
+        block)    echo "${_CSV_REGISTRY_BLOCK_LOGICAL[*]}" ;;
+        qps)      echo "${_CSV_REGISTRY_QPS_LOGICAL[*]}" ;;
         *) echo "" ;;
     esac
 }
@@ -155,6 +196,31 @@ csv_registry_resolve() {
         disk_write_throughput_mibs)        echo "${prefix}_write_throughput_mibs" ;;
         disk_total_throughput_mibs)        echo "${prefix}_total_throughput_mibs" ;;
         disk_throughput_provider_adjusted) echo "${prefix}_${dfp}_throughput_mibs" ;;
+        # ── network 段 10 字段 (物理名 = 逻辑名) ──
+        net_interface)                     echo "net_interface" ;;
+        net_rx_mbps)                       echo "net_rx_mbps" ;;
+        net_tx_mbps)                       echo "net_tx_mbps" ;;
+        net_total_mbps)                    echo "net_total_mbps" ;;
+        net_rx_gbps)                       echo "net_rx_gbps" ;;
+        net_tx_gbps)                       echo "net_tx_gbps" ;;
+        net_total_gbps)                    echo "net_total_gbps" ;;
+        net_rx_pps)                        echo "net_rx_pps" ;;
+        net_tx_pps)                        echo "net_tx_pps" ;;
+        net_total_pps)                     echo "net_total_pps" ;;
+        # ── overhead 段 2 字段 ──
+        monitoring_iops_per_sec)           echo "monitoring_iops_per_sec" ;;
+        monitoring_throughput_mibs_per_sec) echo "monitoring_throughput_mibs_per_sec" ;;
+        # ── block 段 6 字段 ──
+        local_block_height)                echo "local_block_height" ;;
+        mainnet_block_height)              echo "mainnet_block_height" ;;
+        block_height_diff)                 echo "block_height_diff" ;;
+        local_health)                      echo "local_health" ;;
+        mainnet_health)                    echo "mainnet_health" ;;
+        data_loss)                         echo "data_loss" ;;
+        # ── qps 段 3 字段 ──
+        current_qps)                       echo "current_qps" ;;
+        rpc_latency_ms)                    echo "rpc_latency_ms" ;;
+        qps_data_available)                echo "qps_data_available" ;;
         *)
             echo "csv_registry_resolve: unknown logical field: $logical" >&2
             return 1

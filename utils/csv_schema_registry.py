@@ -116,11 +116,61 @@ _DISK_FIELDS: List[FieldDef] = [
 ]
 
 
+# ── network 段 10 字段 (静态, 通用网卡指标, 无 provider 分流) ────────────
+# 实证来源: monitoring/unified_monitor.sh:1938 generate_csv_header network_header
+# 全部物理名固定 (= 逻辑名). 注: 这是 unified CSV 的通用 net 段, 与 ENA/gvnic 平台专属段无关
+# (后者是动态段 ena/独立 Y+ 架构 CSV).
+_NETWORK_FIELDS: List[FieldDef] = [
+    FieldDef("net_interface",    "gauge",      "network", False, "net_interface"),
+    FieldDef("net_rx_mbps",      "throughput", "network", False, "net_rx_mbps"),
+    FieldDef("net_tx_mbps",      "throughput", "network", False, "net_tx_mbps"),
+    FieldDef("net_total_mbps",   "throughput", "network", False, "net_total_mbps"),
+    FieldDef("net_rx_gbps",      "throughput", "network", False, "net_rx_gbps"),
+    FieldDef("net_tx_gbps",      "throughput", "network", False, "net_tx_gbps"),
+    FieldDef("net_total_gbps",   "throughput", "network", False, "net_total_gbps"),
+    FieldDef("net_rx_pps",       "rate",       "network", False, "net_rx_pps"),
+    FieldDef("net_tx_pps",       "rate",       "network", False, "net_tx_pps"),
+    FieldDef("net_total_pps",    "rate",       "network", False, "net_total_pps"),
+]
+
+
+# ── overhead 段 2 字段 (监控自身开销, 静态) ───────────────────────────
+# 实证来源: monitoring/unified_monitor.sh:1939 overhead_header
+_OVERHEAD_FIELDS: List[FieldDef] = [
+    FieldDef("monitoring_iops_per_sec",            "iops",       "overhead", False, "monitoring_iops_per_sec"),
+    FieldDef("monitoring_throughput_mibs_per_sec", "throughput", "overhead", False, "monitoring_throughput_mibs_per_sec"),
+]
+
+
+# ── block 段 6 字段 (区块高度监控, 静态) ──────────────────────────────
+# 实证来源: monitoring/unified_monitor.sh:1940 block_height_header
+_BLOCK_FIELDS: List[FieldDef] = [
+    FieldDef("local_block_height",   "gauge", "block", False, "local_block_height"),
+    FieldDef("mainnet_block_height", "gauge", "block", False, "mainnet_block_height"),
+    FieldDef("block_height_diff",    "gauge", "block", False, "block_height_diff"),
+    FieldDef("local_health",         "gauge", "block", False, "local_health"),
+    FieldDef("mainnet_health",       "gauge", "block", False, "mainnet_health"),
+    FieldDef("data_loss",            "gauge", "block", False, "data_loss"),
+]
+
+
+# ── qps 段 3 字段 (QPS 测试指标, 静态) ────────────────────────────────
+# 实证来源: monitoring/unified_monitor.sh:1941 qps_header
+_QPS_FIELDS: List[FieldDef] = [
+    FieldDef("current_qps",        "gauge", "qps", False, "current_qps"),
+    FieldDef("rpc_latency_ms",     "latency", "qps", False, "rpc_latency_ms"),
+    FieldDef("qps_data_available", "gauge", "qps", False, "qps_data_available"),
+]
+
+
 class CSVSchemaRegistry:
     """全 CSV schema 单一事实源. reader/writer 都向它要字段信息, 不各自硬编码."""
 
     # 全静态字段 (按 CSV 段顺序拼接; 动态段 device/ena 不在此, 由生成函数产出)
-    _ALL_STATIC_FIELDS: List[FieldDef] = _BASIC_FIELDS + _DISK_FIELDS
+    _ALL_STATIC_FIELDS: List[FieldDef] = (
+        _BASIC_FIELDS + _DISK_FIELDS + _NETWORK_FIELDS
+        + _OVERHEAD_FIELDS + _BLOCK_FIELDS + _QPS_FIELDS
+    )
     _FIELDS_BY_LOGICAL: Dict[str, FieldDef] = {f.logical_name: f for f in _ALL_STATIC_FIELDS}
 
     @classmethod
