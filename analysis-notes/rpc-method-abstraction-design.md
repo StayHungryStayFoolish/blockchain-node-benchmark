@@ -40,7 +40,7 @@
 > **关键: 必须记完整的【请求结构体】和【响应结构体】, 不只是"测了能跑"。**
 >   请求结构体 → 归纳参数 DSL; 响应结构体 → 归纳响应解析 DSL。两者都要逐 method 落矩阵。
 
-### 进度: 98 / 184 method 实测 (jsonrpc + bitcoin_jsonrpc 完成)
+### 进度: 127 / 184 method 实测 (jsonrpc + bitcoin_jsonrpc + substrate 完成)
 (矩阵逐 family 分批填, 见下方各 family 节)
 
 ### 3.1 jsonrpc family (16 链, 74 method slots) — 全量实测完成
@@ -121,8 +121,43 @@
 - **位置语义实证**: address_latest=[addr,"latest"](EVM); latest_address=["latest",addr](starknet getNonce/getClassAt, block 在前); address_storage_latest=[addr,key,block]。位置错 = RPC -32602 报错(research §2.5 已证, 本批 starknet 复证 block/addr 顺序)。
 - **响应 block_height 提取路径各异**: EVM=result(hex) / solana getBlockHeight=result(int) / near=result.header.height / tron=block_header.raw_data.number / avalanche-x=result.height。**响应 DSL 必须声明 JSON path + 类型(hex/int/str)**。
 - **dict 参数的 dispatcher 语义**: near query 用 request_type 字段在一个 method 内分派多种子查询 → 参数 DSL 需支持"固定键 + 动态业务键"混合。
-### 3.2 substrate family (5 链)
-(待填)
+### 3.2 substrate family (5 链, 29 method slots) — 全量实测完成
+
+**公开 endpoint 映射**:
+| 链 | public endpoint | 备注 |
+|---|---|---|
+| polkadot | https://polkadot-rpc.publicnode.com | ✅ Substrate JSON-RPC |
+| kusama | https://kusama-rpc.publicnode.com | ✅ |
+| acala | https://acala-rpc.aca-api.network (substrate) + https://eth-rpc-acala.aca-api.network (EVM) | ⚠️ eth_* 须走独立 EVM endpoint |
+| astar | https://evm.astar.network | ✅ substrate + EVM 同端点 |
+| moonbeam | https://moonbeam-rpc.publicnode.com | ✅ substrate + EVM 同端点 |
+
+**协议特征**: Substrate JSON-RPC 2.0, **list 参数**。三链(acala/astar/moonbeam)是 EVM-compat parachain, 混 eth_* method。polkadot 另配 Sidecar REST path 风格 method(走 substrate-api-sidecar 服务, 非节点直连)。
+
+| 链 | method | param_format | **请求结构体(真实)** | **响应结构体(真实, 关键字段)** | 官方参数 | 状态 |
+|---|---|---|---|---|---|---|
+| acala/astar/kusama/moonbeam/polkadot | system_chain | no_params | `params:[]` | `{result:"Polkadot"}` → chain name=result | 无参数 | ✅ |
+| acala/astar/kusama/polkadot | chain_getHeader | no_params | `params:[]` | `{result:{parentHash,number:"0x1e0a8b6",stateRoot,extrinsicsRoot,digest}}` → block_height=result.number(hex) | 无参数(可选 block_hash) | ✅ |
+| acala/astar | state_getRuntimeVersion | no_params | `params:[]` | `{result:{specName,implName,specVersion,implVersion,apis:[[hash,ver]...],transactionVersion}}` | 无参数 | ✅ |
+| kusama | chain_getFinalizedHead | no_params | `params:[]` | `{result:"0xff021ee6...38da"}` → finalized hash=result | 无参数 | ✅ |
+| kusama/moonbeam | system_health | no_params | `params:[]` | `{result:{peers:21,isSyncing:false,shouldHavePeers:true}}` | 无参数 | ✅ |
+| kusama | system_properties | no_params | `params:[]` | `{result:{ss58Format:2,tokenDecimals:12,tokenSymbol:"KSM"}}` | 无参数 | ✅ |
+| kusama | chain_getBlockHash | [block_number] | `params:[1000000]`(int) | `{result:"0xb267ffd7...c3e7"}` → blockhash=result | p1=block number(int, optional→最新) | ✅ |
+| polkadot | account_nextIndex | single_address | `params:["<SS58 addr>"]` | `{result:0}` → nonce=result(int) | p1=SS58 account address | ✅ |
+| acala/kusama/polkadot | system_account | single_address | `params:["<SS58 addr>"]` | `{error:{code:-32601,message:"Method not found"}}` | (chain template 声明的) p1=SS58 address | ⚠️ **`system_account` 不是真 Substrate JSON-RPC method**(节点 -32601)。真实读账户余额须 `state_getStorage` + System.Account 存储键, 或走 Sidecar `/accounts/{addr}/balance-info`。**chain template 声明错误的真实发现** → 印证 research R2/R3(无校验 + 声明错静默) |
+| astar/moonbeam | eth_getBalance | address_latest | `params:["<addr>","latest"]` | `{result:"0xe6b9bb1ce008f88"}` → 余额=result | EVM 标准 | ✅ (astar/moonbeam EVM compat) |
+| acala/astar/moonbeam | eth_chainId | no_params | `params:[]` | `{result:"0x250"}`(astar) / `0x313`(acala) → chain id=result | 无参数 | ✅ (acala 须走 EVM endpoint, substrate 端 -32601) |
+| acala/astar/moonbeam | eth_blockNumber | no_params | `params:[]` | `{result:"0xabba96"}` → block_height=result | 无参数 | ✅ (acala 须走 EVM endpoint) |
+| moonbeam | eth_gasPrice | no_params | `params:[]` | `{result:"0x746a52880"}` → gas price=result | 无参数 | ✅ |
+| polkadot | GET /accounts/{addr}/balance-info | path_addr (Sidecar REST) | `GET /accounts/<SS58>/balance-info` | (Sidecar API) `{at:{hash,height},nonce,tokenSymbol,free,reserved,frozen,...}` → 余额=free | Sidecar path, addr 占位 | ⚠️ 无公开 Sidecar endpoint(Parity 停止公开托管, 须自建 substrate-api-sidecar)。结构按官方 Sidecar API spec |
+| polkadot | GET /blocks/{n} | path_height (Sidecar REST) | `GET /blocks/<n>` | (Sidecar) `{number,hash,parentHash,stateRoot,extrinsicsRoot,authorId,extrinsics:[...],...}` → block_height=number | Sidecar path, n=block number | ⚠️ 同上无公开 Sidecar |
+| polkadot | GET /pallets/staking/progress | no_params (Sidecar REST) | `GET /pallets/staking/progress` | (Sidecar) `{at,idealValidatorCount,activeEra,...}` | Sidecar path, 无参 | ⚠️ 同上无公开 Sidecar |
+
+**substrate family 实测小结**:
+- **Substrate JSON-RPC 2.0 + list 参数**。块高字段 = result.number(hex, chain_getHeader)。
+- **🔴 重大发现: `system_account` 是错误声明**(节点返 -32601)。3 条链(acala/kusama/polkadot)的 chain template 都把它当 single_address balance 查询, 但它不是有效 RPC method。真实余额查询须 state_getStorage(storage key)或 Sidecar REST。**直接印证 research R2(声明错无校验)+ R3 风险, 是 DSL 校验/声明能力必须解决的真实案例**。
+- **EVM-compat parachain 双端点问题**: acala 的 substrate 端 与 EVM 端是两个 endpoint, eth_* 须走 EVM 端(substrate 端 -32601); astar/moonbeam 单端点兼容两套。**参数 DSL/endpoint 路由需考虑同链多 RPC 命名空间**。
+- **polkadot Sidecar REST path**: 3 个 method 是 substrate-api-sidecar 服务的 REST 接口(非节点直连 JSON-RPC), 无公开托管端点。这类 method 的"参数=path 占位 + 响应=Sidecar JSON"形态与 rest family 一致, 是 DSL path-based 参数的又一形态。
 ### 3.3 tendermint family (5 链)
 (待填)
 ### 3.4 bitcoin_jsonrpc family (4 链, 24 method slots) — 全量实测完成
