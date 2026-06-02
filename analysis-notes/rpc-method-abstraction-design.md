@@ -603,8 +603,90 @@
 - DSL 新增: 参数描述字段(替代/扩展 param_formats)+ 响应字段路径描述。**proxy_extraction 已是 declarative DSL(protocol/method_source/params_source 等), 是设计参考样板。**
 **向后兼容**: 现有 36 链 param_format 不能破坏 — DSL 与 param_format 并存或 DSL 覆盖枚举(枚举作 DSL 的预设快捷)。
 **fake-node 侧(响应 fixture)**: tools/fake-node/ handlers(7 go)+ record_*.sh(5 个)— 实测拿到的响应结构体可同时更新 fixture, 让 fake-node 数据更真(顺带解 A 阶段 fake-node 数据退化)。
-### 6.2 实现(设计审过后, 待办)
-(空)
+### 6.2 正式实施计划(2026-06-02, 基于 33 轮全链路分析 + 4 拍板决策 + 整合方案 c)
+
+> 数据地基: `rpc-method-refactor-fulllink-analysis.md`(33轮~80KB, 12真实缺口 + 6处method知识沉淀 + 3现成范式资产)。
+> 4 拍板决策: ①整合方案c(不强合并adapter, 统一family分派 + InputProvider异步抓输入/TargetBuilder同步构造分层) ②InputProvider补全6family ③mixed weight R5一并修 ④响应记录入库+三端同源。
+> 北极星: NS-1/NS-3 从"零代码加链"延伸到"零代码加method"。铁律: 不留技术债 + 调用链不断裂 + 向后兼容 param_format + 每阶段 L1+L2+L3。
+
+#### 6.2.0 总览: 12 缺口 → 4 阶段映射
+
+| 阶段 | 解决的缺口 | 一句话目标 | family 切分 |
+|---|---|---|---|
+| **S0 前置工具链** | (L3前置) | 一次性建好 mock + workload + e2e harness + baseline audit, 不拖到最后 | 全局 |
+| **S1 输入供给层 InputProvider** | #2 #3 #6(fetch) #10 + R-B | 6 family 声明式抓输入(account/tx_hash/block/utxo), 替代单 account 槽兜底 | jsonrpc→substrate→tendermint→bitcoin→rest→hedera |
+| **S2 参数 DSL param_spec** | #1(4套分派统一) #4 #9(mixed weight) | chain template 声明任意 method 参数(位置×类型×语义×来源), 替代 param_format 枚举; 统一 4 套按链分派 | 同上 6 family |
+| **S3 响应链 + 关联键 + 归因** | #5(关联键) #6(响应消费) #7(三端同源) #8(四维归因) #11(proxy基线) #12(块高重复) | 重建 request_id 关联键; 响应 DSL response_spec; attribution 补 EBS/Net 两维 + 减 proxy 基线; 块高提取归一 | 跨 family |
+
+每阶段独立可交付 + 向后兼容 + L1+L2+L3 全过才记 done。S1/S2 按 family 分波(风险倒序: jsonrpc 先, hedera_dual 殿后)。
+
+#### 6.2.1 S0 — 前置工具链(L3 地基, 一次性建好)
+
+目的: 防"L1+L2绿/L3未知"债累积(parallel-entry-trap multi-stage L3 铁律)。
+- **S0.1 mock 节点**: 复用 `tools/fake-node/`(36链 fixture 已入库 378 JSON)+ `tools/mock_rpc_server.py`(720 LOC 现成)。验证 6 family 都能本地起 mock 返回真实 fixture。
+- **S0.2 workload 生成器**: 复用 vegeta(调研保留)+ `tools/target_generator.sh`。S0 阶段确认能对 mock 发起 mixed 负载。
+- **S0.3 e2e harness**: 复用 `tools/e2e_smoke.sh`(注意 skill 警告: --validate 是 smoke 不是真 L3; 真 L3 要跑 `blockchain_node_benchmark.sh` 无 skip + artifact-assert HTML/PNG)。
+- **S0.4 baseline audit**: 跑 `python3 tests/test_chain_adapters.py`(R0 老测 12 healthy/24 known-broken)记录改造前基线, 每阶段回归对比。
+- **交付**: S0 完成 = 6 family mock 可起 + vegeta 可打 + e2e 真跑出 HTML + baseline 数字记录。**S0 不过不进 S1。**
+
+#### 6.2.2 S1 — 输入供给层 InputProvider(缺口 #2/#3/#6-fetch/#10 + R-B)
+
+**问题**: 框架现在只抓 account 一池(fetch L802 拿到 tx_hash/sigs 却 L814 丢弃只写 account), target_generator L220-225 把这一池喂所有 method → 需要 tx_hash/block/filter 的 method 拿不到正确输入(audit 16个 P1_RPC_ERROR + error.data.reason 精确点名缺 filter/transaction_hash 实证)。
+**方案 c 分层**: InputProvider(async 抓输入, 6 family 各实现)与 TargetBuilder(sync 构造 target)解耦。
+- **S1.1 定义 InputProvider 接口契约**(照 network interface.sh 范式: 契约注释 + 不变量 + 共享 helper):
+  - `fetch_inputs(chain_template) -> {account[], tx_hash[], block[], utxo[], ...}` 多池(不是单 account)。
+  - 不变量: 每 family 声明自己能提供哪些输入类型; bitcoin UTXO 无 account 概念(缺口#2)单独处理。
+- **S1.2 6 family 实现**(波次: jsonrpc→substrate→tendermint→bitcoin→rest→hedera_dual):
+  - jsonrpc: account(eth_getBalance)+ tx_hash(eth_getTransactionByHash, fetch L802 已有手只是被丢, 接回)+ block。
+  - bitcoin_jsonrpc: UTXO/txid(无 account), getrawtransaction 需 txid。
+  - tendermint/rest: validator addr + height + REST path 变量。
+  - hedera_dual: 双模式 account + node id。
+- **S1.3 接回 fetch 丢弃的 tx_hash**(缺口#3/#6): fetch_active_accounts.py L814 改为保留 tx_hash/sigs 到对应池, 不只写 account。
+- **S1.4 多池消费**(缺口#10): target_generator 按 method 的 param_spec 声明从对应池取输入(不再一池喂全部)。
+- **L1**: 每 family InputProvider 单测(mock 节点返回 fixture, 断言抓到正确类型输入)。
+- **L2**: InputProvider + TargetBuilder 集成(抓输入→构造 target 链路通)。
+- **L3**: 整框架对 mock 跑 mixed, 断言需要 tx_hash 的 method 不再 -32602。
+
+#### 6.2.3 S2 — 参数 DSL param_spec(缺口 #1/#4/#9)
+
+**问题**: param_format 是枚举 if-else(6 family 各一套 _build_params), 加新 method 要改代码; 4 套按链分派维度冲突(缺口#1); CHAIN_CONFIG 删 _meta 丢 adapter_family(缺口#4); mixed weight 三处代码取 mixed 非 mixed_weighted, weight 未驱动生成(缺口#9)。
+**方案**: chain template 声明式 param_spec(§4 DSL: 位置×类型×语义×来源 3维), 框架据此构造, 枚举作 DSL 预设快捷(向后兼容)。
+- **S2.1 param_spec schema 定稿**(基于 §4 + raw-evidence 硬数据): 支持 ≥5 种参数注入位置(list索引/list内嵌object/dict键/URL path占位符/双模式路由); 每位置声明 type(string/int/object/array)+ source(从哪个输入池取)+ order(精确顺序, EVM[addr,latest] vs starknet[latest,addr]相反)。
+- **S2.2 统一 4 套按链分派**(缺口#1): fetch create_adapter / chain_adapters get_adapter / config_loader MAINNET case / common_functions get_block_height 统一按 _meta.adapter_family 分派(单一来源)。
+- **S2.3 保留 adapter_family**(缺口#4): config_loader L597 CHAIN_CONFIG=jq del(._meta) 改为保留 adapter_family(分派需要)。
+- **S2.4 mixed weight 驱动生成**(缺口#9): 三处代码(config_loader L540/626/674)改取 rpc_methods.mixed_weighted, weight 驱动 vegeta target 比例(非 round-robin 均权)。
+- **S2.5 6 family _build_params DSL 化**: 各 adapter _build_params 改读 param_spec 声明构造(枚举 fallback 兼容)。
+- **L1**: param_spec 解析单测(6 family × 各参数形态, 断言构造的 target body 字节正确)。
+- **L2**: cli.py build-target shim 对每 (chain×method) 跑(parallel-entry Step4-bis: 测 CLI shim 非只 import)。
+- **L3**: 整框架跑 mixed, 断言 weight 比例生效 + 新 method 零代码可配。
+
+#### 6.2.4 S3 — 响应链 + 关联键 + 归因(缺口 #5/#6-响应/#7/#8/#11/#12)
+
+**问题**: 响应无法关联回 method(缺口#5: base.py 固定 id=1, rest.go RequestID=""); 响应消费链不存在(缺口#6); 三端同源漂移(缺口#7); attribution 缺 EBS/Net(缺口#8); proxy_self.csv 死数据未减基线(缺口#11); 块高提取重复实现绑死8链(缺口#12)。
+- **S3.1 重建 request_id 关联键**(缺口#5, 三处改): base.py _vegeta_post_json 注入唯一 id(非固定1)→ proxy extractor 提取 RequestID(rest.go 补 RequestID)→ 响应按 id 关联回 method。
+- **S3.2 响应 DSL response_spec**(§5 + raw-evidence L3 Expected fields 金矿): chain template 声明响应提取路径(envelope×locator×type 3维), 收编 6 处 method 知识沉淀单一来源 + 交叉校验防 __unmatched__ 静默消失(缺口#7)。
+- **S3.3 attribution 补四维**(缺口#8): per_method_attribution 读 unified CSV 的 disk/net 列(数据已采), PerMethodResourceRow 加 ebs/net 字段, 出图四维。**低风险**(数据源零改动)。
+- **S3.4 减 proxy 基线**(缺口#11): attribution 读 proxy_self.csv 减去 proxy 自身 cpu/mem 开销(Q4-10/ADR-0004 设计落地)。
+- **S3.5 块高提取归一**(缺口#12): common_functions.get_block_height 8链 case 改调 chain_adapters.parse_block_height(36链), 块高监控解绑 8 链。
+- **S3.6 响应记录入库旁路**(§5.6, 决策④): PROXY_RESPONSE_CAPTURE 默认关, 独立 response_sink(不扩9列主CSV), maxBody 上限防 OOM。
+- **L1**: 关联键单测(id 注入→提取→关联) + response_spec 解析单测 + attribution 四维单测。
+- **L2**: proxy 全链路(请求带id→sink→attribution关联)集成。
+- **L3**: 整框架跑 mixed, 断言 per-method 四维归因出图 + 响应可按 method 关联 + 块高 36 链通。
+
+#### 6.2.5 验证矩阵 + 向后兼容 + 三端同源
+
+- **每阶段三层**: L1 单测 / L2 模块集成 / L3 整框架 e2e(真跑 blockchain_node_benchmark.sh 无 skip + artifact-assert)。**每阶段 L3 全过才记 done**(不累积 L3 债)。
+- **向后兼容**: 现有 36 链 param_format 不破坏; DSL 与 param_format 并存(枚举作 DSL 预设); 现有 unified CSV schema 不动(Q4-6); 响应记录默认关(向后兼容)。
+- **三端同源校验**(缺口#7): param_spec(构造)+ proxy_extraction(识别)+ response_spec(解析)收编 chain template 单一来源, 加交叉校验 CI 防漂移(防 method 标 __unmatched__ 静默从归因消失)。
+- **回归**: 每阶段跑 R0 老测对比 S0 baseline(12 healthy/24 known-broken 不退化)。
+- **commit 纪律**: 每波 family 落盘 + commit(-F /tmp/msg.txt); fixture 顺带更新(解 fake-node 数据退化)。
+
+#### 6.2.6 风险 + 撤销线
+
+- **R-S2**: param_spec DSL 覆盖 < 6 family 全部参数形态 → 回退该 family 用 param_format 枚举(并存兜底)。
+- **R-S3.1**: 关联键改动破坏现有 proxy per-method 归因 → S3.1 独立 commit + L2 验证 id 关联率, 不过则回退。
+- **R-S3.3**: attribution 四维出图 NaN(GCP 磁盘设备名问题, 见 skill cloudtop-phase7 ref)→ 先验设备名再出图。
+- **撤销条件**: 任一阶段 L3 无法在真框架跑通 → 停, 不进下阶段, 报用户。
 
 ## 7. 执行日志(时间倒序)
 ### 2026-06-01 立项
