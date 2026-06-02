@@ -960,3 +960,32 @@ audit 矩阵 Summary: 29 PASS / 16 P1_RPC_ERROR / 6 P1_NOT_IN_SPEC。16 个 RPC_
 - method-status-matrix.md L61-304(其余链 + 6 个 P1_NOT_IN_SPEC detail + non-PASS issues)。
 - network/*.sh provider variant 4 脚本 + network_unified_entry.sh。
 - unified_monitor cgroup+qps 段+主循环。
+
+
+## 37. 第二十五轮: matrix 全文 error 消息逐条坐实输入供给债 + network_unified_entry 整合范式
+
+### 37.1 method-status-matrix.md 全文读完(304行)— 每条 RPC_ERROR 原始 error 100% 是"参数类型/数量错"
+逐行读 L230-304 的 non-PASS detail, **每条 -32602 error 消息节点明确点名缺哪个参数**:
+- starknet_getEvents: `missing field: "filter"`(L265, audit 没传 filter)
+- starknet_getTransactionByHash: `missing field: "transaction_hash"`(L275, audit 喂 account 非 tx_hash)
+- sui suix_getOwnedObjects/getTransactionBlock/queryTransactionBlocks: `No more params`(L284/293/302)
+- EVM eth_getLogs/eth_getTransactionByHash: `missing value for required argument 0`(L236/246/256)
+- solana getTokenAccountBalance: `Invalid param: not a Token account`(L114); getSignaturesForAddress/getTransaction: `params should have at least 1 argument`(L123/132)
+- 🔴 **16 个 RPC_ERROR 100% 是 audit 用 account 喂所有 method 导致(节点逐条点名缺 filter/transaction_hash/参数), 不是 method 坏**。与我 §3 实测全 PASS 完全互证 → **输入供给债的最强历史实证**(节点原始 error 逐条铁证)。
+- L144/248/267 audit 自标 **"framework needs to handle this"**(error 在 RPC layer 抛出, 框架需处理)= §响应 error 处理 + R2 校验要解决的, audit 早标记。
+- 旁注: scroll 全 NOT_IN_SPEC(L65-70)= audit L1 用 ethereum execution-apis spec 判 scroll(L2)噪声, 非真问题; EVM 链 L1 多 DOC_ERROR 403/404 = 文档站反爬, 非 method 问题。
+
+### 37.2 network_unified_entry.sh 全文(50行)— provider 抽象 = 整合方案 c 的现成优雅范式
+- source cloud_provider.sh 探测 CLOUD_PROVIDER_VARIANT → source `network/<variant>.sh` → 暴露 **4 接口函数**(init_network_monitoring / generate_network_csv_header / collect_network_metrics / get_network_field_metadata)+ L41-46 验证 4 接口都定义 + fallback other_none。
+- 🎯 **与 RPC method 正交**(按 cloud_provider 分派, 非按链)。
+- 🎯 **现成优雅范式**: 统一入口 + 4 接口契约 + variant 路由 + fallback + 接口完整性校验。**这正是整合方案 c(InputProvider/TargetBuilder 按 family 路由)的现成样板** —— network/interface.sh 4-function contract(skill parallel-entry 也提过可推广)。重构 6 family adapter 统一入口可照此范式(get_adapter 路由 + 接口契约校验 + fallback)。
+
+### 37.3 第二十五轮结论
+- audit matrix 全文坐实: 16 RPC_ERROR 是输入供给债历史实证(节点原始 error 逐条点名缺参数)。
+- network provider 抽象 = 整合方案 c 的现成优雅范式(统一入口+接口契约+variant路由+fallback)。
+- docs/audit/ 全部(_method-inventory.json + matrix.md 304行 + audit.py 449行)读透。
+
+### 37.4 仍待逐行(继续, 都评估正交/范式参考)
+- network/aws_ena.sh / gcp_gvnic.sh / gcp_virtio.sh / other_none.sh(4 provider 实现, NIC 采集, 与 RPC method 正交, 但 4 接口实现是范式参考)。
+- unified_monitor.sh cgroup 采集段(get_cgroup_data L1994+)+ qps 段 + 主循环 + log_performance_data。
+- _raw-evidence/<chain>.json(audit 原始证据, 可能有 method 响应样本)。
