@@ -652,8 +652,20 @@
 **问题**: param_format 是枚举 if-else(6 family 各一套 _build_params), 加新 method 要改代码; 4 套按链分派维度冲突(缺口#1); CHAIN_CONFIG 删 _meta 丢 adapter_family(缺口#4); mixed weight 三处代码取 mixed 非 mixed_weighted, weight 未驱动生成(缺口#9)。
 **方案**: chain template 声明式 param_spec(§4 DSL: 位置×类型×语义×来源 3维), 框架据此构造, 枚举作 DSL 预设快捷(向后兼容)。
 - **S2.1 param_spec schema 定稿**(基于 §4 + raw-evidence 硬数据): 支持 ≥5 种参数注入位置(list索引/list内嵌object/dict键/URL path占位符/双模式路由); 每位置声明 type(string/int/object/array)+ source(从哪个输入池取)+ order(精确顺序, EVM[addr,latest] vs starknet[latest,addr]相反)。
-- **S2.2 统一 4 套按链分派**(缺口#1): fetch create_adapter / chain_adapters get_adapter / config_loader MAINNET case / common_functions get_block_height 统一按 _meta.adapter_family 分派(单一来源)。
-- **S2.3 保留 adapter_family**(缺口#4): config_loader L597 CHAIN_CONFIG=jq del(._meta) 改为保留 adapter_family(分派需要)。
+- **S2.2 统一 4 套按链分派**(缺口#1)— **拆 Python 侧 / Shell 侧两子项(§47 GREP-EVIDENCE 实证: 4 套入参/语言异构, 非同质改动)**:
+  - **S2.2a Python 侧**(低风险): fetch create_adapter(L663 `config["chain_type"]` 4 类)/ chain_adapters get_adapter(base.py:119 已按 `_meta.adapter_family`, 是范式)统一到 family 分派。套2 已 family 化作模板。
+  - **S2.2b Shell 侧**(走 **D5=方案①声明式收敛**, 非跨语言 fork): config_loader MAINNET case(L454 BLOCKCHAIN_NODE→endpoint, 8链硬编码)/ get_block_height(common:194 BLOCKCHAIN_NODE→内嵌curl+jq+转换)**改为纯 Shell 读 chain template 声明字段**(jq 读, 复用 config_loader 现成 `echo "$CHAIN_CONFIG" | jq -r` 模式, L540/597/626/674 已大量用)。**不引入 Shell 调 Python**(D5 决策, 见下)。
+- **S2.3 chain template 声明字段收敛 + 不被 del 删**(缺口#4 + D5 地基): 
+  - config_loader L597 `CHAIN_CONFIG=jq del(._meta)` 改为保留分派/声明所需字段(adapter_family + endpoint_spec + block_height_spec), 不能删。
+  - 新增声明块: `block_height_spec:{method, result_path(jq), encoding(hex|dec|int)}` + `endpoint_spec` —— Shell(S2.2b)和 Python(parse_block_height)**同源读这一处**(消除缺口#12 的根: 单一声明源, 非两份代码也非跨语言桥)。
+
+> **D5 架构决策(2026-06-02, 用户拍板"不留技术债+优雅")= 方案① Shell DSL 化**:
+> Shell 侧(endpoint + 块高健康检查)统一走"纯 Shell 读 chain template 声明 + jq 提取", **不走 Shell fork Python**。
+> 依据(§47 + 用户澄清 + GREP-EVIDENCE): 
+> (1) **不留技术债**: 块高知识单一声明源(chain template), Shell/Python 同源读; 方案②(Shell调Python)只是把"两份代码"换成"跨语言桥", 没真消缺口#12。
+> (2) **设计优雅**: 复用框架现成 Shell+jq 读 chain template 模式(config_loader 已大量用), 与 NS-3 全栈声明式同构; 不引入突兀跨语言硬连线。
+> (3) **保护测量准确性(决定性)**: `BLOCK_HEIGHT_MONITOR_RATE` 默认 **每秒 1 次**(internal_config.sh:63, 用户澄清+实证), block_height_monitor 每秒调 get_block_height 2 次(local+mainnet)。方案②=每秒 fork 2 python 进程持续整个 benchmark → 监控工具自吃 CPU **污染节点资源基线**(benchmark 核心就是测节点资源, 监控开销污染=直接破坏测量, 同 Q4-10 自报基线问题)。方案①纯 shell 轻量不污染。
+> **硬约束**: 块高 Shell 实现必须保持纯 shell + jq 轻量(每秒高频, 任何低效被放大)。
 - **S2.4 mixed weight 驱动生成**(缺口#9): 三处代码(config_loader L540/626/674)改取 rpc_methods.mixed_weighted, weight 驱动 vegeta target 比例(非 round-robin 均权)。
 - **S2.5 6 family _build_params DSL 化**: 各 adapter _build_params 改读 param_spec 声明构造(枚举 fallback 兼容)。
 - **L1**: param_spec 解析单测(6 family × 各参数形态, 断言构造的 target body 字节正确)。
@@ -667,7 +679,7 @@
 - **S3.2 响应 DSL response_spec**(§5 + raw-evidence L3 Expected fields 金矿): chain template 声明响应提取路径(envelope×locator×type 3维), 收编 6 处 method 知识沉淀单一来源 + 交叉校验防 __unmatched__ 静默消失(缺口#7)。
 - **S3.3 attribution 补四维**(缺口#8): per_method_attribution 读 unified CSV 的 disk/net 列(数据已采), PerMethodResourceRow 加 ebs/net 字段, 出图四维。**低风险**(数据源零改动)。
 - **S3.4 减 proxy 基线**(缺口#11): attribution 读 proxy_self.csv 减去 proxy 自身 cpu/mem 开销(Q4-10/ADR-0004 设计落地)。
-- **S3.5 块高提取归一**(缺口#12): common_functions.get_block_height 8链 case 改调 chain_adapters.parse_block_height(36链), 块高监控解绑 8 链。
+- **S3.5 块高提取归一**(缺口#12, 走 **D5=方案① Shell DSL 化**): common_functions.get_block_height 8链 case → 改为纯 Shell 读 `block_height_spec`(S2.3 声明的 method + result_path + encoding)通用实现(jq 提取 + 按 encoding 转 hex/dec)。Python parse_block_height 同读这一处声明。**块高知识单一声明源, 块高监控解绑 8 链支持 36 链**。**不走 Shell 调 Python**(块高每秒高频, 见 D5 测量准确性论据 + 硬约束)。
 - **S3.6 响应记录入库旁路**(§5.6, 决策④): PROXY_RESPONSE_CAPTURE 默认关, 独立 response_sink(不扩9列主CSV), maxBody 上限防 OOM。
 - **L1**: 关联键单测(id 注入→提取→关联) + response_spec 解析单测 + attribution 四维单测。
 - **L2**: proxy 全链路(请求带id→sink→attribution关联)集成。
