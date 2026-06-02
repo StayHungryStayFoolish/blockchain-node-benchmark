@@ -495,3 +495,38 @@ unified_monitor采集数据源/target_generator输入消费端。
 replace_env_vars占位符/fetch Sui adapter尾部/config_loader MAINNET_RPC_URL 8链case全文。
 **累计 10 个真实障碍/缺口**(§11.6 八个 + §12.5 EBS/Net归因缺失 + §14.2 数据源就绪降风险 + §16 三端同源+输入消费端落点)。
 这是 grep 阶段完全不可能得到的事实地基, 足以支撑出零技术债的 §6 实施计划。
+
+
+## 18. 第十一轮 token-level 精读: proxy selfreport + Sui尾部 + replace_env_vars(我武断标"边缘"实为缺口)
+
+### 18.1 🔴 proxy selfreport.go — 第11个真实缺口(我之前武断标"边缘", 一读即真缺口)
+- selfreport.go 完整: 每秒读 /proc/self/stat(utime+stime)+ /proc/self/status(VmRSS)→ 写 `proxy_self.csv`(timestamp_ns, cpu_pct, mem_mb)= proxy 自身资源开销。
+- main.go:60 selfreport.New 启动; lib/proxy_lifecycle.sh:143 引用路径 → **proxy 确实在生成 proxy_self.csv**。
+- 🔴🔴 **批判性 grep 验证(grep -rn proxy_self analysis/ visualization/ core/ monitoring/ = 空)**: **没有任何分析代码消费 proxy_self.csv / 减 proxy 基线**。
+- **Q4-10 设计 vs 实现差距**: Q4-10 锁"proxy 自报基线 + **分析层从节点资源减去 proxy 基线后再归因 method**"。但 attribution.py compute_per_method_resource(§12.1)只用 `monitor.cpu_pct × weight`, **没减 proxy_self.csv 的 proxy 自身开销** → per-method 归因的 CPU/MEM **偏高**(proxy 进程开销被算进了 method)。
+- 这是 parallel-entry 近亲: **proxy_self.csv 采了但生产分析链没接 = 死数据**。NS-2/Q4-10 未完成项。
+- **自我批判**: 我前几轮把 selfreport 标"边缘非阻塞"是**没读就预判**, 违反 token-level。一读即发现是真缺口。**"没读的不能判定边缘"** — 教训。
+
+### 18.2 fetch Sui adapter 尾部 + replace_env_vars(逐行精读, 确认非缺口但记录事实)
+- Sui(L516-599): suix_queryTransactionBlocks(MoveFunction filter / 全局搜索)→ digest(tx hash)→ fetch_transaction(showObjectChanges/showBalanceChanges)→ extract。**确认 Sui 抓取独有逻辑**(印证 §9.1 6 family 补全从零设计)。
+- replace_env_vars: 递归替换 CHAIN_CONFIG 里值=env 变量名的字符串(如 "account_count":"ACCOUNT_COUNT" → os.environ 读 + 类型转换)。**印证 skill ref "params 字段值是 env 占位符, 直连测拿字面量"的坑**。重构 InputProvider 整合后此占位符机制要保留(config_loader 注入 ACCOUNT_* env)。
+
+### 18.3 第十一轮结论 + 11 个缺口
+新增第 11 缺口: **proxy_self.csv 采了但归因没减 proxy 基线**(Q4-10 未完成, per-method CPU/MEM 偏高)。
+**11 个真实障碍/缺口总清单**(grep 阶段零):
+1. 两套 adapter 分派冲突(chain_type vs family)→ 整合方案 c
+2. 6 family account 抓取从零设计(bitcoin UTXO 无 account / 各家机制不同)
+3. fetch method ≠ 压测 method(methods vs rpc_methods 两字段)
+4. CHAIN_CONFIG 删 _meta → 整合按 family 要先改 config_loader
+5. vegeta 固定 id=1 + rest RequestID="" → 响应入库关联键必须重建
+6. 压测层 + report 层都不消费响应 → 响应消费链全新增
+7. 三端同源(param_spec/proxy_extraction/response_spec 三独立字段)
+8. per-method 归因缺 EBS/Network 两维(数据源就绪, 低风险补)
+9. mixed weight R5 配置 weight 未驱动生成端(round-robin 均权)
+10. 输入池消费端(target_generator)只读 accounts 一池喂所有 method
+11. **proxy_self.csv 采了没减基线 → 归因 CPU/MEM 偏高(Q4-10 未完成)**
+
+### 18.4 诚实自评(用户问"完全吃透了么")
+- 我前几轮有"没读就标边缘"的武断(selfreport 就是反例, 一读即第11缺口)。本轮已纠正, 逐行读完。
+- **仍未逐行**: cli.py health-probe(cmd_health_probe + 各 family health_check_request 已在 adapter 读过)/ config_loader MAINNET_RPC_URL 8链 case 全文(OQ-11 已知)/ proxy main.go 完整 / extractor chain.go(NewChain 组合逻辑)/ extractor.go(Result 结构 + Chain.Extract 遍历)。
+- **下一步继续**: 读 extractor chain.go + extractor.go(Chain 如何遍历多 extractor, 影响 hedera_dual 双 extractor + 三端同源识别细节)+ proxy main.go(启动参数 + maxBody)+ health 链。
