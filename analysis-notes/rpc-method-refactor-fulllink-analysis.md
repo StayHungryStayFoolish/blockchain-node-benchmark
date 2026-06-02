@@ -1239,3 +1239,38 @@ fixture = §4 param_spec(请求 params 真实结构, 含 path 占位符)+ §5 re
 - **读到底的硬信号**: 最近 5 轮(network provider / cgroup / 8链 raw-evidence / fixture / unified 主循环)扩大到最细原始层, **再无新增第 13 个结构性缺口**, 全部是对已知 12 缺口 + §4/§5 双 DSL 的硬数据强化。
 - 完整闭环已读透: 入口编排 → 4 套按链分派(穷举无第5套)→ 6 family 构造 → proxy 识别 → 响应(记录旁路)→ attribution 归因(缺 EBS/Net 两维)→ 输入供给(单 account 槽兜底=根因)→ 6 处知识沉淀(收编单一来源防漂移)。
 **结论: 分析阶段读透, 可收口进入 §6 正式实施计划(impl-plan)。**
+
+
+## 47. 第三十四轮: 实施计划 GREP-EVIDENCE 回验 — S2.2/S3.5 跨语言统一障碍被证伪(纸上推演纠错)
+
+### ⚠️ 触发: 用户"再次分析" → 按 parallel-entry GREP-EVIDENCE 铁律回验实施计划落点可行性(之前是纸上推演没贴代码证据)
+
+### 47.1 4 套按链分派真实形态(GREP-EVIDENCE BLOCK, 真实 stdout)
+| 套 | 文件:行 | 语言 | 分派键 | 分派内容 | 覆盖 |
+|---|---|---|---|---|---|
+| 1 fetch create_adapter | fetch_active_accounts.py:663 | Python | `config["chain_type"].lower()` | 4 adapter 类(solana/[eth,bsc,base,scroll,polygon]/starknet/sui) | 8 链 |
+| 2 chain_adapters get_adapter | base.py:119 | Python | **`_meta.adapter_family`** | 6 family | 36 链 ✅已family化 |
+| 3 config_loader MAINNET case | config_loader.sh:454 | **Shell** | `${BLOCKCHAIN_NODE,,}` case | 设 MAINNET_RPC_URL endpoint | 8 链硬编码 |
+| 4 get_block_height | common_functions.sh:194 | **Shell** | `${BLOCKCHAIN_NODE,,}` case | **内嵌 curl+jq+进制转换**(L196-232) | 8 链(solana/EVM5/starknet/sui) |
+
+### 47.2 🔴 S2.2"统一4套按adapter_family分派"= 过度简化(证伪)
+- 套2 已 family 化(不用动); 套1 是 Python chain_type 聚类(EVM 已聚, 可改 family)。
+- **套3/套4 是 Shell 层按 BLOCKCHAIN_NODE case, `_meta.adapter_family` 是 chain template JSON 字段, Shell 要 jq 读** → **跨语言(Python adapter_family vs Shell BLOCKCHAIN_NODE), 不是"统一分派键"一句话**。
+- 套3 只设 8 链 endpoint(36 链 endpoint 本就没配全 = 既有 OQ, 非本次新增)。
+
+### 47.3 🔴 S3.5"块高归一: get_block_height 改调 parse_block_height"= 低估架构障碍(证伪)
+- get_block_height = **Shell 函数**, 内嵌 curl + jq + 进制转换(hex→dec, L223-225)。
+- chain_adapters.parse_block_height = **Python 方法**。
+- "Shell 调 Python 做块高" = 每次健康检查/块高监控(高频循环)都 fork python 进程, **性能+架构要重新论证**。
+- 不是"改调"二字, 是架构决策: **① Shell 也 DSL 化**(get_block_height 读 chain template 声明的块高 method + jq 提取路径, 纯 Shell 实现声明式)**vs ② Shell 调 Python**(归一到 parse_block_height 但引入跨语言 fork)。
+
+### 47.4 🎯 真正的"再次分析"价值: 跨语言(Python adapter / Shell config+health)统一是本重构最硬骨头
+我的实施计划 §6.2 在 S2.2/S3.5 把跨语言统一当成同质改动(纸上推演)。GREP 实证: 
+- Python 侧(套1/套2)统一到 family = 可行(套2 已是范式)。
+- **Shell 侧(套3/套4)统一**: 要么 Shell 也 DSL 化(读 chain template, 纯 shell + jq), 要么 Shell 调 Python(跨语言)。这是 §6.2 没回答的架构岔路。
+- **推荐倾向**: Shell 侧 DSL 化(套3 endpoint + 套4 块高 method/路径都从 chain template jq 读), 与 NS-3"proxy 解析也 declarative"一致 = 全栈声明式, 避免跨语言 fork。但这扩大了 S2/S3 工作量, 需用户拍板。
+
+### 47.5 实施计划需修正项(下一步)
+- S2.2 拆为 S2.2a(Python 侧套1/2 family 统一, 低风险)+ S2.2b(Shell 侧套3/4 DSL 化, 需架构决策)。
+- S3.5 块高归一明确选 Shell DSL 化路线(纯 shell 读 chain template 声明的 block_height_method + result 提取 jq 路径), 而非 shell 调 python。
+- 新增前置决策点 D5: Shell 侧统一走 DSL 化 vs 调 Python(影响 S2.2b/S3.5 工作量与架构)。
