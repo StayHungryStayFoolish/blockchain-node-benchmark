@@ -40,7 +40,7 @@
 > **关键: 必须记完整的【请求结构体】和【响应结构体】, 不只是"测了能跑"。**
 >   请求结构体 → 归纳参数 DSL; 响应结构体 → 归纳响应解析 DSL。两者都要逐 method 落矩阵。
 
-### 进度: 127 / 184 method 实测 (jsonrpc + bitcoin_jsonrpc + substrate 完成)
+### 进度: 152 / 184 method 实测 (jsonrpc+bitcoin+substrate+tendermint 完成)
 (矩阵逐 family 分批填, 见下方各 family 节)
 
 ### 3.1 jsonrpc family (16 链, 74 method slots) — 全量实测完成
@@ -158,8 +158,46 @@
 - **🔴 重大发现: `system_account` 是错误声明**(节点返 -32601)。3 条链(acala/kusama/polkadot)的 chain template 都把它当 single_address balance 查询, 但它不是有效 RPC method。真实余额查询须 state_getStorage(storage key)或 Sidecar REST。**直接印证 research R2(声明错无校验)+ R3 风险, 是 DSL 校验/声明能力必须解决的真实案例**。
 - **EVM-compat parachain 双端点问题**: acala 的 substrate 端 与 EVM 端是两个 endpoint, eth_* 须走 EVM 端(substrate 端 -32601); astar/moonbeam 单端点兼容两套。**参数 DSL/endpoint 路由需考虑同链多 RPC 命名空间**。
 - **polkadot Sidecar REST path**: 3 个 method 是 substrate-api-sidecar 服务的 REST 接口(非节点直连 JSON-RPC), 无公开托管端点。这类 method 的"参数=path 占位 + 响应=Sidecar JSON"形态与 rest family 一致, 是 DSL path-based 参数的又一形态。
-### 3.3 tendermint family (5 链)
-(待填)
+### 3.3 tendermint family (5 链, 25 method slots) — 全量实测完成
+
+**公开 endpoint 映射**(每链双端: LCD/REST 1317 风格 + Tendermint RPC 26657 风格):
+| 链 | LCD (REST) | Tendermint RPC | EVM (sei) |
+|---|---|---|---|
+| cosmos-hub | https://cosmos-rest.publicnode.com | https://cosmos-rpc.publicnode.com | - |
+| celestia | https://celestia-rest.publicnode.com | https://celestia-rpc.publicnode.com | - |
+| injective | https://injective-rest.publicnode.com | https://injective-rpc.publicnode.com | - |
+| osmosis | https://osmosis-rest.publicnode.com | https://osmosis-rpc.publicnode.com | - |
+| sei | - | https://sei-rpc.publicnode.com | https://evm-rpc.sei-apis.com |
+
+**协议特征**: **两套子协议混合** — (1) Cosmos LCD/REST(GET path 路由 `/cosmos/*` `/injective/*` `/osmosis/*`, 与 rest family 同形); (2) Tendermint RPC(GET `/status` `/block?height=N`, 返 `{jsonrpc,result}` envelope)。sei 额外是 EVM-on-tendermint(eth_* 走独立 EVM endpoint)。**research §4.2 说 tendermint 用 dict 参数(abci_query)— 实测确认本 36 链配置实际用的是 LCD path 路由 + RPC GET, 不是 dict body**(dict abci_query 是另一种 tendermint 调用法, 本配置未用)。
+
+| 链 | method | param_format | **请求结构体(真实)** | **响应结构体(真实, 关键字段)** | 官方参数 | 状态 |
+|---|---|---|---|---|---|---|
+| cosmos-hub/celestia/osmosis/injective | /cosmos/bank/v1beta1/balances/{addr} | path_address | `GET /cosmos/bank/v1beta1/balances/<bech32>` 实测真 addr | `{balances:[{denom:"utia",amount:"157484711661"}],pagination:{...}}` → 余额=balances[] | LCD path, addr 占位(bech32) | ✅ |
+| cosmos-hub/celestia/injective/osmosis | /status | no_params | `GET /status`(Tendermint RPC) | `{jsonrpc,result:{node_info,sync_info:{latest_block_height,latest_block_hash,...},validator_info}}` → block_height=result.sync_info.latest_block_height | RPC 无参 | ✅ |
+| celestia/cosmos-hub | /cosmos/base/tendermint/v1beta1/blocks/latest | no_params | `GET .../blocks/latest`(LCD) | `{block_id:{hash,...},block:{header:{height,chain_id,time,...},data:{txs:[...]},...}}` → block_height=block.header.height | LCD 无参 | ✅ |
+| cosmos-hub | /cosmos/base/tendermint/v1beta1/blocks/{height} | path_height | `GET .../blocks/<height>` (须 ≥ 节点 lowest height) | 同 blocks/latest 结构 | LCD path, height 占位(int) | ✅ |
+| cosmos-hub | /cosmos/tx/v1beta1/txs/{hash} | path_hash_upper_hex_no_prefix | `GET .../txs/<UPPER_HEX_HASH>` 实测真 hash(sha256 of tx, 无0x前缀大写) | `{tx:{body:{messages:[{@type,...}]},auth_info,signatures},tx_response:{txhash,height,code,...}}` | LCD path, hash=大写hex无前缀 | ✅ |
+| cosmos-hub | /cosmos/staking/v1beta1/validators | query_pagination | `GET .../validators?pagination.limit=1` | `{validators:[{operator_address,consensus_pubkey,jailed,status,tokens,...}],pagination}` | LCD + query 参数 pagination.* | ✅ |
+| celestia | /cosmos/base/tendermint/v1beta1/node_info | no_params | `GET .../node_info`(LCD) | `{default_node_info:{protocol_version,default_node_id,network,version,...},application_version}` | LCD 无参 | ✅ |
+| celestia | /block | [height] | `GET /block` (无height=最新; `?height=N` 指定)(Tendermint RPC) | `{jsonrpc,result:{block_id:{hash},block:{header:{height,...},data:{txs}}}}` → block_height=result.block.header.height | RPC, height=可选 query | ✅ |
+| injective | /injective/exchange/v1beta1/spot/markets | no_params | `GET /injective/exchange/v1beta1/spot/markets`(LCD) | `{markets:[{ticker:"KATANA/USDT",base_denom,quote_denom,market_id,...}]}` | LCD 无参 | ✅ |
+| injective | /injective/exchange/v1beta1/derivative/markets | no_params | `GET .../derivative/markets` | `{markets:[{market:{ticker,oracle_base,...},...}]}` | LCD 无参 | ✅ |
+| injective | /injective/oracle/v1beta1/params | no_params | `GET /injective/oracle/v1beta1/params` | `{params:{pyth_contract,chainlink_verifier_proxy_contract,...}}` | LCD 无参 | ✅ |
+| osmosis | /osmosis/poolmanager/v1beta1/num_pools | no_params | `GET .../num_pools`(LCD) | `{num_pools:"3465"}` | LCD 无参 | ✅ |
+| osmosis | /osmosis/gamm/v1beta1/pools/{pool_id} | path_pool_id | `GET .../pools/1` | `{pool:{@type,address,id:"1",pool_params:{swap_fee,...},pool_assets:[...]}}` | LCD path, pool_id 占位(int) | ✅ |
+| osmosis | /osmosis/twap/v1beta1/ArithmeticTwapToNow | query_params | `GET .../ArithmeticTwapToNow?pool_id=1&base_asset=uosmo&quote_asset=ibc/..&start_time=<ISO>` | `{arithmetic_twap:"0.025081676131380860"}` | LCD + 4 个 query 参数(pool_id,base_asset,quote_asset,start_time) | ✅ |
+| sei | eth_chainId | no_params | `POST {method:"eth_chainId",params:[]}`(EVM endpoint) | `{result:"0x531"}` | EVM 标准 | ✅ |
+| sei | eth_blockNumber | no_params | `POST eth_blockNumber []` | `{result:"0xc97cd97"}` → block_height=result | EVM 标准 | ✅ |
+| sei | eth_getBalance | address_latest | `POST eth_getBalance [addr,"latest"]` | `{result:"0x4065ba745c24000"}` → 余额=result | EVM 标准 | ✅ |
+| sei | eth_call | address_with_options | `POST eth_call [{to,data},"latest"]` | `{result:"0x"}` → data=result | EVM 标准 | ✅ |
+| sei | /status | no_params | `GET /status`(Tendermint RPC) | `{node_info,sync_info,validator_info}`(sei RPC 返裸对象, 无 jsonrpc 包) → block_height=sync_info.latest_block_height | RPC 无参 | ✅ |
+
+**tendermint family 实测小结**:
+- **双子协议混合是本 family 核心特征**: LCD/REST(GET path 路由, `/cosmos/*` 等)+ Tendermint RPC(GET `/status` `/block`, jsonrpc envelope)。**与 research §4.2 "dict 参数"描述不同 — 本 36 链配置实际用 path 路由 + GET query, 非 dict body abci_query**(已实测纠正)。
+- **path 参数 5 种占位**: path_address(bech32)/path_height(int)/path_hash(大写hex无前缀)/path_pool_id(int)/query_params(?k=v)。**参数 DSL 的 path-routing 分支与 rest family 高度同构**(可统一)。
+- **响应 block_height 提取路径**: LCD blocks=block.header.height / RPC status=result.sync_info.latest_block_height / RPC block=result.block.header.height / sei status=sync_info.latest_block_height(无 result 包)。**同 family 内 RPC envelope 不一致**(sei 裸对象 vs 其他 jsonrpc 包)→ 响应 DSL 须能声明"是否有 jsonrpc 外层包"。
+- sei = EVM-on-tendermint, eth_* 走独立 EVM endpoint, 与 substrate EVM-compat 同模式(同链多 RPC 命名空间)。
 ### 3.4 bitcoin_jsonrpc family (4 链, 24 method slots) — 全量实测完成
 
 **公开 endpoint 映射**:
