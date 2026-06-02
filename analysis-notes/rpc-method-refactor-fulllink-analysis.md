@@ -1274,3 +1274,43 @@ fixture = §4 param_spec(请求 params 真实结构, 含 path 占位符)+ §5 re
 - S2.2 拆为 S2.2a(Python 侧套1/2 family 统一, 低风险)+ S2.2b(Shell 侧套3/4 DSL 化, 需架构决策)。
 - S3.5 块高归一明确选 Shell DSL 化路线(纯 shell 读 chain template 声明的 block_height_method + result 提取 jq 路径), 而非 shell 调 python。
 - 新增前置决策点 D5: Shell 侧统一走 DSL 化 vs 调 Python(影响 S2.2b/S3.5 工作量与架构)。
+
+
+## 48. 第三十五轮: 6 family 块高获取全实测 + hex/dec 混合 bug 完整链(用户两问驱动, token-level+实测+对照skill)
+
+### 48.1 6 family 块高获取全实测(真 public endpoint 2026-06-02, 补齐之前只测 substrate/tendermint 的缺口)
+| family | transport | method/path | 响应路径 | 实测值 | 格式 |
+|---|---|---|---|---|---|
+| jsonrpc(solana) | POST jsonrpc | getBlockHeight | `.result` | 401935560 | **十进制** |
+| jsonrpc(EVM) | POST jsonrpc | eth_blockNumber | `.result` | 0x...(§3) | **hex** |
+| substrate(polkadot) | POST jsonrpc | chain_getHeader | `.result.number` | 0x1e0be8a | **hex** |
+| tendermint(cosmos) | POST jsonrpc | status | `.result.sync_info.latest_block_height` | "31398087" | 十进制串 |
+| bitcoin | POST jsonrpc1.0 | getblockcount | `.result` | 952132 | **十进制** |
+| rest(cardano) | **GET path /tip** | — | **数组 [0].block_height** | 13498618 | 十进制 |
+| hedera | **GET path mirror /blocks?limit=1&order=desc** | — | `.blocks[0].number` | 95849662 | 十进制 |
+
+### 48.2 🎯 用户问题1(6 family 都能取块高且兼容么)= 能取但不兼容单一扁平声明
+- **transport 三类**: POST jsonrpc(4 family)/ GET path(rest cardano + hedera)/ hedera 双模式。
+- **响应路径 7 种全不同**: .result / .result.number / .result.sync_info.latest_block_height / 数组[0].block_height / .blocks[0].number。
+- 单一 `{method, result_path, encoding}` 扁平声明对 rest(GET path + 数组)/ hedera(mirror REST)不兼容 → **声明 schema 必须按 transport 分形**(复用 §4/§5 的 transport×locator×type 3维, 非新造扁平字段)。
+
+### 48.3 🔴 用户问题2(hex vs 十进制 + 显示阿拉伯数字逻辑)= 混合存在 + Shell 侧转换 bug 完整链
+**hex/dec 混合实测确认**: hex=EVM/substrate; 十进制=solana/bitcoin/tendermint/cardano/hedera。
+
+**Python 侧已优雅统一(base.py:88-100 `_try_int`)**: 自动识别 0x 前缀→int(s,16), 否则 int(s), 统一输出十进制 int。**不分 family 一份逻辑覆盖 hex/dec**。
+
+**Shell 侧失衡(bug 根)**: get_block_height(common_functions.sh) **每 case 各写转换, 只 EVM case 做 hex→dec**(L223-225 `printf "%d" $((16#$block_num))`); solana/starknet/sui case 用 `[[ =~ ^[0-9]+$ ]]` **假设十进制**。
+
+**完整 bug 链(下游消费实证, block_height_monitor.sh)**:
+- L166 get_cached_block_height_data → get_block_height 取块高。
+- L177 写 CSV `data_line` + **L181 `$block_height_diff -gt $BLOCK_HEIGHT_DIFF_THRESHOLD`= Shell 算术比较, 要求纯十进制整数**。
+- → "显示阿拉伯数字"(用户记忆正确)= L177 写盘 + L181 `-gt` 都要求十进制 → get_block_height 必须返回前把 hex 转十进制。
+- 🔴 **substrate 块高是 hex(0x1e0be8a)且不在现 8 链 case**: 进 36 链后无 substrate case(或塞十进制 case)→ hex 没转 → 返回 0x1e0be8a → L181 `0x1e0be8a -gt 50` **bash 算术报错** → 块高 diff 判断失败/健康检查误判 → **substrate 节点块高监控直接坏**。
+
+### 48.4 🎯 对 D5 设计的硬约束(实测背书)
+- 块高声明 schema **必须含 encoding 维度**(hex/dec/auto)+ 按 transport 分形(POST method / GET path / dual)。
+- Shell 侧 D5 实现**必须有统一 `_decode_height(encoding, raw)` 函数**(对标 Python `_try_int`, 一份逻辑覆盖 6 family), 不能像现状每 case 各写 → 否则缺口#12 换形式重现。
+- auto 模式(识别 0x)最稳, 与 _try_int 一致, jsonrpc family 用 auto 兼容 EVM(hex)+ solana(dec)同 family 混格式。
+
+### 48.5 方法论确认(对照 skill §13.1/§13.2)
+本轮用户两问("6 family 都实测了么"/"hex dec 显示逻辑分析了么")= 探针意图驱动: 我之前"读 parse_block_height 代码"≠"实测 6 family 块高"; "看到 EVM 有 hex 转换"≠"追全转换链到下游 -gt 算术依赖"。补实测 + 追下游消费(L181 -gt)才坐实完整 bug 链。诚实: 之前 2/6 family 实测(substrate/tendermint), 本轮补齐 jsonrpc/bitcoin/rest/hedera = 6/6 全实测。
