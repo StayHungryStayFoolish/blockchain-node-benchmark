@@ -40,7 +40,7 @@
 > **关键: 必须记完整的【请求结构体】和【响应结构体】, 不只是"测了能跑"。**
 >   请求结构体 → 归纳参数 DSL; 响应结构体 → 归纳响应解析 DSL。两者都要逐 method 落矩阵。
 
-### 进度: 152 / 184 method 实测 (jsonrpc+bitcoin+substrate+tendermint 完成)
+### 进度: 179 / 184 method 实测 (jsonrpc+bitcoin+substrate+tendermint+rest 完成)
 (矩阵逐 family 分批填, 见下方各 family 节)
 
 ### 3.1 jsonrpc family (16 链, 74 method slots) — 全量实测完成
@@ -227,8 +227,55 @@
 - **verbosity/verbose 第二参控制响应形态**(hex vs 对象): getblock verbosity 0/1/2、getrawtransaction verbose bool。**参数 DSL 需支持"可选枚举型控制参数"**(影响响应结构)。
 - **wallet 类 method(getreceivedbyaddress)在共享公开节点结构性不可达**(-32701)= 真实约束, 非 endpoint 问题。这类需节点本地 wallet, 全 4 链同。
 - doge 节点 envelope 返 `jsonrpc:"2.0"`(请求发 1.0), 实测节点对 envelope 版本宽容。
-### 3.5 rest family (5 链)
-(待填)
+### 3.5 rest family (5 链, 27 method slots) — 全量实测完成
+
+**公开 endpoint 映射**:
+| 链 | public endpoint | 备注 |
+|---|---|---|
+| algorand | https://mainnet-api.algonode.cloud (node) + https://mainnet-idx.algonode.cloud (indexer) | ⚠️ accounts/{addr}/transactions 须走 indexer |
+| aptos | https://fullnode.mainnet.aptoslabs.com | ✅ |
+| cardano | https://api.koios.rest/api/v1 | ✅ (Koios, 1 RPS 无 key, sleep 2s) |
+| tezos | https://rpc.tzkt.io/mainnet | ✅ |
+| ton | https://toncenter.com/api/v2 | ✅ |
+
+**协议特征**: 纯 REST(HTTP GET path 路由 + POST 对象 body)。每链 REST API 形态不同(algorand node/indexer / aptos fullnode / cardano Koios / tezos RPC / ton toncenter)。chain template 用 `_meta.rest_paths` 声明 (method, path, body?) + `{address}` 占位符替换。**这是现有最接近 declarative DSL 的 family**(已用 rest_paths 字典)。
+
+| 链 | method | param_format | **请求结构体(真实)** | **响应结构体(真实, 关键字段)** | 官方参数 | 状态 |
+|---|---|---|---|---|---|---|
+| algorand | GET /v2/accounts/{address} | path_addr_base32 | `GET /v2/accounts/<base32 addr>` 实测 fee sink | `{address,amount:6886384485,amount-without-pending-rewards,assets:[...],...}` → 余额=amount | path, addr=Algorand base32 | ✅ |
+| algorand | GET /v2/blocks/{round} | path_round_int | `GET /v2/blocks/<round>` 实测真 round | `{block:{bi,earn,fees,rnd,txns,...}}` → block_height=block.rnd | path, round=int | ✅ |
+| algorand | GET /v2/assets/{asset_id} | path_asset_id_int | `GET /v2/assets/31566704`(USDC) | `{index:31566704,params:{creator,decimals:6,name,unit-name,total,...}}` | path, asset_id=int | ✅ |
+| algorand | GET /v2/transactions/{txid} | path_txid_base32 | `GET /v2/transactions/<txid>`(indexer) 实测真 txid | `{current-round,transaction:{confirmed-round,fee,sender,...}}` | path, txid=base32(indexer) | ✅ |
+| algorand | GET /v2/accounts/{address}/transactions | path_addr_query_limit | `GET /v2/accounts/<addr>/transactions?limit=1`(indexer) | `{current-round,next-token,transactions:[{confirmed-round,...}]}` | path + query limit(**indexer, node 返 Not Found**) | ⚠️ node API 不含此端点(404), 须 indexer endpoint。实测 indexer 成功 |
+| aptos | GET /v1 | no_params | `GET /v1` | `{chain_id:1,epoch,ledger_version,ledger_timestamp,block_height,node_role}` → block_height=block_height | 无参 | ✅ |
+| aptos | GET /v1/accounts/{addr} | path_addr | `GET /v1/accounts/0x1` | `{sequence_number,authentication_key}` | path, addr=0x hex | ✅ |
+| aptos | GET /v1/accounts/{addr}/resources | path_addr | `GET /v1/accounts/0x1/resources` | `[{type:"0x1::...",data:{...}},...]`(资源数组) | path, addr | ✅ |
+| aptos | GET /v1/transactions/by_hash/{hash} | path_hash | `GET /v1/transactions/by_hash/0x..` 实测真 hash | `{version,hash,state_change_hash,sender,success,vm_status,...}` | path, hash=0x | ✅ |
+| aptos | POST /v1/view | move_view_call | `POST /v1/view body={function:"0x1::coin::supply",type_arguments:["0x1::aptos_coin::AptosCoin"],arguments:[]}` | `[{vec:["120358165050369164"]}]`(返回值数组) | POST body: {function, type_arguments[], arguments[]} | ✅ Move view 调用(复杂结构化 body) |
+| cardano | GET_TIP (/tip) | no_params | `GET /tip` | `[{hash,epoch_no,abs_slot,block_no,block_time}]` → block_height=[0].block_no | 无参 | ✅ |
+| cardano | GET_BLOCKS (/blocks?limit=1) | no_params | `GET /blocks?limit=1` | `[{hash,epoch_no,abs_slot,block_height,...}]` | query limit(固定) | ✅ |
+| cardano | GET_EPOCH_INFO (/epoch_info) | query_epoch_int | `GET /epoch_info` | `[{epoch_no,out_sum,fees,tx_count,blk_count,start_time,...}]` | 可选 query epoch=int | ✅ |
+| cardano | POST_ADDRESS_INFO (/address_info) | body_addresses_array | `POST /address_info body={_addresses:["<bech32>"]}` | `[{address,balance,stake_address,utxo_set:[...]}]`(空地址返 []) | POST body: {_addresses:[]} | ✅ |
+| cardano | POST_BLOCK_TXS (/block_txs) | body_block_hashes_array | `POST /block_txs body={_block_hashes:["<hash>"]}` 实测真 hash | `[{block_hash,tx_hash,epoch_no,...}]` | POST body: {_block_hashes:[]} | ✅ |
+| cardano | POST_TX_INFO (/tx_info) | body_tx_hashes_array | `POST /tx_info body={_tx_hashes:["<hash>"]}` 实测真 hash | `[{tx_hash,block_hash,block_height,tx_timestamp,inputs:[...],outputs:[...]}]` | POST body: {_tx_hashes:[]} | ✅ |
+| cardano | POST_ASSET_INFO (/asset_info) | (R3 无声明→fallback) | `POST /asset_info body={_asset_list:[[policy,name_hex]]}` | `[{...}]`(不存在资产返 [])路由+body正确 | POST body: {_asset_list:[[policy,asset_name]]} | ✅ (research R3 标缺 param_format 的 method, 实测路由 + body 正确, 返回空因 sample 资产不存在) |
+| tezos | GET head/header | no_params | `GET /chains/main/blocks/head/header` | `{protocol,chain_id,hash,level,timestamp,...}` → block_height=level | 无参 | ✅ |
+| tezos | GET head/protocols | no_params | `GET /chains/main/blocks/head/protocols` | `{protocol,next_protocol}` | 无参 | ✅ |
+| tezos | GET head/votes/current_period | no_params | `GET /chains/main/blocks/head/votes/current_period` | `{voting_period:{index,kind,start_position},position,remaining}` | 无参 | ✅ |
+| tezos | GET contracts/{addr}/balance | path_addr | `GET /chains/main/blocks/head/context/contracts/<tz addr>/balance` | `"283125643"`(裸字符串数字) → 余额=整个响应体 | path, addr=tz1/tz2/tz3/KT1 | ✅ |
+| tezos | GET blocks/{block}/operations/{vp} | path_block_and_vp | `GET /chains/main/blocks/<block>/operations/0` | `[[{protocol,chain_id,hash,branch,contents:[...]}]]`(嵌套数组, vp=validation pass 0-3) | path, block=hash/head, vp=int(0-3) | ✅ |
+| ton | getMasterchainInfo | {} | `GET /getMasterchainInfo` | `{ok:true,result:{@type,last:{workchain,shard,seqno:70698168,root_hash,...}}}` → block_height=result.last.seqno | 无参 | ✅ |
+| ton | getAddressBalance | {address} | `GET /getAddressBalance?address=<addr>` | `{ok:true,result:"6592363731332"}` → 余额=result(裸字符串) | query address(friendly base64url 或 raw) | ✅ |
+| ton | getAddressInformation | {address} | `GET /getAddressInformation?address=<addr>` | `{ok:true,result:{@type:"raw.fullAccountState",balance,last_transaction_id,...}}` | query address | ✅ |
+| ton | getTransactions | {address,limit,lt?,hash?} | `GET /getTransactions?address=<addr>&limit=1` | `{ok:true,result:[{@type:"ext.transaction",address,utime,transaction_id,...}]}` | query: address,limit,(lt,hash optional) | ✅ |
+| ton | lookupBlock | {workchain,shard,seqno} | `GET /lookupBlock?workchain=-1&shard=-9223372036854775808&seqno=1` | `{ok:true,result:{@type:"ton.blockIdExt",workchain,shard,seqno,root_hash,file_hash}}` | query: workchain(int),shard(dec str),seqno(int) | ✅ |
+| ton | runGetMethod | POST{address,method,stack} | `POST /runGetMethod body={address,method:"seqno",stack:[]}` | `{ok:true,result:{@type:"smc.runResult",gas_used,stack:[["num","0x14c97"]],exit_code}}` | POST body: {address,method,stack[]} | ✅ |
+
+**rest family 实测小结**:
+- **现有 `_meta.rest_paths` 已是最接近目标 DSL 的声明式结构**: `{method,path,body?}` + `{address}` 占位符。这是参数 DSL 的样板基础。
+- **参数三态**: (a) path 占位(addr/round/hash/asset_id, 多种编码 base32/hex/int); (b) query string(?limit= ?address=); (c) POST 对象 body(cardano _addresses 数组 / aptos move view {function,type_arguments,arguments} / ton {address,method,stack})。**aptos move_view_call 是最复杂的结构化 body**(嵌套 function 标识 + 类型参数 + 实参)。
+- **响应形态极度异构**: 数组顶层(cardano/aptos resources/tezos operations) / 对象(algorand/aptos/ton) / 裸标量(tezos balance="283125643", ton balance) / {ok,result} 外包(ton)。**响应 DSL 必须支持: 数组索引路径([0].block_no) + 裸标量(整个 body) + 任意嵌套 path(result.last.seqno)**。
+- **同链多 endpoint**: algorand node vs indexer(transactions 类 method 须 indexer)。与 substrate/tendermint EVM 双端同类问题。
 ### 3.6 hedera_dual family (1 链)
 (待填)
 
