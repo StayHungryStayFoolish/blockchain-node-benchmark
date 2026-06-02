@@ -40,7 +40,7 @@
 > **关键: 必须记完整的【请求结构体】和【响应结构体】, 不只是"测了能跑"。**
 >   请求结构体 → 归纳参数 DSL; 响应结构体 → 归纳响应解析 DSL。两者都要逐 method 落矩阵。
 
-### 进度: 74 / 184 method 实测 (jsonrpc family 完成)
+### 进度: 98 / 184 method 实测 (jsonrpc + bitcoin_jsonrpc 完成)
 (矩阵逐 family 分批填, 见下方各 family 节)
 
 ### 3.1 jsonrpc family (16 链, 74 method slots) — 全量实测完成
@@ -125,8 +125,35 @@
 (待填)
 ### 3.3 tendermint family (5 链)
 (待填)
-### 3.4 bitcoin_jsonrpc family (4 链)
-(待填)
+### 3.4 bitcoin_jsonrpc family (4 链, 24 method slots) — 全量实测完成
+
+**公开 endpoint 映射**:
+| 链 | public endpoint | 备注 |
+|---|---|---|
+| bitcoin | https://bitcoin-rpc.publicnode.com | ✅ 免认证 |
+| dogecoin | https://dogecoin.drpc.org | ✅ 免认证 |
+| litecoin | https://litecoin-mainnet.gateway.tatum.io | ⚠️ Tatum 免费 5 req/min, 实测时降速 14s/req 绕限流 |
+| bch | https://bitcoin-cash-mainnet.gateway.tatum.io | ⚠️ 同 Tatum 限流 |
+
+**协议特征**: Bitcoin Core JSON-RPC 1.0(`jsonrpc:"1.0"`, 注意 doge 节点返 `2.0`)。**list 参数**。带 HTTP Basic Auth(公开节点免认证, 真实部署需 rpcuser/rpcpassword)。
+
+| 链 | method | param_format | **请求结构体(真实)** | **响应结构体(真实, 关键字段)** | 官方参数 | 状态 |
+|---|---|---|---|---|---|---|
+| bitcoin/bch/dogecoin/litecoin | getblockcount | no_params | `params:[]` | `{result:952086,error:null}` → block_height=result(int) | 无参数 | ✅ |
+| bitcoin/dogecoin/litecoin | getbestblockhash | no_params | `params:[]` | `{result:"00000...af3a0"}` → blockhash=result(hex str) | 无参数 | ✅ |
+| bitcoin/bch/dogecoin/litecoin | getblock | [blockhash] / [blockhash,verbosity] | `params:["<blockhash>"]` (默认 verbosity=1 返对象; verbosity=0 返 hex; =2 含 tx 详情) | `{result:{hash,confirmations,height,version,merkleroot,time,nonce,bits,difficulty,tx:[...txids],previousblockhash,...}}` → block_height=result.height | p1=blockhash(hex); p2=verbosity(0/1/2 optional) | ✅ |
+| bitcoin/bch/dogecoin/litecoin | getrawtransaction | [txid,verbose] | `params:["<txid>",true]` (verbose=true 返对象; false/0 返 hex) | `{result:{txid,hash,version,size,vsize,weight,locktime,vin:[...],vout:[...],hex,blockhash?,confirmations?}}` | p1=txid(hex); p2=verbose(bool/int optional) | ✅ (bitcoin/doge/litecoin 实测; bch 端 429 限流, 结构同 family) |
+| bitcoin | getrawmempool | no_params | `params:[]` | `{result:["txid1","txid2",...]}` → mempool txids 数组 | 无参数(可选 verbose bool) | ✅ |
+| bitcoin | estimatesmartfee | [conf_target] | `params:[6]` | `{result:{feerate:1.013e-05,blocks:6}}` → feerate=result.feerate | p1=conf_target(int blocks); p2=estimate_mode(optional) | ✅ |
+| bitcoin/bch/dogecoin/litecoin | getreceivedbyaddress | single_address | `params:["<address>"]` | `{error:{code:-32701,message:"Method getreceivedbyaddress is not allowed..."}}` | p1=address; p2=minconf(optional) | ⚠️ **wallet 方法, 共享公开节点禁用**(需节点本地 wallet)。结构按官方: 返 result=金额(BTC float)。本类 method 无法在公开节点实测, 真实部署有 wallet 时可用 |
+| bch | getnetworkinfo | no_params | `params:[]` | `{result:{version,subversion:"/Bitcoin Cash Node:29.0.0.../",protocolversion,localservices,connections,relayfee,networks:[...],...}}` | 无参数 | ✅ |
+| bch/dogecoin/litecoin | getmempoolinfo | no_params | `params:[]` | `{result:{loaded,size:118,bytes,usage,maxmempool,mempoolminfee,minrelaytxfee}}` → mempool_size=result.size | 无参数 | ✅ |
+
+**bitcoin_jsonrpc family 实测小结**:
+- **统一 list 参数 + Bitcoin Core 1.0 envelope**。响应统一 `{result,error,id}`, block_height 路径统一 = result(getblockcount) 或 result.height(getblock)。最规律的 family。
+- **verbosity/verbose 第二参控制响应形态**(hex vs 对象): getblock verbosity 0/1/2、getrawtransaction verbose bool。**参数 DSL 需支持"可选枚举型控制参数"**(影响响应结构)。
+- **wallet 类 method(getreceivedbyaddress)在共享公开节点结构性不可达**(-32701)= 真实约束, 非 endpoint 问题。这类需节点本地 wallet, 全 4 链同。
+- doge 节点 envelope 返 `jsonrpc:"2.0"`(请求发 1.0), 实测节点对 envelope 版本宽容。
 ### 3.5 rest family (5 链)
 (待填)
 ### 3.6 hedera_dual family (1 链)
