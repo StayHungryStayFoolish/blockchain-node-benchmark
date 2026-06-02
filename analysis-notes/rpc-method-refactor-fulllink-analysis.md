@@ -685,3 +685,30 @@ block_height_monitor.sh
 - common_functions 全文 + block_height_monitor 核心链逐行读完, 完整理解套3↔套4↔块高监控耦合。
 - 缺口 #12(块高提取重复)细化: 不只重复, 是块高监控整链(监控+健康+告警)绑死 8 链, 重构要换底座到 chain_adapters。
 - **仍需继续(逐行真实读)**: block_height_monitor.sh L230-464(start_monitoring/CSV header writer/状态输出)/ unified_monitor.sh 主体(是否有按链/按method隐藏逻辑)/ network_monitor.sh / ena_network_monitor.sh / monitoring_coordinator.sh / unified_event_manager.sh。
+
+
+## 25. 第十六轮 token-level 精读(逐行真实文件): block_height_monitor全文464行 + unified_monitor block段
+
+### 25.1 block_height_monitor.sh 全文 464 行读完
+- L232-272 data_loss 告警 + DATA_LOSS 统计(count/periods/total_duration → data_loss_stats.json)。
+- L287-335 show_status: 展示块高状态(同样 source common_functions get_cached)。
+- L337-374 stop_monitor: kill PID + 清缓存。
+- L376-434 start_monitoring: **CSV header 走 csv_registry_segment_header block 单源 + fallback 7字段**(L392-401); 监控循环 `while [[ -f "$TMP_DIR/qps_test_status" ]]`(统一生命周期信号, skill §8.1, 改循环=AP3)→ monitor_block_height_diff + sleep。
+- L437-451 main: check_dependencies + parse_args + start_monitoring。
+- L452-464 update_data_loss_stats: 写 data_loss_stats.json。
+- **完整理解**: block_height_monitor 走统一 qps_test_status 信号, CSV header registry 单源, 数据来自套3+套4(8链)。
+
+### 25.2 unified_monitor.sh block 段 — 复用 block_height_monitor 输出, 不是第5套(好消息)
+- generate_csv_header(L1925-1965): unified CSV 完整段 = basic+device+network+[ena]+overhead+block_height+qps+cgroup+cloud_provider, 各段 header 走 csv_registry 单源。
+- 🎯 **block 段数据采集(L2132-2145)**: **不是自己取块高, 而是 `tail -1 BLOCK_HEIGHT_DATA_FILE`(L2136)读 block_height_monitor 写的 CSV 最后一行 → cut 取 6 字段(L2139)**; 无文件填默认 0,0,0,1,1,0(L2141 优雅降级, skill §8.1)。
+- 🎯 **确认: unified_monitor 不是第5套按链分派** —— 它是数据汇聚者(读 block_height_monitor 的 CSV 输出), 块高真正取数还是套4(get_block_height)。
+
+### 25.3 第十六轮结论 — 按链分派确为 4 套, 无第 5 套(已穷举验证)
+- 块高数据流完整: block_height_monitor(套4 取数 8链 + 写 block CSV 7字段)→ unified_monitor tail 读入 unified CSV block 段(6字段, 跳 timestamp)。
+- unified_monitor 复用块高输出, 不自己按链取 → 无第 5 套。
+- **生产按链分派最终确认 = 4 套**(§22.1 grep 穷举 + 本轮 unified_monitor 逐行验证一致): fetch create_adapter / chain_adapters get_adapter / config_loader MAINNET case / common_functions get_block_height。
+
+### 25.4 监控层是否还有按 method 隐藏逻辑(待续逐行)
+- block_height 段已确认: 不按 method, 只本地 vs 主网块高差。
+- per-method 归因(attribution)已读: 只 CPU/MEM(§12.1)。
+- **仍待逐行**: unified_monitor.sh 其余主体(2885 行, 已读 header+block 段, 未读 cgroup 采集/basic 采集/主循环)/ network_monitor.sh / ena_network_monitor.sh / monitoring_coordinator.sh(组件编排, 决定启哪些监控)/ unified_event_manager.sh。重点看 monitoring_coordinator 怎么编排(skill §8.1 提到硬编码 5 组件)。
