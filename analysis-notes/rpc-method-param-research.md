@@ -155,7 +155,12 @@ address_key_latest     → ["<addr>", "0x1", "latest"]
 | polkadot(substrate) | system_chain | no_params → [] | 无参数 | []→"Polkadot" ✅ | ✅ |
 | ethereum(jsonrpc) | eth_getBlockByNumber | block_number → ["latest",false] | param1: block(latest/hex); param2: full_tx bool | ["latest",false]→区块; [false,"latest"]→error -32602 | ✅ 位置正确; 位置反报错(第2例证实) |
 | ethereum(jsonrpc) | eth_call | eth_call_object_latest → [{to,data},"latest"] | param1: tx object{to,data...}; param2: block | [{to,data},"latest"]→0x..(USDT totalSupply)✅ | ✅ 复杂对象参数+位置正确 |
-**6 family 覆盖完成**: jsonrpc(4 method: getAccountInfo/eth_getBalance/eth_getBlockByNumber/eth_call, 含多参数+对象参数+位置错)/ bitcoin_jsonrpc(getblockcount)/ substrate(system_chain)/ tendermint(REST balances)/ rest(cardano koios 待补1个)/ hedera(待补)。位置错=报错已 3 例证实(eth_getBalance/eth_getBlockByNumber 位置反均 -32602)。
+| cardano(rest) | GET_TIP | GET /tip | 无参数 GET | koios /tip→block_height 13496756 ✅ | ✅ REST GET 路由 |
+| cardano(rest) | POST_ADDRESS_INFO | POST /address_info body={_addresses:[addr]} | POST body 对象 _addresses 数组 | koios→返回 address balance ✅ | ✅ REST POST 对象 body 参数构造正确 |
+| hedera(hedera_dual) | REST /api/v1/blocks | GET mirror path | GET 查询参数 | mirror→区块 number 95830909 ✅ | ✅ REST 双模式 mirror 侧 |
+| hedera(hedera_dual) | eth_blockNumber | json_rpc envelope(委派 jsonrpc adapter) | 无参数 | hashio→result 0x5b6437d ✅ | ✅ 双模式 json_rpc 侧 |
+**✅ 6 family 全覆盖完成(public endpoint 实测)**: jsonrpc(4 method 含多参数/对象/位置错)/ bitcoin_jsonrpc / substrate / tendermint / rest(GET+POST对象body)/ hedera_dual(REST+json_rpc 双模式)。
+覆盖的参数形态: list参数 / dict参数(tendermint) / 复杂对象(eth_call) / 多参数+位置语义(位置错=报错3例) / REST path路由 / REST POST 对象body / 双模式。
 
 ### 4.4 规律化抽象结论
 - ✅ **可规律化**: (family, param_format) 二维。6 family 固定, 每族 param_format 有限枚举。新链归入某 family 后, method 参数复用该族 param_format(已有则零代码)。已 6 family 多 method public endpoint 实测支撑(含复杂对象参数 eth_call、多参数 eth_getBlockByNumber、位置错报错)。
