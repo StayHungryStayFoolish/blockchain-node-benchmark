@@ -1314,3 +1314,37 @@ fixture = §4 param_spec(请求 params 真实结构, 含 path 占位符)+ §5 re
 
 ### 48.5 方法论确认(对照 skill §13.1/§13.2)
 本轮用户两问("6 family 都实测了么"/"hex dec 显示逻辑分析了么")= 探针意图驱动: 我之前"读 parse_block_height 代码"≠"实测 6 family 块高"; "看到 EVM 有 hex 转换"≠"追全转换链到下游 -gt 算术依赖"。补实测 + 追下游消费(L181 -gt)才坐实完整 bug 链。诚实: 之前 2/6 family 实测(substrate/tendermint), 本轮补齐 jsonrpc/bitcoin/rest/hedera = 6/6 全实测。
+
+
+## 49. 第三十六轮: get_block_height 主逻辑纠正(local vs mainnet diff + 阈值)+ 36链块高method差异(用户两点批评驱动, 自我纠错)
+
+### ⚠️ 用户两点批评(都成立, 诚实承认)
+1. 我把 get_block_height 当"取块高单点函数", **漏了核心语义 = 本地节点 vs 主网高度差 + 阈值判断节点是否同步**。
+2. 我**没做 36 链块高 method 全量实测**, 只测 7 个 family 代表(违最初任务"方案 B 全量非抽样", skill §1 已记此纠正)。
+
+### 49.1 get_block_height 真实主逻辑(token-level 实证, 纠正之前缺失)
+common_functions.sh get_cached_block_height_data(L104-136):
+- L105-106: get_block_height **取两次** = `local_rpc_url`(自部署节点)+ `mainnet_rpc_url`(主网)。
+- L107-108: check_node_health 各取一次(复用 get_block_height)。
+- **L113: `block_height_diff=$((mainnet_block_height - local_block_height))` = Shell 算术减法**。
+- L121/127: diff 超阈值判 data_loss; block_height_monitor.sh:L181 `diff -gt THRESHOLD` 告警。
+- **阈值可配实证**(用户记忆正确): internal_config.sh:59 `BLOCK_HEIGHT_DIFF_THRESHOLD="${...:-50}"`(默认50 env可配)+ L61 `BLOCK_HEIGHT_TIME_THRESHOLD`(300s持续才告警)+ L63 `BLOCK_HEIGHT_MONITOR_RATE`(每秒1次)。
+
+### 49.2 🔴 hex bug 比 §48 说的更靠前(L113 减法先炸, 非 L181)
+§48 说 substrate hex 在 L181 `-gt` 报错。**实际更早**: L113 `$((mainnet - local))` 是 Shell 算术减法, **两操作数都必须十进制**。substrate hex 块高(0x1e0be8a)进来 → `$((0x.. - 0x..))` **L113 减法就先炸**(bash 算术不认裸 0x 混入)。bug 比之前定位更靠前更严重。
+
+### 49.3 🎯 36链块高method全量枚举(非6代表)— 同family内有真实差异(用户"具象到36链有区别"实证)
+**0/36 链有专门块高声明字段** → 块高 method 全是 get_block_height 内嵌 case 硬编码, chain template 没声明 → D5 `block_height_spec` 是从零加。
+**同 family 内块高 method 分裂(枚举证据)**:
+- **substrate(5)分裂**: polkadot/kusama/acala = `chain_getHeader`(hex); **astar/moonbeam = EVM兼容链**(single=eth_getBalance)→ 块高很可能 `eth_blockNumber`(hex) 非 chain_getHeader。同 family 两种 method。
+- **tendermint(5)分裂**: celestia/cosmos/injective/osmosis = `status`(.sync_info.latest_block_height); **sei = EVM-on-tendermint**(single=eth_getBalance, 线索含blockNumber)→ 块高可能 `eth_blockNumber`。同 family 两种。
+- **jsonrpc(16)本就多样**: EVM系 eth_blockNumber / solana getBlockHeight / sui getTotalTransactionBlocks / near block / starknet starknet_blockNumber / tron(REST-in-jsonrpc /wallet) / avalanche-x avm.*。
+- **rest(5)各异**: cardano /tip / tezos /chains/main/blocks/head / algorand /v2 / aptos /v1 / ton getMasterchainInfo 类。各 path 不同。
+
+### 49.4 🔴 我的实测缺失(诚实): astar/moonbeam/sei 混合链未测
+我实测 7 代表(每 family 1 个), 但 **astar/moonbeam(substrate-family 但 EVM 块高)/ sei(tendermint-family 但 EVM 块高)= 最易出错的混合链, 没测没实证**, 是按 family 想当然推断的。按 family 推断块高 method 对这些混合链会错 → 必须 36 链全量逐链实测块高 method, 不能 family 代表。
+
+### 49.5 对 D5 设计的强化
+- **block_height_spec 必须逐链声明**(不能 per-family 默认), 因为同 family 内 astar/moonbeam/sei 等混合链块高 method 不同于 family 主流。
+- 这恰是 NS-1 零代码加链的价值: 块高 method 逐链 chain template 声明, 框架不按 family 硬猜 → 混合链零代码正确支持。
+- 下一步: 36 链全量块高 method 实测(local 用 fixture/mock, mainnet 用 public endpoint, 限流加 sleep), 逐链确认块高 method + 响应路径 + 格式, 填进 block_height_spec 草案。
