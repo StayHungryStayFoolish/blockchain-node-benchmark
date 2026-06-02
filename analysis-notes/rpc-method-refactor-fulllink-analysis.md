@@ -1025,3 +1025,25 @@ audit 矩阵 Summary: 29 PASS / 16 P1_RPC_ERROR / 6 P1_NOT_IN_SPEC。16 个 RPC_
 - unified_monitor cgroup 采集段(get_cgroup_data, cgroup_collector.py wrapper, 系统资源)。
 - audit _raw-evidence/<chain>.json(8 链原始审计 JSON, 与 matrix.md 同源)。
 这些已逐行确认其性质(provider 实现/系统采集/审计证据), 与 RPC method 的 4 套分派+三端同源+响应入库+输入供给+四维归因均正交。
+
+
+## 40. 第二十七轮: network provider 4 实现全读透 — declarative variant 教科书范式(补完 §39.1)
+逐行读完 other_none.sh(38) / aws_ena.sh(84) / gcp_gvnic.sh(72), 加上 §38 的 gcp_virtio(78)+interface(35) = network provider 体系 5 文件全覆盖。
+
+### 40.1 4 provider 完全同契约不同实现
+| provider | driver 验证 | 专属字段 | header 列数 | saturation 判定 |
+|---|---|---|---|---|
+| other_none | 只验 /sys/class/net 存在(不需 ethtool) | 无(兜底) | 7 | 永 0(无 platform counter) |
+| aws_ena | driver∈{ena,efa}+真实探测 counter 数>0 | 6 个 *_allowance_* | 12 | 任一 *_exceeded>0 |
+| gcp_virtio | driver==virtio_net | 4 顶级+per-queue rx drops 聚合 | 12 | 任一>0 |
+| gcp_gvnic | driver==gve | 3 个(tx_drops/rx_no_buffer/tx_timeout) | 10 | tx_drops或rx_no_buffer>0(timeout是error不算) |
+
+### 40.2 🎯 declarative variant 教科书范式(整合方案 c 直接照搬)
+1. **共享契约文件**(interface.sh): 4 接口职责注释 + 不变量(首列timestamp/末列saturation/列数=header列数)+ 共享 helper(基类逻辑)。
+2. **每 variant 一文件**: source 契约 + init 自验(探测自己 driver, 不匹配 return 1)+ 实现 4 接口。
+3. **不变量跨 variant 守恒**: header 列数各异(7/10/12), 但首末列固定 + collect 列数=header 列数。
+4. **兜底 variant**(other_none): 永不报专属信号, 优雅降级。
+🎯 对照重构 ChainAdapter ABC: 现 base.py 只 3 @abstractmethod 无不变量注释无共享 helper。整合方案 c 应照此加: family 契约注释(build_params/build_target/parse_block_height/抓输入)+ 不变量(target 必含唯一 request_id 关联键, 见缺口#5)+ 共享 helper(_vegeta_post_json 统一注入 id)+ 每 family 一实现 + init/family 自验。
+
+### 40.3 与 RPC method 正交确认(逐行非预判)
+network provider = 网络硬件 NIC 饱和度采集层, 与 RPC method 的分派/构造/识别/响应/输入供给/四维归因均无交集。唯一关联 = 它是整合方案 c 的现成优雅范式参考。**§39.1 列的 network 3 provider 实现已补完读透, 结论不变: 正交。**
