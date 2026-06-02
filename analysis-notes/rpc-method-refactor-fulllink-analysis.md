@@ -530,3 +530,29 @@ replace_env_vars占位符/fetch Sui adapter尾部/config_loader MAINNET_RPC_URL 
 - 我前几轮有"没读就标边缘"的武断(selfreport 就是反例, 一读即第11缺口)。本轮已纠正, 逐行读完。
 - **仍未逐行**: cli.py health-probe(cmd_health_probe + 各 family health_check_request 已在 adapter 读过)/ config_loader MAINNET_RPC_URL 8链 case 全文(OQ-11 已知)/ proxy main.go 完整 / extractor chain.go(NewChain 组合逻辑)/ extractor.go(Result 结构 + Chain.Extract 遍历)。
 - **下一步继续**: 读 extractor chain.go + extractor.go(Chain 如何遍历多 extractor, 影响 hedera_dual 双 extractor + 三端同源识别细节)+ proxy main.go(启动参数 + maxBody)+ health 链。
+
+
+## 19. 第十二轮 token-level 精读: extractor.go(Chain) + proxy main.go(启动编排) — proxy 子系统读透
+
+### 19.1 extractor.go 完整(Result + Chain 遍历)— hedera_dual 双 extractor 机制坐实
+- Result 结构: Protocol / MethodName / RequestID(注释 L18 明确 "rest 模式为空")/ BatchIdx。
+- **Chain.Extract: 按声明顺序遍历 extractor, 第一个 ok=true 即停**(命中优先级=声明顺序)。
+- 🎯 **hedera_dual 双 extractor 机制坐实**: hedera chain template 配 2 extractor(rest + json_rpc), Chain 顺序尝试 —— eth_* 请求 rest 不匹配(path 不中)→ 落 json_rpc 匹配。**双协议靠 url_pattern 互斥 + 顺序命中实现**。
+- 🔴 **风险(三端同源延伸)**: Chain "第一个 ok 即停" → 若 rest extractor 的 url_pattern 写太宽(误匹配 eth_* path), 会抢先错误命中 → method 提取错。**多 extractor 链(hedera_dual + 任何未来双协议链)的 proxy_extraction 必须 url_pattern 精确互斥**, 顺序也重要。重构三端同源校验要覆盖"多 extractor 不重叠匹配"。
+
+### 19.2 proxy main.go 完整(启动编排)— 响应入库接入点
+- flag: -chain(单文件, Q4-2 单链启动切链重启坐实)/ -upstream / -listen(:18545)/ **-max-body(默认 1MB, 请求 body 读取上限)** / -self-interval。
+- 组装: L43 LoadChain → L49 sink.New(默认csv)→ L55 handler.New → L60 selfreport.Start → L66 http.Server。
+- 🎯 **响应入库启动接入点**: 响应 sink 在 L49 附近新增(respSink := sink.NewResponse + 开关 env)+ 传 handler.New。main.go 是组装点。
+- 🔴 **响应入库 OOM 防护**: L35 maxBody 1MB 是**请求** body 上限; 响应入库时**响应 body 也要类似上限**(near validators 419KB / solana getBlock MB 级 / aptos resources MB 级 → 响应缓冲要限大小或采样, 否则高QPS下 OOM)。这是 §11/§12 响应入库设计要补的防护(token-level main.go maxBody 才联想到)。
+
+### 19.3 proxy 子系统 token-level 全读透
+proxy/internal: extractor.go + jsonrpc.go + rest.go + handler.go + sink.go + config/loader.go + selfreport.go + cmd/proxy/main.go **全部逐行精读完毕**。
+
+## 20. 十二轮 token-level 精读 — 最终完整性自评(诚实)
+**已逐行精读全部核心 + proxy 子系统全文 + 关键周边**:
+- Python: blockchain_node_benchmark.sh 入口 + fetch_active_accounts.py(4 adapter 全 + create_adapter + main + replace_env_vars)+ config_loader.sh(CHAIN_CONFIG + rpc_methods + 缓存)+ target_generator.sh(generate_targets 输入消费)+ cli.py(5 子命令 + _get_param_format)+ 6 family adapter(build_vegeta_target + _build_params)+ base.py + master_qps_executor.sh(压测循环)+ per_method_attribution.py 全文 + per_method_charts.py 全文 + unified_monitor.sh 采集源。
+- Go(proxy 全子系统): extractor.go + jsonrpc.go + rest.go + handler.go + sink.go + config/loader.go + selfreport.go + main.go。
+**仍未逐行(确认真边缘 — 已读其依赖/接口足以判定)**: cli.py cmd_health_probe(health_check_request 已在 6 adapter 读过)/ config_loader MAINNET_RPC_URL 8链 case 全文(OQ-11 已知模式)/ per_method_report.py(渲染 HTML 文案, 不涉逻辑)/ 各 *_test.go(测试)。
+
+**累计 11 个真实障碍/缺口(§18.3)**, 每个都有精确代码落点。这是从框架入口到响应归因的完整闭环、grep 阶段完全不可能得到的事实地基, 足以支撑零技术债 + 优雅的 §6 实施计划。
