@@ -600,3 +600,54 @@ proxy/internal: extractor.go + jsonrpc.go + rest.go + handler.go + sink.go + con
 - block_height_monitor.sh 完整(它怎么用 get_block_height + 写什么 CSV + 谁消费)。
 - config_loader MAINNET_RPC_URL case 全文(第三套, 确认 8 链 + endpoint 来源)。
 - 其余 monitoring/ 组件是否还有第 5 套按链分派(unified_monitor/network_monitor 等)。
+
+
+## 22. 第十四轮 token-level 精读: 全仓按链分派点穷举 + config_loader MAINNET case 全文(4套确认 + endpoint 分散)
+
+### 22.1 全仓按链分派点穷举(grep 全 case/if 分派 + 逐个核实 caller)— 生产 4 套确认
+grep 全仓 `case blockchain_type / chain_type == / in [solana...]`, 逐个核实 caller:
+| 分派点 | 生产? | 归属 |
+|---|---|---|
+| fetch_active_accounts.py L665 create_adapter | ✅ 生产 | 套1(取 account, chain_type 8链) |
+| fetch L316 EthereumAdapter 内 bsc/ethereum 微调 | ✅ 生产 | 套1 内部(block_range 调参) |
+| chain_adapters get_adapter | ✅ 生产 | 套2(family 36链) |
+| config_loader.sh L454 MAINNET case | ✅ 生产 | 套3(8链 endpoint) |
+| common_functions.sh L194 get_block_height case | ✅ 生产 | 套4(8链 块高监控) |
+| **audit_rpc_methods.py L116 if/elif** | ❌ **无 caller(grep 生产代码空)** | 独立审计工具, 非生产链, 不计入 |
+**结论: 生产按链分派确为 4 套(§21.2), audit_rpc_methods 是独立工具排除。无第 5 套。**
+
+### 22.2 config_loader MAINNET_RPC_URL case 全文(套3)— 第五处 endpoint 声明 + 失效迁移历史
+- L454-490: case 8链, **内嵌 8 条真实 mainnet endpoint URL**(solana api.mainnet-beta / eth llamarpc / bsc dataseed / base mainnet.base.org / polygon publicnode / scroll rpc.scroll.io / starknet lava / sui fullnode), L485 其余链兜底 solana。
+- 注释记录 endpoint 失效迁移(polygon polygon-rpc.com 停服→publicnode; starknet blastapi 停→lava)→ 与我建 fixture 时遇到的失效一致(framework 早踩过)。
+- 🔴 **第 12.5 缺口延伸: endpoint 声明分散在 5 处**:
+  1. chain template `rpc_url` = LOCAL_RPC_URL 占位符(运行时注入)
+  2. config_loader MAINNET case = 8 链真实 mainnet URL(套3)
+  3. 我建的 record_all_184_fixtures.py = 36 链 endpoint 映射(本次新增)
+  4. proxy -upstream flag(运行时传)
+  5. (block_height_monitor 用 MAINNET_RPC_URL/LOCAL_RPC_URL = 复用套3/注入)
+- 整合应统一: chain template 增 `mainnet_rpc_url` 字段(OQ-11 候选a), 套3/fixture/proxy 都从 chain template 读, 36 链 endpoint 单一来源。
+
+### 22.3 第十四轮结论
+- 生产按链分派 = **4 套**(确认无遗漏, audit 工具排除)。
+- endpoint 声明分散 5 处, 整合到 chain template 单一来源(配合 OQ-11)。
+- 整合方案 c 最终覆盖面: 4 套按链分派 + 5 处 endpoint → 统一到 chain template(family + mainnet_rpc_url + param_spec + proxy_extraction + response_spec)单一来源 + chain_adapters family 分派单一入口。这才是用户要的"更统一/不留债"。
+
+## 23. 十四轮 token-level 精读 — 截至目前缺口总账(12 个)
+1. 两套→实为分派 4 套(fetch/chain_adapters/config_loader MAINNET/common_functions block_height)
+2. 6 family account 抓取从零设计(bitcoin UTXO 无 account)
+3. fetch method ≠ 压测 method
+4. CHAIN_CONFIG 删 _meta → 整合按 family 要先改 config_loader
+5. vegeta id=1 + rest RequestID="" → 响应入库关联键重建
+6. 压测/report 不消费响应 → 响应消费链全新增
+7. 三端同源 + hedera 多 extractor url_pattern 互斥
+8. per-method 归因缺 EBS/Network(数据源就绪低风险补)
+9. mixed weight R5 未驱动生成端
+10. 输入池消费端只读 accounts 一池
+11. proxy_self.csv 采了没减基线(Q4-10 未完成)
+12. **块高提取重复实现两次(chain_adapters 36链 vs common_functions 8链 case)+ endpoint 分散 5 处**
+
+### 仍需继续(诚实)
+- common_functions.sh check_node_health 全文 + 该文件其余函数全文。
+- block_height_monitor.sh 完整(消费 get_block_height + 写什么 + 谁读)。
+- 其余 monitoring 组件(unified_monitor 主体 / network_monitor / ena_network_monitor)是否还有按 method/链 的隐藏逻辑。
+- audit_rpc_methods.py(虽非生产, 但它的 8 链审计逻辑可能揭示更多 method 形态)。
