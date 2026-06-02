@@ -739,3 +739,36 @@ block_height_monitor.sh
 **逐行读透**: Python 全链路(入口/fetch全/config_loader/target_generator/cli/6 adapter/base/master_qps/attribution/charts/unified_monitor block段) + Go proxy 全子系统(8文件) + common_functions 全文 + block_height_monitor 全文 + monitoring_coordinator 编排 + network_monitor + 监控采集源。
 **仍未逐行(评估真边缘, 但按教训不再武断, 列出待读)**: unified_monitor 其余主体(basic/cgroup 采集/主循环, 2885行已读 header+block 段)/ ena_network_monitor.sh / unified_event_manager.sh / disk_bottleneck_detector.sh / network_unified_entry.sh + monitoring/network/*.sh(provider variant)/ audit_rpc_methods.py。
 **12 个真实缺口**(§23 总账, 块高监控#12 已细化为整链绑8链)。这是从入口到响应归因到监控的完整闭环 token-level 事实地基。
+
+
+## 28. 第十八轮 token-level 精读(逐行真实文件): audit_rpc_methods.py — response_spec 现成设计资产
+
+audit_rpc_methods.py 虽非生产路径(§22.1 无 caller 已排除), 但逐行读发现它是**重构 §5 response_spec + error 处理 + 响应入库用途的现成设计参考**, 不是无关边缘。
+
+### 28.1 audit 是 4 层 method 验证框架(L1-L4)
+- L1 l1_doc_check(L114-160): 拉官方文档判 method 是否 deprecated(solana per-method URL redirect / EVM execution-apis spec / starknet openrpc.json / sui skip)。**按 chain_type 8链 if/elif, 但是审计工具非生产分派**(§22 排除)。
+- L2 l2_endpoint_check(L166-185): 真 POST 验 method 可用; -32601=METHOD_NOT_FOUND / RPC_ERROR / PASS(记 result_type)。
+- L3 l3_schema_check(L233-243): 验框架 adapter 访问的字段在 response 存在; L243 自标 `NEEDS_FULL_PAYLOAD`(L3 深度校验需保留完整响应)。
+- L4 l4_error_semantics_check(L249+): 故意发非法 param 看 error 怎么返(top-level error / 塞 result)。
+
+### 28.2 🎯 ADAPTER_EXPECTED_FIELDS(L193-215)= response_spec 的现成字段路径素材
+人工提取的"框架 adapter parse 代码访问的响应字段路径", 覆盖 ~18 method:
+- solana: getAccountInfo→result.value / getTokenAccountBalance→result.value.amount / getLatestBlockhash→result.value.blockhash / getSignaturesForAddress→result / getTransaction→result.transaction+result.meta
+- EVM: eth_getTransactionByHash→result.hash+blockNumber+from+to / eth_getLogs→result
+- starknet: starknet_getEvents→result.events / starknet_getClassAt→result
+- sui: sui_getObject→result.data / suix_queryTransactionBlocks→result.data
+🎯 **这正是 §5 response_spec 要声明的内容(从响应提哪些语义字段路径)** → 重构 response_spec 可复用这份作字段路径来源(虽 8 链, 提供了模式 + 现成 ~18 method 映射)。
+
+### 28.3 🎯 L4 error 语义 + L3 NEEDS_FULL_PAYLOAD = 响应入库的现成用途论证
+- L4 揭示 error 响应两种形态: top-level `error` 字段(jsonrpc 标准)/ 塞进 result(solana simulateTransaction 模式)。**这是 R2 校验 + 响应入库 error 处理的现成参考**。
+- L3 NEEDS_FULL_PAYLOAD 自标"需保留完整响应做深度 schema 校验" → **正是用户拍板的"响应入库"的现成用途论证**(audit 工具早就需要完整响应)。响应入库后, audit 的 L3 深度校验可真正落地。
+
+### 28.4 第十八轮结论
+- audit_rpc_methods.py 非生产但是重构 §5 的**现成设计资产**: response_spec 字段路径(ADAPTER_EXPECTED_FIELDS 18 method)+ error 语义分类(L4)+ 响应入库用途论证(L3 NEEDS_FULL_PAYLOAD)。
+- 重构 §5 response_spec / 响应 error 处理 / 响应入库, 都有 audit 现成参考, 不从零。
+- 自我修正: 我前面把 audit 标"非生产可忽略", 但逐行读发现它是 §5 的设计金矿。**再次印证"没读不能判边缘"。**
+
+## 29. 十八轮 token-level 精读 — 阶段性完整覆盖(诚实)
+**逐行读透**: Python 全链路 + Go proxy 全子系统 + common_functions 全文 + block_height_monitor 全文 + monitoring_coordinator + network_monitor + attribution + charts + unified_monitor(header+block段)+ audit_rpc_methods(4层验证+ADAPTER_EXPECTED_FIELDS)。
+**仍未逐行**: unified_monitor 余下主体(basic/cgroup/主循环, 大文件)/ ena_network_monitor / unified_event_manager / disk_bottleneck_detector / network_unified_entry + network/*.sh provider variant / audit L4 后半+main。
+**12 缺口 + 现成资产**(audit=§5 金矿 / monitor 采集源就绪=四维归因低风险 / proxy_extraction=识别端样板)。
