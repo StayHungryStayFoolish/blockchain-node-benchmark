@@ -40,7 +40,7 @@
 > **关键: 必须记完整的【请求结构体】和【响应结构体】, 不只是"测了能跑"。**
 >   请求结构体 → 归纳参数 DSL; 响应结构体 → 归纳响应解析 DSL。两者都要逐 method 落矩阵。
 
-### 进度: 179 / 184 method 实测 (jsonrpc+bitcoin+substrate+tendermint+rest 完成)
+### 进度: 184 / 184 method 实测全量完成 ✅ (180真实实测 + 4结构性不可达按官方文档记录)
 (矩阵逐 family 分批填, 见下方各 family 节)
 
 ### 3.1 jsonrpc family (16 链, 74 method slots) — 全量实测完成
@@ -276,8 +276,51 @@
 - **参数三态**: (a) path 占位(addr/round/hash/asset_id, 多种编码 base32/hex/int); (b) query string(?limit= ?address=); (c) POST 对象 body(cardano _addresses 数组 / aptos move view {function,type_arguments,arguments} / ton {address,method,stack})。**aptos move_view_call 是最复杂的结构化 body**(嵌套 function 标识 + 类型参数 + 实参)。
 - **响应形态极度异构**: 数组顶层(cardano/aptos resources/tezos operations) / 对象(algorand/aptos/ton) / 裸标量(tezos balance="283125643", ton balance) / {ok,result} 外包(ton)。**响应 DSL 必须支持: 数组索引路径([0].block_no) + 裸标量(整个 body) + 任意嵌套 path(result.last.seqno)**。
 - **同链多 endpoint**: algorand node vs indexer(transactions 类 method 须 indexer)。与 substrate/tendermint EVM 双端同类问题。
-### 3.6 hedera_dual family (1 链)
-(待填)
+### 3.6 hedera_dual family (1 链, 5 method slots) — 全量实测完成
+
+**公开 endpoint 映射**(双端):
+| 子模式 | public endpoint |
+|---|---|
+| Mirror REST | https://mainnet-public.mirrornode.hedera.com |
+| json_rpc (relay) | https://mainnet.hashio.io/api |
+
+**协议特征**: **单链双子协议** — (1) Hedera Mirror Node REST(GET path/query, 0.0.x 三段账户 ID); (2) JSON-RPC relay(eth_*, 走 0x EVM 地址)。两套账户标识法(0.0.x vs 0x)。
+
+| method | param_format | **请求结构体(真实)** | **响应结构体(真实, 关键字段)** | 官方参数 | 状态 |
+|---|---|---|---|---|---|
+| GET /api/v1/accounts/{addr} | mirror_account_query (path_account_3part) | `GET /api/v1/accounts/0.0.2` | `{account:"0.0.2",alias,balance:{balance:1663012637744658,timestamp,tokens:[]},created_timestamp,...}` → 余额=balance.balance | path, addr=0.0.x 三段 ID | ✅ |
+| GET /api/v1/balances?account.id={addr} | mirror_balance_query (query_account_3part) | `GET /api/v1/balances?account.id=0.0.2` | `{timestamp,balances:[{account:"0.0.2",balance,tokens:[]}],links}` → 余额=balances[0].balance | query account.id=0.0.x | ✅ |
+| GET /api/v1/transactions/{addr} | mirror_tx_lookup (path_tx_id_3part_dash) | `GET /api/v1/transactions?account.id=0.0.2&limit=1` (chain template 模板为 /transactions/{tx_id}, tx_id 形如 0.0.x-sss-nnn) | `{transactions:[{consensus_timestamp,entity_id,charged_tx_fee,name,result,transfers:[...],...}]}` | path, tx_id=0.0.x-秒-纳秒 破折号格式 | ✅ |
+| eth_getBalance | address_latest (json_rpc 委派) | `POST {method:"eth_getBalance",params:["0x..02","latest"]}` (hashio relay) | `{result:"0xdc190f51555e27b8e0800"}` → 余额=result(hex, weibar) | EVM 标准, addr=0x EVM 地址 | ✅ |
+| eth_call | address_with_options (json_rpc 委派) | `POST {method:"eth_call",params:[{to,data},"latest"]}` (hashio) | `{result:"0xe3b0c44298fc...b855"}` → data=result | EVM 标准 | ✅ |
+
+**hedera_dual family 实测小结**:
+- **单链双子协议是本 family 的定义特征**: Mirror REST(0.0.x 账户体系, path/query 路由)+ JSON-RPC relay(0x EVM 体系, eth_* 委派 jsonrpc adapter)。
+- **同一实体两套标识**: 账户在 mirror 是 `0.0.2`, 在 relay 是 `0x...02`。**参数 DSL 须能声明"按子协议选地址编码"**(0.0.x dotted vs 0x hex)。这与 substrate/tendermint/algorand 的"同链多 endpoint"是更深一层: 不仅多 endpoint, 还多地址编码体系。
+- 响应 block_height: hedera 无传统区块高度概念(用 consensus_timestamp); mirror 用 timestamp, relay eth_blockNumber 可取 block。响应 DSL 须容忍"无统一 block_height"链。
+
+---
+
+## 🎯 §3 矩阵全量实测完成总结(184/184 method slots)
+
+| family | 链数 | method slots | 实测 ✅ | ⚠️(限流/wallet/无公开端但结构记录) |
+|---|---|---|---|---|
+| jsonrpc | 16 | 74 | 74 | 0(linea/starknet 换替代 endpoint 后全 ✅) |
+| bitcoin_jsonrpc | 4 | 24 | 23 | 1(getreceivedbyaddress wallet 方法公开节点禁用, 结构按官方记录) |
+| substrate | 5 | 29 | 26 | 3(polkadot 3 个 Sidecar REST 无公开托管, 按官方 spec 记录) + system_account 声明错(已实测证伪) |
+| tendermint | 5 | 25 | 25 | 0 |
+| rest | 5 | 27 | 27 | 0(algorand transactions 走 indexer 已实测) |
+| hedera_dual | 1 | 5 | 5 | 0 |
+| **合计** | **36** | **184** | **180 真实实测** | **4 结构性不可达**(wallet 方法 ×1 + Sidecar 无公开端 ×3, 均按官方文档记录结构 + 标注原因) |
+
+**结构性不可达的 4 个 method(均非 endpoint 问题, 已如实标注)**:
+1. bitcoin_jsonrpc getreceivedbyaddress(×4 链共享声明, 但 method 本身) — wallet 方法, 共享公开节点禁用(-32701), 真实部署有节点本地 wallet 时可用。
+2-4. polkadot Sidecar REST 3 个(/accounts/{addr}/balance-info, /blocks/{n}, /pallets/staking/progress) — substrate-api-sidecar 服务接口, Parity 已停止公开托管, 须自建。结构按官方 Sidecar API spec 记录。
+
+**额外真实发现(DSL 设计必须解决的现状缺陷)**:
+- 🔴 substrate `system_account` 不是有效 RPC method(节点 -32601), 但 3 链 chain template 当 single_address balance 声明 → 直接印证 research R2/R3(声明错 + 无校验静默)。
+- 同链多 RPC 命名空间/多 endpoint/多地址编码: substrate(acala EVM 独立端)/ tendermint(sei EVM 端)/ rest(algorand node vs indexer)/ hedera_dual(mirror 0.0.x vs relay 0x)。
+- 参数容器跨 family 三态: list / dict / HTTP REST(path+query+body), 且 jsonrpc family 内部就三态并存(eth_* list / near·avm dict / tron REST)。
 
 ## 4. 参数结构抽象 DSL 设计(全量实测后归纳)
 (空 — 待矩阵填全后, 从真实形态归纳出能兼容任意 method 的声明式参数 DSL)
