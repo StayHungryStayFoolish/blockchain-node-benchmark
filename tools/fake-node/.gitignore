@@ -1,3 +1,14 @@
-# fixtures are recorded on-demand from public endpoints, not stored in git.
-# Run: bash scripts/record_solana_fixtures.sh
-fixtures/
+# fake-node fixtures
+#
+# 2026-06-02 策略变更(用户拍板): fixtures 改为【入库】。
+# 原因: 框架要支持 36 链, 但无法快速部署 36 个真实区块链节点, 公共节点又限流,
+# 因此离线二次开发(无真实节点环境)必须开箱即用 —— mock fixture + 请求示例都入库。
+# 数据来源: §3 全量实测(184 method public endpoint, 确认正常响应), 一次性录制。
+# 刷新方式: bash scripts/record_all_184_fixtures.sh(脚本内置 endpoint 映射, 可复现)。
+#
+# (历史: 此前 fixtures/ 被 .gitignore, 前提是"clone 后能连真实节点 record";
+#  该前提在 36 链场景不成立 → 本次破例入库。)
+
+# 仅忽略录制过程的临时文件, fixture 本体入库
+*.tmp
+*.partial

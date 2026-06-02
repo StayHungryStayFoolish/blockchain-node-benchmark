@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_account","finality":"final","account_id":"relay.aurora"}}

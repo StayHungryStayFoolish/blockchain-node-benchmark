@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"data":{"objectId":"0x0000000000000000000000000000000000000000000000000000000000000005","version":"900724792","digest":"4ubvdL9p7oQustq1H1nhi4x5hf3fSC9rXwiD9iXRNrdR","type":"0x3::sui_system::SuiSystemState","owner":{"Shared":{"initial_shared_version":1}}}}}

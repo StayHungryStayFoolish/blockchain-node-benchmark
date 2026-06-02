@@ -1,0 +1,1 @@
+{"http":"POST","path":"/v1/view","body":{"function":"0x1::coin::supply","type_arguments":["0x1::aptos_coin::AptosCoin"],"arguments":[]}}
