@@ -316,3 +316,30 @@ fetch 抓取用的 method(getSignaturesForAddress / eth_getLogs / eth_getBlockBy
 - Sui adapter L559+ 剩余 + replace_env_vars(params 占位符替换)。
 - master_qps_executor 完整压测循环(rate 爬坡 + 多 QPS 档)。
 - report_generator per_method section 完整渲染链(响应入库后如何用)。
+
+
+## 10. 第六轮续 token-level 精读: config_loader + proxy extractor(整合接口 + 识别端闭环细节)
+
+### 10.1 CHAIN_CONFIG 构造链(config_loader.sh 逐行精读)— 整合的真实接口障碍
+- L597: `CHAIN_CONFIG=$(jq -c 'del(._meta)' "$chain_file")` —— **CHAIN_CONFIG = chain template 去掉 _meta**。
+- 🔴 **整合障碍**: fetch 收到的 CHAIN_CONFIG **不含 _meta.adapter_family**(被 jq del 掉了)。fetch 现靠 `chain_type` 字段分派(create_adapter), 而 §7 整合方案要按 adapter_family 分派 → **必须改 config_loader 保留 _meta.adapter_family 进 CHAIN_CONFIG, 或 InputProvider 另读 chain 文件取 family**。这是阶段 1 整合的具体接口改动点(前几轮没发现)。
+- L626: `CURRENT_RPC_METHODS_STRING = CHAIN_CONFIG | jq .rpc_methods.<mode>` → L637 IFS=',' split 成 ARRAY → 传 target_generator(round-robin 那段)。
+- L674 get_current_rpc_methods 同样取 `rpc_methods.<mode>` 逗号串 —— **再次确认 mixed 取 rpc_methods.mixed 不是 mixed_weighted(R5 weight 未用), 三处代码一致(L540/626/674)**。
+- L454 MAINNET_RPC_URL 8 链 case 硬编码(OQ-11 的 config_loader 半); L501 validate 已 discover from config/chains/*.json(模板驱动)→ 双重原则并存确认。
+
+### 10.2 proxy jsonrpc extractor 逐行精读(jsonrpc.go)— 识别端闭环硬细节
+- L53-59 Extract: 先 `req.Method==POST` + **`urlRegex.MatchString(req.URL.Path)`** 双校验, 任一不过 return false。
+- 🔴 **关键闭环**: **即使 jsonrpc(读 body.method), 也先过 url_pattern 校验**(L57)。若 build_vegeta_target 构造的 url path 与 proxy_extraction 的 url_pattern(solana=`^/$`)不一致 → return false → method 提取失败 → per-method CSV 缺该 method。**三端同源(§8.3)连 jsonrpc 都适用, 不只 rest**。
+- L82-90: body.method → MethodName; body.id → RequestID(stringifyID)。**RequestID = jsonrpc body 的 id 字段** = 响应关联键(§4.2)。
+- 🔴 **新发现**: vegeta target 的 body 里 `"id":1`(base.py 所有 _vegeta_post_json 固定 id=1)→ **所有请求 RequestID 都是 "1"**! 若开关 on 记录响应按 request_id 关联, **同一压测所有请求 id 都是 1 → request_id 无法区分不同请求的响应**。这是响应入库(用户拍板要做)的真实障碍: 要么 build 时给每请求唯一 id, 要么响应关联改用别的键(时间戳+method)。**这是响应记录开关落地的关键坑, token-level 才挖出。**
+- L93-125 batch: BatchSplit(默认)拆批每条一个 Result; BatchReject/BatchTag 两种其他策略。
+
+### 10.3 第六轮新增的两个真实障碍(影响实施, 前几轮 grep 没发现)
+1. **CHAIN_CONFIG 删 _meta** → 整合按 family 分派要先改 config_loader 保留 adapter_family(§10.1)。
+2. **vegeta target 固定 id=1** → 响应入库按 request_id 关联失效, 需给每请求唯一 id 或改关联键(§10.2)。
+
+### 10.4 仍待 token-level 精读(下轮)
+- proxy rest.go extractor 全文(rest 识别端 url_pattern 匹配细节)。
+- master_qps_executor 完整压测循环(rate 爬坡逻辑 + proxy 串联点)。
+- report_generator _generate_per_method_section 完整渲染链(响应入库后如何被分析/出图用)。
+- per_method_attribution.py 完整(频次权重 + 响应是否参与)。
