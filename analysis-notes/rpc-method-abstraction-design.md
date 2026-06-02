@@ -441,7 +441,23 @@
 
 ## 5. 响应结构抽象 DSL 设计(从 184 method 全量实测归纳)
 
-> 与 §4 参数 DSL + 现有 proxy_extraction 对称: 用声明式 JSON path 描述"从响应哪里提取语义字段", 替代各 adapter 硬编码的 parse_block_height / extract_account 逻辑。
+> ### 5.0 定位澄清(2026-06-02 用户对齐, 重要 — 推翻本节早期"压测主路径必需解析响应"的隐含假设)
+>
+> **代码实查事实(非文档)**: 压测主路径【不解析、不记录响应 body】。
+> - proxy `handler.go:103` 注释明确: `statusRecorder 透明记录 status code, 不缓冲 body(大 response 直接 stream)` —— proxy **有意不读响应 body**(性能, 满足 Q4-8 5k QPS/p99<10ms)。
+> - per-method 资源归因(NS-2 核心)只消费 proxy sink 的 `method_name / status_code / latency_ms`(`analysis/per_method_attribution.py` 实查), **响应业务内容对"该 method 消耗多少 CPU/MEM"零信息量**。
+> - `parse_block_height`(各 adapter)只用于 **health check 一次性探测**(`cli.py:126 cmd_parse_height`), 不在压测热路径。
+>
+> **三层职责分清(代码实证)**:
+> | 能力 | 默认 | 性质 | 代码载体 |
+> |---|---|---|---|
+> | 节点系统资源监控(CPU/MEM/EBS/Net 时序) | **常开** | 框架核心 | unified_monitor.sh 等(常驻) |
+> | **per-method 资源归因(proxy 记 method 时序 + 分析层 join)** | **做 per-method benchmark 时随 proxy 开启 = NS-2 核心, 不可绕过** | 框架核心 | tools/proxy + analysis/per_method_attribution.py + visualization/per_method_* + report_generator.py:3944(生产链真调) |
+> | **响应结构体记录(本节 §5.6 新增开关)** | **默认关** | 旁路增强(调试/录 fixture/可选语义提取) | 待实现, 见 §5.6 |
+>
+> **所以本节 §5.1-5.5 的"响应 DSL"重新定位**: 不是压测主路径的必需解析, 而是 **§5.6 响应记录开关开启时**(以及 health check 块高提取)才生效的声明式提取层。184 method 实测的响应结构体 = 该开关功能的首批 fixture 数据 + DSL 验证素材, 价值不浪费。NS-2 核心(资源归因)不依赖也不受本节影响。
+
+> 与 §4 参数 DSL + 现有 proxy_extraction 对称: 用声明式 JSON path 描述"从响应哪里提取语义字段", 供 §5.6 响应记录开关 / health check 块高提取使用(**非压测主路径必需**)。
 
 ### 5.1 实测归纳: 响应形态的完整分类(184 method 实证)
 
@@ -528,6 +544,52 @@
 - 向后兼容: 现有 param_format 枚举 = DSL 预设别名; 现有 rest_paths/proxy_extraction 是 DSL 子集, 平滑迁移。
 - 解决 research R1(零代码新形态)/R2(位置/编码校验)/R3(强制声明 fail-fast)三缺口。
 
+
+### 5.6 响应记录开关设计(`PROXY_RESPONSE_CAPTURE`, 默认关 — 2026-06-02 用户提出)
+
+**需求**: 大多数压测场景不关心响应业务内容(资源归因用不到), 但少数场景需要真实响应结构体(调试 method 配置 / 验证节点返回正确性 / 录 fake-node fixture)。方案 = **配置开关, 默认关; 需要时打开记录, 不影响 NS-2 核心与默认性能**。与框架既有惯例同构(PROXY_ENABLED / PROXY_SINK_FORMAT 都是"显式开关 + 默认 + 向后兼容")。
+
+**开关定义**:
+| 项 | 设计 |
+|---|---|
+| 变量 | `PROXY_RESPONSE_CAPTURE`(默认 `off`)。建议三态: `off`(默认) / `sample`(每 method 前 N 个) / `full`(全量) |
+| 依赖 | **依赖 `PROXY_ENABLED=true`** —— proxy 是唯一同时见到请求(method)和响应的层。proxy 没开则无从捕获(开关无效, 启动期 WARN)。 |
+| 采样量 | `PROXY_RESPONSE_CAPTURE_N`(默认 3, sample 模式每 method 存前 N 个即够录 fixture, 防 repo 膨胀 record-replay R1) |
+| 落盘 | **独立文件** `proxy_responses_<chain>_<mode>.jsonl`(每行 `{ts, method, status, request_id, response_body}`), **绝不混进 9 列主 CSV**(Q4-6: proxy 独立数据源分析层 join; 避免连锁断 20+ reader, csv-schema-decoupling 已踩) |
+| gitignore | 捕获文件强制进 `.gitignore`(同 fixtures 规则, record-replay R1: 真链上响应不进库) |
+| 性能 | 打开 = proxy 须缓冲/tee 响应 body(现 handler.go:103 故意不缓冲), 有开销。**文档明确撤销线: 打开后不保证 Q4-8 的 5k QPS/p99<10ms, 仅用于调试/录制, 不用于性能基线测试** |
+
+**代码落点(待实现, 不在本次设计阶段)**:
+- proxy `handler.go`: `statusRecorder` 扩展为可选 `bodyRecorder`(开关开启时 tee 响应 body 到 sink; 关闭时维持现状 stream 不缓冲 = 零开销)。
+- proxy `sink/`: 新增 `response_sink`(独立 jsonl writer, 与现 9 列 CSV sink 并列)。
+- `lib/proxy_lifecycle.sh`: 读 `PROXY_RESPONSE_CAPTURE` 传给 proxy 启动 flag。
+- 与 §5.1-5.5 响应 DSL 衔接: 捕获的响应结构体喂给响应 DSL 做"声明式提取语义字段"验证, 或直接转 fake-node fixture。
+
+**为什么这个开关好(评估)**:
+1. 同构框架既有开关模式, 非新发明。
+2. 默认关 → 主路径零开销, NS-2 核心与默认性能不受影响。
+3. 一个开关服务两场景: 调试/验证响应 + 录 fake-node fixture(record-replay + fake-node-v2 复用)。
+4. §3 已实测的 184 响应结构体 = 该功能首批 fixture + DSL 验证素材, 价值激活不浪费。
+
+### 5.7 代码 vs 文档校准(2026-06-02 实查 — 用户提醒"框架一直更新代码, 文档可能过时")
+
+按 skill 铁律(文档/沉淀会过期, git+代码才是真相)实查 NS-2 链路, 确认**代码真实落地非纸面**, 同时抓到 3 处文档过时点(代码 2026-06-01 比 NORTH-STAR 2026-05-28 新):
+
+| # | 文档说法(过时) | 代码实查真相 | 证据 |
+|---|---|---|---|
+| 1 | Q4-9: proxy sink = **6 列** `timestamp,method,req_bytes,resp_bytes,latency_ms,status` | 实际 **9 列** `timestamp_ns, method_name, protocol, request_id, batch_idx, status_code, latency_ms, upstream, client_addr`(**无 req_bytes/resp_bytes**) | tools/proxy/internal/sink/sink.go:41-42 |
+| 2 | Q4-7: per-method 权重源 = **公开资料预设 1/10/100 三档** | 实际已迭代为 **实测频次权重**: `method_weight = count(method in [t,t+1))/total_count`, `method_cpu = total_cpu*weight` | analysis/per_method_attribution.py:14-16 |
+| 3 | (文档未提) | proxy **有意不缓冲响应 body**(大 response 直接 stream); 归因跳过 `__unmatched__` 记录 | handler.go:103 + per_method_attribution.py:74-79 |
+
+**NS-2 链路真实存在且接通(代码实证, 非死代码)**:
+- 采集: tools/proxy/internal/{proxy,extractor,sink,selfreport,config}(commit 2026-05-28 "800 LOC perf-validated")
+- 归因: analysis/per_method_attribution.py(compute_per_method_qps/resource)
+- 出图: visualization/per_method_charts.py + per_method_report.py
+- 生产链真调: report_generator.py:3944 `_generate_per_method_section_safe()` → import 上述模块 → 嵌 HTML
+- proxy 主入口拉起: blockchain_node_benchmark.sh:1103 start_rpc_proxy(non-fatal 容错; skill §6 锁: non-fatal≠optional, proxy=NS-2 核心不可绕过)
+
+**结论**: NS-2 不只在文档, 代码真实落地且生产链接通; 但 NORTH-STAR Q4-7/Q4-9 描述已落后于代码。后续以代码为准, 本设计文档的 DSL 与开关设计已按代码实查事实(9 列 sink / 频次权重 / proxy 不缓冲 body)对齐。
+
 ## 6. 实现方案(设计审过后)
 ### 6.1 代码重构面评估(2026-06-01, DSL 落地要动的层)
 **参数构造链(参数 DSL 落点)**:
@@ -559,3 +621,9 @@
 - §5 响应 DSL: 3 维(envelope × locator × type)覆盖 15 类实测响应形态。
 - 真实发现沉淀: substrate system_account 声明错(-32601 印证 R2/R3); 同链多 endpoint/多地址编码(acala/sei/algorand/hedera)。
 - 下一步: 用户审 §4/§5 DSL 设计, 审过进 §6.2 实现(改 6 adapter + chain template schema, 向后兼容 param_format)。
+
+### 2026-06-02 响应记录开关设计 + 代码vs文档校准(用户多轮对齐)
+- 用户澄清: per-method 资源归因(NS-2)是框架核心、benchmark 时始终做, proxy 不可绕过(skill §6 锁定 non-fatal≠optional)。修正本文档早期把"响应解析"误当压测主路径必需的假设。
+- 新增 §5.0 三层职责澄清: 资源监控常开 / per-method 归因=NS-2核心随proxy开 / 响应结构记录=默认关旁路。
+- 新增 §5.6 响应记录开关设计(PROXY_RESPONSE_CAPTURE 默认关, 依赖 PROXY_ENABLED, 独立jsonl, 采样, gitignore, 性能撤销线, 复用184实测做fixture)。
+- 新增 §5.7 代码vs文档校准: 实查确认 NS-2 链路代码真实落地且生产链接通(proxy/归因/出图/report_generator:3944真调), 但抓到3处文档过时(Q4-9 sink 6列→实际9列 / Q4-7 预设权重→实际频次权重 / proxy故意不缓冲body)。以代码为准。
