@@ -1348,3 +1348,34 @@ common_functions.sh get_cached_block_height_data(L104-136):
 - **block_height_spec 必须逐链声明**(不能 per-family 默认), 因为同 family 内 astar/moonbeam/sei 等混合链块高 method 不同于 family 主流。
 - 这恰是 NS-1 零代码加链的价值: 块高 method 逐链 chain template 声明, 框架不按 family 硬猜 → 混合链零代码正确支持。
 - 下一步: 36 链全量块高 method 实测(local 用 fixture/mock, mainnet 用 public endpoint, 限流加 sleep), 逐链确认块高 method + 响应路径 + 格式, 填进 block_height_spec 草案。
+
+
+## 50. 第三十七轮: 🔴 本地节点自查同步状态实测 — 主网限流缺陷的解法(用户驱动: 外部主网限流→改本地自查)
+
+### ⚠️ 用户揭示的真设计缺陷
+当前 get_block_height 打【外部主网公开 endpoint】取 mainnet 高度。**中心化链主网会限流**, 每秒打一次必被限流 → 拿不到 mainnet 高度 → diff 算不出 → **根本不知道本地节点是否落后主网、落后多少 = 块高同步监控核心功能失效**。用户提议: 调研能否【只问本地节点】拿到"是否落后/落后多少"。
+
+### 50.1 实测: 本地节点自查同步状态能力(真 endpoint, 2026-06-02)
+| family | method | 返回结构 | 能否单本地知道"落后主网多少" |
+|---|---|---|---|
+| **substrate** | `system_syncState` | `{startingBlock, currentBlock:31506195, highestBlock:31506195}` | ✅ **能** currentBlock(本地)vs highestBlock(网络已知最高), 一 method 拿全 |
+| **bitcoin** | `getblockchaininfo` | `{blocks:952132, headers:952132,...}` | ✅ **能** blocks(本地已验证)vs headers(网络已知最高), 一 method 拿全 |
+| EVM | `eth_syncing` | 同步中 `{currentBlock,highestBlock}`; **已同步返 `false`** | ⚠️ 部分: 同步中能拿; **追上后返 false 拿不到网络高度=失明** |
+| substrate | `system_health` | `{peers, isSyncing:false}` | ⚠️ 只给是否同步布尔, 不给差多少 |
+| Solana | `getHealth` | `"ok"`(落后时 error 带 slot 数) | ⚠️ 只给 ok/behind 信号, 不给绝对网络高度 |
+
+### 50.2 🎯 核心结论: 本地自查能力 family 分化, 不能一刀切
+- **能彻底摆脱外部主网(无限流)**: substrate(`system_syncState`)+ bitcoin(`getblockchaininfo` blocks vs headers)——一个本地 method 同时返回本地高度 + 网络已知最高, 直接算 diff, **零外部请求**。
+- **本地"已同步即失明"(仍需外部参考)**: EVM(`eth_syncing` 追上后返 false 不给 highestBlock)+ Solana(`getHealth` 只 ok/behind 不给绝对高度)。
+- **设计含义**: block_height_spec 必须按链声明"同步状态来源类型":
+  - 类型A(本地自查): substrate/bitcoin → 声明 `sync_method` + currentBlock路径 + highestBlock路径, 零外部。
+  - 类型B(本地高度 + 外部参考): EVM/Solana → 本地取高度, 外部主网取参考但【降频+缓存】(不必每秒, 解限流), 或仅用健康信号(eth_syncing bool / getHealth ok)不算精确 diff。
+
+### 50.3 对 D5 / block_height_spec 的强化
+- block_height_spec 不只声明"取块高 method", 还要声明"同步判断策略"(本地自查 vs 本地+外部参考)。
+- 这解决用户最担心的: 中心化链主网限流 → 对能本地自查的链(substrate/bitcoin)直接零外部; 对 EVM/Solana 降频外部参考或退化为健康信号。
+- 这也再次解绑 8 链(28 链不必都配 mainnet endpoint, 能本地自查的链不需要)。
+
+### 50.4 待补实测(诚实, 还没测完)
+本轮测了 substrate/bitcoin/EVM/Solana 4 类。**还需测**: tendermint(`status` 的 `catching_up` 布尔 + latest_block_height, 能否判落后)/ rest 类(cardano/tezos/algorand/aptos/ton 各自有无本地同步 API)/ hedera / 其余 jsonrpc(sui/near/starknet/tron/avalanche-x)。这些测完才有 36 链完整"本地自查 vs 需外部"分类。
+注: delegate_task 委派 web 调研返回 api_calls=1/tool_trace空=零产出(skill 铁律: 委派少调用=没跑), 改自己实测(有 endpoint 直接打 method 看返回结构, 比搜文档更可靠=实测即事实)。
