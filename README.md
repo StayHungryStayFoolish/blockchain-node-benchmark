@@ -12,7 +12,7 @@ A professional multi blockchain node performance benchmarking framework with com
 ## 🎯 Key Features
 
 - **[Multi-Mode QPS Testing](#-testing-modes)**: Quick (15+min), Standard (90+min), and Intensive (8+hr) testing modes
-- **Cross-Platform Compatibility**: Supports 8 mainstream blockchain nodes (Solana, Ethereum, BSC, Base, Polygon, Scroll, Starknet, Sui) on AWS, other clouds, IDC, or local Linux environments
+- **Cross-Platform Compatibility** (**Evolving** — see [NORTH-STAR](docs/NORTH-STAR.md)): 36 blockchain chain templates available under `config/chains/*.json`; **8 chains end-to-end verified** today (Solana, Ethereum, BSC, Base, Polygon, Scroll, Starknet, Sui); the remaining 28 chains pass adapter L1 unit tests but are blocked on fetcher expansion (tracked in [OPEN-QUESTIONS OQ-11](docs/architecture/OPEN-QUESTIONS.md) + NORTH-STAR Phase 5). Runs on AWS, other clouds, IDC, or local Linux environments
 - **Real Transaction Data Testing**: Fetches active accounts from your blockchain node and generates test targets using single or mixed RPC methods
 - **[Multi-Layered Performance Monitoring](#-monitoring-metrics)**: Professional monitoring system with 4 specialized data streams
   - Unified metrics (79 fields): CPU, Memory, Disk, Network, ENA, Block Height, QPS
@@ -47,8 +47,8 @@ A professional multi blockchain node performance benchmarking framework with com
 # 1. RPC Endpoint (Required)
 LOCAL_RPC_URL="http://localhost:8899"  # Your blockchain node RPC endpoint
 
-# 2. Blockchain Type (Required)
-BLOCKCHAIN_NODE="Solana"  # Supported: Solana, Ethereum, BSC, Base, Polygon, Scroll, Starknet, Sui
+# 2. Blockchain Type (Required) — Evolving: 36 chain templates ship under config/chains/; 8 chains are end-to-end verified today (see docs/NORTH-STAR.md NS-1)
+BLOCKCHAIN_NODE="Solana"  # End-to-end verified: Solana, Ethereum, BSC, Base, Polygon, Scroll, Starknet, Sui
 
 # 3. Blockchain Process Names (Required for monitoring)
 BLOCKCHAIN_PROCESS_NAMES=(
@@ -367,7 +367,7 @@ Comprehensive documentation is available in the `docs/` directory:
 
 #### [Blockchain Testing Features](./docs/blockchain-testing-features.md)
 - Single vs Mixed RPC testing modes
-- Multi-blockchain support (Solana/Ethereum/BSC/Base/Polygon/Scroll/Starknet/Sui)
+- Multi-blockchain support — **Evolving**: 36 chain templates available; 8 e2e verified today (Solana/Ethereum/BSC/Base/Polygon/Scroll/Starknet/Sui). See [NORTH-STAR](./docs/NORTH-STAR.md) NS-1.
 - RPC method configuration
 - Real transaction data testing
 

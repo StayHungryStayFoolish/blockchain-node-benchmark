@@ -125,6 +125,27 @@
 
 ---
 
+## OQ-11:fetcher + config_loader 8 链硬编码渐进消除(从 feat/readme-correction-and-oq9 收编, 2026-06-02)
+
+> 来源: 旧分支 `feat/readme-correction-and-oq9` 的 OQ-9(已废弃, 编号在当前分支与 fake-node stub 撞车, 故收编为 OQ-11)。内容与本次 RPC method 重构(输入供给层)直接相关。
+
+**问题**:36 链 chain template 全就位、入口校验 `validate_blockchain_node()` 已模板驱动(discover from `config/chains/*.json`),但**两处命令式残留**与模板驱动原则形成"双重设计原则"风险:
+
+| 位置 | 行为 | 原则 |
+|---|---|---|
+| `config/config_loader.sh` L371-405 | `case BLOCKCHAIN_NODE in solana\|ethereum\|...` 8 链硬编码 case,其余链触发 `Unknown blockchain type` 警告 + 兜底 solana endpoint | 命令式分支 |
+| `tools/fetch_active_accounts.py` L665-674 | 8 链硬编码 if/elif,其余 `raise ValueError: Unsupported chain type` | 命令式分支 |
+| `config/config_loader.sh` `validate_blockchain_node()` | `discover from $chains_dir/*.json`(注释明写无第二权威列表) | 模板驱动 |
+
+**风险**:新人 / AI Agent 触发任一硬编码点时, 可能误以为加新链要改 case/if, 不知入口校验已 discover from JSON, 继续扩张命令式残留(违 NS-3 零代码加链)。
+
+**与本次 RPC 重构的关联(2026-06-02 更新)**:本次 RPC method 重构的"输入供给层"正要扩展 `fetch_active_accounts.py`(取 account 顺手保留 tx_hash/block_id 池, 见 `analysis-notes/rpc-method-refactor-requirements.md` R-B)。fetcher 的 8 链硬编码 if/elif **正好在重构触及范围内** → 建议本次重构顺手把 fetcher 改为 chain template strategy 驱动(读 JSON 决定走哪族输入抓取), 一并消除该硬编码残留。config_loader 的 RPC URL case 可同期或留阶段 5。
+
+**候选方案**:(a) chain template 增字段(mainnet_rpc_url / fetcher_strategy)+ config_loader/fetcher 改读 JSON [终极, 符合 NS-1/NS-3];(b) 仅消除 config_loader case;(c) 双轨 + pre-commit lint 拦截;(d) 现状 + 文档警告注释 [最低成本临时缓冲]。
+**当前倾向**:(a) 随本次 RPC 重构输入供给层一并做;(d) 作为落地前临时警告。
+
+---
+
 ## 更新规则
 
 - 每个 OQ 决策落定时,**从本文档移除**,同步:
@@ -135,5 +156,5 @@
 
 ---
 
-**当前状态**:**2 个 OQ 待决**(OQ-9 / OQ-10;OQ-1 / OQ-2 / OQ-3 / OQ-4 / OQ-5 / OQ-6 / OQ-7 / OQ-8 已锁 → NORTH-STAR Q4-7~14)
-**下次预期更新**:阶段 5 启动前 OQ-9 (fake-node stub handler) / OQ-10 (fixture 录制流水线) 可决
+**当前状态**:**3 个 OQ 待决**(OQ-9 / OQ-10 / OQ-11;OQ-1 / OQ-2 / OQ-3 / OQ-4 / OQ-5 / OQ-6 / OQ-7 / OQ-8 已锁 → NORTH-STAR Q4-7~14)
+**下次预期更新**:阶段 5 启动前 OQ-9 (fake-node stub handler) / OQ-10 (fixture 录制流水线) 可决;OQ-11 (fetcher 硬编码消除) 随本次 RPC method 重构输入供给层一并处理

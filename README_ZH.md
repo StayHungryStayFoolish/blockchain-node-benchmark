@@ -12,7 +12,7 @@
 ## 🎯 核心特性
 
 - **[多模式 QPS 测试](#-测试模式)**：快速（15+分钟）、标准（90+分钟）和密集（8+小时）测试模式
-- **跨平台兼容性**：支持 8 个主流区块链节点（Solana、Ethereum、BSC、Base、Polygon、Scroll、Starknet、Sui）在 AWS、其他云、IDC 或本地 Linux 环境运行
+- **跨平台兼容性**(**演进中** — 参见 [NORTH-STAR](docs/NORTH-STAR.md)):`config/chains/*.json` 提供 36 条链的 chain template;**当前 8 条链已端到端验证**(Solana、Ethereum、BSC、Base、Polygon、Scroll、Starknet、Sui);剩余 28 条链 adapter L1 单元测试已通过,但 fetcher 28 链扩展尚未完成(详见 [OPEN-QUESTIONS OQ-11](docs/architecture/OPEN-QUESTIONS.md) + NORTH-STAR 阶段 5)。可在 AWS、其他云、IDC 或本地 Linux 环境运行
 - **真实交易数据测试**：从区块链节点获取活跃账户地址，使用 single 或 mixed RPC 方法生成测试目标
 - **[多层次性能监控](#-监控指标)**：专业监控系统，4 个专业化数据流
   - 统一指标（79 个字段）：CPU、内存、磁盘、网络、ENA、区块高度、QPS
@@ -47,8 +47,8 @@
 # 1. RPC 端点（必需）
 LOCAL_RPC_URL="http://localhost:8899"  # 您的区块链节点 RPC 端点
 
-# 2. 区块链类型（必需）
-BLOCKCHAIN_NODE="Solana"  # 支持：Solana、Ethereum、BSC、Base、Polygon、Scroll、Starknet、Sui
+# 2. 区块链类型（必需）— 演进中:config/chains/ 提供 36 条链 chain template;当前 8 条链已端到端验证(详见 docs/NORTH-STAR.md NS-1)
+BLOCKCHAIN_NODE="Solana"  # 已端到端验证:Solana、Ethereum、BSC、Base、Polygon、Scroll、Starknet、Sui
 
 # 3. 区块链进程名称（监控必需）
 BLOCKCHAIN_PROCESS_NAMES=(
@@ -353,7 +353,7 @@ blockchain-node-benchmark/
 
 #### [区块链测试特性](./docs/blockchain-testing-features-zh.md)
 - 单一 vs 混合 RPC 测试模式
-- 多区块链支持（Solana/Ethereum/BSC/Base/Polygon/Scroll/Starknet/Sui）
+- 多区块链支持 — **演进中**:36 条链 chain template 已就位,8 条 e2e 验证(Solana/Ethereum/BSC/Base/Polygon/Scroll/Starknet/Sui)。详见 [NORTH-STAR](./docs/NORTH-STAR.md) NS-1。
 - RPC 方法配置
 - 真实交易数据测试
 
