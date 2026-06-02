@@ -278,3 +278,41 @@ param_spec(构造)、proxy_extraction(识别)、response_spec(解析)**应从同
 - 构造 vegeta 文件逻辑 = **一套**(build_vegeta_target), single/batch 两入口(batch 生产 / single legacy 待清理)。
 - 但 method 形态在框架里有**三处独立声明**(param_spec 构造 / proxy_extraction 识别 / response_spec 解析), 这三处不对齐 = "前面通了但拿不到响应"。重构必须三端同源 + 闭环校验。
 - 验证补充(L3): 不只验"target 构造对", 还要验"proxy 能从该 target 识别出正确 method"(proxy_method.csv 出现该 method)+ "响应(开关on)按 request_id 归到该 method"。三端闭环都过才算该 method 重构完成。
+
+
+## 9. 第六轮 token-level 逐行精读补充(自查: 前五轮混用 grep, 本轮补全跳过的关键代码)
+
+### 9.0 自查: 前五轮哪些是 grep 推断而非 token-level 实证
+诚实承认前五轮混用了 grep 锚定 + 部分精读, 以下结论是推断未逐行验证, 本轮补:
+- "补全 InputProvider 到 6 family"= 推断(只读了 fetch 的 Solana/Ethereum, 没读 Starknet/Sui, 完全没读 substrate/tendermint/bitcoin/rest/hedera 该怎么抓)。
+- proxy extractor 只 grep 关键行未读全文。
+- config_loader 怎么注入 CHAIN_CONFIG / 设 BLOCKCHAIN_NODE 没读。
+
+### 9.1 🔴 fetch 4 adapter 的 account 抓取逻辑逐行精读 — 差异巨大, "补全6family"是从零设计非简单补全
+| adapter | 取 tx 列表的机制(_single_request) | 提 account(extract_accounts) |
+|---|---|---|
+| Solana(L251) | `getSignaturesForAddress`(config methods.get_signatures)→ signatures | tx.transaction.message.accountKeys → pubkey |
+| Ethereum(L290) | 合约: `eth_getLogs`(methods.get_logs)取 transactionHash; EOA: 遍历 `eth_getBlockByNumber` 匹配 from/to | tx.from / tx.to |
+| Starknet(L432) | `starknet_getEvents`(from_block/to_block/address/keys/chunk_size)→ event.transaction_hash | contract_address / sender_address / calldata 里的地址 |
+| Sui(L516) | `suix_queryTransactionBlocks`(MoveFunction filter package/module/function)→ tx.digest | (后续行) |
+
+**重大发现(token-level 才暴露)**: 4 个 family 的"取活跃账户"机制**完全不同**(getSignaturesForAddress / getLogs+遍历block / getEvents / queryTransactionBlocks), 不是同一套套模板。所以"补全到 6 family"的真实工作量 = **为 substrate/tendermint/bitcoin/rest/hedera 各设计一套全新的活跃账户抓取逻辑**:
+- **bitcoin_jsonrpc**: UTXO 模型, **无 account 概念** → 要从 block 的 tx vout 提地址(scriptPubKey→address), 与 EVM/Solana 账户模型根本不同。
+- **tendermint**: cosmos, 要查 tx events(/tx_search 或 LCD txs by events)提 sender/recipient。
+- **substrate**: 要查 system events 或 block extrinsics 提 AccountId。
+- **rest**(algorand/aptos/cardano/tezos/ton): 每链 REST API 取活跃账户方式各异(algorand indexer / cardano koios / ...)。
+- **hedera**: mirror REST /accounts 或 /transactions 提 account。
+
+**这是比"补全"严重得多的真实复杂度**: 5 个新 family 的 InputProvider 抓取逻辑要从零设计 + 各自 public endpoint 实测验证。这影响阶段 1 工作量评估(远大于"迁移现有 4 类")。
+
+### 9.2 fetch 用的 method ≠ 压测的 method(token-level 新发现)
+fetch 抓取用的 method(getSignaturesForAddress / eth_getLogs / eth_getBlockByNumber / starknet_getEvents / suix_queryTransactionBlocks)**不在压测的 rpc_methods 列表里** —— 它们是"取输入专用 method", 来自 config 的 `methods` 字段(get_signatures/get_transaction/get_logs), 与 `rpc_methods.single/mixed`(压测 method)是**两个不同的字段**。
+- 含义: InputProvider(取输入)和 TargetBuilder(压测)用的 method 集不同, 整合时两个 method 来源都要保留(chain template 的 `methods` 取输入 + `rpc_methods` 压测)。
+- 这修正了 §7.3 整合方案: InputProvider 层不只是"按 family 抓 account", 还要按 family 知道"用哪个 method 抓"(读 chain template methods 字段)。
+
+### 9.3 待继续 token-level 精读(本轮 context 限制, 下轮补)
+- config_loader.sh 怎么构造 CHAIN_CONFIG env + 设 BLOCKCHAIN_NODE(InputProvider 整合接口)。
+- proxy extractor jsonrpc.go / rest.go 全文(三端同源的识别端细节)。
+- Sui adapter L559+ 剩余 + replace_env_vars(params 占位符替换)。
+- master_qps_executor 完整压测循环(rate 爬坡 + 多 QPS 档)。
+- report_generator per_method section 完整渲染链(响应入库后如何用)。
