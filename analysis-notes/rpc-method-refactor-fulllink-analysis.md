@@ -1116,3 +1116,38 @@ solana.json 3 个 🟡 P1_RPC_ERROR:
 至此 8 个 _raw-evidence JSON 中 solana(最大代表)逐行读透, 结构确认。其余 7 链(base/bsc/eth/polygon/scroll/starknet/sui)
 同结构(均 4-5KB), 已读 solana 确认 schema, 其余按同 schema 派生 method 数据(§3 矩阵已含全部实测值)。
 **与 RPC method 相关 + 全监控组件 + network provider + cgroup + audit 体系(工具代码 + matrix + raw-evidence)= 逐行读透零盲区。**
+
+
+## 43. 第三十轮: starknet.json 逐行 — 多位置参数实证 + L4 error data.reason 精确缺字段清单(§4 param_spec DSL 直接输入)
+
+### 43.1 多位置参数实证(同 family 内位置数/顺序各异 → param_format 编码位置语义必须)
+starknet 是 jsonrpc family 但参数结构多样:
+| method | param_format | params_sent | 位置语义 |
+|---|---|---|---|
+| starknet_getClassAt | latest_address | ["latest", "0x068..."] | [0]=block_tag [1]=address |
+| starknet_getNonce | latest_address | ["latest", "0x068..."] | 同上 |
+| starknet_getStorageAt | address_key_latest | ["0x068...", "0x0", "latest"] | [0]=address [1]=storage_key [2]=block_tag |
+| starknet_blockNumber | no_params | [] | 无参 |
+🎯 **同一 family 内 method 参数位置数 0/2/3 不等, 且顺序不同(latest 在 getClassAt 第0位 vs getStorageAt 第2位)**。
+这是 §4 param_spec DSL "位置 × 类型 × 语义来源"多样性的硬证据 → param_format 名编码【每个位置的语义+顺序】是必须的,
+不能用单一 address 槽兜底(这正是缺口#2/#10 输入供给债的根因)。
+
+### 43.2 🎯 L4_error_semantics 首次非 null — error data.reason 精确点名缺失字段(输入供给债最精确证据 + 重构清单)
+starknet_getEvents (L127-132): L4 = ERROR_THROWN_AT_RPC_LAYER + error_code -32602 + "framework needs to handle this"。
+**节点 error.data.reason 精确点名缺哪个字段**:
+- starknet_getEvents: `missing field: "filter"`
+- starknet_getTransactionByHash: `missing field: "transaction_hash"`
+- (solana 同样: getTransaction 缺 signature, getSignaturesForAddress 缺 address)
+🎯 **这是重构输入供给层"每个 method 该补什么参数"的现成清单** —— 节点自己告诉你缺什么。
+param_spec DSL 的 required slots 可直接从这些 error.data.reason 反推校验。
+
+### 43.3 L1_doc DOC_ERROR(starknet 文档 URL 404)但 L2 endpoint PASS
+- audit L1 文档校验对 starknet 失效(URL 404), 但 L2 真实 endpoint 全 PASS。
+- 🎯 印证纪律: L2 public endpoint 实测是事实地基, 比 L1 文档校验更可靠(文档会失链/改版, 真机实测不会骗人)。
+- 呼应任务纪律"官方文档 + public endpoint 双重", endpoint 实测优先级更高。
+
+### 43.4 schema 跨 family 一致确认
+starknet(jsonrpc 特殊参数)与 solana(jsonrpc 标准)_raw-evidence schema 完全一致(同 7 字段结构: chain/method/tier/
+param_format/params_sent/verdict/L1-L4)。其余 6 链(base/bsc/eth/polygon/scroll/sui)同 schema, §3 矩阵已含全部实测值。
+**audit _raw-evidence 体系逐行读透零盲区, 确认是 §4 param_spec(params_sent + error 缺字段)+ §5 response_spec
+(L3 Expected fields + L2 result_excerpt)双 DSL 的最丰富现成数据源。**
