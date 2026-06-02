@@ -231,3 +231,50 @@ Phase 1 ②: target_generator.sh → cli.py → get_adapter(chain).build_vegeta_
 - L3: 真节点跑 Phase 1 全链路(fetch 36 链任一 → 3 池 → target 构造 → 压测), 验"28 链不再 blocked"。
 - 回归: 现有 8 链 fetch 行为 byte 等价(InputProvider 迁移自原 4 chain_type 实现, 逻辑不变)。
 - 删除: create_adapter + 4 个 chain_type adapter 类删除后, grep 确认无残留 caller(Step 5 disable 验证)。
+
+
+## 8. 构造 vegeta 文件的代码逻辑(第五轮: 有几套 + 构造↔识别闭环, 用户点的关键)
+
+### 8.1 构造 vegeta target 的代码路径(grep 实证: 一套构造逻辑, 两个 CLI 入口)
+| 路径 | 性质 |
+|---|---|
+| `chain_adapters/<family>.py build_vegeta_target` → `_vegeta_post_json`/`_vegeta_get`(base.py:67/78) | **唯一真实构造逻辑**, 6 family 全经此 |
+| `cli.py cmd_build_targets_batch`(L80)← target_generator `generate_targets`(L248/264) | **生产入口**(批量 TSV) |
+| `cli.py cmd_build_target`(L59)← target_generator `generate_rpc_json`(L66, 标注 "legacy callers/debugging") | legacy/debug 入口, 生产不用 |
+| `framework_data_quality_checker.sh validate_vegeta_file`(L239) | **只校验不构造** |
+
+**结论: 构造逻辑只有一套(build_vegeta_target), 但有 single/batch 两个 CLI 入口。** batch 是生产, single 是 legacy。
+两入口走同一 build_vegeta_target → 行为一致(低风险), 但 legacy 入口是 parallel-entry 轻度嫌疑(若未来漂移)→
+重构时建议 single 入口改为调 batch 的同一构造或直接删 legacy(消除潜在漂移)。
+
+### 8.2 vegeta target 完整结构(base.py 实证)
+```
+POST family: {"method":"POST", "url":rpc_url, "header":{"Content-Type":["application/json"]}, "body":_b64('{"jsonrpc","method":"X","params":[...]}')}
+GET  family: {"method":"GET",  "url":full_url_with_path, "header":{}}   ← 无 body, method 信息在 url path
+```
+
+### 8.3 🔴🔴 构造↔识别闭环(用户核心担心的根: "构造错→拿不到响应"的真因)
+proxy 从请求识别 method 决定响应能否归到 method(token-level 实证):
+| family | vegeta target 带 method 信息的方式 | proxy extractor 识别 method | 闭环条件 |
+|---|---|---|---|
+| jsonrpc/substrate/bitcoin/tendermint(POST) | **body 里 `{"method":"X"}`** | jsonrpc.go:49 读 `body.method`(method_source=body.method) | build 的 body.method 正确即闭环 |
+| rest/tendermint(GET path)/hedera mirror | **URL path**(body 无 method 字段) | rest.go 匹配 `url_pattern`(method_source=url path) | 🔴 **build 构造的 path 必须能被 proxy_extraction 的 url_pattern 匹配** |
+| tron(/wallet/* POST) | path + body | 取决于 proxy_extraction 配 jsonrpc/rest | 🔴 协议错配(§2.1)在此咬合 |
+
+**核心洞察(用户点破的"顾此失彼"风险)**: 框架有【三处独立声明同一 method 的形态】, 必须三方对齐, 缺一则"前面通了但拿不到响应":
+1. **构造端** param_spec / build_vegeta_target → 决定 vegeta target 的 url + body
+2. **识别端** proxy_extraction(extractors[]: method_source / url_pattern)→ 决定 proxy 从请求提哪个 method 名
+3. **解析端** response_spec → 决定从响应提语义字段
+
+**漂移即断链**: 若 build 构造的 rest path = `/v2/accounts/{addr}` 但 proxy_extraction url_pattern = `^/v2/accounts/[^/]+$`(正则要匹配实际带值的 path)不一致 → proxy 识别不出 method → per-method CSV 该 method 缺失 → 响应(开关 on 时)也归不到正确 method。**这正是"构造对应 method 的 vegeta 文件"与"响应对应 method"必须同源的根因。**
+
+### 8.4 重构必须保证的三端同源(不留债关键)
+param_spec(构造)、proxy_extraction(识别)、response_spec(解析)**应从同一份 method 声明派生或强制一致性校验**:
+- 方案: chain template 里 method 的 url/path 形态**单一权威声明**, param_spec 用它构造、proxy_extraction 用它生成识别 pattern、response_spec 挂同一 method key。
+- 启动期校验: 对每个 method, 校验 build_vegeta_target 产出的 url/body 能被该链 proxy_extraction 的 extractor 匹配(构造↔识别闭环自检), 不匹配 fail-fast。
+- 这是比单纯"param_spec 替换 param_format"更完整的目标: **三端同源 + 闭环自检**, 否则 §2.1 的 34 个协议错配修了构造端, proxy_extraction 端没同步改照样断链。
+
+### 8.5 第五轮结论更新(回答用户"有几套构造逻辑")
+- 构造 vegeta 文件逻辑 = **一套**(build_vegeta_target), single/batch 两入口(batch 生产 / single legacy 待清理)。
+- 但 method 形态在框架里有**三处独立声明**(param_spec 构造 / proxy_extraction 识别 / response_spec 解析), 这三处不对齐 = "前面通了但拿不到响应"。重构必须三端同源 + 闭环校验。
+- 验证补充(L3): 不只验"target 构造对", 还要验"proxy 能从该 target 识别出正确 method"(proxy_method.csv 出现该 method)+ "响应(开关on)按 request_id 归到该 method"。三端闭环都过才算该 method 重构完成。

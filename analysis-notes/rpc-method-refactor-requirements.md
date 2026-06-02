@@ -64,6 +64,14 @@
 - T2 调研结论出来后: 是否换压测工具(影响重构范围)。
 - §6 实施计划三阶段(输入供给/参数DSL/协议修复)顺序与 family 切分。
 
+## 3.5 用户已拍板(2026-06-02)
+
+- **两套 adapter 整合 = 方案 c**(统一 family 分派 + InputProvider/TargetBuilder 分层, 见 fulllink-analysis §7)。
+- **InputProvider 补全到 6 family**(原 fetch 仅 4 chain_type)—— 让框架更统一。substrate/tendermint/bitcoin/rest/hedera 的 account 抓取逻辑需新写。
+- **mixed weight R5 一并修**(round-robin → 按 mixed_weighted weight 比例分配 method)。
+- **响应记录文件入库**(像 fixture 一样, 供离线二次开发分析)。
+- **构造↔识别↔解析三端同源**(fulllink §8): param_spec / proxy_extraction / response_spec 必须从单一 method 声明派生 + 启动期闭环校验, 防"前面通了但拿不到响应"。
+
 ## 4. 范围演进留痕(防漂移)
 - 第一轮分析: 以为重构 = 改 adapter 参数构造一层。
 - 第二轮扩大: 挖到"输入供给"更上游(45 method 需非账户输入, 框架无源)。
