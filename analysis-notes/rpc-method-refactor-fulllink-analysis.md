@@ -461,3 +461,37 @@ per_method_attribution.py 全文。
 **仍可继续扩大的周边**(对核心重构非阻塞, 但用户要持续扩大): proxy config loader(proxy_extraction 加载/校验)、
 proxy selfreport(Q4-10 自报基线)、cli.py health-probe 完整、replace_env_vars 占位符替换、
 fetch Sui adapter 尾部、target_generator read_accounts 完整、config_loader MAINNET_RPC_URL 8链case 全文。
+
+
+## 16. 第十轮 token-level 精读: proxy config loader + target_generator 输入消费端
+
+### 16.1 proxy config loader.go 逐行精读 — 三端同源识别端配置源确认
+- L34 LoadChain: 从 chain template 读 `proxy_extraction.extractors` → 建 extractor chain。
+- L59-72 buildExtractor: **只支持 2 protocol = json_rpc(需 url_pattern)/ rest(需 url_patterns)**, 其余报错。
+- L43-44 无 extractors 直接报错(每链必配 proxy_extraction)。
+- 🎯 **三端同源实现路径坐实**: param_spec(新增, 构造)+ proxy_extraction(现有, 识别)+ response_spec(新增, 解析)
+  **都在同一 chain template JSON, 但是三个独立字段**。重构必须保证三者从单一 method 声明派生或交叉校验,
+  否则漂移 → method 静默从归因消失(§12.3 `__unmatched__` 机制)。proxy_extraction 只 2 protocol(json_rpc/rest)→
+  tendermint 25 method 协议错配(§2.1)在 proxy_extraction 端也要确认配的是 rest(LCD path)还是 json_rpc。
+
+### 16.2 target_generator generate_targets 逐行精读 — 输入消费端精确落点
+- L220-225 read accounts: **只读 ACCOUNTS_OUTPUT_FILE 一个文件**(account 地址), 逐行进 accounts[]。
+- L240-268(§前轮已读): single 用 accounts[0..] 配 method[0]; mixed round-robin。
+- 🎯 **输入池消费端改动落点**: 重构加 tx_hash_pool/block_id_pool 后, generate_targets L220-225(读单一 accounts)
+  + L246-262(喂 method+address)要改成 **按 param_spec 的 source 类型, 该 method 从对应池取值**
+  (account→accounts池 / tx_hash→tx_hash池 / block_id→block_id池 / contract_call→固定/声明)。
+  现在所有 method 都喂 account(§3 输入供给缺口的消费端根因, token-level 精确定位)。
+
+### 16.3 第十轮结论
+- 三端(param_spec/proxy_extraction/response_spec)同在 chain template 三独立字段, 重构核心 = 三者单一来源/交叉校验。
+- 输入池消费端精确落点 = target_generator generate_targets L220-262(现只读 accounts 一池喂所有 method)。
+
+## 17. 十轮 token-level 精读完整性最终自评(诚实)
+**已逐行精读(核心闭环 + 关键周边)**: 入口/fetch 4 adapter全/config_loader CHAIN_CONFIG+rpc_methods/
+6 family build+_build_params/base.py/cli.py/proxy jsonrpc+rest extractor/proxy handler/proxy sink/
+proxy config loader/master_qps_executor压测循环/report per_method渲染链/attribution全文/charts出图/
+unified_monitor采集数据源/target_generator输入消费端。
+**剩余未逐行(真边缘, 对核心重构非阻塞)**: proxy selfreport(Q4-10自报基线)/cli.py health-probe/
+replace_env_vars占位符/fetch Sui adapter尾部/config_loader MAINNET_RPC_URL 8链case全文。
+**累计 10 个真实障碍/缺口**(§11.6 八个 + §12.5 EBS/Net归因缺失 + §14.2 数据源就绪降风险 + §16 三端同源+输入消费端落点)。
+这是 grep 阶段完全不可能得到的事实地基, 足以支撑出零技术债的 §6 实施计划。
