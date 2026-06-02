@@ -343,3 +343,50 @@ fetch 抓取用的 method(getSignaturesForAddress / eth_getLogs / eth_getBlockBy
 - master_qps_executor 完整压测循环(rate 爬坡逻辑 + proxy 串联点)。
 - report_generator _generate_per_method_section 完整渲染链(响应入库后如何被分析/出图用)。
 - per_method_attribution.py 完整(频次权重 + 响应是否参与)。
+
+
+## 11. 第七轮 token-level 精读: rest extractor + 压测循环 + report渲染链(响应入库闭环硬结论)
+
+### 11.1 proxy rest.go 逐行精读 — RequestID 根本不设(响应入库障碍升级)
+- L64-79 Extract: 遍历 patterns, 校 httpMethod(verb)+ regex.MatchString(path)→ 返 method_name。
+- 🔴 **L74 `RequestID: ""`** —— rest 协议**根本不设 RequestID**(空)。比 jsonrpc 的 id=1 更严重:
+  - jsonrpc/substrate/bitcoin/tendermint(POST): RequestID = body.id = **全是 "1"**(base.py 固定)→ 无法区分。
+  - rest/tendermint(GET)/hedera mirror: RequestID = **""** → 根本没有关联键。
+- **响应入库(用户拍板)的硬障碍坐实**: 当前 proxy RequestID 机制**完全无法支撑"响应结构对应 method 请求"**。
+  必须重构: (a) build_vegeta_target 给每请求注入唯一 id(jsonrpc body.id 用递增/uuid; rest 加 query 参数或 header)+
+  (b) proxy extractor 提取该唯一 id 作 RequestID + (c) 响应记录按该 id 关联。**三处都要改, 否则响应入库后对应不上 method。**
+
+### 11.2 master_qps_executor 压测循环逐行精读 — 压测层完全不碰响应 body
+- L798 vegeta attack -targets=file(url 决定打 proxy 还是节点, Phase0.5 固化)。
+- L806-808 vegeta 输出 → `vegeta report -type=json` → result_file。
+- L820-824 只从 vegeta report 提 requests/status_codes/latencies **聚合统计**(总数/状态码分布/延迟), **不碰单个响应 body**。
+- **确认: 响应入库只能在 proxy 层做**(vegeta + master_qps_executor 都不接触响应 body)。
+
+### 11.3 report_generator per_method 渲染链逐行精读 — 归因/出图完全不消费响应结构
+- L4298 `read_proxy_csv` → 只读 proxy 9 列 CSV(method/status/latency), **不读响应内容**。
+- L4301/4303 compute_per_method_qps/resource: 归因 = **proxy method 时序 + monitor 资源时序 join**, 响应 body 零参与。
+- L4324-4327 write_qps/resource_csv: 产 per_method CSV(供外部)。
+- 🔴 **确认: 现有 report/attribution 链完全不消费响应结构** → **响应入库后, 现有分析/出图链不会自动使用它**。
+
+### 11.4 🎯 响应入库闭环硬结论(第七轮, 修正前几轮"响应喂 response DSL"的乐观说法)
+响应入库要真正可用, 需新建一整条链(不是"记下来就行"):
+1. **关联键重建**(§11.1): build 注入唯一 id + proxy 提取 + 响应按 id 关联 — 三处改, 否则响应对应不上 method。
+2. **响应只能 proxy 层捕获**(§11.2): vegeta/executor 不碰 body, 开关 on 时 proxy tee。
+3. **新建响应消费链**(§11.3): 现有 report/attribution 不读响应 → response_spec 提取 + 响应校验/分析是**全新增**, 现链不接。用途 = 调试/验证节点返回/录 fixture, 不是喂现有归因(归因不需要响应)。
+4. **响应文件入库**(用户拍板): 按 (chain, method, 唯一id/timestamp) 组织, 像 fixture 一样入库。
+
+### 11.5 七轮分析完整性自评(token-level 已覆盖的全链路)
+逐行精读已覆盖: 入口Phase编排 / prepare_benchmark_data / fetch 4 adapter完整(Solana/Ethereum/Starknet/Sui)/
+config_loader CHAIN_CONFIG构造+rpc_methods提取 / 6 family build_vegeta_target+_build_params / base.py vegeta构造 /
+cli.py 两入口 / proxy jsonrpc+rest extractor全文 / master_qps_executor压测循环 / report per_method渲染链。
+**剩 per_method_attribution.py 完整频次权重(已知核心逻辑, §11.3 确认不碰响应)+ fetch Sui尾部/replace_env_vars(占位符)未逐行。**
+
+### 11.6 七轮累计挖出的、影响实施的真实障碍清单(grep 阶段全没有)
+1. 两套 adapter 分派维度冲突(chain_type vs family)→ 整合方案 c(§7)
+2. 6 family account 抓取从零设计(bitcoin UTXO 无 account 等)→ 阶段1 真实工作量(§9.1)
+3. fetch method ≠ 压测 method(两个字段)→ InputProvider 要读 methods 字段(§9.2)
+4. CHAIN_CONFIG 删 _meta → 整合按 family 要先改 config_loader(§10.1)
+5. vegeta 固定 id=1 + rest RequestID="" → 响应入库关联键必须重建(§10.2 + §11.1)
+6. 压测层/report 层都不消费响应 → 响应消费链全新增(§11.2/11.3)
+7. 三端同源(param_spec/proxy_extraction/response_spec)连 jsonrpc 都依赖 url_pattern(§8.3/10.2)
+8. mixed weight R5 三处代码确认未用(§10.1)
