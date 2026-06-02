@@ -556,3 +556,47 @@ proxy/internal: extractor.go + jsonrpc.go + rest.go + handler.go + sink.go + con
 **仍未逐行(确认真边缘 — 已读其依赖/接口足以判定)**: cli.py cmd_health_probe(health_check_request 已在 6 adapter 读过)/ config_loader MAINNET_RPC_URL 8链 case 全文(OQ-11 已知模式)/ per_method_report.py(渲染 HTML 文案, 不涉逻辑)/ 各 *_test.go(测试)。
 
 **累计 11 个真实障碍/缺口(§18.3)**, 每个都有精确代码落点。这是从框架入口到响应归因的完整闭环、grep 阶段完全不可能得到的事实地基, 足以支撑零技术债 + 优雅的 §6 实施计划。
+
+
+## 21. 🔴🔴🔴 第十三轮重大发现: 框架"按链处理 RPC"有【4 套独立分派】, 非 2 套(我前面武断"读透"时漏了 2 套)
+
+用户第三次追问"完全吃透了么"逼我读 cli.py health-probe 的 caller, 顺藤摸到 block_height_monitor → common_functions.sh, 挖出我前面完全漏掉的**第 3、4 套按链分派**。
+
+### 21.1 cli.py 5 子命令 caller 核实
+- build-target(legacy)/ build-targets-batch(生产)→ target_generator(已知)。
+- **health-probe / parse-height: grep 生产代码无 caller, 只测试调** → 生产块高/健康检查**不走 cli.py**。
+- 那生产块高检查走哪? → 顺藤摸到 block_height_monitor.sh:145/151 `source common_functions.sh && get_block_height`。
+
+### 21.2 🔴 第三套 + 第四套按链分派(token-level 实证, 前面完全漏)
+框架"按链处理 RPC"实际有 **4 套独立分派, 维度各异、互不知道**:
+| # | 位置 | 分派维度 | 覆盖 | 职责 | 我之前 |
+|---|---|---|---|---|---|
+| 1 | fetch create_adapter(L661) | chain_type | 8链(4 adapter) | 取 account | §1 已发现 |
+| 2 | chain_adapters get_adapter | adapter_family | 36链(6 family) | 构造 target + parse_block_height + health_check_request | §1 已发现 |
+| 3 | config_loader MAINNET_RPC_URL case(L454) | BLOCKCHAIN_NODE | 8链 case | 设 mainnet endpoint | OQ-11 提过半 |
+| 4 | **common_functions get_block_height case(L194)** | BLOCKCHAIN_NODE | **8链 case** | **块高监控/健康检查** | 🔴 **完全漏!本轮挖** |
+
+### 21.3 🔴 第 12 缺口: 块高提取逻辑重复实现两次(chain_adapters 36链 vs common_functions 8链 case)
+- common_functions.sh get_block_height(L180-281): case 8链, 每 case 重复硬编码 method + 块高提取
+  (solana getBlockHeight / EVM eth_blockNumber+hex转十进制 / starknet starknet_blockNumber / sui sui_getTotalTransactionBlocks), L270 其余链 `Unsupported blockchain type`。
+- **这与 chain_adapters 的 parse_block_height + health_check_request 完全重复**(同 method 同提取逻辑), 但各写各的。
+- **块高监控(block_height_monitor.sh, NS-2 监控组件)用的是 common_functions 的 8 链 case 版, 完全不用 chain_adapters 的 36 链版** → parallel-entry: 块高提取实现两次, 监控用落后的 8 链版 → **28 链块高监控不支持**(与 README "8链e2e" 同根)。
+
+### 21.4 整合范围重大修正(影响方案 c)
+§7 整合方案 c(统一 family 分派)之前只覆盖 2 套 adapter。**实际要覆盖 4 套**:
+1. fetch(取 account)→ InputProvider 按 family(§7)
+2. chain_adapters(构造+解析)→ TargetBuilder(现成)
+3. config_loader MAINNET case → 改读 chain template(OQ-11)
+4. **common_functions get_block_height case → 改用 chain_adapters parse_block_height**(消除块高提取重复, 块高监控支持 36 链)
+**4 套统一到 chain_adapters 的 family 分派 + chain template 声明**, 才是真正"不留技术债"的整合。否则块高监控/endpoint 这两套继续 8 链硬编码。
+
+### 21.5 自我批判(用户第三次追问才挖出)
+- 我第十二轮说"proxy 全读透 + 真边缘已读依赖足以判定" = **又一次武断**。cli.py health-probe 的 caller 我没追 → 漏了 block_height_monitor → common_functions 第三/四套分派。
+- **教训坐实**: "读了 X 文件"≠"吃透 X 的调用全景"。cli.py 读了, 但没追它每个子命令的 caller → 漏掉一整条块高监控链 + 两套按链分派。**精读必须追到每个公共函数/CLI 子命令的真实 caller, 否则就是局部读。**
+- 缺口从 11 个增至 **12 个**(新增: 块高提取重复实现 + 第三/四套按链分派未纳入整合)。
+
+### 21.6 仍需继续(诚实, 不再说"够了")
+- common_functions.sh check_node_health 全文(L284-317)+ 该文件其余函数。
+- block_height_monitor.sh 完整(它怎么用 get_block_height + 写什么 CSV + 谁消费)。
+- config_loader MAINNET_RPC_URL case 全文(第三套, 确认 8 链 + endpoint 来源)。
+- 其余 monitoring/ 组件是否还有第 5 套按链分派(unified_monitor/network_monitor 等)。
