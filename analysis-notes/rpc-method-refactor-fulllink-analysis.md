@@ -1047,3 +1047,34 @@ audit 矩阵 Summary: 29 PASS / 16 P1_RPC_ERROR / 6 P1_NOT_IN_SPEC。16 个 RPC_
 
 ### 40.3 与 RPC method 正交确认(逐行非预判)
 network provider = 网络硬件 NIC 饱和度采集层, 与 RPC method 的分派/构造/识别/响应/输入供给/四维归因均无交集。唯一关联 = 它是整合方案 c 的现成优雅范式参考。**§39.1 列的 network 3 provider 实现已补完读透, 结论不变: 正交。**
+
+
+## 41. 第二十八轮: cgroup 采集段 + cgroup_collector.py — 缺口#8 四维数据源就绪铁证(补完 §39.1)
+
+### 41.1 unified get_cgroup_data(L1994-2006)
+- CGROUP_COLLECTOR_ENABLED 开关(默认 true)+ fail-soft 三级降级(disabled/unavailable/error 各填 18 个 0 + meta)。
+- 调 `cgroup_collector.py --data` 取 19 字段(io 6 + mem 6 + cpu 6 + meta 1)。
+
+### 41.2 cgroup_collector.py docstring(L1-63)+ schema(L78-91)
+- 目的(L8-22): Pod-aware 采集, 从 TARGET_PID 进程 cgroup slice 读 counter, 4 模式(v2/v1/unmounted/unresolved)。
+- **采集粒度 = 整个区块链进程(TARGET_PID 默认 self), 不分 RPC method**。
+- io 6 字段含 rbytes/wbytes/rios/wios/dbytes/dios = **进程级 disk IO 量**。
+
+### 41.3 generate_json_metrics(L2031-2038)= disk 维度数据已采铁证
+- 从 device_data(iostat 21 字段)取 disk_util(f9)+ disk_latency(f7)。
+- network_util 从 network_data f4(L2024-2029)。
+
+### 41.4 🎯 缺口#8 四维归因"低风险补全"的最强印证
+unified CSV 已同时有四维系统资源数据源:
+1. **CPU**: cpu_data(已采)+ cgroup cpu 6 字段(usage/user/system/throttled)
+2. **MEM**: memory_data(已采)+ cgroup mem 6 字段(anon/file/kernel/slab/sock/swap)
+3. **Disk/EBS**: device_data iostat 21 字段(r_s/w_s/util/await)+ cgroup io 6 字段(rbytes/wbytes/rios/wios)
+4. **Network**: network_data(rx/tx mbps)+ network provider variant 饱和度
+**全部四维数据源已就绪(节点进程整体级)**。per-method 归因(attribution.py)现只读 cpu/mem 两维按时间窗加权(缺口#8),
+补 disk/net 维 = 只扩 attribution 读 device/network 列 + 加 PerMethodResourceRow 字段 + 出图, **数据采集层零改动 = 低风险**。
+cgroup 与 RPC method 正交(进程级非 method 级), 但其 io 字段是 disk 维度归因的更精确候选数据源(优于 iostat 节点级 util)。
+
+### 41.5 全框架逐行精读完成度(诚实终评 v2)
+与 RPC method 相关 + 所有监控组件(含 cgroup/network provider 5 文件)= 全部逐行读透。
+剩 audit _raw-evidence/<chain>.json(8 链原始审计 JSON, 与已读透的 method-status-matrix.md 同源派生)未逐行,
+其性质 = matrix.md 的上游原始数据, 已通过 matrix.md(304 行全读)间接覆盖结论。如需可补读但不改任何重构结论。
