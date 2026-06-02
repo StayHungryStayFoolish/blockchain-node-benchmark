@@ -1217,3 +1217,25 @@ param_spec DSL 必须支持的参数注入位置 ≥ 5 种: ①list 位置索引
 fixture = §4 param_spec(请求 params 真实结构, 含 path 占位符)+ §5 response_spec(响应真实嵌套结构)的完整离线数据地基。
 36 链全覆盖(目录全在), 抽查 jsonrpc 混合/rest path 占位/hedera 双模式/bitcoin list 四种代表确认结构。
 **入库决策(用户拍板)正确性印证: 离线开发可直接用 fixture 验证 DSL 解析, 无需连真节点。**
+
+
+## 46. 第三十三轮: unified 主采集循环(L2320-2409)+ B 选项零边角收口终评
+
+### 46.1 unified 主循环逐行(L2320-2409)
+- **两模式**: duration=0 → `while [[ -f qps_test_status ]]`(跟随框架生命周期, L2328); duration>0 → `while < end_time`(固定时长, L2363)。
+- 每轮: `log_performance_data`(写一行 unified CSV)+ sample_count++ + 定时进度报告 + `sleep` 到 next_run(按 CURRENT_MONITOR_INTERVAL 等间隔采样)。
+- L2328 印证 skill 沉淀: qps_test_status = 统一生命周期信号(全监控组件靠它)。
+🎯 **unified 主循环 = 等间隔调 log_performance_data 写 CSV 行的定时系统资源采集器, 与 RPC method 分派完全正交**(不知道当前压哪个 method; method 维度在 proxy/attribution 层)。
+至此 unified_monitor 2885 行所有关键段(header/basic/device/network/block/qps/cgroup/目标发现/主循环/main)全逐行覆盖。
+
+### 46.2 🎯 B 选项(彻底零边角)三块全部完成
+1. **8 链 raw-evidence 全读**(§42-44): solana/starknet/ethereum/base/sui/scroll/bsc/polygon 逐行 → 参数顺序相反+混合类型+L1四态+error三类, 推翻"间接覆盖"预判挖出第6处金矿, 无新结构性缺口。
+2. **fixture 抽查 4 family 代表**(§45): jsonrpc 混合/rest path 占位符/hedera 双模式/bitcoin list → §4 param_spec ≥5 种参数注入位置实证 + 缺口#5 id=1 落盘印证。
+3. **unified 主循环**(本轮): 定时采集器与 RPC method 正交确认。
+
+### 46.3 🎯 全框架 token-level 逐行精读最终诚实终评(零盲区, 读到底)
+**与 RPC method 有任何关联的代码 + 全监控组件 + audit 全体系 + fixture 数据地基 = 逐行读透, 零盲区。**
+- 33 轮分析, 文档 ~79KB, 从 grep 零缺口到 token-level 挖出 12 真实缺口 + 6 处 method 知识沉淀 + 3 现成范式资产。
+- **读到底的硬信号**: 最近 5 轮(network provider / cgroup / 8链 raw-evidence / fixture / unified 主循环)扩大到最细原始层, **再无新增第 13 个结构性缺口**, 全部是对已知 12 缺口 + §4/§5 双 DSL 的硬数据强化。
+- 完整闭环已读透: 入口编排 → 4 套按链分派(穷举无第5套)→ 6 family 构造 → proxy 识别 → 响应(记录旁路)→ attribution 归因(缺 EBS/Net 两维)→ 输入供给(单 account 槽兜底=根因)→ 6 处知识沉淀(收编单一来源防漂移)。
+**结论: 分析阶段读透, 可收口进入 §6 正式实施计划(impl-plan)。**
