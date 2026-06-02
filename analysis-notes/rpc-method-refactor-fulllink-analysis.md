@@ -432,3 +432,32 @@ base.py vegeta 构造 + 注册表 / cli.py 5 子命令 + _get_param_format / pro
 proxy handler.go 全文 / proxy sink.go 全文 / master_qps_executor 压测循环 / report per_method 渲染链 /
 per_method_attribution.py 全文。
 **九大真实障碍/缺口(grep 阶段全无), 见 §11.6 + §12.5。** 这是出 §6 实施计划的完整事实地基。
+
+
+## 14. 第九轮 token-level 精读: per_method_charts + 监控采集数据源(四维归因补全可行性)
+
+### 14.1 per_method_charts.py 逐行精读 — 出图坐实只 CPU 一维
+- L3-7 docstring + L259-282 generate_all_charts: 产 **4 张图 = qps / latency / error_rate / resource**。
+- L279-282 resource 图 `plot_resource_stacked`: L241 只取 `r.cpu_pct`, L252/282 标题 "CPU% (attributed)" / "CPU Attribution"。
+- 🔴 **坐实链条**: attribution 只算 CPU/MEM(§12.1)→ resource 图**只画 CPU**(连 MEM 单独图都没出)→ **EBS/Network per-method 图完全不存在**。NS-2 四维要求 vs 实现一维出图, token-level 全链路坐实。
+
+### 14.2 监控采集数据源逐行精读 — EBS/Network 列【已就绪】(补四维归因好消息)
+- unified_monitor.sh get_network_data(L418): 采 rx_mbps/tx_mbps/total_mbps/rx_pps/tx_pps/...(L475 输出 10 网络字段)。
+- disk 列: source disk_converter.sh(L21), iostat 采 disk iops/throughput/util(disk 段 21 字段, 含 disk_r_s/disk_w_s/disk_total_iops)。
+- ✅ **monitor CSV 已采 CPU/MEM/EBS(disk)/Network 全四维数据** —— 补全 per-method 四维归因**不需要新增采集**, 只需:
+  1. read_monitor_csv 多读 disk/net 列(现只读 cpu_usage/mem_used, attribution.py L94-98)。
+  2. PerMethodResourceRow 加 disk_iops/disk_throughput/net_rx_mbps/net_tx_mbps 字段。
+  3. compute_per_method_resource 按同一 weight 分摊这些列(像 cpu_pct*weight)。
+  4. per_method_charts 加 disk/net 归因图。
+- **这是 NS-2 "更完善"的低风险高价值补全**(数据源就绪, 只扩分析+出图层, 不动采集)。
+
+### 14.3 第九轮结论
+- per-method 归因/出图当前只 CPU 一维(MEM 算了但没单独出图, EBS/Net 完全没算没画)。
+- 但监控采集层 CPU/MEM/EBS/Network 四维数据**全部就绪** → 补全 NS-2 四维归因 = 纯分析+出图层扩展, 数据源零改动, 低风险。
+- 这把 §12.5 的"EBS/Net 归因缺失"从"重大缺口"细化为"低风险可补"(数据源就绪是关键前提, token-level 才确认)。
+
+## 15. 九轮 token-level 精读 — 全链路 + 周边覆盖总清单
+核心链(八轮)+ 本轮周边: per_method_charts 出图全文 + unified_monitor 采集数据源(CPU/MEM/EBS/Net 四维列)。
+**仍可继续扩大的周边**(对核心重构非阻塞, 但用户要持续扩大): proxy config loader(proxy_extraction 加载/校验)、
+proxy selfreport(Q4-10 自报基线)、cli.py health-probe 完整、replace_env_vars 占位符替换、
+fetch Sui adapter 尾部、target_generator read_accounts 完整、config_loader MAINNET_RPC_URL 8链case 全文。
