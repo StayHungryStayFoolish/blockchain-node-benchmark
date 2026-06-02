@@ -1151,3 +1151,38 @@ starknet(jsonrpc 特殊参数)与 solana(jsonrpc 标准)_raw-evidence schema 完
 param_format/params_sent/verdict/L1-L4)。其余 6 链(base/bsc/eth/polygon/scroll/sui)同 schema, §3 矩阵已含全部实测值。
 **audit _raw-evidence 体系逐行读透零盲区, 确认是 §4 param_spec(params_sent + error 缺字段)+ §5 response_spec
 (L3 Expected fields + L2 result_excerpt)双 DSL 的最丰富现成数据源。**
+
+
+## 44. 第三十一轮: 8 链 raw-evidence 全读透(ethereum/base/sui/scroll/bsc/polygon)— DSL 设计硬数据综合
+
+### 44.1 参数顺序跨 family 相反(§4 param_spec 必须按 method 编码精确顺序的铁证)
+- **EVM(eth/base/bsc/polygon/scroll)** address_latest = `[address, "latest"]` — address 第0位, block_tag 第1位。
+- **starknet** latest_address = `["latest", address]` — block_tag 第0位, address 第1位。**顺序相反!**
+🎯 同是"地址+区块标签"两参, EVM 与 starknet 位置顺序相反 → param_spec DSL 不能用语义名兜底, 必须声明【每位置的精确顺序+类型+语义】。
+
+### 44.2 混合类型参数(sui — §4 param_spec 最强类型多样性证据)
+sui_getObject address_with_options = `["0x...005", {"showType": true, "showOwner": true}]`:
+- 位置[0] = address(string scalar), 位置[1] = options(**dict object**)。
+🎯 param_spec DSL 必须支持"位置 × 类型(string/int/object/array)× 语义"三维, 不能只声明 string 参数(单 address 槽兜底彻底不够)。
+
+### 44.3 L1_doc 四种状态 — 全部坐实 L2 endpoint 实测是唯一可靠地基
+| 状态 | 链 | 含义 | L2 实际 |
+|---|---|---|---|
+| ACTIVE | solana/base | 文档找到 method | PASS |
+| DOC_ERROR | ethereum(403)/bsc(404)/polygon(403)/starknet(404) | 文档 URL 反爬/失链 | **仍 PASS** |
+| SKIPPED | sui | 文档结构不易自动判别 | **仍 PASS** |
+| NOT_IN_SPEC | scroll | spec body 没找到(假阳性) | **全 PASS** |
+🎯 scroll 6 method 全 NOT_IN_SPEC 但全 PASS = L1 文档校验假阳性最强证据。**method 有效性判定以 L2 真机为准, L1 仅参考**(呼应任务纪律: 官方文档+public endpoint 双重, endpoint 优先)。
+
+### 44.4 error code 三类(§5 错误解析 DSL 要区分, 不能一律当 method 缺陷)
+- **-32602 参数错**: 大多数 P1, error.data 形态跨链异构(starknet `data.reason:"missing field"` / base `data:"No more params"` / eth&scroll&polygon message 内嵌 `filters.input` Go 类型错 / message `missing value for required argument 0`)。
+- **-32005 限流**: bsc eth_getLogs `"limit exceeded"` = **public endpoint 限流非参数错**(呼应纪律: 限流加 sleep)。audit 误标 P1, 实际 method 无缺陷。
+- **节点类型错**: solana getTokenAccountBalance `"not a Token account"` = 参数语义错(account 类型不对)。
+🎯 error.data 跨链异构 → 错误解析 DSL 不能假设固定结构; 应按 error_code 分类(参数错 vs 限流 vs 语义错)区别处理。
+
+### 44.5 🎯 8 链 raw-evidence 零盲区读透 — 不出新结构性缺口, 全强化 §4/§5 DSL 设计
+本轮读完全部 8 个 raw-evidence(solana/starknet 前轮 + 本轮 6 个)。**没有新增第 13 个结构性缺口**, 全部是对已知 12 缺口 + §4/§5 双 DSL 的硬数据强化:
+- 参数顺序相反 + 混合类型 → §4 param_spec 三维(位置×类型×语义)设计输入。
+- L3 Expected fields + L2 result_excerpt → §5 response_spec 路径+真值校验对。
+- L4 error.data.reason 缺字段清单 + error code 三分类 → 输入供给层"补什么参数" + 错误解析 DSL 分类。
+**这是"读到底"的确认信号: 扩大到最细的原始证据层, 只补强不推翻, 完整闭环已读透。**
