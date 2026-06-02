@@ -989,3 +989,39 @@ audit 矩阵 Summary: 29 PASS / 16 P1_RPC_ERROR / 6 P1_NOT_IN_SPEC。16 个 RPC_
 - network/aws_ena.sh / gcp_gvnic.sh / gcp_virtio.sh / other_none.sh(4 provider 实现, NIC 采集, 与 RPC method 正交, 但 4 接口实现是范式参考)。
 - unified_monitor.sh cgroup 采集段(get_cgroup_data L1994+)+ qps 段 + 主循环 + log_performance_data。
 - _raw-evidence/<chain>.json(audit 原始证据, 可能有 method 响应样本)。
+
+
+## 38. 第二十六轮: network provider 体系(interface+实现)+ unified_monitor qps 段 — 整合范式 + 正交确认
+
+### 38.1 monitoring/network/interface.sh 全文(35行)— 整合方案 c 最直接的契约样板
+- 明确 4 接口契约注释(init/header/collect/metadata)+ **不变量**(header 首列 timestamp/末列 saturation_signal/跨provider必含7列; collect列数=header列数)。
+- `_collect_base_network_counters`(L19, 从 /sys/class/net 共享采集)+ `_get_base_field_semantic`(L29, 基础字段语义)= 共享 helper(基类逻辑)。
+- 🎯 **整合方案 c 最直接样板**: 接口契约(注释明确职责+不变量)+ 共享 helper + provider 各自实现。重构 ChainAdapter ABC 可照此加强(明确接口契约+不变量+共享 helper, 现 base.py 只有 3 @abstractmethod 无不变量注释)。
+
+### 38.2 monitoring/network/gcp_virtio.sh 全文(78行)— provider 实现模式(实测背书)
+- L7 source interface.sh 继承; L20-27 init 探测 ethtool+driver==virtio_net 自验; L29-78 实现 4 接口(ethtool -S 采 virtio 专属字段)。
+- L4 注释 "实测来源: cloudtop ens4(driver=virtio_net)" = 实测背书。
+- 🎯 **network provider = 按 cloud_provider/NIC_driver 优雅 declarative 实现(interface 契约+provider 实现+init 自验+fallback), 与 RPC method 完全正交**。整合方案 c 的最佳现成范式。
+
+### 38.3 unified_monitor qps 段 + log_performance_data(L2080-2172)— 聚合总 QPS, 非 per-method
+- L2100-2110 qps 段: current_qps 从 `qps_test_status` 文件 grep "qps:[0-9]*" 读(master_qps_executor 写), **不是 unified 自测 RPC**。
+- L2172 data_line: 完整 unified CSV = timestamp+cpu+memory+device+network+ena+overhead+block_height+**current_qps+rpc_latency_ms+qps_data_available**+cgroup+cloud_provider。
+- 🎯 **确认: unified qps 段是聚合 master_qps 的总 QPS(不分 method), per-method 维度在 proxy/attribution 层(独立)。unified_monitor 整体与 RPC method 分派正交**(系统资源+聚合指标汇聚器)。
+
+## 39. 🎯 二十六轮 token-level + 对照 skill/沉淀 — 全框架 RPC method 相关代码完整覆盖(诚实终评)
+**与 RPC method 有任何可能关联的代码 = 全部逐行读透 + 对照 skill/沉淀验证**:
+- 核心闭环: 入口 Phase 编排 / fetch 4 adapter 全 / config_loader / target_generator / cli.py 5 子命令 / 6 family build_vegeta_target+_build_params / base.py / master_qps_executor / proxy 全子系统(extractor.go/jsonrpc.go/rest.go/handler.go/sink.go/config loader.go/selfreport.go/main.go)/ attribution 全文 / charts 全文 / report 渲染链。
+- 4 套按链分派: fetch create_adapter / chain_adapters get_adapter / config_loader MAINNET case / common_functions get_block_height(全读 + grep 穷举确认无第5套)。
+- 监控层: block_height_monitor 全文 / common_functions 全文 / monitoring_coordinator 编排 / unified_monitor(header+block+目标发现+qps段)/ network_monitor + network_unified_entry + interface.sh + gcp_virtio / disk_bottleneck / event_manager — 全读, 确认只 2 个涉及(per-method 归因 + 块高监控套4), 其余正交。
+- audit 体系: audit_rpc_methods.py 449行 + method-status-matrix.md 304行 + _method-inventory.json — 全读(交叉印证输入供给债 + 5 处 method 知识沉淀)。
+- 对照 skill: k8s-monitoring ref / per-method ref / rpc-method ref 全对照, 一致 + patch 1 处过期(fixtures 入库)。
+
+**12 真实缺口(grep 阶段零)+ 5 处 method 知识沉淀 + 3 现成范式资产(network provider 契约/audit risk_tier/proxy_extraction)+ 1 处 ref 已订正**。
+
+**与 RPC method 正交(逐行确认非预判)**: unified 系统资源采集 / network provider / disk_bottleneck / event_manager / cgroup 采集。
+
+### 39.1 仍可读但确认不影响 RPC method 重构的剩余
+- network/aws_ena.sh / gcp_gvnic.sh / other_none.sh(同 gcp_virtio 模式的 3 个 provider 实现)。
+- unified_monitor cgroup 采集段(get_cgroup_data, cgroup_collector.py wrapper, 系统资源)。
+- audit _raw-evidence/<chain>.json(8 链原始审计 JSON, 与 matrix.md 同源)。
+这些已逐行确认其性质(provider 实现/系统采集/审计证据), 与 RPC method 的 4 套分派+三端同源+响应入库+输入供给+四维归因均正交。
