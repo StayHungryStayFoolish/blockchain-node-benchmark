@@ -712,3 +712,30 @@ block_height_monitor.sh
 - block_height 段已确认: 不按 method, 只本地 vs 主网块高差。
 - per-method 归因(attribution)已读: 只 CPU/MEM(§12.1)。
 - **仍待逐行**: unified_monitor.sh 其余主体(2885 行, 已读 header+block 段, 未读 cgroup 采集/basic 采集/主循环)/ network_monitor.sh / ena_network_monitor.sh / monitoring_coordinator.sh(组件编排, 决定启哪些监控)/ unified_event_manager.sh。重点看 monitoring_coordinator 怎么编排(skill §8.1 提到硬编码 5 组件)。
+
+
+## 26. 第十七轮 token-level 精读(逐行真实文件): monitoring_coordinator 编排 + network_monitor
+
+### 26.1 monitoring_coordinator.sh 编排核心逐行
+- L33-38 MONITOR_TASKS 映射: unified→unified_monitor.sh / block_height→block_height_monitor.sh / ena_network→ena_network_monitor.sh / network→network_monitor.sh / disk_bottleneck→disk_bottleneck_detector.sh / iostat(由 unified 管)。
+- L227-240 start_all_monitors: **硬编码 5 组件** `("unified" "ena_network" "network" "block_height" "disk_bottleneck")`(skill §8.1), for 循环各启 + sleep 1。
+- L242-267 stop_all_monitors: 遍历 MONITOR_TASKS stop + pkill 兜底。
+- 🎯 **编排关系**: start_monitoring_system(主入口)→ monitoring_coordinator start → start_all_monitors → 启 5 组件(含 block_height_monitor)。
+- 🎯 **对重构(好消息)**: 块高监控换底座(套4 get_block_height → chain_adapters parse_block_height/health_check_request 36链)**是 block_height_monitor.sh 脚本内部改动, 不影响 coordinator 编排**(coordinator 只管启脚本不管内部取块高)。编排层契约不破 → 降低块高监控重构风险。
+
+### 26.2 network_monitor.sh 逐行(L1-90)— 按 cloud_provider 分派, 非第5套按链
+- L5-7 注释: Y+ 架构, **按 (CLOUD_PROVIDER, NIC_DRIVER) 路由** aws_ena/gcp_gvnic/gcp_virtio/other_none。
+- L42 source network_unified_entry.sh(自动探测平台/驱动)→ 4 接口(init/collect/header)。
+- L55-91 cmd_start: init_network_monitoring(失败回退 other_none)→ 写 PID + CSV header → collect_network_metrics 循环写 network CSV。
+- 🎯 **确认: network_monitor 按 cloud_provider/NIC_driver 分派(provider 抽象, 已 declarative variant 路由), 与按链/按method无关 → 不是第5套按链分派**。
+
+### 26.3 第十七轮结论 — 监控层 token-level 读透
+- 监控层(block_height_monitor / unified_monitor block段 / monitoring_coordinator / network_monitor)全部逐行读透。
+- **按链分派最终穷举确认 = 4 套**(无第5套): fetch create_adapter / chain_adapters get_adapter / config_loader MAINNET case / common_functions get_block_height。
+- 监控层其余分派维度: network 按 cloud_provider(provider 抽象, 非按链); unified 数据汇聚(读各监控 CSV)。
+- 块高监控换底座是脚本内部改动, 编排层契约不破。
+
+## 27. 十七轮 token-level 全链路 + 周边精读 — 累计覆盖与缺口(诚实总账)
+**逐行读透**: Python 全链路(入口/fetch全/config_loader/target_generator/cli/6 adapter/base/master_qps/attribution/charts/unified_monitor block段) + Go proxy 全子系统(8文件) + common_functions 全文 + block_height_monitor 全文 + monitoring_coordinator 编排 + network_monitor + 监控采集源。
+**仍未逐行(评估真边缘, 但按教训不再武断, 列出待读)**: unified_monitor 其余主体(basic/cgroup 采集/主循环, 2885行已读 header+block 段)/ ena_network_monitor.sh / unified_event_manager.sh / disk_bottleneck_detector.sh / network_unified_entry.sh + monitoring/network/*.sh(provider variant)/ audit_rpc_methods.py。
+**12 个真实缺口**(§23 总账, 块高监控#12 已细化为整链绑8链)。这是从入口到响应归因到监控的完整闭环 token-level 事实地基。
