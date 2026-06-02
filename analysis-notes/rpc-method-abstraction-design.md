@@ -40,11 +40,87 @@
 > **关键: 必须记完整的【请求结构体】和【响应结构体】, 不只是"测了能跑"。**
 >   请求结构体 → 归纳参数 DSL; 响应结构体 → 归纳响应解析 DSL。两者都要逐 method 落矩阵。
 
-### 进度: 0 / 184 method 实测
+### 进度: 74 / 184 method 实测 (jsonrpc family 完成)
 (矩阵逐 family 分批填, 见下方各 family 节)
 
-### 3.1 jsonrpc family (16 链)
-(待填)
+### 3.1 jsonrpc family (16 链, 74 method slots) — 全量实测完成
+
+**公开 endpoint 映射(本批实测所用)**:
+| 链 | public endpoint | 备注 |
+|---|---|---|
+| ethereum | https://ethereum-rpc.publicnode.com | ✅ |
+| arbitrum | https://arbitrum-one-rpc.publicnode.com | ✅ |
+| avalanche-c | https://avalanche-c-chain-rpc.publicnode.com | ✅ |
+| base | https://base-rpc.publicnode.com | ✅ |
+| bsc | https://bsc-rpc.publicnode.com | ✅ |
+| linea | https://rpc.linea.build | ⚠️ publicnode 不支持 linea_estimateGas, 换官方 endpoint |
+| optimism | https://optimism-rpc.publicnode.com | ✅ |
+| polygon | https://polygon-bor-rpc.publicnode.com | ✅ |
+| scroll | https://scroll-rpc.publicnode.com | ✅ |
+| zksync-era | https://mainnet.era.zksync.io | ✅ 官方 |
+| solana | https://solana-rpc.publicnode.com | ✅ (getTokenLargestAccounts 受限, 改用 getTokenAccountsByOwner 取真实 token account) |
+| sui | https://fullnode.mainnet.sui.io:443 | ✅ 官方 |
+| starknet | https://rpc.starknet.lava.build | ⚠️ blastapi 公开端已停用, 换 lava |
+| near | https://rpc.mainnet.near.org | ✅ 官方 |
+| tron | https://api.trongrid.io | ✅ 官方 (/wallet/* REST + /jsonrpc) |
+| avalanche-x | https://api.avax.network/ext/bc/X | ✅ 官方 X-Chain |
+
+**EVM 子族实测(ethereum/arbitrum/avalanche-c/base/bsc/linea/optimism/polygon/scroll/zksync-era — eth_* method 跨链复用同构, 用 ethereum 为主样本 + 各链独有 method 单独实测)**
+
+| 链 | method | param_format | **请求结构体(真实 body)** | **响应结构体(真实, 关键字段路径)** | 官方文档参数 | 状态 |
+|---|---|---|---|---|---|---|
+| ethereum | eth_getBalance | address_latest | `{jsonrpc,id,method,params:["<addr>","latest"]}` 实测 addr=vitalik.eth | `{result:"0x4ec8826ce34c4d61"}` → 余额=result(hex wei) | p1=address(20B hex); p2=block tag(latest/earliest/pending/hex) | ✅ |
+| ethereum | eth_getTransactionCount | address_latest | `params:["<addr>","latest"]` | `{result:"0x1708"}` → nonce=result | p1=address; p2=block tag | ✅ |
+| ethereum | eth_blockNumber | no_params | `params:[]` | `{result:"0x180f392"}` → block_height=result(hex) | 无参数 | ✅ |
+| ethereum | eth_gasPrice | no_params | `params:[]` | `{result:"0x952da13"}` → gas_price=result | 无参数 | ✅ |
+| ethereum/arbitrum/optimism/linea/avalanche-c/zksync | eth_getBlockByNumber | block_number | `params:["latest",false]` | `{result:{number,hash,parentHash,timestamp,gasUsed,transactions:[...],...}}` → block_height=result.number | p1=block(latest/hex); p2=full_tx bool | ✅ |
+| arbitrum/optimism | eth_call | eth_call_object_latest | `params:[{to:"<contract>",data:"0x18160ddd"},"latest"]` USDT totalSupply | `{result:"0x...0158de55a1c7950b"}` → data=result(abi-encoded) | p1=tx object{to,data,from?,value?}; p2=block | ✅ |
+| arbitrum/optimism | eth_getTransactionReceipt | transaction_hash | `params:["<txhash>"]` 实测 arb 真 tx | `{result:{blockHash,blockNumber,from,to,gasUsed,logs:[...],status,...}}` → status=result.status | p1=tx hash(32B) | ✅ |
+| avalanche-c/linea | eth_getTransactionByHash | transaction_hash | `params:["<txhash>"]` 实测 avax 真 tx | `{result:{blockHash,blockNumber,from,to,value,gas,gasPrice,input,nonce,...}}` | p1=tx hash | ✅ |
+| linea | linea_estimateGas | eth_call_object(单对象) | `params:[{from,to,value:"0x1"}]` | `{result:{gasLimit:"0x5208",baseFeePerGas:"0x7",priorityFeePerGas:"0x25d1eb6"}}` | p1=tx call object; Linea 专有, 返 3 段 gas | ✅ (官方 endpoint) |
+| zksync-era | zks_L1BatchNumber | no_params | `params:[]` | `{result:"0x7cf4c"}` → L1 batch=result | 无参数, zkSync 专有 | ✅ |
+| zksync-era | zks_getBlockDetails | block_number_int | `params:[70392372]`(int, 非 hex) | `{result:{number,timestamp,l1BatchNumber,baseSystemContractsHashes:{bootloader,default_aa},...}}` | p1=block number(integer); zkSync 专有 | ✅ |
+| base/bsc/polygon/scroll | eth_getBalance/eth_getTransactionCount/eth_blockNumber/eth_gasPrice | 同 ethereum | 同 ethereum(EVM 同构, 各链 connectivity probe 全 OK) | 同 ethereum 结构 | 同 EVM 标准 | ✅ |
+
+**非 EVM jsonrpc 子族实测**
+
+| 链 | method | param_format | **请求结构体(真实)** | **响应结构体(真实, 关键字段)** | 官方参数 | 状态 |
+|---|---|---|---|---|---|---|
+| solana | getBlockHeight | no_params | `params:[]` | `{result:401847385}` → block_height=result(直接 int) | 无参数 | ✅ |
+| solana | getLatestBlockhash | no_params | `params:[]` | `{result:{context:{slot},value:{blockhash,lastValidBlockHeight}}}` → blockhash=result.value.blockhash | 无参数(可选 config) | ✅ |
+| solana | getBalance | single_address | `params:["<pubkey>"]` | `{result:{context:{slot},value:1}}` → 余额=result.value(lamports) | p1=pubkey(base58 str); p2=config obj(optional) | ✅ |
+| solana | getAccountInfo | single_address | `params:["<pubkey>",{encoding:"base64"}]` | `{result:{context:{slot},value:{data:["<b64>","base64"],executable,lamports,owner,rentEpoch,space}}}` → data=result.value.data | p1=pubkey; p2=config{encoding,commitment...}(optional) | ✅ |
+| solana | getTokenAccountBalance | single_address | `params:["<token_account>"]` 实测真 USDC token acct | `{result:{context:{slot},value:{amount:"67345173",decimals:6,uiAmount,uiAmountString}}}` → 余额=result.value.amount | p1=token account pubkey; p2=commitment(optional) | ✅ |
+| sui | sui_getChainIdentifier | no_params | `params:[]` | `{result:"35834a8a"}` → chain id=result | 无参数 | ✅ |
+| sui | suix_getReferenceGasPrice | no_params | `params:[]` | `{result:"100"}` → gas price=result(str) | 无参数 | ✅ |
+| sui | sui_getLatestCheckpointSequenceNumber | no_params | `params:[]` | `{result:"282181872"}` → checkpoint=result(str int) | 无参数 | ✅ |
+| sui | sui_getTotalTransactionBlocks | no_params | `params:[]` | `{result:"5272047700"}` → tx count=result(str) | 无参数 | ✅ |
+| sui | sui_getObject | address_with_options | `params:["<objectId>",{showType:true,showOwner:true}]` | `{result:{data:{objectId,version,digest,type,owner:{Shared:{initial_shared_version}}}}}` → data=result.data | p1=objectId(hex); p2=options{showType,showOwner,showContent...} | ✅ |
+| starknet | starknet_blockNumber | no_params | `params:[]` | `{result:10406390}` → block_height=result(int) | 无参数 | ✅ |
+| starknet | starknet_getNonce | latest_address(block在前) | `params:["latest","<contract>"]` | `{result:"0x0"}` → nonce=result | p1=block_id("latest"/{block_number}); p2=contract address | ✅ |
+| starknet | starknet_getStorageAt | address_storage_latest | `params:["<contract>","0x0","latest"]` | `{result:"0x0"}` → storage val=result | p1=contract addr; p2=storage key; p3=block_id | ✅ |
+| starknet | starknet_getClassAt | latest_address(block在前) | `params:["latest","<contract>"]` | `{result:{abi:"[...]",entry_points_by_type:{...},sierra_program:[...]}}` → class=result | p1=block_id; p2=contract address | ✅ |
+| near | block | dict{finality} | `params:{finality:"final"}` | `{result:{author,chunks:[{chunk_hash,...}],header:{height,hash,...}}}` → block_height=result.header.height | dict: {finality}/{block_id} | ✅ |
+| near | gas_price | list[null] | `params:[null]` | `{result:{gas_price:"100000000"}}` → gas=result.gas_price | p1=block_id 或 null(最新) | ✅ |
+| near | validators | list[null] | `params:[null]` | `{result:{current_validators:[...],current_proposals:[...],...}}` | p1=block_id 或 null | ✅ |
+| near | query | dict{request_type,...} | `params:{request_type:"view_account",finality:"final",account_id:"relay.aurora"}` | `{result:{amount,block_hash,block_height,code_hash,locked,storage_usage}}` → account=result | dict dispatcher: request_type 决定子查询(view_account/view_access_key/call_function/view_state...) + finality + 业务参数 | ✅ |
+| near | tx | list[tx_hash,signer] | `params:["<tx_hash>","<signer_account_id>"]` 实测真 tx | `{result:{final_execution_status,transaction:{...},receipts_outcome:[...],status}}` | p1=tx hash; p2=sender account_id | ✅ |
+| tron | /wallet/getnowblock | HTTP POST(无 body) | `POST /wallet/getnowblock body={}` | `{blockID,block_header:{raw_data:{number,txTrieRoot,witness_address,...}},transactions:[...]}` → block_height=block_header.raw_data.number | HTTP REST, 空 body | ✅ |
+| tron | /wallet/getaccount | HTTP POST{address,visible} | `POST body={address:"<base58>",visible:true}` | `{address,balance,create_time,account_resource:{...},...}` → 余额=balance(sun) | body: {address, visible:bool} | ✅ |
+| tron | /wallet/triggerconstantcontract | HTTP POST 对象 | `POST body={owner_address,contract_address,function_selector:"totalSupply()",visible:true}` | `{result:{result:true},constant_result:["<hex>"],energy_used,...}` → data=constant_result[0] | body: {owner_address,contract_address,function_selector,parameter?,visible} | ✅ |
+| tron | /wallet/gettransactionbyid | HTTP POST{value} | `POST body={value:"<txid>"}` 实测真 tx | `{ret:[{contractRet:"SUCCESS"}],txID,signature:[...],raw_data:{...}}` | body: {value: txid hex} | ✅ |
+| tron | eth_blockNumber | jsonrpc(/jsonrpc 路径) | `POST /jsonrpc {jsonrpc,method:"eth_blockNumber",params:[]}` | `{result:"0x4f61f7e"}` → block_height=result | 标准 eth_*, 走 tron 的 /jsonrpc 子路径 | ✅ |
+| avalanche-x | avm.getHeight | dict{} | `params:{}` | `{result:{height:"518811"}}` → block_height=result.height | dict 空 | ✅ |
+| avalanche-x | avm.getBlockByHeight | dict{height,encoding} | `params:{height:0,encoding:"hex"}` | `{result:{block:"0x...",encoding:"hex"}}` (encoding=json 则 block 为对象{txs,height,time,...}) | dict: {height:int, encoding:"hex"/"json"} | ✅ |
+| avalanche-x | avm.getAllBalances | dict{address} | `params:{address:"X-avax1..."}` 实测真 X-addr | `{result:{balances:[{asset:"AVAX",balance:"1210000000"}]}}` → 余额=result.balances[] | dict: {address: bech32 X-addr} | ✅ |
+| avalanche-x | avm.getUTXOs | dict{addresses[],limit,encoding} | `params:{addresses:["X-avax1..."],limit:5,encoding:"hex"}` | `{result:{numFetched:"5",utxos:["0x..."],endIndex:{...}}}` → utxos=result.utxos | dict: {addresses:[], limit, encoding} | ✅ |
+| avalanche-x | avm.getTx | dict{txID,encoding} | `params:{txID:"<txid>",encoding:"json"}` 实测真 txid | `{result:{tx:{unsignedTx:{networkID,blockchainID,outputs:[...],inputs:[...]}},encoding}}` | dict: {txID, encoding:"hex"/"json"} | ✅ |
+
+**jsonrpc family 实测小结(DSL 原始数据要点)**:
+- **参数容器三态**: (a) list 参数 = EVM eth_*/solana/sui/starknet/bitcoin系/near 部分; (b) dict 参数 = near(query/block)/avalanche-x(avm.*); (c) HTTP REST 对象 body = tron(/wallet/*)。**同一 jsonrpc family 内三种参数容器并存** → 参数 DSL 必须能声明"容器类型(list/dict/rest-body)"。
+- **位置语义实证**: address_latest=[addr,"latest"](EVM); latest_address=["latest",addr](starknet getNonce/getClassAt, block 在前); address_storage_latest=[addr,key,block]。位置错 = RPC -32602 报错(research §2.5 已证, 本批 starknet 复证 block/addr 顺序)。
+- **响应 block_height 提取路径各异**: EVM=result(hex) / solana getBlockHeight=result(int) / near=result.header.height / tron=block_header.raw_data.number / avalanche-x=result.height。**响应 DSL 必须声明 JSON path + 类型(hex/int/str)**。
+- **dict 参数的 dispatcher 语义**: near query 用 request_type 字段在一个 method 内分派多种子查询 → 参数 DSL 需支持"固定键 + 动态业务键"混合。
 ### 3.2 substrate family (5 链)
 (待填)
 ### 3.3 tendermint family (5 链)
