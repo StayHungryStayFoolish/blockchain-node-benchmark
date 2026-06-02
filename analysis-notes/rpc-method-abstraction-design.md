@@ -32,8 +32,13 @@
 - public endpoint 实测注意: 限流(sleep)、需真实地址/哈希做参数、记录真实响应 JSON 结构。
 
 ## 3. 36链 184 method 全量实测矩阵(逐链逐 method 填)
-> 格式: 链 | family | method | mode(single/mixed) | 参数(位置×类型×语义) | 官方文档确认 | public endpoint 实测响应结构 | 备注
-> 状态标记: ⬜未测 / 🔄进行 / ✅实测拿到响应 / ⚠️endpoint不可达(需替代)
+> 格式(每 method 必记, 这是 DSL 设计的原始数据):
+> 链 | family | method | mode | **请求结构体(完整 JSON body, 含每个参数位置的真实值类型)** |
+>   **响应结构体(完整 JSON 响应的字段结构, 标出关键字段如 block_height/account/data 的路径)** |
+>   官方文档参数说明 | endpoint | 状态
+> 状态: ⬜未测 / ✅实测拿到请求+响应结构体 / ⚠️endpoint不可达(需替代/录制)
+> **关键: 必须记完整的【请求结构体】和【响应结构体】, 不只是"测了能跑"。**
+>   请求结构体 → 归纳参数 DSL; 响应结构体 → 归纳响应解析 DSL。两者都要逐 method 落矩阵。
 
 ### 进度: 0 / 184 method 实测
 (矩阵逐 family 分批填, 见下方各 family 节)
@@ -58,7 +63,20 @@
 (空 — 待矩阵填全后, 归纳响应解析 DSL: 怎么声明从响应提取 block_height/account/data 等)
 
 ## 6. 实现方案(设计审过后)
-(空 — chain template schema 扩展 + adapter 支持 DSL + 向后兼容现有 param_format)
+### 6.1 代码重构面评估(2026-06-01, DSL 落地要动的层)
+**参数构造链(参数 DSL 落点)**:
+- `tools/chain_adapters/{jsonrpc,substrate,tendermint,bitcoin_jsonrpc,rest,hedera_dual}.py` 各自的 `_build_params`/`build_vegeta_target` — 现在是 param_format 枚举 if-else, DSL 化后改成读 chain template 的声明式参数描述构造。
+- `tools/chain_adapters/cli.py` `_get_param_format`(L28-56)— param_format 读取入口, fallback single_address。DSL 后改读新声明字段。
+- `tools/chain_adapters/base.py` — Handler 接口契约, 可能加 DSL 解析公共方法。
+**响应解析链(响应 DSL 落点)**:
+- 同 6 个 adapter 的 `parse_block_height` / `extract_accounts_from_transaction`(solana 在 jsonrpc 系)— 现硬编码响应字段路径, DSL 后改读声明式响应字段路径。
+**chain template schema(DSL 声明处)**:
+- 现有字段: `param_formats`(method→枚举名)/ `_meta.rest_paths`(rest 的 path+body)/ `proxy_extraction`(proxy method 提取 DSL, 已是声明式!可借鉴)/ `params` / `rpc_methods`。
+- DSL 新增: 参数描述字段(替代/扩展 param_formats)+ 响应字段路径描述。**proxy_extraction 已是 declarative DSL(protocol/method_source/params_source 等), 是设计参考样板。**
+**向后兼容**: 现有 36 链 param_format 不能破坏 — DSL 与 param_format 并存或 DSL 覆盖枚举(枚举作 DSL 的预设快捷)。
+**fake-node 侧(响应 fixture)**: tools/fake-node/ handlers(7 go)+ record_*.sh(5 个)— 实测拿到的响应结构体可同时更新 fixture, 让 fake-node 数据更真(顺带解 A 阶段 fake-node 数据退化)。
+### 6.2 实现(设计审过后, 待办)
+(空)
 
 ## 7. 执行日志(时间倒序)
 ### 2026-06-01 立项
