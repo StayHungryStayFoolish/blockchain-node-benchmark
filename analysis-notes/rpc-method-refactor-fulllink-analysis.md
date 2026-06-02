@@ -1186,3 +1186,34 @@ sui_getObject address_with_options = `["0x...005", {"showType": true, "showOwner
 - L3 Expected fields + L2 result_excerpt → §5 response_spec 路径+真值校验对。
 - L4 error.data.reason 缺字段清单 + error code 三分类 → 输入供给层"补什么参数" + 错误解析 DSL 分类。
 **这是"读到底"的确认信号: 扩大到最细的原始证据层, 只补强不推翻, 完整闭环已读透。**
+
+
+## 45. 第三十二轮: fixture 数据地基抽查(36链378 JSON)— §4 param_spec 跨6family参数注入位置完整实证
+
+### 45.1 fixture 结构(36 链目录 + 378 JSON, 请求/响应成对)
+- 每 method: 响应 `<method>.json` + 请求 `<method>.request.json` 成对(部分无 .request 的是 no_params)。
+- solana getAccountInfo 抽查: 请求 `{"jsonrpc":"2.0","id":1,"method":"getAccountInfo","params":["111...111",{"encoding":"base64"}]}`
+  响应 `{"jsonrpc":"2.0","result":{"context":{...},"value":{"data":[...],"executable":true,...}},"id":1}`。
+
+### 45.2 🎯 缺口#5 响应关联键 fixture 实证
+fixture 请求 **id 固定为 1** = 缺口#5 铁证落盘印证(base.py 所有请求固定 id=1 → proxy RequestID 全"1" → 响应无法关联回 method)。fixture 真实录制, 所以 id=1 反映框架真实缺陷。
+
+### 45.3 🎯 §4 param_spec 跨 6 family 参数注入位置完整实证(fixture 命名直接体现)
+| family | 参数注入位置 | fixture 证据 |
+|---|---|---|
+| jsonrpc(标准) | `params` list 位置索引 | eth_getBalance.request: params=[addr,latest] |
+| jsonrpc(混合) | list 内嵌 dict object | solana getAccountInfo: params=[addr,{encoding}]; sui getObject: [addr,{options}] |
+| bitcoin_jsonrpc | `params` list | bitcoin estimatesmartfee/getblock.request |
+| substrate | `params` list | (前轮 §3 实测) |
+| tendermint | dict 参数 / REST 路由 | cosmos-hub abci_info/block |
+| **rest** | **URL path 占位符 {addr}/{height}** | cosmos-hub `GET__cosmos_bank_v1beta1_balances_{addr}.json` / `..._blocks_{height}.json` / `..._blocks_latest.json` |
+| hedera_dual | 双模式(jsonrpc body + mirror REST path) | hedera/jsonrpc/eth_blockNumber + hedera/mirror/network_nodes |
+
+🎯 **REST family 的 method 名 = `HTTP动词__路径模板` 含 `{addr}`/`{height}` 占位符**(fixture 命名 GET__path_{var} 直接体现)。
+param_spec DSL 必须支持的参数注入位置 ≥ 5 种: ①list 位置索引 ②list 内嵌 object ③dict 键 ④**URL path 占位符** ⑤双模式路由。
+这是 §4 DSL "参数注入位置"维度的最完整跨 family 实证 —— 单一 address 槽兜底对 rest/hedera/混合类型彻底不可行(缺口#2/#10 根因再加强)。
+
+### 45.4 fixture 数据地基确认
+fixture = §4 param_spec(请求 params 真实结构, 含 path 占位符)+ §5 response_spec(响应真实嵌套结构)的完整离线数据地基。
+36 链全覆盖(目录全在), 抽查 jsonrpc 混合/rest path 占位/hedera 双模式/bitcoin list 四种代表确认结构。
+**入库决策(用户拍板)正确性印证: 离线开发可直接用 fixture 验证 DSL 解析, 无需连真节点。**
