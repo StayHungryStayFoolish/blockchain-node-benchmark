@@ -2252,3 +2252,28 @@ D5.1 把 get_block_height 改"本地自查同步状态"后, **必须保证这条
 
 ### 80.4 元教训(用户提醒的价值)
 我之前光顾"字段收敛"(三套收敛成单一声明), 没回到目的确认"改造后这条喂瓶颈检测的链是否还通"。用户"是要做什么么"= 提醒回到业务目的检验设计。**确认: D5.1 改造后链通且更可靠**(本地自查无限流盲区)。**设计验收标准补充**: block_height_spec 收敛三套时, 必须保证产出的落后量仍正确喂给 block_height_monitor→flag→bottleneck_detector 链(L3 验证项: 构造"节点落后"场景断言 bottleneck_detector 场景C触发)。
+
+
+## 81. 第六十八轮: 出图渲染链真读(per_method_charts + report_generator per_method 段)— S3.3 四维出图链终点 + mem_used 列名警示(§66清单最后一块)
+
+### 81.1 per_method_charts.py(283行)出图段实证
+- **plot_resource_stacked(L222-256)只画 cpu_pct 一维**(L241 `vs.append(r.cpu_pct...)`, L252 轴标"CPU%(attributed)")= 确认缺口#8 出图只 CPU。
+- generate_all_charts(L259-283)出 4 图: qps/latency/error_rate/**resource(只 CPU stacked, L279-282)**。
+
+### 81.2 report_generator _generate_per_method_section_safe(L4259-4338)= S3.3 链终点
+- L4271-4282 silent degradation: proxy_csv/monitor_csv 缺返空(per-method non-fatal 旁路)。
+- L4303-4309 compute_per_method_resource(`read_monitor_csv(monitor_csv, mem_col="mem_used")`)。
+- **🔴 L4305-4307 注释揭示已修 bug**: 生产 unified CSV 内存列名是 `mem_used`(非默认 mem_used_mb), 不显式指定 → **内存归因恒 0(静默)**! = §68 read_monitor_csv 列名可配的生产实证。
+- L4318-4331 落盘 per_method CSV(P0-1 修复, 之前只出图未落盘)。L4335-4337 generate_all_charts 出图。
+
+### 81.3 🎯 S3.3 四维出图完整链(行级, 跨 3 文件)+ 关键警示
+```
+attribution PerMethodResourceRow(§68 加 ebs/net 字段, L48-49/62-68/94-152/232-238/252-258)
+  → per_method_charts.py(L241 只读 cpu_pct→加四维 + plot_resource_stacked 1图→4图 + generate_all_charts L279-282 加3图)
+  → report_generator L4303-4309 compute_per_method_resource(读 monitor disk/net 列)+ L4335 generate_all_charts → render → HTML
+```
+**🔴 S3.3 加 EBS/Net 必须注意(mem_used 覆辙)**: 像 mem_col="mem_used" 那样, **生产 unified CSV 的 disk/net 真实列名要查准**(read_monitor_csv 加 disk_col/net_col 参数时, 生产列名别用桩数据列名), 否则四维归因 disk/net 恒 0(静默)。这是 §68 已埋的坑的生产实证 —— S3.3 实施时 disk/net 列名必须用生产 unified CSV 真实列名(查 unified_monitor.sh basic_header/device_header)。
+
+### 81.4 🎯 §66 清单全覆盖完成
+出图渲染链是 §66 清单最后一块。至此 RPC method 完整调用链(含出图渲染链)全部真逐行读: 入口→4套分派→fetch输入→target构造→master_qps压测→proxy(8文件)→attribution归因→**charts出图→report HTML**→块高监控→瓶颈检测。
+**§66 自查的"grep-shallow"已完全纠正: 24 文件 RPC 核心路径 + 出图链 + config 字段冲突 + 块高目的(喂瓶颈检测)全部真读 + 行级落点。**
