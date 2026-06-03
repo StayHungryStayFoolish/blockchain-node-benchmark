@@ -922,3 +922,25 @@ schema + 缺口落点 + 不留债约束已定稿。**等用户审 DSL 设计**, 
 → **S0 fixture 补全后置**: 先 B1(param_spec)/C1(response_spec)/D1(block_height_spec)schema 落地确定 method 命名规范 + record_all_184 按规范重录 → 再回 FN/S0 补 fixture。
 → **S0 现阶段可完成项**: F1 adapter_family 门(✅已完成 commit 1bd3fa7)。F2 e2e method 构造验证 harness 也依赖 B1/B3 接口定稿(验的是 build_vegeta_target 新签名), 同样后置。
 **S0 结论**: 前置工具链中"与 schema 无关"的 F1 已建; fixture 补全 + F2 harness 依赖 schema, 随 B/C/D 落地。**转入 schema 落地功能点(B1→...), 不空补 fixture。**
+
+
+### 6.6.3 B1 param_spec 落地 — "新建 vs 扩展" parallel-entry 决策(token-level 实证)
+> §6.5 定"复用扩展现有 param_formats 非新造", 但 §4.2 param_spec 是新顶层字段, 表面矛盾。token-level 读 36 链现有 param_formats 真实结构厘清:
+> **现有 param_formats = `method → 枚举字符串`扁平映射**(eth_getBalance:address_latest / algorand path_addr_base32 / cardano body_addresses_array):
+> - 枚举名是【有限预定义集】= R1 缺口根源(新形态需加枚举=改代码)
+> - near 已在往枚举塞结构(`"tx":"[hash,signer_id]"`)= 枚举表达力见顶的实证
+> - **不能声明 source(输入池)/ 多位置 encoding / 复杂对象** = param_spec 要补的维度
+>
+> **B1 决策(不留债 + 不 parallel-entry)**:
+> - `param_formats`(枚举)**保留作向后兼容快捷预设**(§4.4 R1 原话"枚举作 DSL 预设快捷")。
+> - **新增 `param_spec`(method→结构化声明 §4.2)作权威源**。
+> - **框架读取单一路径(非两套并存)**: `param_spec[method]` 有→用; 无→fallback `param_formats[method]` 枚举, **枚举经"预设展开表"转成等价 param_spec 结构再构造**。
+> - → 枚举不是独立第二套逻辑, 是 param_spec 的【语法糖别名】, 最终都走 param_spec 构造路径 = 单执行路径, 无漂移。避 parallel-entry。
+>
+> **B1 实做分步(每步可独立验证)**:
+> 1. **枚举→param_spec 预设展开表**(`PARAM_FORMAT_PRESETS`): 把现有 ~15 个枚举(no_params/single_address/address_latest/latest_address/address_storage_latest/address_key_latest/address_with_options/path_addr_*/body_*_array/query_dispatcher_*/...)各映射成等价 param_spec 结构。这是枚举与 param_spec 统一的桥, 可纯单测验证(枚举展开 == 手写 param_spec)。← **B1 本功能点交付**
+> 2. param_spec schema 校验器(R2/R3: slot 数/类型校验 + 缺失 fail-fast)。
+> 3. 框架构造层读 param_spec(优先)/ 枚举 fallback —— 这步是 B2(6 family 构造统一)+ B3(接口签名)的事, 后续功能点。
+> 4. 36 链 chain template 填 param_spec(新形态)/ 保留 param_formats(预设)—— 随 B2 推进逐链。
+>
+> **命名规范副产(解 §6.6.2 fixture 命名漂移)**: param_spec 的 method key 用 chain template rpc_methods 里的原始 method 名(权威), fixture 文件名 = escape(method)(/:空格→_)。统一以此为准, tendermint leading-slash 链(celestia/injective/osmosis/sei)的 method 名规范化在此锚定。
