@@ -2048,3 +2048,25 @@ target_generator generate_targets 是 S1.4/缺口#9/#10 的集中落点: 读 acc
 
 ### 72.4 grep-shallow 纠正进度
 真读: master_qps(986)+attribution(258)+bitcoin(87)+extractor.go(48)+selfreport.go(117)+jsonrpc.go extractor(150)+fetch L1-700+**target_generator 全 339**。剩部分读: common_functions 全文(317)/config_loader 全文(749)/cli.py 全文(172)/main.go(89)/主入口全文(1173)。继续。
+
+
+## 73. 第六十轮: cli.py + main.go 全文真读 — cli.py 历史 bug 印证对称fallback掩盖 + S2.1 fallback 警示
+
+### 73.1 cli.py _get_param_format(L28-56)历史 bug 记录(印证 parallel-entry"对称fallback掩盖bug")
+注释 L36-45 自记历史 bug:
+- commit 6866cba(S2 skeleton)误读 `tpl["params"]`(fetcher 配置, 值是 bash env 名)而非 `param_formats` → fallback ""。
+- **JsonRpcAdapter 自己 default 也是 `[address]` → byte-equality test 靠【对称 fallback】侥幸通过**, 但生产真实调用参数错(eth_getBalance(addr)→[addr] 而非 [addr,"latest"]; eth_blockNumber()→[addr] 而非 [])。hedera_dual mixed C1 live-curl HTTP 400 才暴露。
+- 🎯 **这是 skill parallel-entry"对称 fallback 掩盖 bug"模式的真实案例**(cli.py 注释自记 + KNOWN_BROKEN_MIXED in tests)。
+- L47-55: 读 `param_formats.<method>` fallback `single_address`(缺口 R3)+ repo_root 三层 dirname。
+
+### 73.2 🎯 对 S2.1 的警示(从历史 bug 提炼)
+S2.1 param_spec 替换 param_formats 时, **fallback 设计要 fail-fast 或明确告警, 不能 DSL 解析失败静默退化到 [address]**(会重蹈 6866cba 覆辙: 对称 fallback 让测试假绿、生产真错)。这是 cli.py 历史 bug 给 S2.1 的直接教训。
+
+### 73.3 main.go 全文(89行)wiring 确认
+- flag: -chain(必)/-upstream(必)/-listen(:18545)/-max-body(**默认 1MB, L35**)/-self-interval(1s)。
+- wiring: LoadChain → sink.New("","") → handler.New(chain,sink,upstream,maxBody) → selfreport.New(PROXY_SELF_PATH) → http.Server。
+- **maxBody 默认 1<<20=1MB(L35)** = S3.6 响应记录上限的参照(请求上限, 响应也需类似)。
+- graceful shutdown(L72-81 SIGINT/SIGTERM → srv.Shutdown 5s)。
+
+### 73.4 grep-shallow 纠正进度
+真读: master_qps/attribution/bitcoin/extractor.go/selfreport.go/jsonrpc.go extractor/fetch L1-700/target_generator全/**cli.py全/main.go全**。剩部分读: common_functions 全文(317)/config_loader 全文(749)/主入口全文(1173)。继续(剩 3 个大 shell 文件)。
