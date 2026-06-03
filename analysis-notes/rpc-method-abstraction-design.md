@@ -803,3 +803,32 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 
 ### 6.3.4 向后兼容铁律
 所有复用都保持向后兼容: param_formats/proxy_extraction/health_probe/rest_paths/json_rpc_url **现有链不动**, 新增字段(block_height_spec 等)对未填的链有 fallback。能扩展现有字段就不新造, 能复用现有值(mixed_weighted)就不另填。
+
+
+## 6.4 分析阶段收口总结(2026-06-02, 74 轮分析后)— 还需要什么数据 + 待拍板决策
+
+> 回答用户"还需要再分析什么数据": 纯读代码分析已收口(再读=为读而读)。剩下的"数据"分两类: 要真跑产出的产物层数据 + 待用户拍板的设计决策。
+
+### 6.4.1 ✅ 分析已充分(代码层读透, 不用再分析)
+- RPC method 完整调用链(入口 Phase0.5-7 → 4套分派 → fetch输入 → target构造 → master_qps压测 → proxy 8文件 → attribution归因 → charts出图 → report HTML → 块高监控 → 瓶颈检测)= §66 清单 24 文件全覆盖真逐行读(grep-shallow 已纠正)。
+- 12 真实缺口 + 行级落点 / config 字段复用决案(§6.3)/ 块高目的=喂瓶颈检测(§80)/ mixed=混合发送非顺序(§85)/ 两类图同源派生+守恒对账(§86)/ per-method 资源能力现状(§87)= 全有代码证据。
+
+### 6.4.2 🔴 还需要的"数据" = 要真跑产出的产物层数据(读代码得不到)
+1. **fake-node mixed 丰富多 method 数据**: skill §7 数据退化(getTransaction 返同 fixture→账户去重剩2→targets少→QPS failed)。不解决 S3.3 四维出图/守恒对账 L3 验收跑不出真数据。**S0 必须先解决 fake-node 数据丰富度**(用 §3 入库的 184 fixture)。
+2. **proxy_method.csv + unified CSV 时间戳对齐 join**: 代码看过(read_monitor_csv 双格式), 真跑没验(skill ISO-vs-epoch 耦合)。S0 真跑验证 join 率。
+→ 这两个是产物层, 唯有 S0 真跑(fake-node/真节点)才能得到, 不是再读代码能分析出。
+
+### 6.4.3 🟡 待用户拍板的设计决策(实施前需定)
+| 决策 | 选项 | 我的倾向 |
+|---|---|---|
+| **决策A 块高字段** | block_height_spec 收编现有三套(get_block_height/parse_block_height/health_probe) | ✅ 单一声明源不留债(§79) |
+| **S3.3 出图机制** | per-method 四维图 ① 统一 matplotlib+UnifiedChartStyle vs ② 保持 SVG 独立 | ✅ ① 不留体系割裂债(§83) |
+| **mixed weight** | S2.4 直接读现有 mixed_weighted 驱动(零新增) | ✅ 已定(§6.3.2 决策B) |
+| **CSV 字段名** | mainnet_block_height → network_block_height(语义变)vs 保留旧名加注释 | 待定(§S3.5 向后兼容) |
+| **mixed 归因加权** | 请求数等权(现状)vs latency 加权(精度) | 等权(Q4-7 撤销线, 误差>20%才改)|
+
+### 6.4.4 🟢 可选新需求(非主线, 记 OQ)
+- 不同 mixed 配比自动对比(§87 场景B, 现手动跑两次)= OQ-12 候选。
+
+### 6.4.5 下一步建议
+分析阶段收口。下一步 = **用户拍板 6.4.3 决策 → 进 S0**(建前置工具链 + 解 fake-node 数据丰富度 + 真跑验证 6.4.2 两个产物层数据)→ 按 S1-S3 family 分波实施, 每阶段 L1+L2+L3。**不擅自进 S0**(决策 A/出图机制等待拍板)。
