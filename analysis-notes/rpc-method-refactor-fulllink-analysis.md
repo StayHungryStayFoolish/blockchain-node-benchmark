@@ -1769,3 +1769,35 @@ main.go / handler.go / extractor.go / jsonrpc.go / rest.go / sink.go / config/lo
 | §62 | Go sink+loader | proxy 2-protocol 三端同源维度修正 | 🟡中(设计理解修正) |
 **判定**: §62 又出一个设计理解修正(三端同源维度), 说明仍未完全到底, **但全是已知缺口/设计的细化, 无新结构性缺口**。proxy 8 文件 + shell/python 双侧 + 主入口依赖链 = 全行级覆盖。RPC method 完整调用链逐环行级有代码事实。
 **收口**: 文档无误判; 遗漏(proxy_lifecycle/Phase时序)已补; 认知/维度修正(块高dead path/rest id注入/三端同源维度)已记。基于代码事实完整性达成。
+
+
+## 63. 第五十轮: jsonrpc.py _build_params + cli.py 生产入口逐行(S2.5/S1 接口链行级)— 占位符测量污染发现
+
+### 63.1 jsonrpc.py _build_params 全文逐行(L46-97, S2.5 直接改点)
+16 枚举构造逻辑全确认。**精确落点**:
+- L42 `"id": 1` 硬编码(缺口#5 jsonrpc.py:42 确认)。
+- L38-41 `build_vegeta_target(self, method, address, rpc_url, param_format)` = **单 address 槽**(S2.1/S2.5 接口瓶颈精确代码)。
+- L96-97 default fallback `return [address]`(缺口 R3 未知 param_format 静默错落点)。
+
+### 63.2 🔴 占位符兜底的精确实证 + 测量污染发现(文档没记的隐患)
+- L84 transaction_hash: `tx_hash = address if address.startswith("0x") and len==66 else "0x"+"0"*64` → **没传真 tx_hash 用全0占位符**, 注释 L82-83 明说"node returns null result, which counts as success"。
+- L70-78 block_number_int: `try int(address) except → bn=1`(占位)。L93-95 object_single: address 当 from/to(假数据)。
+🎯 **测量污染隐患(新发现)**: 占位符 tx_hash → 节点返 null(查不到)→ **该 method 资源消耗 = 查空开销, 非真实业务负载**。NS-2 按 method 归因资源时, 占位符 method 归因值**偏低且失真**。**强化 S1 输入供给必要性**: 不是"枚举支持就行", 占位符兜底会让 per-method 归因失真(查 null 的 CPU ≠ 查真实数据的 CPU)。这是"参数构造已支持但输入供给没跟上"的危害的量化后果。
+
+### 63.3 cli.py cmd_build_targets_batch 生产入口逐行(L80-111)
+- L96-103: stdin 读 **`method\taddress` 两列 TSV**(每行 method + 单 address)。
+- L106-109: build_vegeta_target(method, address, ...) 单 address 槽。
+
+### 63.4 🎯 S1+S2.1+S2.5 接口改造完整链(行级精确, 4 处缺一断链)
+生产数据流: **target_generator 输出 `method\taddress` 两列 TSV → cli.py stdin 解析(L96-103)→ build_vegeta_target 签名(单 address, L38)→ _build_params(单 address, L46)**。
+需 tx_hash 的 method: address 槽塞 account → jsonrpc.py:84 检测非0x66位 → 退化全0占位符 → 节点 null。
+**S1/S2 重构必须同步改 4 处**(parallel-entry: 改一处不改其他断链):
+1. target_generator 输出格式(TSV 两列 → 多输入, 见 §53.2 target_generator L220-264)
+2. cli.py stdin 解析(L96-103 split tab)
+3. build_vegeta_target 签名(单 address → inputs dict)
+4. 各 family _build_params(单 address → 从 inputs 取多值)
+**输入格式契约 = `method\taddress` TSV**(行级精确, 之前文档只说"单 address 槽"没到 TSV 格式)。
+
+### 63.5 审查覆盖(§57-63)
+proxy 8 文件全行级 + jsonrpc.py 全文 + cli.py 生产入口全文 + shell/python 双侧 + 主入口依赖链。RPC 构造链(target_generator TSV → cli batch → build_vegeta_target → _build_params → 占位符兜底)逐行有代码事实。
+**仍出真东西**: §63 占位符测量污染(新隐患)+ 接口改造 4 处 TSV 契约(行级精确)。属"已知缺口的量化危害 + 行级精确化", 无新结构性缺口。

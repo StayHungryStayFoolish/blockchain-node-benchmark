@@ -650,7 +650,7 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 
 #### 6.2.2 S1 — 输入供给层 InputProvider(缺口 #2/#3/#6-fetch/#10 + R-B)
 
-**问题**: 框架现在只抓 account 一池(fetch L802 拿到 tx_hash/sigs 却 L814 丢弃只写 account), target_generator L220-225 把这一池喂所有 method → 需要 tx_hash/block/filter 的 method 拿不到正确输入(audit 16个 P1_RPC_ERROR + error.data.reason 精确点名缺 filter/transaction_hash 实证)。
+**问题**: 框架现在只抓 account 一池(fetch L802 拿到 tx_hash/sigs 却 L814 丢弃只写 account), target_generator L220-225 把这一池喂所有 method → 需要 tx_hash/block/filter 的 method 拿不到正确输入(audit 16个 P1_RPC_ERROR + error.data.reason 精确点名缺 filter/transaction_hash 实证)。**🔴 占位符测量污染(§63 新发现, 强化 S1 必要性)**: 当前 jsonrpc.py:84 等用占位符兜底(transaction_hash 没真值→全0占位, 注释"node returns null counts as success")→ 节点返 null(查不到)→ **该 method 资源消耗 = 查空开销, 非真实业务负载** → NS-2 per-method 归因值**偏低失真**(查 null 的 CPU ≠ 查真实数据的 CPU)。即"参数构造已支持但输入供给没跟上"会直接污染归因测量, 不只是报错。
 **方案 c 分层**: InputProvider(async 抓输入, 6 family 各实现)与 TargetBuilder(sync 构造 target)解耦。
 - **S1.1 定义 InputProvider 接口契约**(照 network interface.sh 范式: 契约注释 + 不变量 + 共享 helper):
   - `fetch_inputs(chain_template) -> {account[], tx_hash[], block[], utxo[], ...}` 多池(不是单 account)。
