@@ -772,3 +772,30 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 - 新增 §5.0 三层职责澄清: 资源监控常开 / per-method 归因=NS-2核心随proxy开 / 响应结构记录=默认关旁路。
 - 新增 §5.6 响应记录开关设计(PROXY_RESPONSE_CAPTURE 默认关, 依赖 PROXY_ENABLED, 独立jsonl, 采样, gitignore, 性能撤销线, 复用184实测做fixture)。
 - 新增 §5.7 代码vs文档校准: 实查确认 NS-2 链路代码真实落地且生产链接通(proxy/归因/出图/report_generator:3944真调), 但抓到3处文档过时(Q4-9 sink 6列→实际9列 / Q4-7 预设权重→实际频次权重 / proxy故意不缓冲body)。以代码为准。
+
+
+## 6.3 现有 config 字段复用决案(2026-06-02, §77 冲突核查后, 36链覆盖度实证)
+
+> 用户要求: 明确"打算复用哪些现有 config 字段"供确认。已核查 36 链真实覆盖度。
+
+### 6.3.1 字段复用清单(按覆盖度分级)
+| # | 现有字段 | 覆盖 | 复用方式 | 用于 |
+|---|---|---|---|---|
+| 1 | `param_formats` | **36/36** | param_spec 在其基础上升级, 枚举作 DSL 预设快捷(向后兼容) | S2.1 |
+| 2 | `proxy_extraction` | **36/36** | response_spec 与其三端同源(method名串联), 不动 proxy_extraction | S3.2 |
+| 3 | `rpc_methods.mixed_weighted` | **36/36**(已有 weight 值都=1, 代码没读) | **直接读它驱动 weight, 零新增字段** | S2.4 |
+| 4 | `_meta.health_probe` | 5/36(rest4+hedera) | 复用其 `{method,path,parse_jq}` schema 基因 | S3.5 参照 |
+| 5 | `_meta.rest_paths` | 6/36(rest5+hedera) | REST 输入声明复用 + `_tx_hashes`/`_block_hashes` 范式推广到 jsonrpc | S1/S2 REST |
+| 6 | `_meta.json_rpc_url` | 1/36(hedera) | 双 endpoint 声明复用 | endpoint |
+
+### 6.3.2 决策 B(已定): mixed_weighted 直接复用零新增
+36/36 链已有 mixed_weighted(weight 值都=1), S2.4 **直接读它驱动 weight, 不另造字段**。零争议零新增。
+
+### 6.3.3 决策 A(我的判断, 待用户最终确认): 新增独立 block_height_spec, 复用 health_probe 的 schema 基因, 两者共存互补
+- **不把块高自查塞进 health_probe**: health_probe 语义 = "健康连通探测"(单值 parse_jq, 5链在用); block_height 本地自查 = "双高度/同步策略"(local+network+sync_strategy 三策略 §51)。**两者是不同功能, 各一个字段 = 单一职责, 非 parallel-entry**(parallel-entry 是同功能两套, 这是两功能各一套)。
+- **复用 health_probe 的 schema 基因**(parse_jq 路径声明风格), 保持一致。
+- **新增 block_height_spec(全36链填), health_probe 保留(健康连通)**。两者互补: health_probe 判"能否连通", block_height_spec 判"落后网络多少"。
+- ⚠️ 待用户确认: 若用户倾向"扩 health_probe 一个字段做两件事", 可改为 health_probe 加 sync_strategy 子字段。我倾向独立 block_height_spec(语义清晰), 但尊重用户决定。
+
+### 6.3.4 向后兼容铁律
+所有复用都保持向后兼容: param_formats/proxy_extraction/health_probe/rest_paths/json_rpc_url **现有链不动**, 新增字段(block_height_spec 等)对未填的链有 fallback。能扩展现有字段就不新造, 能复用现有值(mixed_weighted)就不另填。
