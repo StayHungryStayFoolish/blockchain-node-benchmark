@@ -1558,3 +1558,45 @@ S3.2 response_spec 落地时必须: ① 对应键=method(已对)② 与 param_sp
 
 ### 55.4 待办登记
 监控专项(bug审计 + 耦合度/可插拔重构可行性 + 工作量评估)= 独立立项, RPC重构主线完成后或用户明确要求时启动。现有RPC重构S3已覆盖3个已知监控bug。
+
+
+## 56. 第四十三轮: 🔴 返工风险分析 — RPC重构后做监控重构会否导致RPC代码再返工(用户核心担心)
+
+### 用户担心
+重构 RPC method 后, 再重构监控系统, 会不会反过来导致前面重构好的 RPC method 代码再次返工?
+
+### 56.1 GREP-EVIDENCE: 两次重构的代码接触面(找返工点)
+**两个明确交集组件**(RPC 重构 S3 改 + 监控重构也可能动):
+- per_method_attribution.py(S3.3 加 EBS/Net 四维)
+- get_block_height / block_height_monitor(S3.5 块高本地自查)
+
+**关键发现: monitoring_coordinator 已是注册表式(L33-38, 非硬编码列表)**:
+```bash
+[unified]=unified_monitor.sh / [block_height]=block_height_monitor.sh / [ena_network]=... / [network]=... / [disk_bottleneck]=...
+```
+关联数组"名字→脚本"映射 = 半声明式。监控可插拔重构主要是把这个注册表 + start_all_monitors 做更声明式。
+
+### 56.2 🎯 核心判断: 两次重构改【不同维度】, 默认不返工
+| 交集组件 | RPC重构改什么(维度) | 监控可插拔重构改什么(维度) | 返工? |
+|---|---|---|---|
+| per_method_attribution.py | S3.3 内部加EBS/Net字段(**算法逻辑**) | 它怎么被编排调用(**编排维度**), 不动内部算法 | ❌不返工 |
+| block_height_monitor | S3.5 get_block_height本地自查(**取数逻辑**) | 它在coordinator注册表怎么注册(**注册维度**) | ❌不返工 |
+| coordinator 注册表 | RPC重构**完全不碰** | 监控重构改这里 | 无交集 |
+**两维度正交**: RPC改"组件内部怎么处理method", 监控改"组件怎么被编排启动" → 默认不返工。
+
+### 56.3 🔴 唯一真返工风险点(诚实标注)
+**若监控可插拔重构要求"每个组件实现统一接口契约"**(如 network provider interface.sh 的 init/collect/header/metadata 4函数), 而 RPC 重构刚把 per_method_attribution/block_height_monitor 改完旧形态 → 这两组件**要再改一次适配新契约** = 返工。
+
+### 56.4 🎯 避免返工的关键建议: 契约先行, 实现跟上
+- **不是**"先做完RPC再做监控", **也不是**反过来。
+- **而是**: **先定义监控组件统一接口契约**(可插拔的"插槽"形状, 参照 network provider interface.sh 现成范式) → RPC重构改 per_method_attribution/block_height_monitor(S3.3/S3.5)时**直接按新契约改, 一步到位** → 避免"改成旧形态再改成新契约"两次改。
+- 即: **可插拔的"插座标准"先定下来(评估快/改动小), RPC的S3.3/S3.5按这个插座形状改**。
+- 前提: 监控接口契约定义 = 监控专项的**第一步**(轻量, 不是整个监控重构), 可在RPC S3之前先做这一小步, 不必等整个监控重构完成。
+
+### 56.5 决策(请用户确认方向)
+| 方案 | 做法 | 返工风险 | 代价 |
+|---|---|---|---|
+| **甲(契约先行)** | 先定监控组件接口契约(轻量第一步)→ RPC S3.3/S3.5 按契约改 → 后续监控重构填实现 | **最低**(一步到位) | RPC S3 前插一个"定契约"小步骤 |
+| 乙(RPC先完整做完) | RPC重构全做完(S3用现状形态)→ 监控重构时再改适配 | **有返工**(per_method_attribution/block_height_monitor 改两次) | 主线快但埋返工 |
+| 丙(只做RPC不做监控可插拔) | RPC重构(含3 bug修)→ 监控可插拔重构不做 | **零返工**(不做就不返工) | 监控仍紧耦合(但够用) |
+**初判倾向甲或丙**: 若确定要做监控可插拔重构→甲(契约先行避返工); 若监控可插拔非刚需→丙(RPC含bug修已够, 监控紧耦合不影响功能)。乙最差(埋返工)。
