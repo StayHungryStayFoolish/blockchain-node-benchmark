@@ -2670,3 +2670,90 @@ base.py 实证: `parse_block_height` 是 ChainAdapter ABC **3 个 @abstractmetho
 | report_generator.py 块高段 | 🟡 grep定位(i18n标签+表格), 出图逻辑同 performance_visualizer |
 | quality_checker.sh L393/472/580 | 🟡 grep定位(校验header+cache), 未逐行(但契约=header字面匹配, registry已单源) |
 | data_loss_stats.json reader | ❌ grep零Python reader(只 block_height_monitor 自写自统计 L441 update_data_loss_stats), **确认无外部消费者=自用统计, 非调用链节点** |
+
+
+## 99. 全域调用链 token-level 精读(用户"为什么不全部补充")— C/D/E 并行精读 + 回验
+
+> 用户点破我只读透块高一条链冒充整链, 且把"全部要做的"当选择题。本轮 3 子agent并行精读 C(归因消费)/D(可视化8文件)/E(监控组件), 各建行号台账; 关键矛盾我自己 grep 回验(E9 铁律)。
+
+### 99.1 ✅ E 监控子系统(子agent全文台账, 我回验)
+- **unified_monitor.sh(2885行)**: 65函数清单全出。collect主循环 start_unified_monitoring L2234 `while [-f qps_test_status]`; log_performance_data L2080 装配 performance CSV 一行(cpu/mem/device/network/ena/overhead/block/qps/cgroup/cloud_provider); safe_write_csv L2641 锁。**纠正任务假设2处**: ❌`overhead_monitor.sh`不存在(逻辑在unified内部get_monitoring_overhead_legacy L845); ❌`proxy_self.csv`不在monitoring/(在tools/proxy/)。
+- **monitoring_coordinator.sh**: start_all_monitors L231 硬编码 `(unified ena_network network block_height disk_bottleneck)`; ena与network互斥(ENA_MONITOR_ENABLED)。
+- **bottleneck_detector.sh(1294)**: 几乎全文读. 5场景 detect_bottleneck L983/L1145-1213(读 block_height_time_exceeded.flag, 场景C Node_Unhealthy); 单次调用非循环(master_qps_executor 传 qps 参数)。
+- **ena/network/event_manager**: 全文读. network_monitor Y+ 写独立 network_<ts>.csv; 4 provider 子文件(aws_ena/gcp_gvnic/gcp_virtio/other_none)🟡未逐行(接口契约从调用点确认)。
+
+### 99.2 ✅ C 归因消费链(子agent台账 + 我回验3缺口行号)
+- **per_method_attribution.py(258全)**: ProxyRecord/MonitorRecord/PerMethodQpsRow/PerMethodResourceRow; compute_per_method_resource L202-240 weight=cnt/total(L231) cpu=m.cpu*weight(L236) mem=m.mem*weight(L237)。
+- **report_generator _generate_per_method_section_safe(L4259-4352)**: 编排 proxy_csv+monitor_csv→attribution→charts→report; L4324 落盘 per_method_qps/resource_<tag>.csv。
+- **per_method_charts.py(283全)**: 纯 f-string 拼 SVG(无matplotlib); plot_resource_stacked L222-256。
+- **rpc_deep_analyzer.py**: 独立旁路, 读 unified df 系统级(无 method 维度), 块高段 L236-268 读 block_height_diff。
+
+### 99.3 🔴 3缺口行号坐实(我 grep 回验, 两子agent口径矛盾已消解)
+| 缺口 | 坐实行号 | 回验 |
+|---|---|---|
+| **#8 只CPU/MEM(出图退化只CPU)** | per_method_charts.py **L241 `vs.append(r.cpu_pct...)`** 只画cpu丢mem_mb; PerMethodResourceRow L62-68 无EBS/Net | ✅ grep L241 确认 |
+| **#11 proxy_self.csv死数据** | 生产端 tools/proxy/{main.go,selfreport.go} + lib/proxy_lifecycle.sh **3处生产**; attribution+report_generator **0处消费** → 未减基线(L236 m.cpu*weight 未减proxy_self) | ✅ grep 消解两子agent矛盾: 生产在tools/proxy(子3对) 不在monitoring/(子2对), 口径不矛盾是目录切片不同(同E9) |
+| **mem_used列名** | attribution.py **L98 默认`mem_col="mem_used_mb"`(错, 真实mem_used)** L151 .get默认0静默; report_generator L4308 显式传mem_used兜住但默认值仍错 | ✅ grep L98确认 |
+
+### 99.4 🟡 D 可视化(子agent台账, 大文件未全逐行, 诚实标)
+子agent读了 report_generator per-method段 + per_method_charts全 + performance_visualizer骨架, 但 advanced_chart_generator(1231)/disk_chart_generator(1346)/chart_style_config(714)/device_manager(584) 仅函数清单+grep定位, 未逐行。两套出图: report_generator(matplotlib主)+per_method_charts(SVG手拼)分工确认。**诚实: D 仍有 ~3000行未逐行(与块高/per-method核心链关系弱, 是通用图样式/磁盘图/设备管理)。**
+
+### 99.5 ❌ B 参数构造链(任务最核心, 本会话尚未补读, 诚实标)
+S1/S2 要改的就是 B: 6 family adapter _build_params 全文 / cli.py build-targets-batch / target_generator.sh / fetch_active_accounts.py。**之前 §63-76 读过关键段非逐行全文**, 本轮并行没排 B(我本会话本应自己读 B 但优先落盘 C/D/E 台账)。**B 是下一步必须逐行补的, 它是重构主战场。**
+
+### 99.6 全域文件×读取状态清单(诚实总览)
+| 领域 | 状态 |
+|---|---|
+| A 块高链 | ✅ 闭环(§98) |
+| C 归因消费链 | ✅ 子agent全文台账+我回验3缺口 |
+| E 监控子系统 | ✅ 核心组件全文(4 provider子文件🟡) |
+| D 可视化 | 🟡 per-method+核心出图读了, ~3000行通用图未逐行 |
+| **B 参数构造链** | ❌ **关键段读过非全文, 下一步必补(重构主战场)** |
+
+### 99.7 元教训(用户再点破)
+我用"块高链读透"冒充"整链读透"(拿单领域覆盖率自证全局), 且把"B/C/D/E都要做"当选择题甩锅。用户"为什么不全部补充, 难道不都要做的么"=强信号: 范围已全量指定, 直接全做不要问。已并行补 C/D/E, B 下一步自己逐行补。
+
+
+## 100. B 参数构造链 token-level 逐行精读(本会话自读, 补 §99.5 欠的重构主战场)
+
+> §99.5 标 B 未全文读, 本轮自己逐行读 base/jsonrpc/cli/rest 全文(不委派, 重构主战场必须亲读)。
+
+### 100.1 ✅ base.py(全144行)
+- 3 @abstractmethod 契约: build_vegeta_target(L34) / health_check_request(L44, 返 {method,url,headers,body,parse_jq}) / parse_block_height(L53)。
+- helper: _vegeta_post_json(L67 不碰id, 固定 id:1 在各adapter) / _vegeta_get(L78) / _try_int(L88 自动识别0x) / _b64(L62)。
+- get_adapter(L119) 按 _meta.adapter_family 工厂; register(L110) 装饰器; L144 触发 6 family import 注册。
+
+### 100.2 ✅ jsonrpc.py _build_params(L46-97) — 占位符污染逐行坐实
+- 7 baseline format(no_params/single_address/address_latest/latest_address/address_storage_latest/address_key_latest/address_with_options L48-65)+ S3-A EVM format(block_number/block_number_int/transaction_hash/eth_call_object_latest/object_single L67-95)。
+- 🔴 **占位符测量污染坐实**: transaction_hash 缺真值用 `0x+64个0`(L84) / block_number_int fallback bn=1(L77) / eth_call balanceOf(0x0)(L90) → 节点返null → 该method资源归因失真。**S1 输入供给要解的核心**。
+- 🔴 **default fallback L97 `return [address]`** 静默退化(未知format), 同 cli 6866cba 隐患。
+
+### 100.3 ✅ cli.py(全172行) — S1/S2 接口瓶颈坐实
+- _get_param_format(L28-56): 读 `param_formats.<method>` map, 默认 fallback `single_address`(L55)。docstring L36-45 详记 6866cba bug(读错 params 字段对称fallback假绿)。
+- 🔴🔴 **build_vegeta_target 签名 = (method, address, rpc_url, param_format) 单address槽**(cmd_build_target L70 / batch L106)。**S1/S2 强耦合瓶颈**: 多池多参数必须改签名为 (method, inputs:dict)。四处一并改: TSV解析(L96-103 method\taddress) + build调用(L106) + adapter签名(base L34) + _build_params。缺一断链。
+- cmd_build_targets_batch(L80) 生产入口(TSV stdin→vegeta JSON/行, 摊销Python启动)。os.environ BLOCKCHAIN_NODE 强制override(L68/88, 防RestAdapter路由错链, S3-E.2 教训)。
+
+### 100.4 ✅ rest.py(全161行) — declarative DSL 现成样板(S1/block_height_spec 复用源)
+- 🔴 **rest = 已落地 declarative DSL**: _resolve_path(L54) 读 `_meta.rest_paths[method]` → path+body模板, `{address}`/`{addresses_array}` 占位替换(L69/75)。**body模板 `_tx_hashes`/`_addresses` 数组(L76-77) = S1 非account输入的现成范式**。
+- 🔴 **health_check_request(L106-128) 读 `_meta.health_probe`**(method/path/parse_jq) = 块高声明式获取的 rest 实现。**block_height_spec 复用扩展此 schema 坐实**。
+- parse_block_height(L130-161) 多JSON path兜底(block_height/height/level/header.level/数组首元素), 对应块高文件 rest 链实测字段。
+
+### 100.5 🟡 B 链剩余(本轮未逐行, 下一步补)
+- tendermint.py / substrate.py / bitcoin_jsonrpc.py / hedera_dual.py 的 _build_params + health(§64-65 读过关键段, 非本轮逐行重读)
+- target_generator.sh generate_targets 全文(§读过 L220-263)
+- fetch_active_accounts.py 全文(§67 读 L1-700, 后半未读)
+
+### 100.6 B 链不留债结论(基于逐行精读)
+1. **接口签名改造是 S1/S2 核心**: build_vegeta_target 单address槽 → inputs:dict, 四处联动改。
+2. **rest_paths + health_probe 是现成 declarative 范式**: param_spec(REST)复用 rest_paths, block_height_spec 复用 health_probe, 不新造。
+3. **占位符污染**: jsonrpc _build_params 的 tx_hash/block_number/eth_call 占位 → S1 真输入供给消除。
+4. **fallback 静默退化**(cli L55 single_address / jsonrpc L97 [address]): DSL 解析失败必须 fail-fast 告警, 不静默(6866cba 教训)。
+
+### 100.7 全域清单更新(B 核心已补)
+| 领域 | 状态 |
+|---|---|
+| A 块高链 | ✅ 闭环 |
+| B 参数构造链 | ✅ base/jsonrpc/cli/rest 全文(tendermint/substrate/bitcoin/hedera/target_gen/fetch 🟡剩余) |
+| C 归因消费链 | ✅ |
+| D 可视化 | 🟡 通用图~3000行未逐行 |
+| E 监控子系统 | ✅(4 provider子文件🟡) |
