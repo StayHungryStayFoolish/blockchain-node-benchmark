@@ -2757,3 +2757,90 @@ S1/S2 要改的就是 B: 6 family adapter _build_params 全文 / cli.py build-ta
 | C 归因消费链 | ✅ |
 | D 可视化 | 🟡 通用图~3000行未逐行 |
 | E 监控子系统 | ✅(4 provider子文件🟡) |
+
+
+## 101. 全域调用链精读闭环(继续不停)— B余adapter自读 + D/E/S1并行补完
+
+> 接 §100, 继续补完所有 🟡。本会话读 tendermint+hedera_dual; 3子agent补 D通用图/E network provider/S1供给链。
+
+### 101.1 ✅ B链剩余 adapter(本会话自读)
+- **tendermint.py(全81)**: 🔴 **dict参数**(非list, _build_params L43-58): no_params{}/single_address{address}/height_param{height}/abci_balance_query{path,data,prove}; default fallback {address}(L58)静默退化。health=status method, parse .result.sync_info.latest_block_height(L68/79)。
+- **hedera_dual.py(全119)**: 🔴🔴 **委派路由范式(整合方案c现成样板)**: _is_jsonrpc_method(L35 正则 ^(eth_|net_|web3_|debug_|trace_))→ build_vegeta_target(L86)按method路由 _jsonrpc(json_rpc_url from _meta L76)或 _rest(rest_paths)。__init__ 持有 RestAdapter+JsonRpcAdapter 实例委派不重复逻辑(L52-53)。**S3.7 协议错配修复复用此范式**。
+
+### 101.2 ✅ D 可视化通用图(子agent全文3875行)
+advanced_chart_generator(1231)/disk_chart_generator(1346)/chart_style_config(714)/device_manager(584) **全读**。
+- **两支柱**: 样式=UnifiedChartStyle(chart_style_config FONT/COLORS/LAYOUT/apply_layout); 数据=DeviceManager(字段映射/设备检测/阈值/provider_aware registry解析)。
+- **per-method/块高: 4文件全 ❌ 不涉及**(grep 0命中)——通用出图层不在 RPC method 重构链路。
+- 非阻塞瑕疵: apply_layout(fig,'auto')参数顺序反置(advanced L286等/disk L1168)落else默认tight_layout不崩。
+
+### 101.3 ✅ E network provider 可插拔范式(子agent全文)— RPC method DSL 要学的样板
+- interface.sh(35): **4函数契约**(init/header/collect/metadata)注释钉死 + base counter下沉(L19-36)。
+- aws_ena/gcp_gvnic/gcp_virtio/other_none.sh: 各实现4函数, 结构100%对称(字段数组→header循环→collect循环→metadata case)。
+- 路由双层: config/cloud_provider.sh L69 拼 `${CLOUD_PROVIDER}_${NIC_DRIVER}` variant + L72-86白名单; network_unified_entry.sh L26 **约定式文件名路由 `{variant}.sh`(无dispatch表)** + L40-46 declare -F 契约校验。
+- 🎯 **零代码加provider范式精髓**: 约定式文件名=路由键(免switch) + 声明式字段数组驱动header/collect同步 + 共性下沉interface + 三重防御。**迁移到RPC method DSL: method名=variant, 4函数契约=validate/build_request/parse_response/field_meta, 约定式文件名/声明免dispatch表, 字段数组驱动schema**。
+
+### 101.4 ✅ S1 供给链(子agent全文 fetch 841 + target_generator 339)— 4缺口行号坐实
+- **fetch_active_accounts.py(841全)**: create_adapter L661-674 仅4 adapter类覆盖8 chain_type; request_jsonrpc L123-153 限流重试(L141识别-32005但无差异化退避, L153指数退避)。
+- 🔴 **#2 6family账户抓取**: create_adapter L673-674 **bitcoin/UTXO 完全缺席**直接raise(整链以account为中心, extract_accounts_from_transaction L228-230抽象, UTXO无account概念无法表达)。
+- 🔴 **#3 tx_hash丢弃**: L729 fetch_transaction(sig)用完即弃 → L745-759抽account无return tx_hash → L818只write addr单列。
+- **target_generator.sh(339全)**: generate_targets L206-286。
+- 🔴 **#9 weight未驱动**: mixed L260 method_index=account_index%method_count **纯round-robin均权, 全脚本不读weight**。
+- 🔴 **#10 单account池喂全部**: L220-225单列读成一个accounts数组; single L246-247整池喂[0]; mixed L259-263同池取模切分。无per-method池。
+- param_format **shell侧不传**(L74-78/L248-251只传chain/method/address/rpc-url), 由cli.py python侧 _get_param_format 决定。
+
+### 101.5 🟡 B链最后2 adapter(substrate/bitcoin_jsonrpc)
+§65 读过 substrate 关键段(混协议四重错配 polkadot), bitcoin §67片段。本轮没重读这2个全文 → 仍🟡, 下一步补。
+
+### 101.6 全域文件×读取状态清单(本轮后)
+| 领域 | 状态 |
+|---|---|
+| A 块高链 | ✅ |
+| B 参数构造链 | ✅ base/jsonrpc/cli/rest/tendermint/hedera全文 (🟡 substrate/bitcoin 待重读全文) |
+| C 归因消费链 | ✅ |
+| D 可视化 | ✅ 全文(per-method链相关✅, 通用图✅不涉及) |
+| E 监控子系统 | ✅ 全文(含 network provider 4子文件) |
+| S1 供给链 | ✅ fetch+target_generator 全文 |
+→ 整链仅剩 substrate.py + bitcoin_jsonrpc.py 两个 adapter 待重读全文。
+
+
+## 102. 整链 token-level 精读闭环(最后2 adapter, 全域无 🟡)
+
+> 补完 §101.5 剩的 substrate + bitcoin_jsonrpc, 整条调用链全部逐行读完。
+
+### 102.1 ✅ substrate.py(全69)
+- list 参数。🔴 **_build_params L34-45 几乎所有 format 都 `return [address]`**(single_address/storage_key/block_hash 全相同, address_with_block=[address,None]), default L45 也 [address] —— **§65 坐实: param_formats 声明 path_addr/path_height 等枚举但 _build_params 无对应分支全走 [address]**, 混协议链(polkadot 混 REST path)参数构造错。
+- health=chain_getHeader [] parse `.result.number`(hex, L55/66)。
+
+### 102.2 ✅ bitcoin_jsonrpc.py(全87)
+- 🔴 **唯一需 HTTP Basic Auth 的 family**: _auth_header L28-34 读 BITCOIN_RPC_USER/PASSWORD env(或 _meta.basic_auth), build_vegeta_target L43-45 注入 Authorization header。**S1/S2 接口改造要保留 auth 注入**。
+- _build_params L54-64: no_params/single_address/address_minconf_includewatchonly([addr,1,False])/txid([addr,True]); default [address]。
+- health=getblockcount parse .result(int)。**bitcoin 无 account 概念**(对应 fetch 缺口#2 UTXO 不抓 account)。
+
+### 102.3 🎯 整链闭环 — 全域文件×读取状态清单(最终, 无 🟡 无 ❌)
+| 领域 | 文件 | 状态 |
+|---|---|---|
+| A 块高链 | common_functions/block_height_monitor/bottleneck/unified块高段 | ✅ |
+| B 参数构造链 | base/jsonrpc/cli/rest/tendermint/hedera/substrate/bitcoin_jsonrpc **6 family adapter 全** | ✅ |
+| C 归因消费链 | per_method_attribution/report_generator per-method段/per_method_charts/rpc_deep_analyzer | ✅ |
+| D 可视化 | report_generator/performance_visualizer/advanced/disk/chart_style/device_manager/per_method_report | ✅ |
+| E 监控子系统 | unified_monitor/coordinator/bottleneck/ena/network/event_manager + network provider 4子文件 | ✅ |
+| S1 供给链 | fetch_active_accounts(841)/target_generator(339) | ✅ |
+
+### 102.4 6 family 参数结构总表(全 adapter 精读后定稿, DSL 设计地基)
+| family | 参数类型 | _build_params 关键 | auth | health method | 占位污染/fallback |
+|---|---|---|---|---|---|
+| jsonrpc | list | 12 format(7baseline+5 EVM) | 无 | eth_blockNumber | tx_hash=0x64个0/bn=1/balanceOf 0x0; default [address] |
+| substrate | list | 几乎全 [address](枚举未实现) | 无 | chain_getHeader | default [address] |
+| tendermint | **dict** | {address}/{height}/abci query | 无 | status | default {address} |
+| bitcoin_jsonrpc | list | txid/minconf | **Basic Auth** | getblockcount | default [address] |
+| rest | **path路由+body模板** | _meta.rest_paths declarative | 无 | _meta.health_probe | rest_paths 缺 method raise(非静默) |
+| hedera_dual | **委派路由** | _is_jsonrpc_method 分派 rest/jsonrpc | 无 | rest health_probe | 委派各自 fallback |
+
+→ **DSL 设计结论**: 6 family 参数结构 = (list/dict/path-route/delegate) × (无auth/basic-auth) 二维。param_spec DSL 必须声明: 参数容器类型(list/dict/path/delegate) + 每位置语义来源 + auth + 占位真值来源(消除污染)。rest 的 rest_paths + hedera 的委派 + network provider 的约定式文件名路由 = 三个现成 declarative 范式样板。
+
+### 102.5 整链精读真实收获(非空跑)
+1. **3 真缺口行号坐实**(C): #8 per_method_charts L241 / #11 proxy_self.csv 生产3消费0 / mem_used列名 attribution L98。
+2. **4 真缺口行号坐实**(S1): #2 fetch create_adapter L673无UTXO / #3 tx_hash L729用L818弃 / #9 weight L260取模均权 / #10 单池L220-225。
+3. **B链接口瓶颈**: build_vegeta_target 单address槽 = S1/S2四处联动改点。
+4. **3 declarative 现成范式**: rest_paths / hedera委派 / network约定式文件名(DSL要复用)。
+5. **占位污染 + 静默fallback** 全 family 坐实(除rest raise)。
