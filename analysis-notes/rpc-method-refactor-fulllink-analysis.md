@@ -2512,3 +2512,84 @@ base.py 实证: `parse_block_height` 是 ChainAdapter ABC **3 个 @abstractmetho
 - **"没被调用"必须查清三种可能**: ① 真废弃死代码(可删)② 设计好但漏集成的新体系/半成品(parallel-entry, 应集成不应删)③ 条件触发暂未走到(正常)。**默认不能当死代码**, 尤其当它是 ABC @abstractmethod / 有完整设计契约时 → 几乎一定是②目标态。
 - 配 parallel-entry skill: "新代码写好测过但主流程没接 = 看起来没调用, 实为漏集成"。
 - **实施前查清这个至关重要**: 若按错误判断"删 Python parse_block_height", 会删掉 36 链零代码加链的目标态体系 = 灾难性方向错误。用户实施前追问救了这个。
+
+
+## 90. 第七十七轮(块高根本确认): 三套块高代码本质 = 新旧两套 + 不留债方案(用户要求定哪套)
+
+### 90.1 token-level 精读三套本质(对照读, 非片段)
+**套1 — Shell `get_block_height`(common_functions.sh:180)**: 8链硬编码 case, 每链内嵌 curl+jq+进制转换(构造+发送+解析揉一起)。**生产在用**(块高监控+check_node_health 都调)= **旧体系 live**。
+**套2 — Python `parse_block_height`(chain_adapters ABC)**: 36 family, 只"解析响应提块高"(不发请求), ABC @abstractmethod 契约。
+**套3 — Python `health_check_request`(ABC)+ cli.py health-probe/parse-height + `_meta.health_probe`**: health_check_request **构造健康探测请求**(返 vegeta target dict), cli.py health-probe(L114-118)拿请求 + parse-height(L126-133)从 stdin 读响应解析 = **两步配合**。_meta.health_probe(5链)是 rest adapter 的 health_check_request 读的声明。
+
+### 90.2 🔴🔴 根本真相(parallel-entry 实锤): 不是"三套独立", 是"新旧两套"
+- **套2 + 套3 是【同一套 Python chain_adapters 体系】的两半**: health_check_request(构造请求)+ parse_block_height(解析响应)= 完整的"声明式块高获取"设计 = **36 链零代码加链的目标态**(ABC 契约完整)。
+- **套1(Shell)是旧体系**: 8 链硬编码, 构造+发送+解析全揉在一个 case。
+- → **"三套"实际 = 1 套旧(Shell get_block_height)+ 1 套新(Python chain_adapters, 分构造/解析两半)**, 新的设计完整但主流程没切过去(parallel-entry: 新体系建好没集成)。
+
+### 90.3 🎯 不留债方案(回答用户"用哪一个 + 不留任何债")
+**用 Python chain_adapters 新体系(套2+套3), 废弃 Shell 旧体系(套1)** —— 理由:
+1. **新体系是 36 链目标态**(ABC 契约, 零代码加链); 旧 Shell 只 8 链硬编码(违 NS-1)。保留旧的=永远卡 8 链。
+2. **新体系已分层正确**(构造 health_check_request / 解析 parse_block_height 分离, 符合单一职责); 旧 Shell 揉一起。
+3. **不留债 = 删旧 Shell case, 主流程切到 Python adapter** —— 唯一声明源 = chain_adapters + chain template(block_height_spec/health_probe 声明)。
+
+**但有一个 D5 冲突要解决(关键)**: D5 定了"块高每秒高频, Shell 不调 Python(防 fork 污染测量)"。若用 Python 新体系, get_block_height 的 Shell caller(block_height_monitor 每秒)要调 Python = 违 D5。
+**解法(两步声明式, 不 fork Python)**: chain_adapters 新体系的"声明"(health_check_request 构造逻辑 + parse_block_height 解析逻辑)**下沉为 chain template 的 block_height_spec 声明**(method+path+result_path+encoding), **Shell 和 Python 都读这个声明**:
+- Shell get_block_height(高频生产)= 纯 Shell + jq 读 block_height_spec(不 fork Python, 满足 D5)。
+- Python chain_adapters(cli/测试/未来 36 链扩展)= 读同一 block_height_spec。
+- **唯一真理源 = chain template block_height_spec; Shell 和 Python 是两个【读同源声明】的消费者, 不是两套独立逻辑**(不留债的本质: 逻辑下沉为声明, 消费者读声明)。
+
+### 90.4 收编动作(不留债执行)
+1. **block_height_spec 声明**(chain template, 36链): 从现有 Shell get_block_height 8链 case + Python parse_block_height 36 family + _meta.health_probe 5链 **三处提取共性, 归一为声明**(method/transport/result_path/encoding/sync_strategy)。
+2. **Shell get_block_height**: 8链 case → 纯 Shell 读 block_height_spec 通用实现(D5 满足)。
+3. **Python parse_block_height/health_check_request**: 改读 block_height_spec(或保留作 cli/测试, 同源)。
+4. **_meta.health_probe**: 并入 block_height_spec(rest 5链的块高声明)。
+5. **删除**: Shell 8链硬编码 case(旧体系)。
+→ 结果: 1 声明源(block_height_spec)+ N 消费者读同源, **零重复逻辑, 零跨语言 fork, 36 链零代码**。
+
+
+## 91. 第七十八轮(块高完整依赖链+健康监测机制): 乙方案不留债改造清单(用户点 config+差值判健康)
+
+### 91.1 三个内存文件(用户记忆"内存写文件"=实际3个)
+| 文件 | 写 | 读 | 内容 |
+|---|---|---|---|
+| node_health_<urlhash>.cache | **get_block_height 内部**(common L184/205/226/244/262/272/278) | check_node_health(L300) | 1/0 健康 |
+| block_height_monitor_cache.json | get_cached_block_height_data(common L163) | block_height_monitor(L166), quality_checker(L580) | 6字段快照(timestamp_ms/local/mainnet/diff/local_health/mainnet_health/data_loss) |
+| block_height_time_exceeded.flag | block_height_monitor(L202) | **bottleneck_detector 场景C**(L1147) | 1=持续落后 |
+清理点: block_height_monitor.sh:48-49(rm cache.json + node_health_*.cache), monitoring_coordinator.sh:432, blockchain_node_benchmark.sh:192(rm flag)。
+
+### 91.2 🔴 健康监测=两层机制(用户记忆"差值判健康"=第二层)
+- **第一层(连通性健康)**: get_block_height **内部 L184-278 顺带写 node_health cache**——能取到块高→health=1, 取不到→0。**块高获取与健康判定在同一函数内强耦合**。check_node_health(L296-303 60秒缓存)读它; cache 过期则 L306 再调 get_block_height 探活。
+- **第二层(同步健康)**: common L113 `diff=mainnet-local` → monitor L181 `diff > DIFF_THRESHOLD(50)` 持续 → L197 `duration > TIME_THRESHOLD(300s)` → L202 写 flag → bottleneck L1147 读 → 场景C `Node_Unhealthy`。
+
+### 91.3 config 变量体系(用户记忆"config 配置")
+| 变量 | 默认 | 定义 | 消费者 |
+|---|---|---|---|
+| BLOCK_HEIGHT_DIFF_THRESHOLD | 50 | internal_config.sh:59 | monitor L181/318 + visualizer py L2354 |
+| BLOCK_HEIGHT_TIME_THRESHOLD | 300 | internal_config.sh:61 | monitor L197 + bottleneck L1150/1195/1200 |
+| BLOCK_HEIGHT_MONITOR_RATE | 1 | internal_config.sh:63 | 每秒采集 |
+| MAINNET_RPC_URL | 8链硬编码 | config_loader.sh:453-486 | get_block_height mainnet 入参 |
+| LOCAL_RPC_URL | localhost:8899 | config_loader.sh:14 | get_block_height local 入参 |
+| **BLOCK_HEIGHT_SYNC_THRESHOLD** | **20** | **rpc_deep_analyzer.py:35(Python独立)** | py 分析 L259/266 |
+
+🔴 **既有配置债**: SYNC_THRESHOLD=20(Python) vs DIFF_THRESHOLD=50(Shell) **两阈值判同一事(块高落后)**, 值还不同。乙重构应收敛为单一阈值源(internal_config 定, Python 读 env, 不再 py 内写死20)。
+
+### 91.4 🎯 乙方案不留债完整改造清单(7 处必须同步, 漏一=留债)
+**前提冲突**: D5.1 块高本地自查(dual_height/synced_bool/slot_diff)后**不打主网→无 mainnet 概念→L113 减法 + cache/CSV 的 mainnet 字段 + MAINNET_RPC_URL 全部要重定义**。乙(声明式)叠加 D5.1 必须连这片一起改:
+
+1. **block_height_spec 声明**(36链 chain template): method/transport/result_path/encoding + **sync_strategy(dual_height/synced_bool/slot_diff)+ 各策略字段**。三处共性(Shell 8链case+Python parse 36+_meta.health_probe 5)归一。
+2. **get_block_height 内部健康耦合拆解**: 把 L184-278 写 node_health cache 这层【连通性健康】**保留但解耦**——块高读取(读 spec)与健康标志(取到=1)分离为两个清晰职责, 不再揉在 8链 case 里; cache 文件名/读写契约不变(check_node_health 不断)。
+3. **差值语义按 sync_strategy 重定义**(L113 减法的债): 
+   - slot_diff 链(solana/EVM/starknet): 仍是 int 差值, diff>THRESHOLD 逻辑不变。
+   - synced_bool 链(部分EVM/near): **无数字高度, 只 true/false** → diff 概念失效, 健康判定改为 `synced==false 持续>TIME_THRESHOLD`→写同一 flag(保护场景C契约)。
+   - dual_height 链(substrate/bitcoin): 本地两高度比(finalized vs best), 自算落后。
+4. **cache.json + CSV schema**(7字段)+ **5 Python reader**: D5.1 后 mainnet 字段语义变(不再打主网, 改"本地自查同步状态")。**保留字段名 local_block_height/mainnet_block_height 不改**(否则断 performance_visualizer L2313/report_generator L595/rpc_deep_analyzer/degraded_report/device_manager 五reader), **只改填充语义 + 注释说明**(mainnet 列在 synced_bool 链填 N/A 或同步标志)。→ 用户曾问的 network_block_height 改名=**否决**(断5 reader 高风险, 收益仅语义), 保留旧名加注释。
+5. **阈值配置收敛**(91.3 债): SYNC_THRESHOLD(20,py)与 DIFF_THRESHOLD(50,sh)合一, internal_config 单源, Python os.getenv 读(同 visualizer L2354 已有范式)。
+6. **flag 文件契约保护**(场景C): 无论 sync_strategy 怎么变, "节点持续落后→写 block_height_time_exceeded.flag→bottleneck 场景C"链必须不断。**L3 验证项: 构造节点落后(slot_diff/synced=false)断言 flag 写入 + 场景C 触发 Node_Unhealthy**。
+7. **D5 满足(不 fork Python)**: get_block_height(每秒高频)= 纯 Shell + jq 读 block_height_spec, 不调 Python adapter。Python adapter 读同源 spec 供 cli/测试/36链扩展。
+
+### 91.5 不留债判定
+- 唯一真理源: block_height_spec(chain template) —— 块高 method + 同步策略 + 阈值(引 config)全声明。
+- 三内存文件契约(node_health cache / monitor cache.json / flag)**全部保留不改名**, 只改内部填充逻辑 → 0 reader 断裂。
+- 阈值双源收敛为单源 → 消除既有配置债。
+- 8链硬编码 case 删除 → 36链零代码(NS-1)。
+- 两层健康机制保留(连通性+同步), 只解耦"块高读取"与"健康判定"职责。
