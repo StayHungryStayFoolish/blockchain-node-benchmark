@@ -2135,3 +2135,36 @@ fetch 调用(L138)只传 --output/--count → **S1 扩展 fetch 多池输出后,
 ### 76.4 🎯 grep-shallow 纠正完成度(§66 清单全覆盖)
 按 §66 清单真读全部关键文件: master_qps(986)/per_method_attribution(258)/bitcoin(87)/extractor.go(48)/selfreport.go(117)/jsonrpc.go extractor(150)/fetch(L1-700主体)/target_generator(全339)/cli.py(全172)/main.go(全89)/common_functions(全317)/config_loader(generate_auto_config 核心)/主入口(RPC 数据流编排段)。
 **§66 自查的 4 个"完全没读" + 9 个"部分读"中 RPC 核心路径全部真逐行读完**。剩主入口 Phase 5/6/7 结果处理 + 各 helper(与 RPC method 构造正交, 读了 Phase 编排确认)。**grep-shallow 纠正达成: 不再用 grep/片段冒充精读。**
+
+
+## 77. 第六十四轮: 🔴🔴 config/ 现有配置 vs 新 DSL 字段冲突核查(用户要求)— 重大设计修正: 复用现有字段非新造
+
+### 触发: 用户"查 config 下已有配置(很多有注释)和重构的 rpc method 配置是否冲突"。系统 dump 36 chain template 全字段 + config/*.sh。
+
+### 77.1 撞名检测: 4 个新 DSL 字段顶层/  _meta 均不撞名 ✅
+param_spec/response_spec/block_height_spec/endpoint_spec 在顶层和 _meta 都无字面撞名。**但语义重叠是真冲突(更隐蔽)**:
+
+### 77.2 🔴🔴 真冲突 = 语义重叠 = 重复造轮子(现有字段已做我新字段想做的事)
+现有 chain template 字段(36链并集): 顶层 chain_type/rpc_url/methods/param_formats/params/proxy_extraction/rpc_methods/system_addresses/_meta; **_meta 已有 health_probe/json_rpc_url/rest_paths/adapter_family**。
+| 我的新字段 | 现有重叠字段 | 重叠实证 |
+|---|---|---|
+| **block_height_spec** | **`_meta.health_probe`** | rest 5链已用: cardano `{GET,/tip,.[0].block_height}` / aptos `{GET,/v1,.block_height}` / tezos `{GET,.../header,.level}` = **已是声明式块高探测 + jq 路径, 正是 block_height_spec 想做的!** |
+| **endpoint_spec** | **`_meta.json_rpc_url`** | hedera 已用(双 endpoint 声明) |
+| **param_spec(REST部分)** | **`_meta.rest_paths`** | cardano 已用 path+body 模板含 {address} 占位 + **`_tx_hashes`/`_block_hashes` body 模板(POST_TX_INFO/POST_BLOCK_TXS)= 框架已有"声明非account输入"机制!** |
+| param_spec(jsonrpc) | param_formats | 已知(枚举升级, 计划已说并存) |
+| response_spec | proxy_extraction + rest_paths | method 识别 + path 已声明 |
+
+### 77.3 🎯 重大设计修正: 扩展现有字段, 不新造并存(否则 parallel-entry)
+- **我之前把 param_spec/response_spec/block_height_spec 当全新字段设计 = 会和现有 health_probe/rest_paths/json_rpc_url 造成两套声明并存(parallel-entry 漂移)**。
+- **正解**: block_height_spec → **扩展/复用 `_meta.health_probe`**(它已声明式取块高); endpoint_spec → 复用 `_meta.json_rpc_url`; param_spec REST → 复用/扩展 `_meta.rest_paths`(已支持 path+body+占位符)。
+- **降低工作量的现成范式**: `_meta.rest_paths` 的 `_tx_hashes`/`_block_hashes` body 模板**证明框架已有"声明 tx_hash/block 非 account 输入"机制**(只 rest 用), S1/S2 推广到 jsonrpc 有现成参照, 不是从零。
+
+### 77.4 internal_config.sh(75行注释清晰)+ 块高配置无 RPC 构造冲突
+块高监控配置(BLOCK_HEIGHT_DIFF_THRESHOLD/TIME_THRESHOLD/MONITOR_RATE L57-63)+ 瓶颈阈值 + QPS 阈值 = 运行参数, 与 chain template 声明字段正交, 不撞 RPC method 构造设计。
+
+### 77.5 🎯 对实施计划的修正(关键)
+- S2.1 param_spec: 不新造, **扩展 param_formats(jsonrpc)+ 复用 rest_paths(REST)**。
+- S2.3 block_height_spec: **改为扩展 `_meta.health_probe`**(已声明式块高探测), 非新造同功能字段。
+- endpoint 声明: 复用 `_meta.json_rpc_url`(已有)。
+- S1 输入供给: rest_paths 的 _tx_hashes/_block_hashes 是现成"非account输入声明"范式, S1 推广到 jsonrpc。
+**用户提醒的价值**: 不看现有 config 就新造 DSL 字段 = 重复造轮子 + parallel-entry 两套声明。现有字段(health_probe/rest_paths)已是声明式范式, 复用 + 扩展才对。

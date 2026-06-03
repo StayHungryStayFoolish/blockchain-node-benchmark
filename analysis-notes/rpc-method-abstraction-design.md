@@ -679,6 +679,7 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 - **S2.3 chain template 声明字段收敛 + 不被 del 删**(缺口#4 + D5 地基): 
   - config_loader L597 `CHAIN_CONFIG=jq del(._meta)` 改为保留分派/声明所需字段(adapter_family + endpoint_spec + block_height_spec), 不能删。
   - 新增声明块: `block_height_spec`(基于 36 链全量实测, 见 **analysis-notes/block-height-sync-method-measurement.md**)+ `endpoint_spec` —— Shell(S2.2b)和 Python(parse_block_height)**同源读这一处**(消除缺口#12 的根: 单一声明源, 非两份代码也非跨语言桥)。
+  - **🔴🔴 复用现有字段非新造(§77 config 冲突核查, 重大修正)**: 现有 chain template `_meta` **已有 health_probe / json_rpc_url / rest_paths** = 声明式范式, 我的新字段语义重叠 → **扩展复用而非新造并存**(否则 parallel-entry 两套声明漂移): block_height_spec → **扩展 `_meta.health_probe`**(rest 5链已用 `{method,path,parse_jq}` 声明式取块高, 正是要做的); endpoint_spec → 复用 `_meta.json_rpc_url`(hedera 已用); param_spec REST → 复用/扩展 `_meta.rest_paths`(已有 path+body 模板 + `_tx_hashes`/`_block_hashes` 非account输入声明=S1 推广到 jsonrpc 的现成范式); param_spec jsonrpc → 扩展 param_formats。**S1/S2/S3 字段设计全部先查现有 _meta 子字段, 能扩展不新造。**
 
 > **🔴 D5.1 块高同步监控重大修正(2026-06-02, 用户引导 + 36链实测, 推翻"打外部主网")**:
 > **原设计缺陷**: get_block_height 打【外部主网 MAINNET_RPC_URL】取 mainnet 高度 → 中心化链主网限流(每秒打必被限)→ 取不到 → diff 算不出 → 不知道本地节点落后主网多少 = 块高同步监控核心功能失效。
