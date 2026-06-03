@@ -910,3 +910,15 @@ schema + 缺口落点 + 不留债约束已定稿。**等用户审 DSL 设计**, 
 > **纠正后 F1 方案(甲, 不留债)**: adapter_family 是【协议族归属语义】= 领域知识(需懂 bch 虽 HTTP 但协议是 bitcoin fork), **不该靠启发式猜**。治理缺口本质 = "无校验"非"无自动生成"。
 > F1 实做 = **CI 校验脚本 `ci/check_adapter_family.sh`**: ①36 链每条必有 _meta.adapter_family ②必须在 6 注册 family 内(bitcoin_jsonrpc/hedera_dual/jsonrpc/rest/substrate/tendermint) ③缺失/非法 = exit 1 fail-fast 提示手填。与 skill §6 铁律"加新 adapter family 用 @register"一致(family 归属人工权威定, 框架校验不猜)。
 > normalize_chain_templates.py **不加 adapter_family 推断**(避免填错), 仅保留现有 adapter_required(布尔, 是否需 adapter 路由, 与 family 归属正交)。
+
+
+### 6.6.2 S0 fixture 覆盖审计(2026-06-03)+ 执行顺序调整(契约先行避返工)
+> token-level 审计 184 method × fake-node fixture(注意 fixture 文件名转义规则: method 名 `/ : 空格`→`_`, 如 `GET /v2/accounts/{address}`→`GET__v2_accounts_{address}.json`; 第一次审计未按转义匹配误报51缺, 修正后真缺27)。
+**真实覆盖: 157/184 有 fixture, 27 缺(10链)**:
+- **命名不统一(非真缺, 待规范化)**: celestia/injective/osmosis/sei 的 leading-slash `/status` `/cosmos/bank/...`(cosmos-hub 同 method 有 `GET__cosmos_...` fixture, 但这几条链 template 里 method 名带前导 `/` 无 GET 前缀 → 命名漂移)。polkadot Sidecar path(`GET /blocks/{n}` 等)。
+- **结构性不可达(record 脚本已记跳过)**: system_account(acala/kusama/polkadot, substrate state_call 公开端禁/-32601) / getreceivedbyaddress(bitcoin/dogecoin, wallet method 公开节点禁) / tron `/wallet/*`(部分公开端限)。
+
+**🔴 执行顺序调整(契约先行, 避返工)**: fixture 补全**不能在 schema 落地前硬补** —— 缺的 27 个里命名漂移那批(tendermint leading-slash vs GET 前缀)取决于 D1/C1/B1 的 method 命名规范定稿; 现在补会和后续 DSL 命名冲突返工。
+→ **S0 fixture 补全后置**: 先 B1(param_spec)/C1(response_spec)/D1(block_height_spec)schema 落地确定 method 命名规范 + record_all_184 按规范重录 → 再回 FN/S0 补 fixture。
+→ **S0 现阶段可完成项**: F1 adapter_family 门(✅已完成 commit 1bd3fa7)。F2 e2e method 构造验证 harness 也依赖 B1/B3 接口定稿(验的是 build_vegeta_target 新签名), 同样后置。
+**S0 结论**: 前置工具链中"与 schema 无关"的 F1 已建; fixture 补全 + F2 harness 依赖 schema, 随 B/C/D 落地。**转入 schema 落地功能点(B1→...), 不空补 fixture。**
