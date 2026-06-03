@@ -1447,3 +1447,31 @@ getHealth             = ok
 ### 52.4 block_height_spec 设计地基就绪
 基于全量实测, block_height_spec DSL 草案已定(sync_strategy: dual_height / synced_bool / slot_diff + transport + 各路径 + encoding)。
 下一步可: ① 据此重写 D5/block_height_spec 正式设计并更新实施计划 S2.2b/S3.5 ② 或用户先 review 实测文件。
+
+
+## 53. 第四十轮: 实施计划剩余落点 GREP-EVIDENCE 全回验(S3.1/S1/S2.1)— 执行用户指示A夯实计划
+
+### 触发: 用户"先执行A" = 把实施计划剩余未验落点(之前只验 S2.2/S3.5)全部 GREP-EVIDENCE 回验, 消除纸上推演。
+
+### 53.1 S3.1 关联键(缺口#5)— 真实落点精化(纠正之前"base.py"定位)
+- **GREP 实证**: `base.py:67 _vegeta_post_json` **本身不注入 id**, 只序列化传入 body_obj(L69)。
+- **真实落点 = 各 family adapter 构造 body 时硬编码 `"id": 1`, 共 9 处**: bitcoin_jsonrpc.py:40/67, jsonrpc.py:42/104, substrate.py:29/49, tendermint.py:39/62。
+- proxy 侧正确: jsonrpc.go:88 RequestID=stringifyID(r.ID)(正确提取), rest.go:74 RequestID=""(rest 无 id), sink.go:102 写 request_id 列。
+- **纠错**: 分析文档之前说"base.py _vegeta_post_json 固定 id=1"不准 —— id 是各 family 在 _build_params 硬编码。**S3.1 改动 = 4 family 9 处 body 构造**(不是 base.py 一处), 唯一 id 生成逻辑放 base.py helper 各 family 调。
+
+### 53.2 S1 输入供给(缺口#3/#6/R-B)— 完整影响链确认
+- **fetch 落点**(fetch_active_accounts.py main): L802 sigs(tx_hash)已在手 → L811 fetch_and_count 用 sigs → L814 只留 account 频次 → **L817-819 只 `f.write(addr)` 单列 account, sigs 经手即丢**。坐实 R-B(数据已在手, 保留近零成本)。
+- **下游 reader 强耦合**(GREP 实证, 计划之前没说全): fetch 输出 `ACCOUNTS_OUTPUT_FILE`(active_accounts.txt 单列)→ target_generator.sh:220-225 `while read address; accounts+=($address); done < ACCOUNTS_OUTPUT_FILE`(逐行读单列)+ L193-200 校验。
+- **S1 真实改动量**: ① fetch L817-819 输出单列→多池(account/tx_hash/block)② **输出格式变→target_generator L220-225 reader 必须同步改**(parallel-entry CSV 耦合)③ ACCOUNTS_OUTPUT_FILE 配置+校验+config_loader 约定扩展 ④ target_generator L246-262 round-robin 按 param_spec.source 从对应池取(缺口#10)。跨 fetch→config→target_generator 一条链。
+
+### 53.3 S2.1 param_spec schema — 塞入点 + 接口瓶颈确认
+- **现状**(stdout): param_formats = `{method:"枚举名"}` 映射; cli.py:28 _get_param_format 读 param_formats.<method> fallback single_address(R3); build_vegeta_target(method,**address**,rpc_url,param_format)→_build_params(param_format,address) **接口只单 address 槽**; _build_params 6 family if-else 枚举。
+- **S2.1 真实改动量**: ① param_spec = param_formats 升级(method→声明式参数描述, chain template 同层并存, 枚举作预设快捷)② **接口瓶颈**: build_vegeta_target 单 address 槽 → param_spec 多池多参数**必须改接口签名**(从输入池取多值), 与 S1 多池**强耦合** ③ _build_params 6 family 各改读 param_spec(枚举 fallback)。
+
+### 53.4 🎯 回验总结: 3 落点全部需精化, 印证"计划阶段纸上推演率高"(skill §18)
+| 落点 | 计划原描述 | GREP 实证精化 |
+|---|---|---|
+| S3.1 | "base.py 注入唯一 id" | 真实 = 4 family **9 处** body 硬编码 id=1, base.py 函数不碰 id |
+| S1 | "fetch 额外保留 tx_hash" | 真实 = fetch 输出 + target_generator reader + config 约定**一条链**都要改 |
+| S2.1 | "param_spec 替换 param_formats" | 真实 = 还要**改 build_vegeta_target 接口签名**(单 address 槽瓶颈), 与 S1 多池强耦合 |
+**结论**: 加上之前 S2.2/S3.5, 实施计划全部关键落点已 GREP-EVIDENCE 回验, 每处有真实 stdout 证据。S1+S2.1 强耦合(都卡在"单 address 槽 vs 多池多参数"接口), 实施时应合并考虑接口改造。计划夯实完成, 可进 S0。
