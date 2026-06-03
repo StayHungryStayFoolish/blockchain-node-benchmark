@@ -684,20 +684,38 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 > **🔴 D5.1 块高同步监控重大修正(2026-06-02, 用户引导 + 36链实测, 推翻"打外部主网")**:
 > **原设计缺陷**: get_block_height 打【外部主网 MAINNET_RPC_URL】取 mainnet 高度 → 中心化链主网限流(每秒打必被限)→ 取不到 → diff 算不出 → 不知道本地节点落后主网多少 = 块高同步监控核心功能失效。
 > **修正方案(36链实测背书)**: get_block_height **不打外部主网, 改为只问本地节点的同步状态 method** —— 所有 6 family 实测证实节点自身就知道"本地高度 + 网络最高/是否落后"(节点参与共识必须知道网络头)。
-> **block_height_spec DSL 三策略(实测分类, 详见独立实测文件)**:
+> **block_height_spec DSL 五档 sync_strategy 定稿(2026-06-03 锁, 36链官方文档+主会话真机实测背书, 详见 block-height-sync-method-measurement.md §92-97 + 全链路分析 §90-93)**:
+> 早期"三策略草案"(dual_height/synced_bool/slot_diff)已被实测推翻扩为五档 —— 真相: 节点必知网络最高(第一性原理), sui/aptos 的网络最高在 metrics 端口非 RPC(源码+真机证伪), cardano/tezos/ton 有比"协议推断"更好的专用同步 method。
 > ```jsonc
 > "block_height_spec": {
->   "sync_strategy": "dual_height" | "synced_bool" | "slot_diff",
->   "transport": "jsonrpc" | "rest",
->   // dual_height(substrate system_syncState / bitcoin getblockchaininfo / EVM同步中eth_syncing):
+>   "sync_strategy": "dual_height" | "slot_diff" | "sync_progress" | "peer_metrics" | "freshness",
+>   "transport": "jsonrpc" | "rest" | "metrics",   // metrics = 抓 Prometheus 文本(sui/aptos 网络最高仅此暴露)
+>   "encoding": "hex" | "dec" | "auto",            // 统一 _decode_height(encoding,raw), 对标 Python _try_int 自动识别0x
+>
+>   // ── 档1 dual_height: 本地+网络最高同一 RPC 响应给数字(精确 diff) ──
+>   //   substrate(system_syncState .result.currentBlock/.highestBlock) / bitcoin系(getblockchaininfo .result.blocks/.headers)
+>   //   / EVM同步中(eth_syncing .currentBlock/.highestBlock; 已同步返false→本地=网络) / sei(status .max_peer_block_height!)
 >   "sync_method": "system_syncState", "local_height_path": ".result.currentBlock", "network_height_path": ".result.highestBlock",
->   // slot_diff(solana): "local_method":"getSlot", "network_method":"getMaxShredInsertSlot"(相减=落后slot)
->   // synced_bool(tendermint catching_up / near syncing / avax isBootstrapped / EVM已同步 / acala system_health):
->   //   "synced_method":"status","synced_path":".result.sync_info.catching_up","synced_value":false,"height_path":".result.sync_info.latest_block_height"
->   "encoding": "hex" | "dec" | "auto"
+>
+>   // ── 档2 slot_diff: 双 method 相减 ── solana: "local_method":"getSlot","network_method":"getMaxShredInsertSlot"(实测差7)
+>
+>   // ── 档3 sync_progress: 节点自报同步布尔/百分比 + 本地高度(都有数字高度, 不是"只有bool") ──
+>   //   cardano(cardano-cli query tip .syncProgress 百分比) / tezos(/chains/main/is_bootstrapped .sync_state synced|unsynced|stuck)
+>   //   / tendermint(status .sync_info.catching_up) / near(status .sync_info.syncing) / acala(system_health .isSyncing)
+>   //   "synced_method":"status","synced_path":".result.sync_info.catching_up","synced_value":false,"local_height_path":".result.sync_info.latest_block_height"
+>
+>   // ── 档4 peer_metrics: 网络最高仅在 Prometheus metrics(public 不暴露, S0 真节点验) ── transport:"metrics"
+>   //   sui(:9184/metrics highest_known_checkpoint vs highest_synced_checkpoint) / aptos(:9101/metrics aptos_data_client_highest_advertised_data vs aptos_state_sync_version)
+>   //   "metrics_endpoint":":9184/metrics","network_height_metric":"highest_known_checkpoint","local_height_metric":"highest_synced_checkpoint"
+>
+>   // ── 档5 freshness: 仅本地高度+块时间戳, now-block_timestamp 判新鲜度(无网络最高也无同步bool的兜底) ──
+>   //   ton-HTTP(getMasterchainInfo .last.seqno + 降级) / hedera-mirror(/api/v1/blocks .blocks[0].timestamp.to)
+>   //   "local_height_path":".result.last.seqno","timestamp_path":".blocks[0].timestamp.to","freshness_threshold_sec":60
 > }
 > ```
-> **逐链声明非 per-family(实测铁证)**: acala 同 substrate family 但**不支持 system_syncState**(返-32601), 走 system_health; astar/moonbeam EVM 兼容; sei EVM-on-tendermint。→ block_height_spec 必须逐链填, 框架不按 family 硬猜。
+> **逐链声明非 per-family(实测铁证)**: acala 同 substrate family 但**不支持 system_syncState**(返-32601, 真机复测), 走 system_health.isSyncing(档3); astar/moonbeam EVM 兼容; sei 是 EVM-on-tendermint 且 status 含 max_peer_block_height(档1)。→ block_height_spec 必须逐链填, 框架不按 family 硬猜。
+> **实测覆盖**: 36/36 链本地高度 method 全有真机证据(主会话亲测14链覆盖6family + bch/doge/ltc Blockbook验证 + 同family同构); 网络最高大部分RPC层已验, 仅 sui/aptos metrics端口待S0真节点(已真机证伪RPC层无此method)。
+> **健康判定统一收口(保护契约)**: 五档最终都产出"节点是否落后" → 写同一 `block_height_time_exceeded.flag` → bottleneck_detector 场景C Node_Unhealthy(契约不变)。slot_diff/dual_height 走 diff>DIFF_THRESHOLD; sync_progress 走 synced==false/syncProgress<100 持续; peer_metrics 走 (network-local)>阈值; freshness 走 (now-ts)>FRESHNESS_THRESHOLD。**L3 必验: 构造节点落后场景断言 flag 写入 + 场景C 触发**。
 > **收益**: 中心化链主网限流问题消失 + 不污染测量(不打外部) + 28链不必配 mainnet endpoint(彻底解绑8链)。
 > **🔴 向后兼容约束(S2.3 GREP-EVIDENCE 实证)**: 现有 CSV 字段 `local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss` 硬编码在 **3 处 reader**(framework_data_quality_checker.sh:393/472, unified_monitor.sh:1951, block_height_monitor 写端)+ cache JSON(common_functions.sh:154-156)。改本地自查后 `mainnet_block_height` 语义从"外部主网高度"变成"节点自查网络已知最高"→ **字段名撒谎风险**(skill E10/E11)。处理: 字段名改 `network_block_height`(中立)需同步 3 reader(parallel-entry CSV 耦合), 或保留旧名加注释。diff 语义 `mainnet-local`→`network_known-local`, 算法不变(仍是减法), 只是数据源从外部改本地。
 
@@ -832,3 +850,48 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 
 ### 6.4.5 下一步建议
 分析阶段收口。下一步 = **用户拍板 6.4.3 决策 → 进 S0**(建前置工具链 + 解 fake-node 数据丰富度 + 真跑验证 6.4.2 两个产物层数据)→ 按 S1-S3 family 分波实施, 每阶段 L1+L2+L3。**不擅自进 S0**(决策 A/出图机制等待拍板)。
+
+
+## 6.5 schema 定稿收口(2026-06-03 锁 — 全链路 token-level 精读 §0-105 后, 进 S0 前最后定稿)
+
+> 全仓 96 文件 token-level 精读完成(差集为空, 见全链路分析 §105), 据完整事实地基锁定以下 schema/约束。审过进 S0。
+
+### 6.5.1 三大 spec 定稿状态
+| spec | 状态 | 复用范式(非新造) |
+|---|---|---|
+| **block_height_spec** | ✅ 五档定稿(§6.2.3 上方) | 扩展 `_meta.health_probe`(rest 5链已用 {method,path,parse_jq}) |
+| **param_spec** | ✅ §4.2 定稿(transport+slots/fields+source 3维) | 扩展 param_formats(jsonrpc) / `_meta.rest_paths`(rest, 含 _tx_hashes/_addresses 数组=非account输入范式) |
+| **response_spec** | ✅ §5.2 定稿(envelope+locator path) | **复用 network_field_registry 字段→语义映射范式**(§105.3: _SEMANTIC_MAP 把字段名→语义类型, group_by_semantic 分组 = response DSL 声明"从响应提 block_height/account/data"的现成样板) |
+
+### 6.5.2 4 个现成 declarative 范式(DSL 全部复用, 杜绝 parallel-entry 新造)
+1. **rest `_meta.rest_paths`**: path+body 模板, {address}/{addresses_array} 占位, _tx_hashes/_addresses 数组 → param_spec 非account输入。
+2. **hedera_dual 委派路由**: `_is_jsonrpc_method` 正则按 method 分协议委派 RestAdapter/JsonRpcAdapter → S3.7 协议错配修复范式。
+3. **network provider 约定式文件名路由**: `{variant}.sh` 文件名=路由键免 dispatch 表, 4函数契约 + 三重防御 → 零代码加 method 的工程范式。
+4. **network_field_registry 字段→语义映射**: 静态查表 字段名→semantic_type → response_spec 字段语义声明。
+
+### 6.5.3 2 治理缺口修复(进 S0 必带, §103.2/§104.5 挖出)
+- **GAP-A adapter_family 无自动生成**: 36/36 chain template 有 adapter_family 但**无脚本写入**(grep 写入点=0), normalize_chain_templates 只产 _meta.adapter_required(布尔)。→ **S0 补: normalize 阶段自动判 adapter_family**(从 rpc_protocol/method 形态推断, 同 adapter_required 逻辑); 加新链 fail-fast 校验 adapter_family 必填(get_adapter base L126 已 raise, 但应前移到 normalize/CI)。
+- **GAP-B e2e 不验 method 构造**: e2e_smoke.sh 用 mock_rpc_server.py 黑盒探活(硬编码 eth_blockNumber 字面量, 非 cli.py build-target), L184 只断言 mock.log 含"method"字样(存在性非构造正确性)。→ **S0 补 L3 验证: method×chain×address 经 build-targets-batch 构造, 断言 address 进 body/url + param 顺序正确**(同 parallel-entry Step4-bis CLI shim 验证, 防 6866cba 对称fallback假绿复发)。
+
+### 6.5.4 7 真缺口修复落点(行号坐实, §98-104)
+| 缺口 | 落点 | 修复 |
+|---|---|---|
+| #2 6family账户抓取(无UTXO) | fetch create_adapter L673 | S1 InputProvider 6family输入池(bitcoin走UTXO/txid非account) |
+| #3 tx_hash丢弃 | fetch L729用L818弃 | S1 保留tx_hash入池供 transaction_hash param_spec |
+| #8 归因只CPU(出图丢mem) | per_method_charts.py **L241** | S3.3 plot 补 mem_mb+EBS+Net 四维 |
+| #9 weight未驱动 | target_generator **L260** 取模均权 | S2.4 按 mixed_weighted weight 加权分配(36链已有weight=1, fill_mixed_weighted硬编码) |
+| #10 单account池喂全部 | target_generator L220-225单池 | S1 多池按 param_spec.source 分桶 |
+| #11 proxy_self.csv死数据 | 生产3处(main.go/selfreport.go/proxy_lifecycle.sh)消费0处 | S3.4 attribution 读 proxy_self.csv 减基线(Q4-10/ADR-0004) |
+| mem_used列名 | attribution.py **L98** 默认mem_used_mb错 | S3.3 默认值改 mem_used(report_generator L4308 已显式兜但默认仍错) |
+
+### 6.5.5 不留债硬约束(token-level 实测背书, S0-S3 全程遵守)
+1. **字段名全保留**(csv_schema_registry 单源, block段6字段 L93-100): 不改名 → 8 consumer 零断裂; mainnet_block_height 改名=**否决**(performance_visualizer L2316 optional 无兜底, 收益仅语义)。
+2. **block_height_diff = 最硬契约**(performance_visualizer L2295 required 无兜底 + 3 consumer): 列名+required 不变, 五档 sync_strategy 产出的落后量都填进这列(数字diff/哨兵值/秒数)。
+3. **配置债收敛单源**: BLOCK_HEIGHT_DIFF_THRESHOLD(internal_config L59=50) 与 rpc_deep_analyzer.py L35 SYNC_THRESHOLD=20 合一(py os.getenv 读 internal_config, 同 visualizer L2354 范式)。
+4. **接口签名联动改**: build_vegeta_target 单address槽→(method,inputs:dict), 四处(target_generator TSV/cli.py解析/base签名/_build_params)一并改, 缺一断链。
+5. **fallback fail-fast**: param_spec 缺失/解析失败 必告警退出, 禁静默退化 [address](cli L55/jsonrpc L97/各adapter default 6866cba 教训)。
+6. **D5 Shell 不 fork Python**: 块高每秒高频, Shell get_block_height 纯 Shell+jq 读 block_height_spec, 不调 Python(防 fork 污染测量)。
+7. **L3 每阶段全过才 done**(parallel-entry 多阶段铁律): 每 S 阶段跑整框架 e2e, 块高保护场景C契约必验。
+
+### 6.5.6 ⏸️ 审查点(用户流程: 审过再进实现)
+schema + 缺口落点 + 不留债约束已定稿。**等用户审 DSL 设计**, 审过进 S0(建前置工具链 + 解 fake-node 数据退化 + 真跑验产物层), 再 S1-S3 按 family 分波编码。
