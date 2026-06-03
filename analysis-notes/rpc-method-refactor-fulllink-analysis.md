@@ -1475,3 +1475,46 @@ getHealth             = ok
 | S1 | "fetch 额外保留 tx_hash" | 真实 = fetch 输出 + target_generator reader + config 约定**一条链**都要改 |
 | S2.1 | "param_spec 替换 param_formats" | 真实 = 还要**改 build_vegeta_target 接口签名**(单 address 槽瓶颈), 与 S1 多池强耦合 |
 **结论**: 加上之前 S2.2/S3.5, 实施计划全部关键落点已 GREP-EVIDENCE 回验, 每处有真实 stdout 证据。S1+S2.1 强耦合(都卡在"单 address 槽 vs 多池多参数"接口), 实施时应合并考虑接口改造。计划夯实完成, 可进 S0。
+
+
+## 54. 第四十一轮: 🔴 请求↔响应对应关系处理逻辑(用户核心担心: 同参数类型/同method不同参数, 响应结构是否对应)
+
+### 用户问题(戳中我没专门分析的设计点)
+"6 family 的 method 用相同属性参数(如 address/tx_hash)传入时, 响应结构是否对应? 担心 address/tx_hash 类似 method 响应结构完全不同, 框架抽象后什么请求类型如何对应响应结构的逻辑处理, 不确定是否详细分析确认。"
+
+### 54.1 实测层1: 同参数类型(都传 address), 响应结构完全不同(坐实担心)
+| method | 参数 | 响应 result | 结构 |
+|---|---|---|---|
+| eth_getBalance | address+latest | "0x2a" | scalar hex(余额) |
+| eth_getTransactionCount | address+latest | "0x1" | scalar hex(nonce) |
+| eth_getCode | address+latest | "0x606060..." | scalar hex(合约字节码, 语义/长度完全不同) |
+| solana getBalance | pubkey | {context,value:508201} | dict, value=数字 |
+| solana getAccountInfo | pubkey | {context,value:{data,lamports,owner}} | dict, value=嵌套对象 |
+🎯 **参数类型相同 ≠ 响应结构相同**, 绝不能按参数类型推断响应解析规则。
+
+### 54.2 实测层2(更深, 用户"单个或多个参数"暗示的边界): 同method同参数位置, 仅参数值不同→响应结构变
+```
+eth_getBlockByNumber("latest", false) → transactions=["0x0aaf..."](字符串数组)
+eth_getBlockByNumber("latest", true)  → transactions=[{blockHash,...}](对象数组)
+```
+同 method, 仅第2参数 bool 不同, transactions 子结构 str→dict。**response_spec 用 method 名单键, 对"响应子结构随参数值变"的 method 理论上不够**。
+
+### 54.3 ✅ 现有 response_spec 设计对应键确认 = method(设计正确, 未犯参数类型混淆)
+§5.2 schema: `response_spec: { "<method_name>": { envelope, extract:{block_height,balance,...} } }` —— **键是 method_name, 每 method 独立声明**。getBalance/getCode/getAccountInfo 各有独立条目, 响应不同不混淆。**我没犯"按参数类型映射"的错**。
+
+### 54.4 🎯 完整请求↔响应对应关系处理逻辑(两层键 — 之前没讲透, 本轮补全)
+**静态层(声明绑定)**: param_spec[method] 和 response_spec[method] **都以 method 名为键** → "怎么构造请求" 和 "怎么解析响应" 天然按 method 绑定。
+**运行时层(实例关联)**: 同 method 并发多次 → 靠 **request_id**(缺口#5 唯一 id)把具体某次响应关联回具体某次请求。
+```
+param_spec[method] → 构造请求(带唯一 request_id) → proxy_extraction 识别 method(写 method_name+request_id 到 sink)
+→ request_id 关联键 → response_spec[method] 用该 method 专属解析规则提取语义字段
+```
+这是缺口#5(关联键)+ 缺口#7(三端同源)的合体: **param_spec / proxy_extraction / response_spec 三端都以 method 为键 + request_id 做运行时实例关联**。
+
+### 54.5 🟡 §54.2 边界的处理(诚实标注 + 不过度设计)
+- **第一性原理判断**: response_spec 只提取【有限语义字段】(block_height/balance/account_data/tx_status/nonce), 非完整解析响应。对块高: eth_getBlockByNumber 提 result.number, **无论 full_tx true/false, result.number 都在且一样**, 变的是 transactions(我们不提取)。→ **多数情况参数值变化不影响目标语义字段路径**(变的是不关心的部分)。
+- **但不绝对**: 若某 method 目标语义字段本身随参数变路径(理论可能), method 单键不够。
+- **设计处理**: response_spec schema **加约束声明 + 留扩展位**: ① 默认 method 单键(覆盖绝大多数)② 文档明确"目标语义字段路径须对该 method 所有参数变体稳定, 否则该 method 用参数变体子键"③ 留 `response_spec[method].variants[param_signature]` 扩展位(默认不用, 遇到真变体才启用)。**不预先过度设计**(184 实测中未发现目标字段随参数变路径的真实案例, 留位不实现)。
+
+### 54.6 对实施计划 S3.2 的强化
+S3.2 response_spec 落地时必须: ① 对应键=method(已对)② 与 param_spec/proxy_extraction 三端同 method 键交叉校验(防漂移, 缺口#7)③ schema 留 variants 扩展位但默认不启用 ④ L1 单测覆盖"同参数类型不同method响应不混淆"+"同method参数值变目标字段路径稳定"两个断言。

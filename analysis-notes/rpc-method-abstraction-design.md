@@ -506,6 +506,25 @@
 
 语义字段名(`block_height`/`balance`/`account_data`/`tx_status`/`nonce`...)是框架分析/归因层消费的标准键; 用户为新 method 声明它能从响应提取哪些, 框架据此零代码解析。
 
+### 5.2.1 🔴 请求↔响应对应关系处理逻辑(用户核心担心: 同参数类型/同method不同参数, 响应结构如何对应)
+
+**实测铁证(响应结构不能按参数类型推断)**:
+- 同传 address: eth_getBalance→"0x2a"(余额) / eth_getTransactionCount→"0x1"(nonce) / eth_getCode→"0x6060.."(合约字节码); solana 同传 pubkey: getBalance→`{value:数字}` / getAccountInfo→`{value:{嵌套对象}}`。**参数类型相同 ≠ 响应结构相同**。
+- 更深边界: 同 method 仅参数值变, 响应子结构变 —— eth_getBlockByNumber("latest",**false**)→transactions=[hash串] vs ("latest",**true**)→transactions=[{对象}]。
+
+**对应键 = 两层(框架抽象的核心处理逻辑)**:
+1. **静态层(声明绑定)**: `param_spec[method]`(构造)和 `response_spec[method]`(解析)**都以 method 名为键** → 请求怎么构造 + 响应怎么解析天然按 method 一一绑定。**绝不按参数类型映射**(getBalance/getCode 各有独立 response_spec 条目, 响应不同不混淆)。
+2. **运行时层(实例关联)**: 同 method 并发多次 → 靠 `request_id`(唯一 id, 见缺口#5/S3.1)把具体某次响应关联回具体某次请求。
+```
+param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 method(写 method_name+request_id 到 sink)
+  → request_id 关联键 → response_spec[method] 用该 method 专属解析规则提取语义字段
+```
+这是缺口#5(关联键)+ 缺口#7(三端同源)合体: **param_spec / proxy_extraction / response_spec 三端都以 method 为键 + request_id 做运行时实例关联**。
+
+**§5.2 边界(同method参数值变→响应子结构变)的处理(不过度设计)**:
+- 第一性原理: response_spec 只提【有限语义字段】(block_height/balance/...), 非完整解析。多数情况参数值变只影响不提取的部分(如 eth_getBlockByNumber 提 result.number, 无论 full_tx true/false 都在且一样, 变的是 transactions 不提取)。
+- schema 留扩展位但默认不启用: `response_spec[method]` 默认单键(覆盖绝大多数); 文档约定"目标语义字段路径须对该 method 所有参数变体稳定"; 留 `response_spec[method].variants[param_signature]` 扩展位, 仅遇真变体启用(184 实测未发现目标字段随参数变路径案例, 留位不实现)。
+
 ### 5.3 DSL 覆盖 184 实测响应形态的逐类验证(证明无遗漏)
 
 | 实测响应形态 | 链:method 例 | DSL 表达 |
