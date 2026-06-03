@@ -1905,3 +1905,31 @@ polkadot(混协议)应该用 **hedera_dual 式 per-request 路由**(REST path me
 ### 66.3 纠正动作: 按清单真读 13 个未读/部分文件
 从最关键开始: master_qps_executor.sh(986, 压测核心)→ per_method_attribution.py(258, 归因核心)→ fetch_active_accounts.py(841 主体)→ 其余。**这次真逐行读全文, 不再 grep 充精读, 不再挑段跳读。**
 **元教训(沉淀)**: 用户多轮"继续"+ 最后反问"是否遵守要求"= 强信号我在 grep-shallow。正解 = 立即列"文件×读取状态"清单(本轮做了)暴露真实覆盖率, 而非继续凭感觉挑读。**"读透"必须用清单证明全覆盖, 不能凭"我挖出了东西"的感觉自证。**
+
+
+## 67. 第五十四轮: master_qps_executor.sh 全 986 行真读(纠正 grep-shallow)— 与 RPC method 正交确认
+
+### 触发: §66 自查后按清单真读未读文件, 第一个 = master_qps_executor.sh(986行压测核心, 之前只 grep vegeta 行)。
+
+### 67.1 全文结构(986行逐行读)
+- L139-230 parse_arguments(--quick/standard/intensive + --single/mixed + 自定义 QPS)。
+- L246-285 pre_check(vegeta 安装 hard gate + target 文件存在 + RPC 连通)。
+- L287-467 瓶颈检测(check_bottleneck_during_test: CPU/MEM/磁盘 IOPS·throughput·latency/网络/error_rate 阈值 + bottleneck_detector 4 场景判真假阳性)。
+- L469-781 monitoring 数据读取 + bottleneck context/recommendations 辅助。
+- **L784-847 execute_single_qps_test = vegeta attack 核心**。
+- L849-959 execute_qps_test 主循环(QPS 爬坡 INITIAL→MAX step)。
+- L962-987 main。
+
+### 67.2 🎯 vegeta attack 核心(L784-847)行级确认
+- **L791: `echo "running qps:$qps" > qps_test_status`** = 监控生命周期信号 qps_test_status 的**运行时写入点**(每轮 QPS 更新)。纠正: 文档之前说"benchmark.sh:195 建", 实际运行时每轮更新在 master_qps L791。
+- **L798: `vegeta attack -format=json -targets=$targets_file -rate=$qps -duration=${duration}s`** = vegeta 核心命令, **读 target_generator 预生成的 target 文件**。
+- L820-824: 解析结果只读 requests/status_codes.200/latencies.mean = **传输层指标, 不碰响应 body**(确认文档"压测主路径不解析响应")。
+- L857-861: 按 RPC_MODE 选 single/mixed target 文件。
+
+### 67.3 🎯 与 RPC method 重构的关系(读全文确认, 非预判)
+1. **master_qps 完全不碰 RPC method 构造**: 只 `vegeta attack -targets=文件`, target 文件由 target_generator 预生成(method 构造在 target_generator/cli.py/adapter)。**master_qps 与 RPC method 分派/构造正交**。
+2. **vegeta 经 LOCAL_RPC_URL 发请求**: proxy 通过改 LOCAL_RPC_URL→localhost:18545(proxy_lifecycle.sh)插流量, master_qps 无感知。**S3.1 关联键改动不影响 master_qps**(它只发 target 文件里已构造好的请求)。
+3. **qps_test_status 运行时写入点 = L791**(execute_single_qps_test 内)。
+
+### 67.4 诚实纠正的价值
+之前只 grep vegeta 行就说"master_qps 是压测核心"(对)但没确认它与 method 构造的关系。读全 986 行才确认: **它与 RPC method 构造完全正交**(只发预生成 target), S2/S3 不需要改它。若之前凭 grep 推断它涉及 method 构造, 会误判 S2 要改它。**这就是 token-level 全读 vs grep 的差别: grep 能确认"它调 vegeta", 读全文才能确认"它不碰 method 构造、S2 不用改它"。**
