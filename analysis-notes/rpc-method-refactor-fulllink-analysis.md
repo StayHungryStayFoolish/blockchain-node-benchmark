@@ -2844,3 +2844,75 @@ advanced_chart_generator(1231)/disk_chart_generator(1346)/chart_style_config(714
 3. **B链接口瓶颈**: build_vegeta_target 单address槽 = S1/S2四处联动改点。
 4. **3 declarative 现成范式**: rest_paths / hedera委派 / network约定式文件名(DSL要复用)。
 5. **占位污染 + 静默fallback** 全 family 坐实(除rest raise)。
+
+
+## 103. 边界盲区补读(用户"确定都分析完了么"=探针, 实证我边界漏了一片)
+
+> 用户追问揭示: 我圈的 A-E/S1 边界漏了调用链上一批文件。grep 主入口 source 链 + 全仓 sh/py 清单对照, 实证盲区。
+
+### 103.1 ✅ 补读: tools/ RPC 直接相关脚本(之前完全漏)
+- **audit_rpc_methods.py(449)**: 独立 4 层证据验证工具(L1文档/L2 curl实证/L3 schema比对/L4错误语义)。**自带 build_params(L48-67) = 第3套参数构造**(adapter _build_params / cli 一套 + 这里一套), 但只 6 format(无 EVM 扩展)。limit RATE_LIMIT_DELAY=0.5(L37)。**与生产 adapter 参数逻辑重复, 是 DSL 统一应收编的第3处**。
+- **fill_mixed_weighted.py(73)**: L37-39 mixed→mixed_weighted, **weight 恒=1 硬编码(L38)**, 坐实 S2.4(36链全 weight=1, 等权迁移)。幂等跳过已有。
+- **fill_proxy_extraction.py(150)**: 按 _meta.adapter_family 每族一模板(L91分派)。json_rpc: method_source=body.method/id_source=body.id 硬编码(L23-24); rest: build_rest_extractor 从 rest_paths 展开 url_patterns(L34-61); hedera: 双extractor(L64-80, REST 4条写死非读rest_paths)。**proxy DSL 生成器, NS-3 核心**。
+- **normalize_chain_templates.py(194)**: research→baseline 7-key 规范化。产 rpc_methods.{single,mixed}(L111-114, 喂 fill_mixed) + _meta.adapter_required(L103布尔)。
+
+### 103.2 🔴 真缺口(补读挖出): adapter_family 无自动生成, 是治理缺口
+- 36/36 chain template **都有 adapter_family**(grep -l =36), **但无任何脚本写入它**(grep 写入点=0)。
+- normalize_chain_templates 只产 `_meta.adapter_required`(布尔), **不产 `adapter_family`**; 而 fill_proxy_extraction(L91)+ get_adapter(base L126)+ tendermint/rest 等全靠 adapter_family 分派。
+- → **治理缺口**: adapter_family 靠手工填/git历史填, 无 normalize 自动判定。**加新链时 adapter_family 漏填 → get_adapter raise / proxy_extraction 生成失败**。DSL 重构应补: normalize 阶段自动判 adapter_family(可从 rpc_protocol/method 形态推断, 同 adapter_required 逻辑)。
+
+### 103.3 ✅ 补读: config_loader source 链基础文件(子agent全文)
+- **config_loader.sh(749全)**: RPC 中枢。get_param_format_from_json(L683-704, param DSL入口, 默认single_address) / rpc_methods解析(L626/674) / **L597 jq del(._meta) 坐实缺口#4**(proxy_extraction 保留, _meta剥离) / MAINNET_RPC_URL 8链(L454-488)/ 块高文件定义(L351-352)。
+- **csv_schema_registry.sh(281全)**: bash侧CSV SSOT, 与py字节对称。block段6字段(L93-100)/qps段(L103-107)/resolve(L163-231)/segment_header(L267-281)。_CSV_REGISTRY_* 禁env覆盖(L23, 破坏对称)。
+- **unified_logger.sh(408全)/error_handler.sh(206全)**: 日志+错误处理底座。L15/L16 反向 source config_loader(循环依赖)。**与 RPC/块高/proxy 正交**(确认, 非口头)。
+
+### 103.4 ✅ 补读: analysis/ 漏掉的4分析器(子agent全文)
+- comprehensive_analysis.py(944): 总编排, 调 qps_analyzer+rpc_deep_analyzer+performance_visualizer。**无per-method维度**, RPC全委托 rpc_deep_analyzer。
+- qps_analyzer.py(1220): QPS级聚合(groupby current_qps), **无method维度**。
+- cpu_disk_correlation_analyzer.py(612): 18统计法(method=统计方法名非RPC), 被 performance_visualizer 调。
+- network_analyzer.py(162): **全仓零引用=孤立未接线模块**。
+- → 4个全 ❌ 不涉per-method/RPC method维度。
+
+### 103.5 🟡 仍未读(诚实, 待确认是否正交)
+config 6个: cloud_provider/deployment_mode_detector/internal_config(读过块高变量)/k8s_paths/system_config/user_config; utils/disk_converter.sh; tools/ disk_analyzer/benchmark_archiver/single_disk_workload_profile/disk_bottleneck_detector + 4 e2e_smoke + framework_data_quality_checker(读过段)。
+**初判云平台/磁盘/部署/测试维度, 与RPC method DSL正交 —— 但"正交"我栽过跟头(skill反例:标正交一读即真缺口), 下一步读完确认不口头判。**
+
+### 103.6 元教训(用户第N次点破): 我画的领域边界本身会漏调用链节点
+不是"领域内没读全", 是"领域圈定就漏了文件"(tools/ 4个RPC直接相关脚本 + config 6个 source链文件)。**"确定分析完了么"=信号: 我的边界可能不全, 必须 grep 主入口 source/import 链 + 全仓文件清单对照, 不能凭自己圈的范围自证完整**。
+
+
+## 104. 全仓正交性确认(§103.5 剩余全读, 不口头判正交)— 真正全域闭环
+
+> §103.5 标的剩余 config/tools 文件全部读代码+grep实证确认正交(不口头判, skill反例:标正交一读即真缺口)。
+
+### 104.1 ✅ internal_config.sh(全75, 本会话亲读) — 块高配置债源头坐实
+- BLOCK_HEIGHT_DIFF_THRESHOLD=50(L59) / BLOCK_HEIGHT_TIME_THRESHOLD=300(L61) / BLOCK_HEIGHT_MONITOR_RATE=1(L63) + BOTTLENECK_*阈值。
+- **配置债源头**: 这里 Shell 侧 DIFF_THRESHOLD=50, vs rpc_deep_analyzer.py L35 SYNC_THRESHOLD=20 — 两阈值判同一事(块高落后)双源。不留债收敛点 = 这里单源 + py os.getenv 读。
+
+### 104.2 ✅ config 6文件 + disk_converter(子agent读代码+grep实证)正交
+user_config/cloud_provider/deployment_mode_detector/k8s_paths/system_config/disk_converter: 云平台/磁盘/部署/IOPS换算维度。**rpc_method/param_format/build_target/proxy_extraction grep 0命中**。唯一 block_height 字面 = system_config L73 MONITORING_PROCESS_NAMES 进程名标签(非块高逻辑)。user_config L6 "RPC connection" 是过时误导注释(无对应变量)。→ 全正交。
+
+### 104.3 ✅ tools 9文件(子agent读代码+terminal grep实证)正交
+- **e2e_smoke.sh(217) + 3 matrix**: L3 验证入口, **但用 mock_rpc_server.py 黑盒探活(非 cli.py build-target)**, L119 硬编码 eth_blockNumber 字面量探活, L184 只断言 mock.log 含"method"字样(存在性非构造正确性)。**重要: 现有 e2e 不验证 method 构造正确性 → DSL 重构必须补 L3 method 构造验证**。
+- framework_data_quality_checker.sh(754): block_height/qps 是 CSV 列 schema 校验(SSOT=csv_schema_registry, 非 RPC DSL)。
+- disk_analyzer/disk_bottleneck_detector/single_disk_workload_profile/benchmark_archiver: 磁盘/归档, qps 仅"测试窗/max-qps结果"语义非RPC。→ 全正交。
+- 🔧 **工具坑**: search_files 对含横线 token(build-target)返假0命中, 必须 terminal grep 复核。
+
+### 104.4 🎯 真正全域闭环 — 全仓文件×读取/正交状态最终清单
+| 类别 | 文件 | 状态 |
+|---|---|---|
+| **RPC DSL 核心链** | 6 family adapter+cli+base / fetch+target_generator / config_loader(RPC段) / proxy 8 Go / attribution / fill_mixed+fill_proxy+normalize+audit | ✅ 全读 |
+| **块高链** | common/block_height_monitor/bottleneck/unified块高段/internal_config | ✅ 全读 |
+| **归因+出图** | per_method_attribution/charts/report_generator/visualization 7文件/analysis 8文件 | ✅ 全读 |
+| **监控** | unified_monitor/coordinator/ena/network+4provider/event_manager | ✅ 全读 |
+| **基础底座** | csv_schema_registry(sh+py)/unified_logger/error_handler | ✅ 全读 |
+| **正交确认(读代码非口头)** | config 6/disk_converter/e2e_smoke 4/磁盘归档4/quality_checker | ✅ 读完确认正交 |
+
+→ **全仓 sh+py 调用链相关文件全部 token-level 读完或读代码确认正交。无 🟡 无 ❌。**
+
+### 104.5 补读新挖的2个真问题(非空跑)
+1. **adapter_family 治理缺口**(§103.2): 36/36 有但无脚本生成, normalize 只产 adapter_required → 加新链手填易漏 → DSL 重构补自动判定。
+2. **e2e 不验 method 构造**(§104.3): 现有 L3 e2e 黑盒探活不覆盖 method 参数构造正确性 → DSL 重构必须补 method×chain 构造验证(同 parallel-entry Step4-bis CLI shim 验证)。
+
+### 104.6 元教训沉淀
+"确定分析完了么" = 不是问进度, 是探针我边界是否漏文件。正确响应: grep 主入口 source/import 链 + 全仓 sh/py 清单对照自己读过的, 暴露边界盲区, 而非凭自己圈的领域自证完整。本轮从"圈6领域自认完整"→ 实证漏了 tools 4 RPC脚本 + config 6 source链文件 + analysis 4分析器 + 14正交待确认文件, 全部补完。
