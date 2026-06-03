@@ -1961,3 +1961,24 @@ polkadot(混协议)应该用 **hedera_dual 式 per-request 路由**(REST path me
 
 ### 68.4 grep-shallow 纠正进度
 按 §66 清单真读: master_qps(986)✅ + per_method_attribution(258)✅。剩未读: bitcoin_jsonrpc.py(87)/ extractor.go(48)/ selfreport.go(117)/ fetch 主体/ target_generator 全文/ common_functions 全文/ config_loader 全文/ cli.py 全文/ main.go/ jsonrpc.go(extractor)/ blockchain_node_benchmark.sh 全文。继续按清单读。
+
+
+## 69. 第五十六轮: bitcoin/extractor.go/selfreport.go 真读(纠正grep-shallow, 4个"完全没读"文件补完3个)
+
+### 69.1 bitcoin_jsonrpc.py 全文(87行)— bitcoin 独有 auth 维度 + UTXO 无 account
+- **L28-34/43-45/69-71 HTTP Basic Auth**: bitcoin family 需 rpcuser:rpcpassword(BITCOIN_RPC_USER/PASSWORD env 或 _meta.basic_auth)→ **bitcoin 独有 auth 维度**, 其他 family 无。S1/S2 重构 bitcoin 要保留 auth header 注入(param_spec/InputProvider 要支持声明 auth)。
+- **L62-63 txid 占位符**: `return [address, True]`(getrawtransaction 需 txid), 但 address 槽塞 account, **bitcoin UTXO 模型无 account 概念**(缺口#2)→ bitcoin 的 single_address/txid 都用 address, 但地址≠txid≠UTXO。bitcoin 特有输入供给问题。
+- L59-61 address_minconf_includewatchonly `[address,1,False]`(getreceivedbyaddress, 对)。
+
+### 69.2 extractor.go 全文(48行)— Chain 串接确认 §62
+- Extractor 接口(Name+Extract); Chain(L30-46)多 extractor **串接第一个 ok 即停**(L39-45 按声明顺序)。确认 §62 proxy 只 json_rpc/rest 2 protocol, Chain 按序尝试。Result(Protocol/MethodName/RequestID/BatchIdx)。
+
+### 69.3 🎯 selfreport.go 全文(117行)— 缺口#11 完整闭环确认
+- L22-30 New 默认 proxy_self.csv + 1秒间隔; L37-41 写 header `timestamp_ns,cpu_pct,mem_mb`; L44-71 每秒 goroutine 读 /proc/self/stat(utime+stime)算 proxy CPU% + /proc/self/status VmRSS 算 mem MB → 写 proxy_self.csv。
+- **数据格式完全匹配 per_method_attribution 的 MonitorRecord**(timestamp_ns+cpu_pct+mem_mb)。
+🎯 **缺口#11 完整闭环**: 生产端(selfreport.go)proxy 每秒**正确采集写 proxy_self.csv** ✅; 消费端(per_method_attribution §68)**根本不读** ❌。数据采了格式对没人消费(Q4-10/ADR-0004 减 proxy 基线未实现)。
+→ **S3.4 比想象简单**: 生产端现成 + 格式已匹配 MonitorRecord, S3.4 = attribution 加读 proxy_self.csv(复用 read_monitor_csv 同款解析)+ L236 减基线。只缺消费端那一步。
+
+### 69.4 grep-shallow 纠正进度
+真读完: master_qps(986)+ per_method_attribution(258)+ bitcoin(87)+ extractor.go(48)+ selfreport.go(117)。
+4 个"完全没读"补完 3 个(剩 jsonrpc.go extractor 150)。剩 🟡 部分读: fetch 主体/target_generator 全文/common_functions 全文/config_loader 全文/cli.py 全文/main.go/blockchain_node_benchmark.sh 全文。继续。
