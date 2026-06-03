@@ -724,7 +724,7 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
   - common_functions.get_block_height 8链 case → 改为纯 Shell 读 `block_height_spec`(S2.3 三策略: dual_height / synced_bool / slot_diff)通用实现: 按 sync_strategy 分支 + jq 提取 + 统一 `_decode_height(encoding,raw)` 对标 Python `_try_int`(auto 识别 0x)。**块高知识单一声明源, 解绑 8 链支持 36 链**。
   - **核心改造(D5.1)**: get_block_height **不再打外部主网 MAINNET_RPC_URL, 改问本地节点同步状态 method**(36链实测背书)→ 消除中心化链主网限流缺陷 + 不污染测量。get_cached_block_height_data L105-106 双取(local+mainnet外部)→ 改为单取本地节点 block_height_spec(本地自查含网络最高/落后)。
   - **向后兼容(S2.3 约束)**: CSV 6 字段在 3 reader 硬编码, `mainnet_block_height` 改本地自查后语义变 → 字段改名 `network_block_height` 需同步 framework_data_quality_checker.sh:393/472 + unified_monitor.sh:1951 + block_height_monitor 写端 + cache JSON(parallel-entry CSV 耦合), 或保留旧名加注释。diff 算法不变(减法), 数据源外部→本地。
-  - **不走 Shell 调 Python**(块高每秒高频, D5 测量准确性论据 + 硬约束)。Python parse_block_height 同读 block_height_spec 声明。
+  - **不走 Shell 调 Python**(块高每秒高频, D5 测量准确性论据 + 硬约束)。**🔴 生产路径修正(§59 核查)**: 块高监控生产路径 = **Shell get_block_height 单套**(common_functions.sh); Python parse_block_height **生产链路零调用**(只 cli.py parse-height 子命令 + tests 用 = 测试夹具/dead path)。→ **S3.5 核心 = 改 Shell get_block_height 读 block_height_spec**(这是 live path); Python parse_block_height 同读声明**仅为测试一致性, 非生产必需**(工作量可选)。缺口#12"两套重复"真相 = Python 那套生产是 dead path, 非两套都在生产跑 → 块高归一工作量比之前估的小。
 - **S3.6 响应记录入库旁路**(§5.6, 决策④): PROXY_RESPONSE_CAPTURE 默认关, 独立 response_sink(不扩9列主CSV), maxBody 上限防 OOM。
 - **L1**: 关联键单测(id 注入→提取→关联) + response_spec 解析单测 + attribution 四维单测。
 - **L2**: proxy 全链路(请求带id→sink→attribution关联)集成。

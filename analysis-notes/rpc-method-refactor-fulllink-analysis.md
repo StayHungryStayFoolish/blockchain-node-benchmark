@@ -1653,3 +1653,29 @@ Phase 0.5 proxy启动(§57补)→ Phase 1 prepare(fetch L138 + target_generator 
 | 核查无误判 | 4套分派/proxy不解析响应/weight未驱动/attribution两维 | 批判性证伪均未推翻 |
 **调用链完整性确认**: 主入口 4 source + 8 Phase 全覆盖; RPC method 完整链(入口编排 Phase0.5-7 → 4套分派 → fetch输入 → target构造 → proxy识别 → master_qps压测 → attribution归因 → report)逐环有代码事实。
 **审查结论**: 文档**无误判**(已有断言核查正确), 有 **2 处遗漏已补**(proxy 生命周期 + Phase 时序)。新发现的 error_handler 正交不影响。基于代码事实的完整性达成。
+
+
+## 59. 第四十六轮: Python import 链审查 — 块高生产路径核查, 修正"Shell+Python两套都要改"认知(承审查扩大)
+
+### 触发: 换 Python import 链维度审查(前几轮按 shell 入口追)。cli.py 5 子命令 + parse_block_height 调用方核查。
+
+### 59.1 ✅ 生产入口确认(parallel-entry Step4-bis): cli.py 生产走 build-targets-batch
+- target_generator.sh:248/264 生产路径用 **build-targets-batch**(批量); L74 build-target 注释"Production path uses build_targets_batch" = 非生产/legacy。
+- 文档"cli.py batch 是生产入口"**对**。S2 实施 L2 测试必须测 build-targets-batch(非 build-target)。
+
+### 59.2 🔴 重要修正: 块高生产路径 = Shell get_block_height 单套, Python parse_block_height 是测试夹具(生产 dead path)
+**parse_block_height(Python)所有调用方核查**:
+- cli.py:129 cmd_parse_height(parse-height 子命令)+ hedera_dual 内部委派 + **tests/test_chain_adapters.py**。
+- **生产 shell: 零调用**(parse-height 子命令在 .sh 里 grep 无 caller)。
+- 块高监控生产路径 = **Shell get_block_height(common_functions.sh, 每秒高频)**, 完全独立, 不调 Python。
+
+🎯 **修正缺口#12 / S3.5 认知**: 之前文档说"Shell get_block_height + Python parse_block_height 两套重复实现, S3.5 让两套同读 block_height_spec"。**核查发现**: Python parse_block_height **生产链路根本不调**(只 cli.py parse-height 子命令 + 测试用), 生产块高 = Shell 单套。
+- **S3.5 核心 = 改 Shell get_block_height**(读 block_height_spec 本地自查), 这才是生产路径。
+- Python parse_block_height 改不改取决于: 它是否会成未来生产路径, 还是永远测试夹具。若永远测试用 → 改它是为测试一致性, **非生产必需** → **S3.5 工作量可能比文档估的小**(生产只改 Shell 一套, Python 视测试需要)。
+- 缺口#12"重复实现"的真相: 两套里 **Python 那套在生产是 dead path(只测试)**, 不是两套都在生产跑。这降低了块高归一的紧迫性和工作量。
+
+### 59.3 审查方法论(token-level 扩大的真价值)
+本轮换 import 链维度, 纠正了一个**认知误判**(非文档明写的误判, 是隐含假设): "Shell+Python 块高两套都在生产, 都要同步改"。核查调用方实证 Python 块高生产 dead path → S3.5 认知修正。**教训: "两套实现"不等于"两套都在生产跑", 必须 grep 各自的生产 caller 确认哪套是 live path**(parallel-entry: dead code 不是生产路径)。
+
+### 59.4 待补 S3.5 实施计划修正
+S3.5 应明确: 生产块高归一 = 改 Shell get_block_height 读 block_height_spec(本地自查); Python parse_block_height 作测试夹具, 同读 block_height_spec 仅为测试一致性(非生产必需, 工作量可选)。
