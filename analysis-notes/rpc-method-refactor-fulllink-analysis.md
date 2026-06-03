@@ -1737,3 +1737,35 @@ config.LoadChain(chain_file) → sink.New → proxyhandler.New(chain, sink, upst
 本轮(rest 关联键)又挖出真复杂度(rest 无天然 id 需框架注入, 非补一行)= 仍出真东西。但这是**已知缺口#5 的细化**(不是新结构性缺口), 属"强化已知"。
 **累计审查趋势**: §57 整文件遗漏(高)→ §59 dead path 认知修正(中)→ §60 行级落点(低)→ §61 已知缺口细化(rest id 注入)。**严重度持续递减, 无新结构性缺口, 调用链 live/dead path + Go/Shell 双侧 + 主入口依赖链全覆盖**。
 **收口结论**: RPC method 完整调用链(入口 Phase0.5-7 → 4套分派 → fetch输入 → target构造 → proxy handler/extractor/sink wiring → master_qps → attribution → report)逐环行级有代码事实。文档**无误判**, 遗漏(proxy_lifecycle/Phase时序)已补, 认知修正(块高dead path/rest id注入)已记。基于代码事实的完整性达成, 可收口进 S0 实施。
+
+
+## 62. 第四十九轮: sink.go + config/loader.go 审查(proxy 8文件全行级覆盖收口)— 三端同源维度修正
+
+### 62.1 sink.go(131行)实测 = 文档对, S3.1 sink 侧不改 schema
+- CSV 9 列锁定(L40-43)与文档一致。Record struct **RequestID 字段已存在**(L27)→ S3.1 关联键 sink 侧**不改 schema**, RequestID 列已就位, 只是上游(adapter id + extractor)填的值要修。
+- 支持 csv/jsonl/**discard** 三格式(PROXY_SINK_FORMAT)。文件锁(mu)+ 空文件才写 header(L88-91)并发安全。
+- **S3.6 约束确认**: sink 只 9 列无 response body 列 → S3.6 响应记录必须独立 response_sink, 不扩这个主 CSV(schema 锁定, 文档说对)。
+
+### 62.2 🔴 config/loader.go(73行)实测 — proxy_extraction 只支持 2 种 protocol(三端同源维度修正)
+- LoadChain 读 chain template `proxy_extraction.extractors[]`(protocol/method_source/id_source/params_source/url_pattern/batch_handling/url_patterns)。
+- **buildExtractor(L57-72)只支持 2 种 protocol: `json_rpc` 和 `rest`**! default 报错 "only json_rpc/rest allowed (spec §1.7)"。
+
+🎯 **对 S3.2 三端同源的维度修正(文档没讲透)**: 
+- proxy_extraction = **传输协议维度(2 种: json_rpc / rest)**, 不是 6 family 维度。
+- 6 family 在传输层归结为这 2 种: substrate/bitcoin/tendermint(jsonrpc body)走 json_rpc extractor; rest/部分tendermint(URL path)走 rest extractor; hedera 双模式用两个。这**合理**(proxy 识别 method 看传输层 method 字段/URL path, 不需要知道 family)。
+- **但三端同源的"键"维度不完全一致**: param_spec/response_spec 是 **method 维度**(每 method 一条), proxy_extraction 是 **传输协议维度**(json_rpc extractor 从 body.method 提 method 名 / rest extractor 从 url_pattern 映射 method 名)。三端同源 = **proxy 按传输协议提取出 method 名 → 该 method 名作为 param_spec/response_spec 的键**。不是"三个都按 family 平行", 是靠 **method 名串联**。S3.2 交叉校验要校验: proxy_extraction 能提取出的 method 名集合 ⊇ param_spec/response_spec 声明的 method 集合(否则该 method 走 __unmatched__ 静默消失)。
+
+### 62.3 🎯 proxy 8 文件全行级覆盖收口
+main.go / handler.go / extractor.go / jsonrpc.go / rest.go / sink.go / config/loader.go / selfreport.go — **8 文件全部 token-level 行级读过**(§60 handler / §61 rest / §62 sink+loader + 前轮 extractor/jsonrpc/selfreport)。proxy 子系统无遗漏文件。
+
+### 62.4 审查累计最终收口(§57-62)
+| 轮 | 维度 | 发现 | 严重度 |
+|---|---|---|---|
+| §57 | shell source 链 | proxy_lifecycle.sh 整文件遗漏 + Phase0.5 | 🔴高 |
+| §58 | source续 | error_handler 正交 | — |
+| §59 | Python import | 块高 Python dead path 认知修正 | 🟡中 |
+| §60 | Go handler wiring | 行级落点 | 🟢低 |
+| §61 | Go rest extractor | rest 关联键复杂度细化 | 🟢低 |
+| §62 | Go sink+loader | proxy 2-protocol 三端同源维度修正 | 🟡中(设计理解修正) |
+**判定**: §62 又出一个设计理解修正(三端同源维度), 说明仍未完全到底, **但全是已知缺口/设计的细化, 无新结构性缺口**。proxy 8 文件 + shell/python 双侧 + 主入口依赖链 = 全行级覆盖。RPC method 完整调用链逐环行级有代码事实。
+**收口**: 文档无误判; 遗漏(proxy_lifecycle/Phase时序)已补; 认知/维度修正(块高dead path/rest id注入/三端同源维度)已记。基于代码事实完整性达成。
