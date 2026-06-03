@@ -309,3 +309,23 @@ approval.py:346 `(python[23]?|perl|ruby|node)\s+-[ec]\s+` = "script execution vi
 4. ton validator-console getstats(需 console key)
 5. hedera consensus 节点 metrics hasFallenBehind(public 只有 mirror REST)
 → 这 5 项是协议/部署使然, 不是接口缺失; 块高同步监控用已实测的 method(本地高度 + 同步布尔/网络最高)足够, metrics 是精度增强项。
+
+
+## 98. D5 sui/aptos 网络最高来源 — 联网官方文档最终确认(用户追问"是否搜了官方文档")
+
+> 用户质疑 peer_metrics 档(sui/aptos 网络最高在 metrics 非 RPC)是否漏了官方 method。子agent联网下载官方 spec 全量扫描 2026-06-03。
+
+### sui(openrpc spec v1.74.0 全43 method 扫描)
+- 含 sync/status/peer/highest/target 的 method = **0**。唯一 "state"=suix_getLatestSuiSystemState(系统状态非同步, 37字段无 checkpoint/round/sync)。唯一 "highest"=highest_supported_protocol_version(协议版本无关)。
+- sui_getLatestCheckpointSequenceNumber 官方描述 = "latest checkpoint that has been EXECUTED"(本地已执行非网络最高)。
+- GraphQL(graphql.mainnet.sui.io)checkpoint 也是本地最新, 无 highest_known/synced。
+- → **确认: 网络最高(highest_known_checkpoint/highest_synced_checkpoint)只在 :9184 Prometheus metrics, JSON-RPC+GraphQL 无遗漏 method**。
+
+### aptos(spec.yaml 15682行 全28 endpoint 扫描)
+- 无 /sync /target /state /status 路径。/v1 IndexResponse 字段无 sync/target/advertised(只 ledger_version/block_height 本地)。/-/healthy 只判时间戳延迟(server_latest_ledger_timestamp >= now - duration_secs), 不量化落后 version。
+- indexer GraphQL processor_status.last_success_version = indexer 处理进度(近似链头, 但是托管服务非节点 REST)。
+- → **确认: 网络最高(aptos_data_client_highest_advertised_data / aptos_state_sync_version{type=highest})只在 :9101 metrics, REST 无遗漏 endpoint**。
+
+### 结论: D1 block_height_spec peer_metrics 档成立(官方文档实证背书)
+sui/aptos **本地高度有 RPC method**(已真机测), **网络最高只在 metrics 端口**(官方 spec 全量扫描确认无 RPC method 遗漏)。transport:"metrics" 档设计正确。public fullnode 不开 metrics 端口 → S0 真节点(GCE/GKE fake-node)验。
+官方文档: docs.sui.io/sui-api-ref + MystenLabs/sui openrpc.json / aptos.dev + aptos-labs/aptos-core api/doc/spec.yaml。
