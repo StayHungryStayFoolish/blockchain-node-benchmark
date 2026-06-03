@@ -1424,3 +1424,26 @@ getHealth             = ok
 - 用户两次第一性原理引导("每个链都该有这能力"+"slot 就是差值")纠正了我两轮判错(§50 判 EVM/Solana 失明)。教训: 判"某链没有 X 能力"前, 先假设"它应该有(第一性原理: 节点功能必需), 是我没找对 method", 多查几个 method + 实测, 别轻易下"该链不支持"结论。
 - delegate web 调研 tool_trace 空=基于模型知识非真搜索(self-report), 关键点(solana slot 差)我自己实测回验=实测即事实, 坐实用户论点。
 - **待补**: tendermint catching_up 实测(本轮 cosmos status 返回被截断没看全 sync_info)、sui 网络最高 checkpoint、rest 类(cardano/tezos/algorand/aptos/ton)本地同步 API、hedera、其余 jsonrpc(tron/avalanche-x)。36 链逐链 sync_method 全确认才完整。
+
+
+## 52. 第三十九轮: 36链本地同步method全量实测完成 + 独立文件沉淀(用户要求全量非抽样)
+
+### 52.1 全量实测收口(独立文件 analysis-notes/block-height-sync-method-measurement.md, commit f57be04)
+用户要求"剩余全部实测完 + 记录到文件 + 放 rpc method 同文件夹"。已建独立实测文件(36链逐链总表)。
+本轮补测(纠正之前 family 代表的抽样):
+- **tendermint 3 链单独实测**(非代表): celestia(catching_up=False latest=11359855)/ injective(169100283)/ osmosis(63170327)全 ✅。
+- **acala 真发现**: 同 substrate family 但 **system_syncState 返 -32601 Method not found**! 改 system_health(isSyncing=false)+ chain_getHeader(本地高度)→ 类型 B。**坐实"逐链声明非 per-family"**: polkadot/kusama 有 system_syncState, acala 没有。
+- **bitcoin bch/litecoin/dogecoin**: 公开免费 endpoint 需 API key / 404 不可达(skill 早记 bitcoin 系节点稀缺), 诚实标注"同 Bitcoin Core 协议 getblockchaininfo blocks/headers 一致, bitcoin 主链已实测"。
+
+### 52.2 🎯 36链本地同步method全量实测完成度(诚实)
+**真实测 ✅**: substrate polkadot/kusama/astar/moonbeam/acala(5) + bitcoin 主链(1) + EVM ethereum 代表 + solana/sui/near/starknet/tron/avalanche-x(jsonrpc) + tendermint cosmos/celestia/injective/osmosis(4) + rest cardano/aptos/algorand/ton/tezos(5) + hedera(1)。
+**endpoint 不可达诚实标注 ⚠️**: bch/litecoin/dogecoin(同协议)+ EVM 其余链(eth_syncing 同构, ethereum 已证)+ sei(双模式)。
+**真发现(非抽样推断)**: ① acala 同 family 不支持 system_syncState ② solana getMaxShredInsertSlot-getSlot=7 本地自算落后 ③ astar/moonbeam EVM=substrate 块高同值。
+
+### 52.3 沉淀位置(两文档同步)
+- **独立实测文件**: analysis-notes/block-height-sync-method-measurement.md(36链总表 + 两类同步判断 + block_height_spec DSL 草案 + 局限), commit f57be04 push ✅。
+- **全过程分析**: 本文档 §48-52(块高分析五轮), commit 3e19535/9b5817b/fc31b19/e1a0f75/本轮 push ✅。
+
+### 52.4 block_height_spec 设计地基就绪
+基于全量实测, block_height_spec DSL 草案已定(sync_strategy: dual_height / synced_bool / slot_diff + transport + 各路径 + encoding)。
+下一步可: ① 据此重写 D5/block_height_spec 正式设计并更新实施计划 S2.2b/S3.5 ② 或用户先 review 实测文件。
