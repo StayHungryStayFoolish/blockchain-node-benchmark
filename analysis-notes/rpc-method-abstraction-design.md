@@ -895,3 +895,18 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 
 ### 6.5.6 ⏸️ 审查点(用户流程: 审过再进实现)
 schema + 缺口落点 + 不留债约束已定稿。**等用户审 DSL 设计**, 审过进 S0(建前置工具链 + 解 fake-node 数据退化 + 真跑验产物层), 再 S1-S3 按 family 分波编码。
+
+
+## 6.6 S0 执行记录(自主执行, 2026-06-03 起)
+
+### 6.6.1 F1 adapter_family 治理缺口 — 批判性纠正(天真"自动推断"方案被数据证伪)
+> token-level 核 36 链 adapter_family 真实值 vs rpc_protocol 信号(execute_code 全量 dump):
+> **adapter_family 无法从 rpc_protocol 可靠推断**:
+> - proto=rest 横跨 3 family: bitcoin_jsonrpc(bch/dogecoin/litecoin) / rest(algorand/aptos/cardano/tezos) / tendermint(cosmos-hub)
+> - proto=mixed 横跨 5 family: bitcoin/hedera/tron/substrate/tendermint
+> - proto=json-rpc 横跨 jsonrpc + substrate(kusama)
+> → **"从 rpc_protocol 自动推断 family"会填错**(bch proto=rest 但 family=bitcoin_jsonrpc, 因协议是 Bitcoin Core fork 非 REST)。
+>
+> **纠正后 F1 方案(甲, 不留债)**: adapter_family 是【协议族归属语义】= 领域知识(需懂 bch 虽 HTTP 但协议是 bitcoin fork), **不该靠启发式猜**。治理缺口本质 = "无校验"非"无自动生成"。
+> F1 实做 = **CI 校验脚本 `ci/check_adapter_family.sh`**: ①36 链每条必有 _meta.adapter_family ②必须在 6 注册 family 内(bitcoin_jsonrpc/hedera_dual/jsonrpc/rest/substrate/tendermint) ③缺失/非法 = exit 1 fail-fast 提示手填。与 skill §6 铁律"加新 adapter family 用 @register"一致(family 归属人工权威定, 框架校验不猜)。
+> normalize_chain_templates.py **不加 adapter_family 推断**(避免填错), 仅保留现有 adapter_required(布尔, 是否需 adapter 路由, 与 family 归属正交)。
