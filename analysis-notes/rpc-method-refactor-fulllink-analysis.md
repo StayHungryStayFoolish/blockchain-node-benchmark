@@ -2593,3 +2593,80 @@ base.py 实证: `parse_block_height` 是 ChainAdapter ABC **3 个 @abstractmetho
 - 阈值双源收敛为单源 → 消除既有配置债。
 - 8链硬编码 case 删除 → 36链零代码(NS-1)。
 - 两层健康机制保留(连通性+同步), 只解耦"块高读取"与"健康判定"职责。
+
+
+## 98. 块高完整调用链 token-level 全量精读(用户要求继续全面查)— 纠正前几轮3处遗漏
+
+> 用户"继续查整个逻辑调用链, token-level 全面分析"。逐行真读所有 reader(不转述 file-notes), 建文件×读取清单。
+> **纠正之前遗漏**: §80/§91/§94 都漏了 unified_monitor 这条路径 + 块高字段进主 performance CSV + 跨CSV join。
+
+### 98.1 🎯 完整调用链真实拓扑(单一数据源 + 消费分叉, token-level 确认)
+```
+[唯一生产者] block_height_monitor.sh(独立进程, 每秒)
+  └ get_block_height(local) + get_block_height(mainnet)  ← get_block_height 真正 caller
+      └ common.get_cached_block_height_data: 算 diff=mainnet-local(common L113)
+          ├─→ 写 cache.json(common L163, 3秒缓存)
+          ├─→ 写 node_health_<hash>.cache(get_block_height 内部 L184/205/278, 连通性健康)
+          ├─→ block_height_monitor 写【独立】block_height_monitor_<ts>.csv(7字段, L174 buffered_write)  ★主数据文件
+          ├─→ diff>50 持续>300s → 写 block_height_time_exceeded.flag(L202)
+          └─→ 写 data_loss_stats.json(L451)
+
+[消费分叉]
+  ① unified_monitor.sh(L2134-2144): tail -1 BLOCK_HEIGHT_DATA_FILE + cut -f2-7 取6字段
+       → 塞进【主 performance CSV】的 block 段(header 经 csv_registry block 段 L1945, 实证 unified L1940)
+       → 取不到填默认 "0,0,0,1,1,0"。**unified 不自己调 get_block_height, 只读 block_height_monitor 的产物**
+  ② bottleneck_detector.sh(L1147): 读 block_height_time_exceeded.flag → 场景C Node_Unhealthy
+  ③ quality_checker.sh(L580): validate cache.json; (L393/472)校验 block_height CSV header
+  
+[末端 Python reader, 读主 performance CSV 的 block 段]
+  ④ performance_visualizer.py(L2294-2316): block_height_diff+data_loss=required, local/mainnet=optional → 出4子图(双线/diff线)
+  ⑤ rpc_deep_analyzer.py(L247-266): block_height_diff>SYNC_THRESHOLD(20!) 判 sync_issues, 联 current_qps/rpc_latency_ms(同CSV)
+  ⑥ degraded_report.py(L149-187): 读【独立】block_height_*.csv 或 fallback performance_latest.csv; 字段软匹配[local_block_height/block_height/height]
+  ⑦ report_generator.py: HTML 块高段(i18n local/mainnet/diff 标签)
+  ⑧ csv_schema_registry.py(L147-154): block 段6字段注册(单一事实源, unified+quality_checker 都引)
+```
+
+### 98.2 🔴 本轮纠正的3处前轮遗漏(token-level 真读才发现)
+1. **漏了 unified_monitor 路径**: §80/§91/§94 只说 block_height_monitor 一条线。真相: 块高6字段经 unified_monitor tail+cut **进主 performance CSV**(L2139), 末端 Python reader 大多读这里不读独立 CSV。
+2. **漏了跨CSV join 关系**: rpc_deep_analyzer L264 联 block_height_diff + current_qps + rpc_latency_ms = 三段同在 performance CSV(块高被合进主CSV才能联)。
+3. **registry 单源已落地**: block 段6字段 csv_schema_registry L147 注册, unified L1945 + quality_checker 都经 csv_registry_segment_header, 非各自字面量(F1 已解耦)。**改字段名要改 registry 单点, 不是散改**(比 §91 判断的"散在多reader"乐观, registry 已收敛 header 源)。
+
+### 98.3 字段名/语义改动的真实断裂面(不留债依据, token-level 实测)
+| 字段 | 改名断裂面 | 软匹配兜底? |
+|---|---|---|
+| local_block_height | csv_registry L148(单源) + performance_visualizer L2313(optional, 缺则降级单线不崩) + degraded_report L172(软匹配[local_block_height/block_height/height], 改名不崩) | 部分有 |
+| mainnet_block_height | csv_registry L149 + performance_visualizer L2316(optional) | 无直接兜底 |
+| block_height_diff | **csv_registry L150 + performance_visualizer L2295(required, 缺则跳过出图!) + rpc_deep_analyzer L247 + degraded_report L158** | 无—改名直接断出图+分析 |
+| data_loss | csv_registry L153 + performance_visualizer L2295(required) | 无 |
+| 三内存文件名(cache/flag/node_health) | 各1-2 reader(bottleneck L1147/quality L580/check_node_health L300) | 无 |
+
+→ **block_height_diff 是最硬契约**(required+无兜底, 3个consumer)。改名/改语义必须同步 csv_registry(单源)+ 这3处。
+
+### 98.4 🔴🔴 既有配置债坐实(token-level 双消费点确认)
+- Shell 侧: BLOCK_HEIGHT_DIFF_THRESHOLD=50(internal_config L59)→ block_height_monitor L181 告警 + performance_visualizer L2354 画线
+- Python 侧: BLOCK_HEIGHT_SYNC_THRESHOLD=20(rpc_deep_analyzer L35 写死)→ L259 判 sync_issues
+- **同一件事(块高落后)两个阈值(50 vs 20)两处定义**, 一个 env 一个 py 硬编码 → 不留债必须收敛单源(internal_config 定, py os.getenv 读, 照 visualizer L2354 已有范式)。
+
+### 98.5 不留债方案据此精化(完整调用链版)
+1. **唯一生产者保持 block_height_monitor**(它是唯一调 get_block_height 处; unified 只读产物)→ block_height_spec 声明只需让这一个生产者读。
+2. **get_block_height 收编**: 8链case → 读 block_height_spec(D5 纯Shell不fork Python); 内部"块高读取"与"node_health cache写入"职责解耦但 cache 契约不变。
+3. **字段全保留原名**(csv_registry 单源不改名)→ 8个consumer零断裂; mainnet_block_height 改名=否决(§91 已定, 本轮坐实 performance_visualizer optional 无兜底)。
+4. **block_height_diff 语义按 sync_strategy 适配但列名+required 契约不变**(performance_visualizer L2295 required); synced_bool/freshness 链产出的"落后量"也填进 block_height_diff 列(哨兵值或秒数), 下游零改。
+5. **阈值收敛单源**(98.4 债): SYNC_THRESHOLD 改 os.getenv 读 internal_config, 消除 50/20 双源。
+6. **flag→场景C 契约 L3 必验**(98.1 链③不变)。
+7. **unified tail+cut 路径不动**(L2139 按列读, 块高段位置不变即可)。
+
+### 98.6 文件×读取状态清单(本轮覆盖率证明)
+| 文件 | 读取状态 |
+|---|---|
+| common_functions.sh get_block_height+check_node_health L100-317 | ✅ 全读(前轮+本轮) |
+| block_height_monitor.sh | ✅ file-notes 452/452 + 本轮关键段 |
+| bottleneck_detector.sh L1145-1214 | ✅ 全读 |
+| unified_monitor.sh L1935-1965 + L2132-2179 | ✅ 本轮真读(前轮遗漏) |
+| performance_visualizer.py L2290-2365 | ✅ 本轮真读 |
+| rpc_deep_analyzer.py L240-268 | ✅ 本轮真读 |
+| degraded_report.py L145-187 | ✅ 本轮真读 |
+| csv_schema_registry.py L144-163 block段 | ✅ 本轮真读 |
+| report_generator.py 块高段 | 🟡 grep定位(i18n标签+表格), 出图逻辑同 performance_visualizer |
+| quality_checker.sh L393/472/580 | 🟡 grep定位(校验header+cache), 未逐行(但契约=header字面匹配, registry已单源) |
+| data_loss_stats.json reader | ❌ grep零Python reader(只 block_height_monitor 自写自统计 L441 update_data_loss_stats), **确认无外部消费者=自用统计, 非调用链节点** |
