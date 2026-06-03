@@ -657,7 +657,27 @@
   - **S2.2b Shell 侧**(走 **D5=方案①声明式收敛**, 非跨语言 fork): config_loader MAINNET case(L454 BLOCKCHAIN_NODE→endpoint, 8链硬编码)/ get_block_height(common:194 BLOCKCHAIN_NODE→内嵌curl+jq+转换)**改为纯 Shell 读 chain template 声明字段**(jq 读, 复用 config_loader 现成 `echo "$CHAIN_CONFIG" | jq -r` 模式, L540/597/626/674 已大量用)。**不引入 Shell 调 Python**(D5 决策, 见下)。
 - **S2.3 chain template 声明字段收敛 + 不被 del 删**(缺口#4 + D5 地基): 
   - config_loader L597 `CHAIN_CONFIG=jq del(._meta)` 改为保留分派/声明所需字段(adapter_family + endpoint_spec + block_height_spec), 不能删。
-  - 新增声明块: `block_height_spec:{method, result_path(jq), encoding(hex|dec|int)}` + `endpoint_spec` —— Shell(S2.2b)和 Python(parse_block_height)**同源读这一处**(消除缺口#12 的根: 单一声明源, 非两份代码也非跨语言桥)。
+  - 新增声明块: `block_height_spec`(基于 36 链全量实测, 见 **analysis-notes/block-height-sync-method-measurement.md**)+ `endpoint_spec` —— Shell(S2.2b)和 Python(parse_block_height)**同源读这一处**(消除缺口#12 的根: 单一声明源, 非两份代码也非跨语言桥)。
+
+> **🔴 D5.1 块高同步监控重大修正(2026-06-02, 用户引导 + 36链实测, 推翻"打外部主网")**:
+> **原设计缺陷**: get_block_height 打【外部主网 MAINNET_RPC_URL】取 mainnet 高度 → 中心化链主网限流(每秒打必被限)→ 取不到 → diff 算不出 → 不知道本地节点落后主网多少 = 块高同步监控核心功能失效。
+> **修正方案(36链实测背书)**: get_block_height **不打外部主网, 改为只问本地节点的同步状态 method** —— 所有 6 family 实测证实节点自身就知道"本地高度 + 网络最高/是否落后"(节点参与共识必须知道网络头)。
+> **block_height_spec DSL 三策略(实测分类, 详见独立实测文件)**:
+> ```jsonc
+> "block_height_spec": {
+>   "sync_strategy": "dual_height" | "synced_bool" | "slot_diff",
+>   "transport": "jsonrpc" | "rest",
+>   // dual_height(substrate system_syncState / bitcoin getblockchaininfo / EVM同步中eth_syncing):
+>   "sync_method": "system_syncState", "local_height_path": ".result.currentBlock", "network_height_path": ".result.highestBlock",
+>   // slot_diff(solana): "local_method":"getSlot", "network_method":"getMaxShredInsertSlot"(相减=落后slot)
+>   // synced_bool(tendermint catching_up / near syncing / avax isBootstrapped / EVM已同步 / acala system_health):
+>   //   "synced_method":"status","synced_path":".result.sync_info.catching_up","synced_value":false,"height_path":".result.sync_info.latest_block_height"
+>   "encoding": "hex" | "dec" | "auto"
+> }
+> ```
+> **逐链声明非 per-family(实测铁证)**: acala 同 substrate family 但**不支持 system_syncState**(返-32601), 走 system_health; astar/moonbeam EVM 兼容; sei EVM-on-tendermint。→ block_height_spec 必须逐链填, 框架不按 family 硬猜。
+> **收益**: 中心化链主网限流问题消失 + 不污染测量(不打外部) + 28链不必配 mainnet endpoint(彻底解绑8链)。
+> **🔴 向后兼容约束(S2.3 GREP-EVIDENCE 实证)**: 现有 CSV 字段 `local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss` 硬编码在 **3 处 reader**(framework_data_quality_checker.sh:393/472, unified_monitor.sh:1951, block_height_monitor 写端)+ cache JSON(common_functions.sh:154-156)。改本地自查后 `mainnet_block_height` 语义从"外部主网高度"变成"节点自查网络已知最高"→ **字段名撒谎风险**(skill E10/E11)。处理: 字段名改 `network_block_height`(中立)需同步 3 reader(parallel-entry CSV 耦合), 或保留旧名加注释。diff 语义 `mainnet-local`→`network_known-local`, 算法不变(仍是减法), 只是数据源从外部改本地。
 
 > **D5 架构决策(2026-06-02, 用户拍板"不留技术债+优雅")= 方案① Shell DSL 化**:
 > Shell 侧(endpoint + 块高健康检查)统一走"纯 Shell 读 chain template 声明 + jq 提取", **不走 Shell fork Python**。
@@ -679,7 +699,11 @@
 - **S3.2 响应 DSL response_spec**(§5 + raw-evidence L3 Expected fields 金矿): chain template 声明响应提取路径(envelope×locator×type 3维), 收编 6 处 method 知识沉淀单一来源 + 交叉校验防 __unmatched__ 静默消失(缺口#7)。
 - **S3.3 attribution 补四维**(缺口#8): per_method_attribution 读 unified CSV 的 disk/net 列(数据已采), PerMethodResourceRow 加 ebs/net 字段, 出图四维。**低风险**(数据源零改动)。
 - **S3.4 减 proxy 基线**(缺口#11): attribution 读 proxy_self.csv 减去 proxy 自身 cpu/mem 开销(Q4-10/ADR-0004 设计落地)。
-- **S3.5 块高提取归一**(缺口#12, 走 **D5=方案① Shell DSL 化**): common_functions.get_block_height 8链 case → 改为纯 Shell 读 `block_height_spec`(S2.3 声明的 method + result_path + encoding)通用实现(jq 提取 + 按 encoding 转 hex/dec)。Python parse_block_height 同读这一处声明。**块高知识单一声明源, 块高监控解绑 8 链支持 36 链**。**不走 Shell 调 Python**(块高每秒高频, 见 D5 测量准确性论据 + 硬约束)。
+- **S3.5 块高同步监控归一 + 本地自查改造**(缺口#12 + D5.1, 走 **D5=方案① Shell DSL 化**):
+  - common_functions.get_block_height 8链 case → 改为纯 Shell 读 `block_height_spec`(S2.3 三策略: dual_height / synced_bool / slot_diff)通用实现: 按 sync_strategy 分支 + jq 提取 + 统一 `_decode_height(encoding,raw)` 对标 Python `_try_int`(auto 识别 0x)。**块高知识单一声明源, 解绑 8 链支持 36 链**。
+  - **核心改造(D5.1)**: get_block_height **不再打外部主网 MAINNET_RPC_URL, 改问本地节点同步状态 method**(36链实测背书)→ 消除中心化链主网限流缺陷 + 不污染测量。get_cached_block_height_data L105-106 双取(local+mainnet外部)→ 改为单取本地节点 block_height_spec(本地自查含网络最高/落后)。
+  - **向后兼容(S2.3 约束)**: CSV 6 字段在 3 reader 硬编码, `mainnet_block_height` 改本地自查后语义变 → 字段改名 `network_block_height` 需同步 framework_data_quality_checker.sh:393/472 + unified_monitor.sh:1951 + block_height_monitor 写端 + cache JSON(parallel-entry CSV 耦合), 或保留旧名加注释。diff 算法不变(减法), 数据源外部→本地。
+  - **不走 Shell 调 Python**(块高每秒高频, D5 测量准确性论据 + 硬约束)。Python parse_block_height 同读 block_height_spec 声明。
 - **S3.6 响应记录入库旁路**(§5.6, 决策④): PROXY_RESPONSE_CAPTURE 默认关, 独立 response_sink(不扩9列主CSV), maxBody 上限防 OOM。
 - **L1**: 关联键单测(id 注入→提取→关联) + response_spec 解析单测 + attribution 四维单测。
 - **L2**: proxy 全链路(请求带id→sink→attribution关联)集成。
