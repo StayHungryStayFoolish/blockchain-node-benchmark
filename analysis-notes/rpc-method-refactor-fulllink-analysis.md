@@ -1709,3 +1709,31 @@ config.LoadChain(chain_file) → sink.New → proxyhandler.New(chain, sink, upst
 - §59: 块高 Python 侧生产 dead path 认知修正(S3.5 工作量降)。
 - §60: Go proxy 内部 wiring 行级落点补全(S3.1/S3.6/缺口#7)。
 **趋势**: 仍在出真东西(遗漏/认知修正/行级落点), 但从"整文件遗漏"(§57)收敛到"行级落点补全"(§60)= 接近读透但未完全到底。
+
+
+## 61. 第四十八轮: extractor rest.go 审查(S3.1 Go 侧最后落点)— rest 关联键真实复杂度修正
+
+### 触发: 审 S3.1 关联键唯一未行级确认的 Go 文件 = extractor(rest.go 要改)。收口 S3.1 Go 侧。
+
+### 61.1 rest.go Extract 全文实测(L64-79)
+- `Extract(req *http.Request, _ []byte)` —— **第二参数 body 用 `_` 丢弃, rest 模式根本不读 body**, 只用 `req.URL.Path` 正则匹配 method_name(L65-70)。
+- L74: `RequestID: ""` 恒空。
+
+### 61.2 🔴 S3.1 rest 关联键真实复杂度(修正文档"rest.go:74 需补"的过简描述)
+**jsonrpc vs rest 关联键来源根本不同**:
+- jsonrpc: id 在 **request body**(`{"id":1,"method":...}`), extractor 从 body 提(jsonrpc.go:88 stringifyID)→ 关联键天然存在(只是当前固定1=缺口#5)。
+- **rest: 请求是 GET URL path(如 /cosmos/.../balances/{addr}), body 通常空, URL 无 id 字段, rest 协议本身没有 jsonrpc 那种 request id**。
+🎯 **所以"给 rest 补 RequestID"不是补一行** —— rest 请求本身无天然 id 字段。要给 rest 关联键, 必须**框架自己注入**: vegeta 构造 rest 请求时在 **URL query 或 HTTP header 加 `X-Request-Id`** → proxy rest extractor 从 header/query 读(改 rest.go Extract 读 req.Header/Query, 不是读 body)。
+- **与 S2.1 耦合**: rest 请求的 id 注入发生在 TargetBuilder 构造 rest target 时(S2.1/S1.4 接口), 不在 body。S3.1 rest 关联键 = S2.1 注入 header + rest.go extractor 读 header 两端配合。
+
+### 61.3 S3.1 关联键完整落点(三 family 形态, 修正后)
+| 模式 | 当前 id | S3.1 改法 |
+|---|---|---|
+| jsonrpc/bitcoin/substrate/tendermint(body 有 id) | 固定 "1"(9处硬编码) | adapter 构造 body 写唯一 id + extractor 已提取(jsonrpc.go:88 ok) |
+| **rest(无 body id)** | "" 恒空 | **框架注入 header/query X-Request-Id + rest.go Extract 改读 header**(非读 body) |
+| hedera_dual | jsonrpc 模式有 id / mirror REST 无 | 按所走模式分别处理(jsonrpc 同上 / mirror 同 rest) |
+
+### 61.4 🎯 审查收口判定(§57-61)
+本轮(rest 关联键)又挖出真复杂度(rest 无天然 id 需框架注入, 非补一行)= 仍出真东西。但这是**已知缺口#5 的细化**(不是新结构性缺口), 属"强化已知"。
+**累计审查趋势**: §57 整文件遗漏(高)→ §59 dead path 认知修正(中)→ §60 行级落点(低)→ §61 已知缺口细化(rest id 注入)。**严重度持续递减, 无新结构性缺口, 调用链 live/dead path + Go/Shell 双侧 + 主入口依赖链全覆盖**。
+**收口结论**: RPC method 完整调用链(入口 Phase0.5-7 → 4套分派 → fetch输入 → target构造 → proxy handler/extractor/sink wiring → master_qps → attribution → report)逐环行级有代码事实。文档**无误判**, 遗漏(proxy_lifecycle/Phase时序)已补, 认知修正(块高dead path/rest id注入)已记。基于代码事实的完整性达成, 可收口进 S0 实施。
