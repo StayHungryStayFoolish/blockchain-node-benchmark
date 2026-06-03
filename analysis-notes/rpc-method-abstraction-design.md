@@ -821,7 +821,7 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 ### 6.4.3 🟡 待用户拍板的设计决策(实施前需定)
 | 决策 | 选项 | 我的倾向 |
 |---|---|---|
-| **决策A 块高字段** | block_height_spec 收编现有三套(get_block_height/parse_block_height/health_probe) | ✅ 单一声明源不留债(§79) |
+| **决策A 块高字段** | block_height_spec 单一声明源, **主流程切到 chain_adapters Python adapter 体系(36链目标态)/ 或 Shell 读与 Python 同源声明; 收编的是旧 Shell 8链case, 不删 Python** | ✅ **§89 修正: parse_block_height 是 ABC 设计契约(36链目标态)非死代码, 收编旧态非删新态** |
 | **S3.3 出图机制** | per-method 四维图 ① 统一 matplotlib+UnifiedChartStyle vs ② 保持 SVG 独立 | ✅ **已定 = ①统一 matplotlib(2026-06-02 用户拍板)** |
 | **mixed weight** | S2.4 直接读现有 mixed_weighted 驱动(零新增) | ✅ 已定(§6.3.2 决策B) |
 | **CSV 字段名** | mainnet_block_height → network_block_height(语义变)vs 保留旧名加注释 | 待定(§S3.5 向后兼容) |
