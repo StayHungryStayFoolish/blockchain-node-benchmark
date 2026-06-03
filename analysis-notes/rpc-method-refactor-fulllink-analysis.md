@@ -1679,3 +1679,33 @@ Phase 0.5 proxy启动(§57补)→ Phase 1 prepare(fetch L138 + target_generator 
 
 ### 59.4 待补 S3.5 实施计划修正
 S3.5 应明确: 生产块高归一 = 改 Shell get_block_height 读 block_height_spec(本地自查); Python parse_block_height 作测试夹具, 同读 block_height_spec 仅为测试一致性(非生产必需, 工作量可选)。
+
+
+## 60. 第四十七轮: Go proxy 内部 wiring 审查(handler 完整路径)— S3.1/S3.6/缺口#7 精确行级落点
+
+### 触发: S3.1 关联键要改 Go 侧, 审 proxy 内部 wiring(main→handler→extractor→sink 完整调用链, 之前单独读文件没审 wiring)。
+
+### 60.1 main.go wiring(L43-60)
+config.LoadChain(chain_file) → sink.New → proxyhandler.New(chain, sink, upstream, maxBody) → selfreport.New(PROXY_SELF_PATH)。8 Go 文件全确认。
+
+### 60.2 handler.go ServeHTTP 完整路径(L50-100, S3.1 核心)
+1. L54-65: **读 request body 然后还原**(`r.Body = NopCloser(bytes.NewReader(body))`, reverse proxy 要再读)。
+2. L69-70: statusRecorder 包装 + rp.ServeHTTP 转发上游。
+3. L73: `h.chain.Extract(r, body)` 从 **request body** 提 method + RequestID(非响应)。
+4. L75-77: **`__unmatched__` 兜底**(extractor 没匹配 → method_name="__unmatched__")。
+5. L89-93: `sink.Write(Record{..., RequestID: res.RequestID})`。
+
+### 60.3 🎯 三个精确行级落点(文档之前有结论无行号)
+- **S3.1 关联键数据通路已存在**: handler L54-65 已读 request body 用于 extract → 从 body 提 id 的通路现成, extractor 改 rest.go 补 RequestID 时 body 可用。
+- **🔴 S3.6 响应记录硬约束落点 = statusRecorder(handler.go:103-111)**: 当前 statusRecorder **只重写 WriteHeader 截 status, 故意不缓冲 response body**("大 response 直接 stream")。S3.6 要 tee response body 必须给 statusRecorder **加 `Write([]byte)` 方法 tee body + 受 maxBody 上限约束**(防 OOM, near validators 419KB/solana getBlock MB级)。
+- **🔴 缺口#7 精确落点 = handler.go:77 `__unmatched__`**: extractor 匹配不上 method → 这里写 method_name="__unmatched__" → attribution 跳过 → method 静默从归因消失。S3.2 三端同源校验就是防 extractor 匹配不上走到这行。
+
+### 60.4 审查价值: 文档结论对, 但补全了 Go 侧行级落点(实施必需)
+之前文档 S3.1/S3.6 提过"改 extractor 补 RequestID""statusRecorder 只截 status 需 tee body""__unmatched__ 静默消失", 但**没精确到 handler.go 行号 + 数据通路确认**。本轮补全: request body 通路现成(L54-65)/ response tee 落点(L103 statusRecorder)/ __unmatched__ 写入点(L77)。proxy 内部 wiring 完整确认, 无遗漏文件(8 Go 文件 + main wiring 全覆盖)。
+
+### 60.5 审查累计(§57-60)净发现
+- §57: 真遗漏 proxy_lifecycle.sh + Phase 0.5 时序(已补)。
+- §58: error_handler.sh 正交(读了确认)。
+- §59: 块高 Python 侧生产 dead path 认知修正(S3.5 工作量降)。
+- §60: Go proxy 内部 wiring 行级落点补全(S3.1/S3.6/缺口#7)。
+**趋势**: 仍在出真东西(遗漏/认知修正/行级落点), 但从"整文件遗漏"(§57)收敛到"行级落点补全"(§60)= 接近读透但未完全到底。
