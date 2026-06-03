@@ -1933,3 +1933,31 @@ polkadot(混协议)应该用 **hedera_dual 式 per-request 路由**(REST path me
 
 ### 67.4 诚实纠正的价值
 之前只 grep vegeta 行就说"master_qps 是压测核心"(对)但没确认它与 method 构造的关系。读全 986 行才确认: **它与 RPC method 构造完全正交**(只发预生成 target), S2/S3 不需要改它。若之前凭 grep 推断它涉及 method 构造, 会误判 S2 要改它。**这就是 token-level 全读 vs grep 的差别: grep 能确认"它调 vegeta", 读全文才能确认"它不碰 method 构造、S2 不用改它"。**
+
+
+## 68. 第五十五轮: per_method_attribution.py 全 258 行真读(纠正 grep-shallow)— S3.3/S3.4 行级落点
+
+### 触发: 按清单真读归因核心(之前只读 L13-16/71-140 片段)。
+
+### 68.1 归因核心全文实证(确认缺口#8/#11/#7 + Q4-7)
+- **L44-49 MonitorRecord 只取 cpu_pct + mem_mb 两字段**; read_monitor_csv(L94-152)只读 `cpu_usage`+`mem_used_mb` 列 → **确认缺口#8 只两维**。
+- **L62-68 PerMethodResourceRow 只有 cpu_pct+mem_mb** → 输出也只两维。
+- L202-240 compute: `weight=cnt/total`(实测频次, 确认 Q4-7)→ `cpu_pct=m.cpu_pct*weight` / `mem_mb=m.mem_mb*weight`。
+- L74/79 跳过 `__unmatched__`(确认缺口#7 未匹配不归因=静默消失)。L226-227 该秒无监控数据跳过(避免 0 当零负载)。
+- read_monitor_csv 时间戳双格式(epoch ns/us/ms/s + ISO 字符串, L111-142)= 之前修过的时间戳耦合 bug, 已健壮。
+
+### 68.2 🎯 S3.3 四维补全精确落点(5 处, 行级)
+数据源(disk/net 列)unified CSV 已采, attribution 只需扩:
+1. **L48-49 MonitorRecord 加 disk/net 字段**(ebs_iops/ebs_throughput/net_rx/net_tx)。
+2. **L94-152 read_monitor_csv 加读 disk/net 列**(unified CSV 已采, 加列名参数)。
+3. **L62-68 PerMethodResourceRow 加 ebs/net 字段**。
+4. **L232-238 compute 加 `disk*weight` / `net*weight`**。
+5. **L252-258 write_resource_csv 加列**。
+→ **确认 S3.3 低风险**: 数据源已采, 只扩 attribution 5 处读/算/写, **不动采集层**(与文档一致, 现有行级落点)。
+
+### 68.3 🎯 S3.4 减 proxy 基线落点
+- compute_per_method_resource L236 `cpu_pct=m.cpu_pct*weight` → S3.4 要先减 proxy_self 基线再乘: `(m.cpu_pct - proxy_self_cpu)*weight`。
+- **缺口#11 确认**: proxy_self.csv **当前根本没被 read**(read_monitor_csv/read_proxy_csv 都不读它)→ S3.4 要新增读 proxy_self.csv + 在 L236 减基线。
+
+### 68.4 grep-shallow 纠正进度
+按 §66 清单真读: master_qps(986)✅ + per_method_attribution(258)✅。剩未读: bitcoin_jsonrpc.py(87)/ extractor.go(48)/ selfreport.go(117)/ fetch 主体/ target_generator 全文/ common_functions 全文/ config_loader 全文/ cli.py 全文/ main.go/ jsonrpc.go(extractor)/ blockchain_node_benchmark.sh 全文。继续按清单读。
