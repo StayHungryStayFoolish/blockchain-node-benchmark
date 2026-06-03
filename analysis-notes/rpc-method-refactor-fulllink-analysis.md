@@ -1600,3 +1600,32 @@ S3.2 response_spec 落地时必须: ① 对应键=method(已对)② 与 param_sp
 | 乙(RPC先完整做完) | RPC重构全做完(S3用现状形态)→ 监控重构时再改适配 | **有返工**(per_method_attribution/block_height_monitor 改两次) | 主线快但埋返工 |
 | 丙(只做RPC不做监控可插拔) | RPC重构(含3 bug修)→ 监控可插拔重构不做 | **零返工**(不做就不返工) | 监控仍紧耦合(但够用) |
 **初判倾向甲或丙**: 若确定要做监控可插拔重构→甲(契约先行避返工); 若监控可插拔非刚需→丙(RPC含bug修已够, 监控紧耦合不影响功能)。乙最差(埋返工)。
+
+
+## 57. 第四十四轮: 🔴 文档审查(用户要求批判性扩大代码分析, 查误判/遗漏)— 发现真遗漏 proxy_lifecycle.sh + Phase 0.5 时序
+
+### 触发: 用户"扩大代码分析范围, 确认文档是否误判/遗漏, 重点逻辑调用链完整性"。以"审查文档误判"为探针重读关键链。
+
+### 57.1 ✅ 核查确认文档正确的断言(批判性证伪未推翻)
+- **"4 套按链分派, 无第5套真分派"**: 全仓 grep `case BLOCKCHAIN_NODE / chain_type ==` → fetch:665 / common:194 / config_loader:454 / audit:116(audit 无生产 caller 是独立工具)。**确认无第5套真分派**, 文档对。
+- **"proxy_self.csv 采了没人消费"**: 确认 proxy_lifecycle.sh:143/165 PROXY_SELF_PATH 生成, 下游 attribution 不读。结论对(落点补全见下)。
+
+### 57.2 🔴 真遗漏1: lib/proxy_lifecycle.sh 整个文件(247行)全链路分析没读过
+全仓 grep BLOCKCHAIN_NODE 消费点时发现此文件, 之前 44 轮分析**从未逐行读**。token-level 补读, 关键事实:
+- **proxy 启动消费 chain_file**(L161-170): `proxy -chain=$chain_file -upstream=$LOCAL_RPC_URL -listen=:18545` → proxy 的 method 识别规则(proxy_extraction)**启动时从 chain template 加载**(印证 Q4-2 单链启动)。**S3.1 关联键改动涉及 proxy, 此加载点相关, 文档之前没记。**
+- **缺口#11 生产落点**(L142-143/148): sink_csv=proxy_method.csv + self_csv=proxy_self.csv, 启动前 rm -f 清理。proxy_self.csv 确实生成(L165 PROXY_SELF_PATH), 下游不读 → 缺口#11 落点 = proxy_lifecycle.sh:143(文档之前没记生产落点)。
+- **流量重定向**(L196-197): ORIGINAL_LOCAL_RPC_URL=$LOCAL_RPC_URL → LOCAL_RPC_URL=localhost:18545 让 vegeta 过 proxy。PROXY_ENABLED 机制真实落点。
+- **per-method 归因静默禁用路径**(L131/157/188/242): proxy binary 没有/端口占用/不健康 → 静默降级 "per-method attribution disabled" 继续跑。**S3 涉及 proxy 改动时此降级路径要保持**(non-fatal 设计)。
+- **僵尸 proxy reap**(L68-104): _proxy_reap_orphans 精确按 binary 绝对路径 pgrep + fuser 释放端口(修 skill 记的"僵尸 proxy 占端口→bind失败→per-method静默禁用"bug)。
+
+### 57.3 🔴 真遗漏2: Phase 0.5 proxy 启动时序(主入口编排, 文档"入口编排"章节没覆盖)
+blockchain_node_benchmark.sh 实证:
+- L69-70 source lib/proxy_lifecycle.sh; L1103-1104 **Phase 0.5 启动 proxy(在 Phase 1 之前!)**; L1134-1137 Phase 4.5 停止。
+- **L1099 重要时序修正实证**: 注释 "P0-3 修复: 之前 proxy 在 Phase 2.5 启动, targets 已用 8899 固化, vegeta 绕过 proxy" → 改到 **Phase 0.5(Phase 1 前)启动**。
+- 🔴 **对 S3.1 的硬约束**: 关联键改动后, **proxy 启动时序(Phase 0.5, 早于 targets 生成)绝不能动**, 否则复发"vegeta 绕过 proxy → per-method 数据稀疏"bug(skill per-method-proxy-lifecycle ref §1.5 P0-3)。
+
+### 57.4 审查结论: 文档有【遗漏】非【误判】
+- 已有断言(4套分派/proxy不解析响应/weight未驱动/attribution两维)**经核查正确, 无误判**。
+- **遗漏 2 处**: ① proxy 生命周期文件(lib/proxy_lifecycle.sh)整个没读 ② Phase 0.5/4.5 proxy 编排时序。
+- 这 2 处遗漏对实施有实质影响: S3.1 关联键改动 = 改 proxy method 识别 + 响应关联, 必须考虑 proxy 启动时序(Phase 0.5)+ chain_file 加载点 + 静默降级路径 + 僵尸 reap。**S3.1 实施落点补全**: 不只 base.py/各family/extractor, 还涉及 proxy 启动参数(-chain 加载)+ 时序保持。
+- lib/ 目录已确认仅此一文件, 无其他遗漏。
