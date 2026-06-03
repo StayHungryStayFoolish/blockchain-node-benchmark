@@ -2332,3 +2332,35 @@ attribution PerMethodResourceRow(§68 加 ebs/net 字段, L48-49/62-68/94-152/23
 - 已读: per_method_charts(283 全)/ report_generator per_method 段 + 整体资源图头 / UnifiedChartStyle 结构 / performance_visualizer 结构。
 - **未逐行**: report_generator 其余 ~4700 行 / performance_visualizer 2568 全 / disk_chart_generator 1346 / advanced_chart_generator 1231 / device_manager 584 / per_method_report 247 / chart_style_config 细节。
 - **但对 S3.3 关键决策(出图机制 + 复用 UnifiedChartStyle)已有足够证据**。其余图片代码(disk/advanced chart generator 等)与 RPC method per-method 出图**正交**(它们出系统资源/磁盘整体图, 非 per-method)— 但按 token-level 铁律"没读不准标正交", 标记为"骨架确认正交方向, 逐行待补"。
+
+
+## 84. 第七十一轮: per-method 资源图 vs 系统资源图区别 + mixed 阶段统计机制(用户问)— 等权分摊精度边界 + proxy 无 bytes 纠正
+
+### 84.1 两类图本质区别
+| | 系统资源图(原有) | per-method 资源图(RPC method 相关) |
+|---|---|---|
+| 数据源 | unified_monitor CSV(节点整体每秒 CPU/MEM/磁盘/网络) | proxy CSV(每method每秒请求数)+ unified CSV(节点总资源)join |
+| 含义 | 整个被测节点资源消耗(不分 method) | 节点总资源**按 method 拆分**(NS-2 核心: 每method各占多少) |
+| 生成 | report_generator/performance_visualizer(matplotlib) | per_method_charts(SVG) |
+**一句话**: 系统图="节点总共用多少", per-method 图="这些资源里每method各占多少"。
+
+### 84.2 🎯 mixed 阶段怎么按 method 统计资源(核心机制, compute_per_method_resource L211-238)
+- **前提**: mixed 同时跑多 method, 节点 CPU/MEM 混在一起(validator 单进程线程处理 RPC, OS 层分不出哪个 CPU 是哪个 method)→ **不是直接测到 method, 是分摊估算**。
+- **算法(Q4-7 锁定)**: weight = 该method该秒请求数 / 该秒总请求数; method_cpu = 节点总CPU(该秒) × weight; method_mem = 节点总MEM × weight。
+- **例**: 某秒总CPU=60%, 100请求(getBlock 30/getBalance 70)→ getBlock归因CPU=60%×0.3=18%, getBalance=60%×0.7=42%。
+- **per-method 资源 = 节点总资源 × 该method流量占比(按请求数)**。
+
+### 84.3 🔴 等权分摊精度边界(用户问"如何统计"的核心质量问题)
+- **隐含假设**: 每请求消耗资源大致相同。**实际不同 method 单次开销差很大**(getBlock 比 getBalance 重)→ 等权分摊**对重量级差异大的 method 失真**(getBlock 占30%请求可能耗60%CPU, 等权低估它)。
+- **Q4-7 撤销条件**: ground truth 误差 > 20% 才升级回归算法(当前粗粒度等权可接受)。
+
+### 84.4 🔴 纠正: proxy CSV 无 req_bytes/resp_bytes(只 latency 可加权)
+- **proxy 实际 9 列**(sink.go:5-6): timestamp_ns/method_name/protocol/request_id/batch_idx/status_code/**latency_ms**/upstream/client_addr。
+- **没有 req_bytes/resp_bytes**! 我之前(和早期文档)说"proxy 记 req_bytes/resp_bytes 可做权重"**是错的** —— 9 列里**只 latency_ms 一个可做加权信号**(早期 Q4-9 提的 6 列含 bytes, 实际落地 9 列把 bytes 换成 upstream/client_addr)。
+- latency_ms 在 attribution 只用于 p50/p99 延迟图(compute_per_method_qps L182), **没用于资源加权**。
+- **唯一可用的精度改进 = 按 latency 加权**(weight = method_latency_sum / total_latency_sum 替代 count/total; latency 高≈处理重≈占资源多)。但 latency 含网络/排队, 不纯是节点处理开销, 也是近似。
+
+### 84.5 🎯 对重构/设计的影响
+- mixed per-method 资源图是**分摊估算非实测**(精度边界, 用户问的核心)。S3.3 补 EBS/Net 四维**也是按同一 weight 分摊**(磁盘/网络归因同样是 总量×流量占比, 同等权精度限制)。
+- 若用户要更准: 改 weight 从 count → latency 加权(proxy 已有 latency, 零新增采集)。但属 Q4-7 撤销线范畴(误差>20%才改), 当前等权是有意的粗粒度决策。
+- **诚实**: per-method 资源图的"精度"= 流量占比近似, 不是 method 级实测。报告/文档应标注"按流量占比分摊估算"避免误读为实测。
