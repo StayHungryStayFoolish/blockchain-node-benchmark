@@ -1629,3 +1629,27 @@ blockchain_node_benchmark.sh 实证:
 - **遗漏 2 处**: ① proxy 生命周期文件(lib/proxy_lifecycle.sh)整个没读 ② Phase 0.5/4.5 proxy 编排时序。
 - 这 2 处遗漏对实施有实质影响: S3.1 关联键改动 = 改 proxy method 识别 + 响应关联, 必须考虑 proxy 启动时序(Phase 0.5)+ chain_file 加载点 + 静默降级路径 + 僵尸 reap。**S3.1 实施落点补全**: 不只 base.py/各family/extractor, 还涉及 proxy 启动参数(-chain 加载)+ 时序保持。
 - lib/ 目录已确认仅此一文件, 无其他遗漏。
+
+
+## 58. 第四十五轮: 审查完整性收口 — 主入口依赖链 + Phase 序列系统核查(承 §57 扩大)
+
+### 触发: §57 发现 proxy_lifecycle.sh 真遗漏后, 系统核查"还有没有别的主入口 source 文件/Phase 没读", 不停在发现一个就收手。
+
+### 58.1 主入口完整 source 链核查(blockchain_node_benchmark.sh)
+仅 4 个 source: config_loader.sh ✅ / common_functions.sh ✅ / lib/proxy_lifecycle.sh ✅(§57补) / **utils/error_handler.sh ⬅ 本轮新读**。
+
+### 58.2 utils/error_handler.sh(206行)token-level 核查 = 与 RPC 正交(读了确认非预判)
+定义: handle_framework_error / setup_error_handling / safe_execute(重试) / check_dependencies / cleanup_temp_files / check_disk_space / validate_config。
+**无 RPC/method/response/proxy/block_height 逻辑** = 框架级通用错误处理, 与 RPC 重构正交。**读了确认正交, 不是预判**(token-level 铁律: 没读不准标正交)。
+
+### 58.3 完整 Phase 序列核查(与文档 method 链一致, 无遗漏)
+Phase 0.5 proxy启动(§57补)→ Phase 1 prepare(fetch L138 + target_generator L161 ✅)→ Phase 2 监控 → Phase 3 QPS(master_qps L289 ✅)→ Phase 4 停监控 → Phase 4.5 停proxy → Phase 5 结果 → Phase 6 分析(attribution)→ Phase 7 报告。method 链各 Phase 已分析。
+
+### 58.4 🎯 本轮(§57+§58)文档审查净结果(用户要求: 查误判/遗漏 + 调用链完整性)
+| 类别 | 项 | 处理 |
+|---|---|---|
+| 真遗漏(已补) | lib/proxy_lifecycle.sh 整文件 + Phase 0.5 时序 | §57 落盘 + 补 S3.1 实施约束 |
+| 核查正交(读了确认) | utils/error_handler.sh | §58.2 通用错误处理无 RPC 逻辑 |
+| 核查无误判 | 4套分派/proxy不解析响应/weight未驱动/attribution两维 | 批判性证伪均未推翻 |
+**调用链完整性确认**: 主入口 4 source + 8 Phase 全覆盖; RPC method 完整链(入口编排 Phase0.5-7 → 4套分派 → fetch输入 → target构造 → proxy识别 → master_qps压测 → attribution归因 → report)逐环有代码事实。
+**审查结论**: 文档**无误判**(已有断言核查正确), 有 **2 处遗漏已补**(proxy 生命周期 + Phase 时序)。新发现的 error_handler 正交不影响。基于代码事实的完整性达成。
