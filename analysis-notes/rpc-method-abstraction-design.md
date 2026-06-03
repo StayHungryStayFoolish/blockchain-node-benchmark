@@ -641,8 +641,10 @@
   - bitcoin_jsonrpc: UTXO/txid(无 account), getrawtransaction 需 txid。
   - tendermint/rest: validator addr + height + REST path 变量。
   - hedera_dual: 双模式 account + node id。
-- **S1.3 接回 fetch 丢弃的 tx_hash**(缺口#3/#6): fetch_active_accounts.py L814 改为保留 tx_hash/sigs 到对应池, 不只写 account。
-- **S1.4 多池消费**(缺口#10): target_generator 按 method 的 param_spec 声明从对应池取输入(不再一池喂全部)。
+- **S1.3 接回 fetch 丢弃的 tx_hash + 输出格式扩展**(缺口#3/#6, §53.2 GREP-EVIDENCE 实证完整链):
+  - fetch_active_accounts.py **L817-819**(非 L814): 现 `f.write(addr)` 单列 account, sigs(tx_hash)L802 已在手但丢 → 改为输出多池(account/tx_hash/block)。
+  - **下游 reader 强耦合(必同步改)**: 输出格式变 → target_generator.sh **L220-225** `while read address; done < ACCOUNTS_OUTPUT_FILE`(逐行读单列)+ L193-200 校验 + config_loader ACCOUNTS_OUTPUT_FILE 约定(L289/353)都要扩展(parallel-entry: 多池要么多文件要么带类型前缀)。
+- **S1.4 多池消费 + 接口签名改造**(缺口#10, 与 S2.1 强耦合): target_generator L246-262 round-robin 按 method 的 param_spec.source 从对应池取输入(不再一池喂全部)。**⚠️ 与 S2.1 共享接口瓶颈**: build_vegeta_target 现只单 address 槽, 多池多参数要一并改接口签名(见 S2.1)。
 - **L1**: 每 family InputProvider 单测(mock 节点返回 fixture, 断言抓到正确类型输入)。
 - **L2**: InputProvider + TargetBuilder 集成(抓输入→构造 target 链路通)。
 - **L3**: 整框架对 mock 跑 mixed, 断言需要 tx_hash 的 method 不再 -32602。
@@ -687,7 +689,7 @@
 > (3) **保护测量准确性(决定性)**: `BLOCK_HEIGHT_MONITOR_RATE` 默认 **每秒 1 次**(internal_config.sh:63, 用户澄清+实证), block_height_monitor 每秒调 get_block_height 2 次(local+mainnet)。方案②=每秒 fork 2 python 进程持续整个 benchmark → 监控工具自吃 CPU **污染节点资源基线**(benchmark 核心就是测节点资源, 监控开销污染=直接破坏测量, 同 Q4-10 自报基线问题)。方案①纯 shell 轻量不污染。
 > **硬约束**: 块高 Shell 实现必须保持纯 shell + jq 轻量(每秒高频, 任何低效被放大)。
 - **S2.4 mixed weight 驱动生成**(缺口#9): 三处代码(config_loader L540/626/674)改取 rpc_methods.mixed_weighted, weight 驱动 vegeta target 比例(非 round-robin 均权)。
-- **S2.5 6 family _build_params DSL 化**: 各 adapter _build_params 改读 param_spec 声明构造(枚举 fallback 兼容)。
+- **S2.5 6 family _build_params DSL 化 + 接口签名改造**(§53.3 GREP-EVIDENCE): 各 adapter `_build_params` 改读 param_spec 声明构造(枚举 fallback 兼容)。**⚠️ 接口瓶颈(与 S1.4 强耦合)**: `build_vegeta_target(method, address, rpc_url, param_format)` 现只**单 address 槽** → param_spec 多池多参数必须**改接口签名**为从输入池取多值(如 `build_vegeta_target(method, inputs:dict, rpc_url, param_spec)`)。S1+S2 实施时合并改这一个接口。
 - **L1**: param_spec 解析单测(6 family × 各参数形态, 断言构造的 target body 字节正确)。
 - **L2**: cli.py build-target shim 对每 (chain×method) 跑(parallel-entry Step4-bis: 测 CLI shim 非只 import)。
 - **L3**: 整框架跑 mixed, 断言 weight 比例生效 + 新 method 零代码可配。
@@ -695,7 +697,7 @@
 #### 6.2.4 S3 — 响应链 + 关联键 + 归因(缺口 #5/#6-响应/#7/#8/#11/#12)
 
 **问题**: 响应无法关联回 method(缺口#5: base.py 固定 id=1, rest.go RequestID=""); 响应消费链不存在(缺口#6); 三端同源漂移(缺口#7); attribution 缺 EBS/Net(缺口#8); proxy_self.csv 死数据未减基线(缺口#11); 块高提取重复实现绑死8链(缺口#12)。
-- **S3.1 重建 request_id 关联键**(缺口#5, 三处改): base.py _vegeta_post_json 注入唯一 id(非固定1)→ proxy extractor 提取 RequestID(rest.go 补 RequestID)→ 响应按 id 关联回 method。
+- **S3.1 重建 request_id 关联键**(缺口#5, §53.1 GREP-EVIDENCE 精化落点): **真实落点 = 4 family adapter 构造 body 硬编码 `"id": 1` 共 9 处**(bitcoin_jsonrpc.py:40/67, jsonrpc.py:42/104, substrate.py:29/49, tendermint.py:39/62), **非 base.py _vegeta_post_json**(它只序列化不碰 id)→ 改为唯一 id(生成逻辑放 base.py helper 各 family 调)→ proxy extractor 已正确提取(jsonrpc.go:88 stringifyID; **rest.go:74 RequestID="" 需补**)→ 响应按 id 关联回 method。
 - **S3.2 响应 DSL response_spec**(§5 + raw-evidence L3 Expected fields 金矿): chain template 声明响应提取路径(envelope×locator×type 3维), 收编 6 处 method 知识沉淀单一来源 + 交叉校验防 __unmatched__ 静默消失(缺口#7)。
 - **S3.3 attribution 补四维**(缺口#8): per_method_attribution 读 unified CSV 的 disk/net 列(数据已采), PerMethodResourceRow 加 ebs/net 字段, 出图四维。**低风险**(数据源零改动)。
 - **S3.4 减 proxy 基线**(缺口#11): attribution 读 proxy_self.csv 减去 proxy 自身 cpu/mem 开销(Q4-10/ADR-0004 设计落地)。
