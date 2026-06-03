@@ -2309,3 +2309,26 @@ attribution PerMethodResourceRow(§68 加 ebs/net 字段, L48-49/62-68/94-152/23
 ### 82.3 诚实结论 + 纠正动作
 **图片相关代码我远未分析完**(11899 行读 ~360 = <10%)。用户反问正确。纠正: 系统读剩余图片代码, 重点 ① chart_style_config UnifiedChartStyle(所有图基础)② report_generator 整体资源图(S3.3 参照样式)③ performance_visualizer(NS-2 早期提的 per_method 守卫?)④ per_method_report(per-method HTML 渲染)。
 **元教训(重复犯)**: "出图渲染链读透"= 我只读了 per-method 那条线, 没读整个 visualization/ 出图体系。**说"读透某条链"前必须枚举该领域全部文件确认覆盖率**(像 §66 对 RPC 做的清单, 图片领域我没做清单就说读透)。
+
+
+## 83. 第七十轮: 图片出图体系骨架真读(UnifiedChartStyle + performance_visualizer + 整体资源图)— S3.3 出图机制决策
+
+### 83.1 UnifiedChartStyle(chart_style_config.py:122)= 全框架图表统一样式中枢
+- FONT_CONFIG / COLORS / CHART_CONFIGS / SUBPLOT_LAYOUTS / COLORMAPS / MARKERS / Z_ORDER / LAYOUT_CONFIGS。
+- 方法: setup_matplotlib(L411) / apply_layout / add_text_summary / create_chart_title(L115, 按 accounts_configured 双盘/单盘变标题)。
+- **全框架 matplotlib 图表的统一配色/字体/布局基础**。
+
+### 83.2 出图体系机制确认(读骨架)
+- **matplotlib + UnifiedChartStyle 统一体系**: report_generator(_generate_resource_distribution_chart 3×2 CPU/MEM/磁盘/网络整体资源图)/ performance_visualizer(PerformanceVisualizer: overview/correlation/util_threshold, 系统性能图)/ disk_chart_generator / advanced_chart_generator。
+- **per_method_charts = 自拼 SVG 例外**(不用 matplotlib)。
+- performance_visualizer **无 per_method 守卫**(印证 EXEC-TRACKER §12.2 "performance_visualizer 守卫不做", 它不涉及 per-method)。
+
+### 83.3 🎯 S3.3 出图机制决策点(用户提醒"图片代码"的核心价值)
+- per-method 四维图(CPU/MEM/EBS/Net)**应参照现有整体资源图(_generate_resource_distribution_chart 的 3×2 matplotlib + UnifiedChartStyle)**, 保持全框架配色/字体/布局一致。
+- **决策(待用户拍板)**: per-method 四维图 ① 统一到 matplotlib + UnifiedChartStyle(和全框架一致, HTML 不混排 SVG/PNG, 但要重写 per_method_charts 的 SVG 出图)还是 ② 保持 per_method SVG 独立(轻量无 matplotlib 依赖, 但与全框架体系割裂)。**倾向①**(不留体系割裂债, 复用 UnifiedChartStyle), 但要评估重写 per_method_charts SVG→matplotlib 的工作量。
+- 这是和 config 字段冲突(§77)、块高三套(§79)同类: **不看现有体系就设计新图 = 割裂债**。S3.3 出图必须先定机制(matplotlib 统一 vs SVG 独立)。
+
+### 83.4 诚实状态: 图片代码骨架清楚, 逐行未全
+- 已读: per_method_charts(283 全)/ report_generator per_method 段 + 整体资源图头 / UnifiedChartStyle 结构 / performance_visualizer 结构。
+- **未逐行**: report_generator 其余 ~4700 行 / performance_visualizer 2568 全 / disk_chart_generator 1346 / advanced_chart_generator 1231 / device_manager 584 / per_method_report 247 / chart_style_config 细节。
+- **但对 S3.3 关键决策(出图机制 + 复用 UnifiedChartStyle)已有足够证据**。其余图片代码(disk/advanced chart generator 等)与 RPC method per-method 出图**正交**(它们出系统资源/磁盘整体图, 非 per-method)— 但按 token-level 铁律"没读不准标正交", 标记为"骨架确认正交方向, 逐行待补"。
