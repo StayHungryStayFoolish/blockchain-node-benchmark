@@ -791,11 +791,14 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 ### 6.3.2 决策 B(已定): mixed_weighted 直接复用零新增
 36/36 链已有 mixed_weighted(weight 值都=1), S2.4 **直接读它驱动 weight, 不另造字段**。零争议零新增。
 
-### 6.3.3 决策 A(我的判断, 待用户最终确认): 新增独立 block_height_spec, 复用 health_probe 的 schema 基因, 两者共存互补
-- **不把块高自查塞进 health_probe**: health_probe 语义 = "健康连通探测"(单值 parse_jq, 5链在用); block_height 本地自查 = "双高度/同步策略"(local+network+sync_strategy 三策略 §51)。**两者是不同功能, 各一个字段 = 单一职责, 非 parallel-entry**(parallel-entry 是同功能两套, 这是两功能各一套)。
-- **复用 health_probe 的 schema 基因**(parse_jq 路径声明风格), 保持一致。
-- **新增 block_height_spec(全36链填), health_probe 保留(健康连通)**。两者互补: health_probe 判"能否连通", block_height_spec 判"落后网络多少"。
-- ⚠️ 待用户确认: 若用户倾向"扩 health_probe 一个字段做两件事", 可改为 health_probe 加 sync_strategy 子字段。我倾向独立 block_height_spec(语义清晰), 但尊重用户决定。
+### 6.3.3 决策 A(§79 消费链核查后修正): block_height_spec 作单一声明源, 收编现有三套块高提取(不留债)
+- **🔴 真相(§79 GREP-EVIDENCE)**: 框架现在"从节点取块高"**已是三套并存**(parallel-entry 债): ① Shell get_block_height(common_functions 8链 case, live path)② Python parse_block_height(各 adapter 36 family, dead path)③ `_meta.health_probe`(5链 REST)+ Python health_check_request(dead path)。health_probe 的 parse_jq 就是提块高(cardano `.[0].block_height` 等), **≈ 块高提取非纯健康连通**。
+- **不留债 = block_height_spec 作【单一声明源】, 收敛现有三套读同源**(非"新造第4套"也非"复用某一个"):
+  - Shell get_block_height 读 block_height_spec(替换 8链 case)。
+  - Python parse_block_height 读同一 block_height_spec(替换硬编码/作测试夹具读同源)。
+  - **health_probe 收编进 block_height_spec**(5链 REST 块高提取并入 REST 策略; health_probe dead path + 只5链, 收编无生产影响, 反消除一套死字段债)。
+- **决策 A 修正**: 之前"新增独立 block_height_spec 与 health_probe 共存互补"= 错(会变4套)。正解 = block_height_spec 单一声明收编三套。
+- **元教训**: 判"复用还是新造"前必查现有字段真实消费链 + 是否已有多套。块高实为三套并存(不是"现有1套 vs 我新造1套"二选一), 不留债 = 4套收敛成1声明源 + N 消费者读同源。
 
 ### 6.3.4 向后兼容铁律
 所有复用都保持向后兼容: param_formats/proxy_extraction/health_probe/rest_paths/json_rpc_url **现有链不动**, 新增字段(block_height_spec 等)对未填的链有 fallback。能扩展现有字段就不新造, 能复用现有值(mixed_weighted)就不另填。
