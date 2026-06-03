@@ -20,11 +20,19 @@
 | substrate | astar | `system_syncState`(或 EVM eth_syncing) | currentBlock | highestBlock | dec | A | rpc.astar.network ✅(EVM 兼容: eth_blockNumber=chain_getHeader.number 同值实测) |
 | substrate | moonbeam | `system_syncState`(或 EVM) | currentBlock | highestBlock | dec | A | rpc.api.moonbeam.network ✅(同上 EVM=SUB 同值) |
 | **bitcoin** | bitcoin | `getblockchaininfo` | `.result.blocks`(本地已验证) | `.result.headers`(网络已知最高) | dec | A 双高度 | bitcoin-rpc.publicnode.com ✅ |
-| bitcoin | bch | `getblockchaininfo` | `.result.blocks` | `.result.headers` | dec | A | ⚠️公开免费endpoint需APIkey/404不可达; 同 Bitcoin Core fork 协议, getblockchaininfo blocks/headers 字段与 bitcoin 主链一致(bitcoin已实测✅) |
-| bitcoin | dogecoin | `getblockchaininfo` | `.result.blocks` | `.result.headers` | dec | A | ⚠️同上 endpoint 不可达; 协议同 bitcoin |
-| bitcoin | litecoin | `getblockchaininfo` | `.result.blocks` | `.result.headers` | dec | A | ⚠️同上 endpoint 不可达; 协议同 bitcoin |
-| **jsonrpc(EVM)** | ethereum | `eth_syncing` | (同步中 `.result.currentBlock`) | (同步中 `.result.highestBlock`; **已同步返 false** → 用 eth_blockNumber 本地=网络最高) | hex | A同步中/B已同步 | ethereum-rpc.publicnode.com ✅ |
-| jsonrpc(EVM) | arbitrum/base/bsc/polygon/scroll/optimism/linea/avalanche-c/zksync-era | `eth_syncing` | 同上 | 同上(EVM 同构) | hex | A/B | publicnode 各链 ✅ |
+| bitcoin | bch | `getblockchaininfo`(节点) / Blockbook GET /api/v2(explorer验证) | `.result.blocks` / `.backend.blocks` | `.result.headers` / `.backend.headers` | dec | A 双高度 | ✅ bchblockexplorer.com/api/v2 实测 blocks=953784 headers=953784 inSync(节点 getblockchaininfo 无 public 直连, 用 Blockbook REST 验证同字段; 协议同 bitcoin) |
+| bitcoin | dogecoin | `getblockchaininfo`(节点) / Blockbook(explorer验证) | `.result.blocks` / `.backend.blocks` | `.result.headers` / `.backend.headers` | dec | A 双高度 | ✅ dogecoin.atomicwallet.io/api/v2 实测 blocks=6233547 headers=6233547 inSync(同 bch, Blockbook 验证) |
+| bitcoin | litecoin | `getblockchaininfo`(节点) / Blockbook(explorer验证) | `.result.blocks` / `.backend.blocks` | `.result.headers` / `.backend.headers` | dec | A 双高度 | ✅ litecoin.atomicwallet.io/api/v2 实测 blocks=3118688 headers=3118688 inSync(同 bch, Blockbook 验证) |
+| **jsonrpc(EVM)** | ethereum | `eth_syncing` + `eth_blockNumber` | `eth_blockNumber`(同步中用 syncing.currentBlock) | 同步中 `syncing.highestBlock`; 已同步返 false → 本地=网络 | hex | A同步中/B已同步 | ethereum-rpc.publicnode.com ✅(blockNumber=0x18116e5, syncing=false) |
+| jsonrpc(EVM) | arbitrum | `eth_syncing` + `eth_blockNumber` | eth_blockNumber | syncing.highestBlock / false | hex | A/B | arbitrum-one-rpc.publicnode.com ✅(blockNumber=0x1bfe3259, syncing=false) |
+| jsonrpc(EVM) | base | `eth_syncing` + `eth_blockNumber` | eth_blockNumber | 同上 | hex | A/B | base-rpc.publicnode.com ✅(0x2caed24) |
+| jsonrpc(EVM) | bsc | `eth_syncing` + `eth_blockNumber` | eth_blockNumber | 同上 | hex | A/B | bsc-rpc.publicnode.com ✅(0x615b9c9) |
+| jsonrpc(EVM) | polygon | `eth_syncing` + `eth_blockNumber` | eth_blockNumber | 同上 | hex | A/B | polygon-bor-rpc.publicnode.com ✅(0x53ca65f) |
+| jsonrpc(EVM) | scroll | `eth_syncing` + `eth_blockNumber` | eth_blockNumber | 同上 | hex | A/B | scroll-rpc.publicnode.com ✅(0x205e312) |
+| jsonrpc(EVM) | optimism | `eth_syncing` + `eth_blockNumber` | eth_blockNumber | 同上 | hex | A/B | optimism-rpc.publicnode.com ✅(0x9162ebe) |
+| jsonrpc(EVM) | linea | `eth_syncing` + `eth_blockNumber` | eth_blockNumber | 同上 | hex | A/B | linea-rpc.publicnode.com ✅(0x1d751f0) |
+| jsonrpc(EVM) | avalanche-c | `eth_syncing` + `eth_blockNumber` | eth_blockNumber | 同上 | hex | A/B | avalanche-c-chain-rpc.publicnode.com ✅(0x530cd94) |
+| jsonrpc(EVM) | zksync-era | `eth_syncing` + `eth_blockNumber` | eth_blockNumber | 同上 | hex | A/B | mainnet.era.zksync.io ✅(0x4328a25; publicnode 不可达, 用官方 endpoint) |
 | jsonrpc | solana | `getMaxShredInsertSlot` - `getSlot` | `getSlot`(本地已处理) | `getMaxShredInsertSlot`(节点经turbine看到的网络最高) | dec(int) | **A 双slot相减** | solana-rpc.publicnode.com ✅(实测差=7 slot) |
 | jsonrpc | sui | `sui_getLatestCheckpointSequenceNumber` | `.result`(本地最新checkpoint) | 已同步=本地即网络最高(JSON-RPC无独立网络最高, metrics 才有) | dec(str) | B | fullnode.mainnet.sui.io ✅(282352715) |
 | jsonrpc | near | `status` | `.result.sync_info.latest_block_height` | `.result.sync_info.syncing`(布尔, false=已同步) | dec(int) | B | rpc.mainnet.near.org ✅(syncing=False) |
@@ -35,7 +43,7 @@
 | tendermint | celestia | `status` | `.sync_info.latest_block_height` | `.sync_info.catching_up` | dec | B | celestia-rpc.publicnode.com ✅(catching_up=False latest=11359855) |
 | tendermint | injective | `status` | `.sync_info.latest_block_height` | `.sync_info.catching_up` | dec | B | injective-rpc.publicnode.com ✅(catching_up=False latest=169100283) |
 | tendermint | osmosis | `status` | `.sync_info.latest_block_height` | `.sync_info.catching_up` | dec | B | osmosis-rpc.publicnode.com ✅(catching_up=False latest=63170327) |
-| tendermint | sei | `status`(或 EVM eth_syncing, sei 是 EVM-on-tendermint) | latest_block_height(或 eth_blockNumber) | catching_up(或 eth_syncing) | dec/hex | B | sei-rpc.publicnode.com / evm-rpc.sei-apis.com |
+| tendermint | sei | `status`(或 EVM eth_blockNumber, sei 是 EVM-on-tendermint) | `.sync_info.latest_block_height`(或 eth_blockNumber) | **`.sync_info.max_peer_block_height`(网络最高直接在RPC!)** + catching_up | dec/hex | **A 双高度**(有 max_peer_block_height) | ✅ sei-rpc.publicnode.com 实测 latest=211534763 max_peer=211534748 catching_up=false; evm-rpc.sei-apis.com eth_blockNumber=0xc9bc3b0 |
 | **rest** | cardano | Koios `GET /tip` | `[0].block_no`(本地tip) | Koios 节点同步; 无独立网络最高字段(节点级判断) | dec | B | api.koios.rest ✅ |
 | rest | aptos | `GET /v1` | `.block_height`(本地最新) | `.node_role`+ledger_version(节点状态; 已同步=本地即最新) | dec(str) | B | fullnode.mainnet.aptoslabs.com ✅(block_height=804318901) |
 | rest | algorand | `GET /v2/status` | `.last-round`(本地最新轮) | `.catchup-time`(0=已同步)+ catchpoint 字段 | dec | B | mainnet-api.algonode.cloud ✅(catchup-time=0) |
@@ -272,3 +280,32 @@ block_height_spec schema 需加: `transport: "metrics"` + `metrics_endpoint`(:91
 
 ### 96.3 BLOCKED 根因沉淀(防后续再撞)
 approval.py:346 `(python[23]?|perl|ruby|node)\s+-[ec]\s+` = "script execution via -e/-c flag" 危险模式。terminal 里任何 `python3 -c "..."` / `node -e` / `perl -e` 都触发审批。curl 本身只有 `curl|wget ... | sh`(:347)才危险。**正解: 解析 JSON 用 curl 存文件 + read_file/search_files, 不在 terminal 内联 python3 -c; 或用 browser 工具(走不同路径, 完全绕开命令审批)。**
+
+
+## 97. 36 链实测覆盖率收口(用户要求: 没测的全测掉 + 给清单)
+
+> 用户追问"几个没测", 联网搜 endpoint 后把能测的全测掉。实测 2026-06-03 主会话亲测复验。
+
+### 97.1 ✅ 本轮补测的 4 条(原未实测, 现全部真机通过)
+| 链 | endpoint | 实测值 | 调用方式 |
+|---|---|---|---|
+| bch | bchblockexplorer.com/api/v2 | blocks=953784 headers=953784 inSync | Blockbook REST GET(节点 getblockchaininfo 无 public 直连) |
+| dogecoin | dogecoin.atomicwallet.io/api/v2 | blocks=6233547 headers=6233547 inSync | Blockbook REST GET |
+| litecoin | litecoin.atomicwallet.io/api/v2 | blocks=3118688 headers=3118688 inSync | Blockbook REST GET |
+| sei | sei-rpc.publicnode.com + evm-rpc.sei-apis.com | latest=211534763 **max_peer=211534748**(网络最高在RPC!) catching_up=false; eth_blockNumber=0xc9bc3b0 | tendermint status + EVM |
+
+### 97.2 🎯 36 链实测覆盖率最终状态
+- **36/36 链本地高度 method 全部有真机实测证据**(31条直接亲测 + bch/doge/ltc 用 Blockbook 验证同字段 + sei 本轮补)。
+- **网络最高 method**: 大部分在 RPC 层已实测(solana getMaxShredInsertSlot / substrate highestBlock / bitcoin·bch·doge·ltc headers / sei max_peer_block_height / EVM·starknet syncing.highestBlock); 仅 **sui/aptos 在 metrics 端口**(public 物理不暴露, 已真机证伪 RPC 层无 method, 待 S0 真节点验 :9184/:9101)。
+- **诚实标注的证据层级差异**: 
+  - bch/doge/ltc = Blockbook explorer REST 验证(非节点 getblockchaininfo 直连, 但返回同样的 blocks/headers 双字段, 协议同 bitcoin 已亲测), 真节点部署时走节点自己的 getblockchaininfo。
+  - sui/aptos 网络最高 = 需真节点 metrics 端口, public fullnode 不开。
+- **新发现**: sei 的 status 含 `max_peer_block_height` = 网络最高直接在 RPC 层(不需 metrics), 优于原标注的"只 catching_up 布尔"。
+
+### 97.3 仍无法 public 实测项(物理限制, 非遗漏, 待 S0 真节点)
+1. sui :9184/metrics highest_known_checkpoint(public fullnode 不开 metrics 端口)
+2. aptos :9101/metrics highest_advertised_data(同)
+3. cardano-cli query tip .syncProgress(需本地 node.socket)
+4. ton validator-console getstats(需 console key)
+5. hedera consensus 节点 metrics hasFallenBehind(public 只有 mirror REST)
+→ 这 5 项是协议/部署使然, 不是接口缺失; 块高同步监控用已实测的 method(本地高度 + 同步布尔/网络最高)足够, metrics 是精度增强项。
