@@ -1801,3 +1801,41 @@ main.go / handler.go / extractor.go / jsonrpc.go / rest.go / sink.go / config/lo
 ### 63.5 审查覆盖(§57-63)
 proxy 8 文件全行级 + jsonrpc.py 全文 + cli.py 生产入口全文 + shell/python 双侧 + 主入口依赖链。RPC 构造链(target_generator TSV → cli batch → build_vegeta_target → _build_params → 占位符兜底)逐行有代码事实。
 **仍出真东西**: §63 占位符测量污染(新隐患)+ 接口改造 4 处 TSV 契约(行级精确)。属"已知缺口的量化危害 + 行级精确化", 无新结构性缺口。
+
+
+## 64. 第五十一轮: tendermint+rest adapter 逐行 — tendermint 三端协议错配行级铁证 + 正确修法
+
+### 64.1 rest.py 全文(161行)= 已是声明式 DSL 好范式(非占位符兜底)
+- `_resolve_path`(L54-79): 从 chain template `_meta.rest_paths[method]` 读 `{method,path,body}` 声明, path 模板替换 {address}(L69)+ body 模板深替换(L72-78)。
+- **rest adapter = declarative**: method 名 → _meta.rest_paths 查 path 模板 → 替换变量 → GET/POST。**加 rest method 改 chain template rest_paths 即可零 Python 代码**。health 也从 _meta.health_probe 声明读(L106-128)。
+- 🎯 **rest 是 6 family 里已实现"零代码加 method"的范式**(对照 jsonrpc 的 if-else 枚举)。
+
+### 64.2 tendermint.py 全文(81行)= 协议错配铁证(adapter 假设 jsonrpc dict)
+- adapter 构造 `{"jsonrpc":"2.0","method":method,"params":dict}`(L39), _build_params 返 dict(L43-58)。
+- adapter docstring 自述用 abci_query POST jsonrpc(L10-13)。
+
+### 64.3 🔴🔴 GREP-EVIDENCE: tendermint 三端全错配(cosmos-hub 实证, 最有价值发现之一)
+cosmos-hub chain template 实际配置:
+- adapter_family: **tendermint**
+- **rpc_methods.single: `"GET /cosmos/bank/v1beta1/balances/{addr}"`** = REST GET path 含 {addr} 占位符!
+- rpc_methods.mixed: 全是 `GET /cosmos/...` REST path
+- **无 _meta.rest_paths**(rest adapter 需要的声明)
+- proxy_extraction.protocols: **['json_rpc']**
+
+**三重不一致(行级铁证)**:
+| 层 | 实际 | 应该 |
+|---|---|---|
+| adapter | TendermintAdapter 构造 jsonrpc body(把 "GET /cosmos/.../{addr}" 塞进 method 字段→节点必拒) | REST GET path 路由 |
+| 配置 | rpc_methods 配 REST path, 但 family=tendermint(走 jsonrpc adapter) | family=rest 或 tendermint 支持 REST |
+| proxy | proxy_extraction=json_rpc(识别不对真实 REST GET) | rest protocol |
+🎯 **这是缺口#7 三端漂移 + §callchain "tendermint 25 method 协议错配"的完整行级证据**: adapter 构造 jsonrpc / 配置是 rest path / proxy 识别 json_rpc, 三端全错。
+
+### 64.4 🎯 正确修法(S3 协议错配修复, 行级明确)
+tendermint 链实际是 REST 协议(GET path), 三端统一到 REST:
+- adapter: tendermint 走 rest adapter 的 rest_paths declarative 机制(或 TendermintAdapter 改支持 REST path 路由, 像 rest.py 那样)。
+- 配置: 补 _meta.rest_paths(rest adapter 需要)或把 rpc_methods 的 "GET /path" 解析成 path 路由。
+- proxy: proxy_extraction 改 rest protocol(config/loader.go 支持 json_rpc/rest 两种, rest 现成)。
+- **rest.py 是现成范式**: tendermint 错配修复 = 让它复用 rest adapter 已有的声明式 path 机制, 不是新造。
+
+### 64.5 审查价值(§64 = 高价值发现)
+本轮挖出 tendermint 三端协议错配的**行级三层铁证 + 正确修法**(adapter/config/proxy 各一行证据), 不是泛泛"有错配"。这是 S3 协议错配修复(原计划阶段3)的精确依据。rest.py 是声明式范式(零代码加 rest method), tendermint 修复 = 复用它。剩 substrate/bitcoin/hedera adapter 未逐行(下轮)。
