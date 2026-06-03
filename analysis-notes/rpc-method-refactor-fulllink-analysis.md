@@ -1982,3 +1982,24 @@ polkadot(混协议)应该用 **hedera_dual 式 per-request 路由**(REST path me
 ### 69.4 grep-shallow 纠正进度
 真读完: master_qps(986)+ per_method_attribution(258)+ bitcoin(87)+ extractor.go(48)+ selfreport.go(117)。
 4 个"完全没读"补完 3 个(剩 jsonrpc.go extractor 150)。剩 🟡 部分读: fetch 主体/target_generator 全文/common_functions 全文/config_loader 全文/cli.py 全文/main.go/blockchain_node_benchmark.sh 全文。继续。
+
+
+## 70. 第五十七轮: jsonrpc.go extractor 全 150 行真读(4个"完全没读"全补完)— S3.1 batch 关联键复合约束
+
+### 70.1 jsonrpc extractor 全文实证(S3.1 提取端)
+- L53-75 Extract: POST + URL regex 匹配 + 嗅探单条 vs batch(`[` 开头=batch)。
+- L77-91 extractSingle: 从 body 提 method + id(L88 stringifyID(r.ID))= id 提取正确。
+- L93-130 extractBatch 三种 batch_handling: reject(整拒)/ tag_batch(整批当1条 method="__batch__" RequestID="")/ **split(默认)拆 N 条每条 RequestID=stringifyID(r.ID)+BatchIdx=i**。
+- L132-150 stringifyID: nil→"" / string→原样 / float64→int / bool→str(健壮)。
+
+### 70.2 🔴 S3.1 batch 关联键复合约束(新发现)
+- **batch split 模式下关联键 = (RequestID, BatchIdx) 复合**(L122-123), 不只 RequestID! batch 多条共享一个 HTTP 请求, 各有自己 id+batch_idx。**S3.1 重建关联键 batch 场景要 (id, batch_idx) 联合**, 不能只 id。
+- **tag_batch 模式 RequestID=""+method=`__batch__`** → 整批无法按 method 关联(类似 __unmatched__ 的归因黑洞)。
+- **base.py 固定 id=1 在 batch 下更严重**: vegeta 发 batch 每条 id=1, split 后 N 条 RequestID 全 "1"(BatchIdx 0..N-1 还能区分, 但跨请求 batch 全撞 id=1)。
+
+### 70.3 确认 S3.1 落点在 adapter 不在 extractor
+stringifyID 提取逻辑健壮(nil/string/float/bool 全处理)→ **问题不在提取端(jsonrpc.go 对), 在生产端(base.py/各family 固定 id=1)**。再次坐实 S3.1 落点 = adapter body 构造的 id, 不是 extractor。S3.1 还要考虑 batch 场景的 (id, batch_idx) 复合关联键。
+
+### 70.4 🎯 grep-shallow 纠正: 4个"完全没读"文件全补完
+✅ master_qps(986)+ per_method_attribution(258)+ bitcoin(87)+ extractor.go(48)+ selfreport.go(117)+ jsonrpc.go extractor(150)。**§66 清单的 4 个"完全没读"(bitcoin/extractor.go/selfreport.go/master_qps)全部真读 + jsonrpc.go extractor 补**。
+剩 🟡 部分读的大文件: fetch_active_accounts.py 主体(841)/ target_generator.sh 全文(339)/ common_functions.sh 全文(317)/ config_loader.sh 全文(749)/ cli.py 全文(172)/ main.go(89)/ blockchain_node_benchmark.sh 全文(1173)。继续按清单啃。
