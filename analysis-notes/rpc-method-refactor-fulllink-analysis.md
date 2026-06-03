@@ -1839,3 +1839,44 @@ tendermint 链实际是 REST 协议(GET path), 三端统一到 REST:
 
 ### 64.5 审查价值(§64 = 高价值发现)
 本轮挖出 tendermint 三端协议错配的**行级三层铁证 + 正确修法**(adapter/config/proxy 各一行证据), 不是泛泛"有错配"。这是 S3 协议错配修复(原计划阶段3)的精确依据。rest.py 是声明式范式(零代码加 rest method), tendermint 修复 = 复用它。剩 substrate/bitcoin/hedera adapter 未逐行(下轮)。
+
+
+## 65. 第五十二轮: substrate+hedera adapter 逐行 — substrate 混协议三端错配(比tendermint更深)+ param_format枚举缺失 + hedera范式
+
+### 65.1 substrate.py 全文(69行)= 参数全塌缩(比tendermint更糟)
+_build_params(L32-45)所有 param_format 几乎都返 `[address]`:
+- storage_key → `[address]`(注释 L39 说要 [storage_key, block_hash?], 代码返 [address] = storage key 用 address 类型语义全错)
+- block_hash → `[address]`(应是 block_hash)
+- address_with_block → `[address, None]`(第二参恒 None)
+- default → `[address]`
+**substrate 多种 param_format 代码层面根本没区分, 全塞 address**(比 jsonrpc 占位符更彻底)。
+
+### 65.2 🔴🔴 GREP-EVIDENCE: substrate 混协议三端错配(polkadot 实证, 比 tendermint 更深)
+polkadot chain template:
+- adapter_family: **substrate**
+- rpc_methods.mixed **混两种协议**: `GET /accounts/{addr}/balance-info` `GET /blocks/{n}` `GET /pallets/staking/progress`(**Sidecar REST path**)+ `account_nextIndex` `chain_getHeader`(**jsonrpc method**)
+- param_formats 用 **`path_addr` `path_height`** 枚举名
+- proxy protocols: **['json_rpc']**
+
+**四重问题(比 tendermint 三端错配更深)**:
+| 问题 | 实证 |
+|---|---|
+| 配置混协议 | 一条链同时 REST path + jsonrpc method, family 单标 substrate |
+| **param_format 枚举缺失** | 配置用 `path_addr`/`path_height`, 但 substrate.py _build_params **没这俩枚举 → 走 default `[address]`** → REST path method 被当 jsonrpc 塞 address |
+| adapter 不支持 REST | SubstrateAdapter 只构造 jsonrpc body, REST path method 无法处理 |
+| proxy 标 json_rpc | 识别不对 REST GET |
+🎯 **tendermint 是整族走错协议(全REST当jsonrpc); substrate 更深 = 同一条链混两种协议(部分REST+部分jsonrpc), 需 per-request 路由**, 当前 SubstrateAdapter 无路由全走 jsonrpc。
+
+### 65.3 ✅ hedera_dual.py(119行)= 整合方案 c 的现成最佳范式(per-request 多协议路由)
+- L49-53 **委派模式**: `self._rest = RestAdapter()` + `self._jsonrpc = JsonRpcAdapter()`, 注释 L13-15 明说"no logic duplication, only routing"。
+- L86-101 **per-request 路由**: `_is_jsonrpc_method(method)`(eth_*/net_*/web3_*/debug_*/trace_* → jsonrpc; 否则 → rest)。
+- L68-82 jsonrpc_url 从 `_meta.json_rpc_url` 读(双 endpoint)。
+🎯 **hedera_dual 正是"一条链 per-request 按 method 路由 rest/jsonrpc"的现成实现 = 整合方案 c 的最佳参照**(委派单协议 adapter + 路由层, 不强合并)。
+
+### 65.4 🎯 substrate 错配正确修法 = 用 hedera_dual 式 dual 路由(现成范式)
+polkadot(混协议)应该用 **hedera_dual 式 per-request 路由**(REST path method → rest adapter; jsonrpc method → jsonrpc adapter), 不是纯 substrate jsonrpc adapter。
+- 即 substrate family 里**混协议的链(polkadot 用 Sidecar)需要 dual 路由**, 纯 jsonrpc 的链(kusama 等)保持 substrate。
+- 这把"6 family"的认知细化: family 不只看名, 同 family 内有的链混协议(polkadot)需 dual, 有的纯单协议。S3 协议错配修复要按链而非按 family 处理。
+
+### 65.5 审查高价值累计(§64 tendermint + §65 substrate)
+连续两轮(tendermint/substrate)都挖出**三端/四重协议错配的行级铁证**, 且都指向 hedera_dual/rest.py 的现成 declarative 范式作修法。这证明 6 family 里至少 tendermint(整族)+ substrate(polkadot 混协议)有真协议错配, 不是抽样推断。剩 bitcoin_jsonrpc adapter 未逐行(下轮, bitcoin 是最规律 family 预期问题最少)。
