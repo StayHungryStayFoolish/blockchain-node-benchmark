@@ -2364,3 +2364,32 @@ attribution PerMethodResourceRow(§68 加 ebs/net 字段, L48-49/62-68/94-152/23
 - mixed per-method 资源图是**分摊估算非实测**(精度边界, 用户问的核心)。S3.3 补 EBS/Net 四维**也是按同一 weight 分摊**(磁盘/网络归因同样是 总量×流量占比, 同等权精度限制)。
 - 若用户要更准: 改 weight 从 count → latency 加权(proxy 已有 latency, 零新增采集)。但属 Q4-7 撤销线范畴(误差>20%才改), 当前等权是有意的粗粒度决策。
 - **诚实**: per-method 资源图的"精度"= 流量占比近似, 不是 method 级实测。报告/文档应标注"按流量占比分摊估算"避免误读为实测。
+
+
+## 85. 第七十二轮: mixed 模式 method 是同时混打还是顺序(用户问"按顺序就是错误的")— 确认: 混合发送非顺序分段 ✅
+
+### 用户担心: mixed 若按顺序逐 method 执行 = 错误(无法模拟生产多 method 并发)。
+
+### 85.1 ✅ target 文件 method 交错混排(非分段, target_generator L258-263)
+round-robin: account[0]→method[0] / account[1]→method[1] / ... / account[N]→method[N%count](循环)。
+→ target 文件**逐行交错**(getAccountInfo→getBalance→getTokenAccountBalance→getAccountInfo→... 轮转), **不是"前N行全method0, 后N行全method1"的分段**。文件本身混排 ✅。
+
+### 85.2 ✅ vegeta 消费 = 恒定速率混合发送(master_qps L798)
+`vegeta attack -targets=$file -rate=$qps -duration=Ns`:
+- **-rate=N**: 恒定速率每秒发 N 个请求(开环, §14 选 vegeta 核心)。
+- **vegeta 默认**: 顺序读 targets 文件, 到 EOF 循环回头, 按 rate 时间驱动发, 直到 duration 结束(总请求 = rate × duration)。master_qps 无 -lazy 等特殊处理。
+- **实际效果**: 每秒发的 N 个请求从混排文件连续取 N 行 → **这 N 个请求包含多种 method 交错** → 节点同一秒承受混着各种 method 的请求流 = **真混合并发, 模拟生产多 method 负载**。
+
+### 85.3 🎯 确定结论(回答用户)
+- ❌ **不是按顺序分段执行**(那才错: 会变"先压垮 getAccountInfo 再压 getBalance", 测不出混合负载)。
+- ✅ **是 method 交错混排 + vegeta 恒定速率混合发送** = 节点同时承受多种 method, 符合生产。
+- per-method 资源归因(§84)正是建立在"混合负载下按流量占比拆分"之上, 前提是混合发送(成立)。
+
+### 85.4 ⚠️ 两个精度边界(诚实, 混合并发本质满足但非完美)
+1. **比例 = round-robin 均等**(缺口#9: weight 没生效, 现 mixed 各 method 均等比例)→ S2.4 修后可按 mixed_weighted 真实比例(更贴生产)。
+2. **到达模式 = 确定性轮转**(getAccountInfo→getBalance→...循环), **非生产的随机泊松到达**。但"节点同一时间处理多种 method"的混合并发本质满足(节点收到的是混着各 method 的请求流)。vegeta 开环恒定速率本就不是模拟单用户随机, 是模拟"持续混合压力", 符合 benchmark 找瓶颈的目的。
+
+### 85.5 对重构的影响
+- mixed 混合发送语义**正确**, 重构不需改这个机制(target_generator 交错 + vegeta 发送)。
+- S2.4 weight 驱动(缺口#9)= 让混合比例从均等→按配置 weight, 是精度提升(更贴真实业务 method 配比), 不是修"顺序错误"(本来就混合)。
+- **报告可标注**: mixed = 多 method 恒定速率混合并发(交错轮转), 各 method 资源按流量占比归因。
