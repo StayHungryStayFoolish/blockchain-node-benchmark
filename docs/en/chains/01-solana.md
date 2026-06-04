@@ -203,7 +203,7 @@ When fixing `getRecentBlockhash` → `getLatestBlockhash`, **all of the followin
 | 3 | `tools/mock_rpc_server.py:137` `if method == "getRecentBlockhash"` | Add `getLatestBlockhash` branch (may keep old branch returning deprecated error to simulate real node) | mock_rpc_server is fallback target; without this, mock mode breaks with new config |
 | 4 | `analysis-notes/baseline-current-state.md:193` chain list | Sync remove old method | Doc truth alignment, prevent v1.4.1-style doc-vs-code drift |
 | 5 | `analysis-notes/disk-and-network-pipeline-redesign.md:216` | Sync | Same as above |
-| 6 | `analysis-notes/research_notes/02-solana-sui-aptos-rpc-resource.md:33` | Upgrade `(deprecated)` annotation to `(removed from framework, replaced by getLatestBlockhash)` | Research notes reflect reality |
+| 6 | `REFACTOR-SSOT.md §5.1(资源画像, 原02已合并删):33` | Upgrade `(deprecated)` annotation to `(removed from framework, replaced by getLatestBlockhash)` | Research notes reflect reality |
 
 **Test requirement**: After Phase 2.1 completes, must run `core/master_qps_executor.sh --mixed --duration 30` (or shortest e2e_smoke) to capture vegeta error rate. **All requests should be 200, no `-32601`**, as E2 evidence of this bug fix.
 
@@ -331,7 +331,7 @@ Solana is the sole representative of its family (no other chain uses SVM + PoH).
 ## Open Questions
 
 - [x] ⚠️ **`getRecentBlockhash` has been deprecated by Solana** (real test returns `-32601 Method not found`), dual-source verified (`api.mainnet-beta.solana.com` + `solana-rpc.publicnode.com` both return the same error).
-  - **This deprecation was already documented**: `analysis-notes/research_notes/02-solana-sui-aptos-rpc-resource.md:33` already noted `getRecentBlockhash (deprecated) | Memory | <1ms | replaced by getLatestBlockhash`.
+  - **This deprecation was already documented**: `REFACTOR-SSOT.md §5.1(资源画像, 原02已合并删):33` already noted `getRecentBlockhash (deprecated) | Memory | <1ms | replaced by getLatestBlockhash`.
   - **However**, `config/config_loader.sh:430` mixed list still contains this method uncleaned, `config_loader.sh:436` param_formats also still keeps the entry.
   - **Call chain verified**: `config_loader.sh:430` → `target_generator.sh:184/300-306` (reads `CURRENT_RPC_METHODS_ARRAY` looping over each account × method) → `generate_rpc_json` → vegeta targets file → vegeta actually sends to mainnet.
   - **Failure rate estimate (E5 SPECULATED, not measured)**: mixed mode 5 methods equal weight → **theoretically ~20% of requests** will return `-32601`. **Vegeta not actually run**; real failure rate depends on vegeta default success criteria (HTTP 200 + JSON `error` field counts as 200-class success in vegeta defaults) and other factors, may differ from theory. Phase 2.1 acceptance must measure to confirm.

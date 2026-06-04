@@ -4,15 +4,15 @@
 > 顺序决策: B(RPC method 参数+36链规律+fake-node数据)→ C(mixed weight + proxy 404)→ A(完整端到端出HTML)。
 > 理由: 依赖链 — A 依赖 fake-node 数据丰富(B 的产出)+ weight/proxy 修复(C); B 是地基。
 > 方法纪律: B 必须互联网搜索 + public endpoint double-check(用户强制); 改前 token-level Gate3;
->   每完成一块 commit; 落盘本文档 + rpc-method-param-research.md + EXEC-TRACKER。
+>   每完成一块 commit; 落盘本文档 + REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删) + EXEC-TRACKER。
 > 真机环境: GKE bench-k8s-test(§18.9) + GCE instance-20260429-041108(§30, 同 payment-network)。
 
 ## 状态总览
 | 阶段 | 状态 | commit |
 |---|---|---|
-| B1 框架现状(阶段1) | ✅ 已完成(rpc-method-param-research.md 阶段1) | 3524d48 |
+| B1 框架现状(阶段1) | ✅ 已完成(REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删) 阶段1) | 3524d48 |
 | B2 36链 method 参数/响应规律(互联网+public endpoint) | ✅ 已完成(param位置语义代码实证 + publicnode double-check) | ec575c9 |
-| B3 调研结论(现状/风险/方案) | ✅ 已完成(rpc-method-param-research.md 阶段3, R1-R5 风险 + 方案) | ec575c9 |
+| B3 调研结论(现状/风险/方案) | ✅ 已完成(REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删) 阶段3, R1-R5 风险 + 方案) | ec575c9 |
 | C1 mixed weight 全链路追踪 | ✅ 已完成(两种weight厘清, 见下) | 本批 |
 | C2 proxy per-method 404 定位 | ✅ 已完成(proxy 无 bug, 404 是历史 fixture 状态) | 本批 |
 | A 完整端到端出 HTML(GKE Job + GCE 真机) | ⏸️ 部分(挖出更深设计问题, 待用户定方向) | - |
@@ -73,7 +73,7 @@
 - 下一步: C2 proxy per-method 404 定位。
 
 ### B 阶段完成
-- B1 现状 + B2 参数位置语义(代码 jsonrpc.py _build_params 实证 + publicnode EVM 实打 double-check 位置错=报错)+ B3 风险清单 R1-R5 + 处理方案。全落 rpc-method-param-research.md。
+- B1 现状 + B2 参数位置语义(代码 jsonrpc.py _build_params 实证 + publicnode EVM 实打 double-check 位置错=报错)+ B3 风险清单 R1-R5 + 处理方案。全落 REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删)。
 - 关键证据: [addr,latest]→拿到余额 / [latest,addr]→error -32602 cannot unmarshal into Address。证实用户担心。
 - 下一步: C1 mixed weight 全链路(生成端已确认未用=round-robin均权; 需查归因/报告端是否用 → 死字段?)。
 

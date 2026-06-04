@@ -1286,10 +1286,10 @@ hostPath 挂 /host/{proc,sys,dev} + privileged, 容器内 iostat 读 node 级设
 | **GCE VM 真机** | config 完整加载 / provider 自动探测 gcp / ENA=false / 设备名默认+env / iostat 采集 / vm_bare 不走 resolver(本节) |
 | cloudtop 单测 | provider/config/device 4 套全 PASS(test_cloud_provider_detect 6/0, provider_contract 61 checks, smoke_config_loader, validate_devices 8/0) |
 - **结论: config env-override 治理 + 设备名 + ENA 修复 = GKE+GCE 双真机 + 单测三重闭环, VM 路径无回归。前面问题确实闭环。**
-### 30.4 仍未闭环(归入 TODO, 用户定 k8s/404 后做)= rpc-method-param-research.md
+### 30.4 仍未闭环(归入 TODO, 用户定 k8s/404 后做)= REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删)
 - A 完整端到端出 HTML(本地+GKE+GCE 都卡 fake-node byte-correct 数据退化 target=2 → QPS test failed; 非 k8s 非 config 问题)
-- C/proxy: mixed weight 压测端未用(均权 round-robin, §见 rpc-method-param-research.md 1.2); proxy per-method 404(§24.2)
-- TODO #2 RPC method 参数位置 + 36链规律调研(rpc-method-param-research.md 阶段2/3, 需互联网+public endpoint)
+- C/proxy: mixed weight 压测端未用(均权 round-robin, §见 REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删) 1.2); proxy per-method 404(§24.2)
+- TODO #2 RPC method 参数位置 + 36链规律调研(REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删) 阶段2/3, 需互联网+public endpoint)
 - GCE/GKE 完整 benchmark 出 HTML 真机验证(等 fake-node 数据丰富度解决后, 在真机一并跑)
 
 

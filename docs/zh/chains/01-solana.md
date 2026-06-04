@@ -203,7 +203,7 @@ $ curl -s ... -d '{"method":"getSignaturesForAddress","params":["So1111111111111
 | 3 | `tools/mock_rpc_server.py:137` `if method == "getRecentBlockhash"` | 加 `getLatestBlockhash` 分支(可保留旧分支返 deprecated error 模拟真实节点) | mock_rpc_server 是 fallback target,不改则 mock 模式跑不通新配置 |
 | 4 | `analysis-notes/baseline-current-state.md:193` 链路列表 | 同步移除旧 method | 文档真相对齐,防 v1.4.1 同款 doc-vs-code 偏离 |
 | 5 | `analysis-notes/disk-and-network-pipeline-redesign.md:216` | 同步 | 同上 |
-| 6 | `analysis-notes/research_notes/02-solana-sui-aptos-rpc-resource.md:33` | 把 `(deprecated)` 标注升级为 `(removed from framework, replaced by getLatestBlockhash)` | 研究笔记反映现实 |
+| 6 | `REFACTOR-SSOT.md §5.1(资源画像, 原02已合并删):33` | 把 `(deprecated)` 标注升级为 `(removed from framework, replaced by getLatestBlockhash)` | 研究笔记反映现实 |
 
 **测试要求**:Phase 2.1 完成后必须跑 `core/master_qps_executor.sh --mixed --duration 30`(或最短 e2e_smoke)抓 vegeta 错误率,**所有请求都应是 200,无 `-32601`**,作为本 bug 修复的 E2 证据。
 
@@ -331,7 +331,7 @@ Solana 是其本族的唯一代表(无其他链使用 SVM + PoH)。SolanaAdapter
 ## Open Questions(待解决问题)
 
 - [x] ⚠️ **`getRecentBlockhash` 已被官方废弃**(实测返回 `-32601 Method not found`),双源验证(`api.mainnet-beta.solana.com` + `solana-rpc.publicnode.com` 均返同样错误)。
-  - **此 method 废弃事实早有记录**:`analysis-notes/research_notes/02-solana-sui-aptos-rpc-resource.md:33` 已标注 `getRecentBlockhash (deprecated) | Memory | <1ms | 已被 getLatestBlockhash 替代`。
+  - **此 method 废弃事实早有记录**:`REFACTOR-SSOT.md §5.1(资源画像, 原02已合并删):33` 已标注 `getRecentBlockhash (deprecated) | Memory | <1ms | 已被 getLatestBlockhash 替代`。
   - **但** `config/config_loader.sh:430` 的 mixed 列表仍含此 method 未清理,`config_loader.sh:436` 的 `param_formats` 也仍保留对应条目。
   - **调用链已验**:`config_loader.sh:430` → `target_generator.sh:184/300-306`(读 `CURRENT_RPC_METHODS_ARRAY` 循环每 account × method)→ `generate_rpc_json` → vegeta targets file → vegeta 真发 mainnet。
   - **失败率估算(E5 SPECULATED,未实测)**:mixed 模式 5 method 等权 → **理论上 ~20% 请求**会返 `-32601`。**未跑 vegeta 实测**,真实失败率受 vegeta 默认成功判定(HTTP 200 + JSON `error` 字段在 vegeta 默认 200-class 成功)等因素影响,可能与理论值不同。Phase 2.1 验收时必须实测确认。

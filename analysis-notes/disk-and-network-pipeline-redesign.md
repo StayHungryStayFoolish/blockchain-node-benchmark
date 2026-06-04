@@ -1378,7 +1378,7 @@ $ git diff --stat HEAD~1
 
 ### §17.1 设计动机：为什么不用现有 Prometheus
 
-研究素材:`analysis-notes/research_notes/01-evm-rpc-resource.md`(全有效) / `02-solana-sui-aptos-rpc-resource.md`(Aptos 部分 OUT-OF-SCOPE) / `03-bitcoin-starknet-rpc-resource.md`(Bitcoin 部分 OUT-OF-SCOPE)
+研究素材:`REFACTOR-SSOT.md §5.1(资源画像, 原01已合并删)`(全有效) / REFACTOR-SSOT.md §5.1(资源画像, 原02已合并删)(Aptos 部分 OUT-OF-SCOPE) / REFACTOR-SSOT.md §5.1(资源画像, 原03已合并删)(Bitcoin 部分 OUT-OF-SCOPE)
 
 8 链 per-method metric 暴露能力实证对比：
 
@@ -1806,7 +1806,7 @@ fi
 
 ### §19.3 真 8 链默认权重（v1.4.2 校正,基于 research_notes/）
 
-来源：`analysis-notes/research_notes/01-evm-rpc-resource.md` Cloudflare 排序 + reddit 经验值 + 03b-evm-l2-rpc-resource(v1.4.2 新增 Scroll/Polygon)
+来源：`REFACTOR-SSOT.md §5.1(资源画像, 原01已合并删)` Cloudflare 排序 + reddit 经验值 + 03b-evm-l2-rpc-resource(v1.4.2 新增 Scroll/Polygon)
 
 #### Ethereum / BSC / Base / Scroll / Polygon (EVM 5 链同源,共用 handle_evm)
 ```json
@@ -1827,9 +1827,9 @@ fi
 **v1.4.2 真 8 链校正说明**:
 - 5 EVM 链(ethereum/bsc/base/scroll/polygon)在 `mock_rpc_server.py:387` 共用 `handle_evm` handler,
   默认权重也共用本表(各链可在 `chains/<chain>.json` 单独覆盖,如 Polygon 高 TPS 场景可上调 eth_getLogs 权重)
-- Scroll/Polygon 详细 RPC 特性见 `research_notes/03b-evm-l2-rpc-resource.md`
+- Scroll/Polygon 详细 RPC 特性见 `research_notes/REFACTOR-SSOT.md §5.1(资源画像, 原03b已合并删)
 
-#### Solana (来源 02-solana-sui-aptos-rpc-resource.md)
+#### Solana (来源 REFACTOR-SSOT.md §5.1(资源画像, 原02已合并删))
 ```json
 "mixed": {
   "getAccountInfo": 0.35,
@@ -2067,7 +2067,7 @@ case "$param_format" in
 esac
 ```
 
-完整 15 个 case 实现参考 `analysis-notes/research_notes/04-evm-complex-params.md §6.2` + `05-multichain-complex-params.md §5.1`。
+完整 15 个 case 实现参考 `REFACTOR-SSOT.md §5.2(calldata池, 原04已合并删) §6.2` + REFACTOR-SSOT.md §5.3(filter矩阵, 原05已合并删) §5.1`。
 
 ### §20.4 chain config JSON schema 扩展（chains/<chain>.json）
 
@@ -2381,13 +2381,13 @@ guard_method() {
   - `/tmp/k8s_api_stability/` — Rule #1/#4a deprecation policy
   - `/tmp/k8s_version_research/` — EKS/GKE 支持周期 + 在售版本表
 - **RPC method 调研**（v1.2 新增）:
-  - `analysis-notes/research_notes/01-evm-rpc-resource.md` — Ethereum/BSC/Base，含 Cloudflare Gateway Top 10 实测
-  - `analysis-notes/research_notes/02-solana-sui-aptos-rpc-resource.md` — Solana getProgramAccounts 深度剖析 [**Aptos 部分 OUT-OF-SCOPE**]
-  - `analysis-notes/research_notes/03-bitcoin-starknet-rpc-resource.md` — ~~Bitcoin txindex/scantxoutset~~ + Starknet Pathfinder/Juno 差异 [**Bitcoin 部分 OUT-OF-SCOPE**]
+  - `REFACTOR-SSOT.md §5.1(资源画像, 原01已合并删)` — Ethereum/BSC/Base，含 Cloudflare Gateway Top 10 实测
+  - `REFACTOR-SSOT.md §5.1(资源画像, 原02已合并删)` — Solana getProgramAccounts 深度剖析 [**Aptos 部分 OUT-OF-SCOPE**]
+  - `REFACTOR-SSOT.md §5.1(资源画像, 原03已合并删)` — ~~Bitcoin txindex/scantxoutset~~ + Starknet Pathfinder/Juno 差异 [**Bitcoin 部分 OUT-OF-SCOPE**]
 - **RPC 复杂参数 + fixture 池调研**（v1.3 新增，3 subagent 并行产出）:
-  - `analysis-notes/research_notes/04-evm-complex-params.md` — EVM Top 15 method JSON schema + eth_getLogs provider 限制 + calldata 池构造 + 15 新 param_format 实现
-  - `analysis-notes/research_notes/05-multichain-complex-params.md` — Solana/Sui/Starknet 复杂参数矩阵 + commitment/encoding 成本 + node-killer 清单 + safety_max_* 默认值 [**Aptos 部分 OUT-OF-SCOPE**]
-  - `analysis-notes/research_notes/06-fixture-pool-engineering.md` — 业界 fixture 池工程实践（paradigm flood / ChainForge / k6 / Alchemy SLA）+ hot/cold 比 + 漂移容忍 + 双层架构
+  - `REFACTOR-SSOT.md §5.2(calldata池, 原04已合并删)` — EVM Top 15 method JSON schema + eth_getLogs provider 限制 + calldata 池构造 + 15 新 param_format 实现
+  - `REFACTOR-SSOT.md §5.3(filter矩阵, 原05已合并删)` — Solana/Sui/Starknet 复杂参数矩阵 + commitment/encoding 成本 + node-killer 清单 + safety_max_* 默认值 [**Aptos 部分 OUT-OF-SCOPE**]
+  - `REFACTOR-SSOT.md §5.5(fixture工程, 原06已合并删)` — 业界 fixture 池工程实践（paradigm flood / ChainForge / k6 / Alchemy SLA）+ hot/cold 比 + 漂移容忍 + 双层架构
 - skill: `software-development/parallel-entry-trap`
 - skill: `software-development/systematic-debugging`
 - 早班讨论记录: 39 项清单 (A 组 10 项 disk / B 组 8 项 network / C 组 5 项 IMDS / D 组 7 项 K8s / E 组 4 项 cgroup / F 组 6 项自动降级 / G 组 5 项横切)

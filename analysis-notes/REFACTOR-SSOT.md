@@ -13,7 +13,7 @@
 >
 > 📋 旧文档收敛状态:
 > - 原料(审核后搬入本SSOT, 全搬完即删/标存档): design / fulllink / callchain / requirements / param-research。
-> - **SELF-EXEC-PROMPT-rpc-dsl.md = 待删原料**(已加降级标记, RPC事实过时仅作搬运索引; 待 SSOT 全单元搬完确认覆盖后删; skill 5处引用是方法论案例不依赖文件内容)。
+> - **SELF-EXEC-PROMPT-rpc-dsl.md 已删**(内容被本 SSOT 完整取代; 原是上下文续命 prompt + 落点索引, SSOT 全单元搬完后冗余; skill 5处引用是方法论案例不依赖该文件内容)。
 
 ---
 

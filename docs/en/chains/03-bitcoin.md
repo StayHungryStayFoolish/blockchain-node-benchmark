@@ -307,7 +307,7 @@ Bitcoin is a **brand-new chain** — no existing code path on the chain side. Th
 | 6 | `tests/guard_8chain_truth.sh` — rename to `guard_9chain_truth.sh` (or parameterize) | Add `"bitcoin"` to expected array | Otherwise guard blocks startup |
 | 7 | `analysis-notes/baseline-current-state.md` — grep `8chain` / `8 chain` | Update to 9-chain, add bitcoin to the path list | doc-vs-code parity (same v1.4.1 hazard) |
 | 8 | `analysis-notes/disk-and-network-pipeline-redesign.md` — sync | Same | Same |
-| 9 | `analysis-notes/research_notes/03-bitcoin-starknet-rpc-resource.md` — if marked deprecated, reassess or annotate that this doc supersedes the bitcoin block | Doc-vs-reality parity | Same |
+| 9 | `REFACTOR-SSOT.md §5.1(资源画像, 原03已合并删)` — if marked deprecated, reassess or annotate that this doc supersedes the bitcoin block | Doc-vs-reality parity | Same |
 
 **N/A**: Bitcoin has no existing methods to delete → "delete" column in template row 1 is N/A.
 

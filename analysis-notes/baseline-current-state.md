@@ -362,7 +362,7 @@ Summary: 8 passed, 0 failed
 - §19 / §20 / §21 / §22 引用 Sui/Aptos/Bitcoin 处统一标 OUT-OF-SCOPE
 - `research_notes/02-solana-sui-aptos*.md` 顶部加 OUT-OF-SCOPE banner,Aptos 部分标注
 - `research_notes/03-bitcoin-starknet*.md` 顶部加 OUT-OF-SCOPE banner,Bitcoin 部分标注
-- 新增 `research_notes/03b-evm-l2-rpc-resource.md` 覆盖 Scroll/Polygon
+- 新增 `research_notes/REFACTOR-SSOT.md §5.1(资源画像, 原03b已合并删) 覆盖 Scroll/Polygon
 - 原 02/03 文件归档至 `research_notes/_archive_v1.4/`
 
 **对应 commit**:`docs(plan): v1.4.1 — correct 8-chain truth (Scroll/Polygon, not Bitcoin/Aptos)`

@@ -1,7 +1,7 @@
 # RPC Method & 响应结构 抽象设计(声明式 DSL — 兼容用户配置任意 method)
 
 > **状态**: 设计+全量实测进行中(2026-06-01 立项)。这是长期工程的专门文档。
-> 相关: rpc-method-param-research.md(规律发现, 阶段1-4, 已确立 family×param_format 二维规律)是本文档的前置调研。
+> 相关: REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删)(规律发现, 阶段1-4, 已确立 family×param_format 二维规律)是本文档的前置调研。
 > 本文档 = 全量实测矩阵(184 method)+ 参数/响应抽象 DSL 设计。
 
 ## 0. 🎯 目标(用户 2026-06-01 澄清, 这是北极星)
@@ -20,7 +20,7 @@
 (public endpoint 实测拿到), 才能归纳出 DSL 要覆盖哪些情况、怎么设计才能兼容未来用户任意配置。
 抽样(每 family 1-2 个)不够 —— 那只能验规律存在, 不能保证 DSL 覆盖全部真实形态。
 
-## 1. 现状抽象的不足(rpc-method-param-research.md 已证)
+## 1. 现状抽象的不足(REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删) 已证)
 - 参数: 靠 (family, param_format) 二维, param_format 是预定义枚举名(53 种)。新 method 若参数形态不在某族枚举 → 必须改 _build_params 加分支(非零代码)。R1 风险。
 - 无校验: 用户声明错 param_format(位置反/类型错)框架静默错(public endpoint 证实位置错=报错)。R2/R3。
 - 响应: 各 method parse 逻辑(提 block_height/account 等)散在 adapter 代码, 非声明式。
@@ -472,7 +472,7 @@ param_spec[method] → 构造请求(带唯一 request_id) → proxy 识别 metho
 ### 2026-06-01 立项
 - 用户澄清目标: 不是验现有 method 能跑, 是设计 DSL 让用户配任意新 method 零代码兼容。
 - 确认 36 链 184 method 需全量实测(public endpoint + 官方文档)。
-- 建本文档。前置规律(family×param_format)见 rpc-method-param-research.md 阶段4。
+- 建本文档。前置规律(family×param_format)见 REFACTOR-SSOT.md §0.1/§3(原param-research被design§4取代已删) 阶段4。
 - 下一步: 逐 family 实测填矩阵(从 jsonrpc 16 链开始)。
 
 ### 2026-06-02 全量实测 + DSL 设计完成
