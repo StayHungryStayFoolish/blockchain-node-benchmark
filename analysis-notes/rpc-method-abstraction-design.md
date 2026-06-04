@@ -944,3 +944,14 @@ schema + 缺口落点 + 不留债约束已定稿。**等用户审 DSL 设计**, 
 > 4. 36 链 chain template 填 param_spec(新形态)/ 保留 param_formats(预设)—— 随 B2 推进逐链。
 >
 > **命名规范副产(解 §6.6.2 fixture 命名漂移)**: param_spec 的 method key 用 chain template rpc_methods 里的原始 method 名(权威), fixture 文件名 = escape(method)(/:空格→_)。统一以此为准, tendermint leading-slash 链(celestia/injective/osmosis/sei)的 method 名规范化在此锚定。
+
+
+### 6.6.4 B1 自审 review(2026-06-03, 用户无IDE要求我自审)— 挖出4问题, 修3记1
+token-level 重读 param_spec.py + 对照 §3 实测矩阵自审, 批判性挑刺:
+- **问题1(虚惊, 已核实对)**: 疑 block_number 枚举映射错。对照 §3 L76 实测铁证 eth_getBlockByNumber=`params:["latest",false]`, 我的预设 `[{literal,latest},{literal,false}]` 吻合✓。顺验 block_number_int(L82 [int])/[block_number](kusama L148 [int])/transaction_hash 均对。**核对是必须的, 不核不知对错**。
+- **问题2(真缺陷, 已修)**: validate_spec 只校 slots/fields source, 漏了 rest_path 的 bindings / rest_query 的 query / call_object shape / http_method → 非法声明运行时才炸。已补全 4 类校验 + 4 新单测(16/16过)。
+- **问题3(死码, 已修)**: `from typing import Any` 导入未用, 删。
+- **问题4(设计盲点, 记录待 B2 解)**: `encoding` 字段全预设表为空。§4.2 schema 有 encoding(account 地址编码 hex/base58/bech32/base32/...), 但**预设表里 `{"source":"account"}` 不带 encoding** —— 根因: **枚举(single_address)是 per-method 的, encoding 是 per-chain 的**(EVM=hex/solana=base58/cardano=bech32/algorand=base32/ton=ton_friendly), 预设表无链信息填不了。
+  → **B2 构造层处理**: encoding 不在 param_spec 预设里定, 而在 **chain template 顶层声明 `address_encoding`(per-chain 默认)** + param_spec slot 可选 override。构造时: slot 无 encoding → 取 chain.address_encoding。这样枚举预设(per-method)不需携带 encoding(per-chain), 职责分离。**B2 落地时 chain template 加 address_encoding + 构造器按"slot.encoding ?? chain.address_encoding"取**。
+
+**B1 review 结论**: 机制正确(resolve 单一路径 + 校验完整 + 22枚举对照§3验证), encoding 维度的 per-chain 职责在 B2 补(已设计清), 不阻塞。

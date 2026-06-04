@@ -30,7 +30,7 @@ source 枚举(从哪个输入池取值, S1 多池供给的契约):
     contract_call — 复杂合约调用对象(call_object 描述)
 """
 from __future__ import annotations
-from typing import Optional, Any
+from typing import Optional
 
 
 class ParamSpecError(ValueError):
@@ -206,6 +206,36 @@ def validate_spec(method: str, spec: dict) -> None:
             raise ParamSpecError(f"method {method!r}: field {key!r} source {src!r} invalid")
         if src == "literal" and "value" not in fld:
             raise ParamSpecError(f"method {method!r}: literal field {key!r} missing 'value'")
+    # rest_path / rest_query 的 path 占位符绑定校验(bindings)
+    for placeholder, bind in spec.get("bindings", {}).items():
+        src = bind.get("source")
+        if src not in _VALID_SOURCES:
+            raise ParamSpecError(
+                f"method {method!r}: binding {placeholder!r} source {src!r} invalid, "
+                f"must be one of {sorted(_VALID_SOURCES)}"
+            )
+        if src == "literal" and "value" not in bind:
+            raise ParamSpecError(f"method {method!r}: literal binding {placeholder!r} missing 'value'")
+    # rest_query 的 query 参数校验
+    for qk, qv in spec.get("query", {}).items():
+        src = qv.get("source")
+        if src not in _VALID_SOURCES:
+            raise ParamSpecError(f"method {method!r}: query {qk!r} source {src!r} invalid")
+        if src == "literal" and "value" not in qv:
+            raise ParamSpecError(f"method {method!r}: literal query {qk!r} missing 'value'")
     # rest_* 需 path
     if transport in ("rest_path", "rest_query") and not spec.get("path"):
         raise ParamSpecError(f"method {method!r}: transport {transport} requires 'path'")
+    # rest_body / POST 类需 http_method(GET 默认, POST 显式)
+    hm = spec.get("http_method")
+    if hm is not None and hm not in ("GET", "POST"):
+        raise ParamSpecError(f"method {method!r}: http_method {hm!r} invalid, must be GET|POST")
+    # call_object shape 校验(contract_call source 时)
+    co = spec.get("call_object")
+    if co is not None:
+        shape = co.get("shape")
+        _VALID_SHAPES = {"evm_call", "evm_tx_object", "aptos_view", "tron_trigger"}
+        if shape not in _VALID_SHAPES:
+            raise ParamSpecError(
+                f"method {method!r}: call_object shape {shape!r} invalid, must be one of {sorted(_VALID_SHAPES)}"
+            )

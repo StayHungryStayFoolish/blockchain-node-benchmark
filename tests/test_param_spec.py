@@ -93,6 +93,48 @@ def test_validate_rest_requires_path():
         assert "requires 'path'" in str(e)
 
 
+def test_validate_rejects_bad_binding_source():
+    # review 修复: bindings 校验(之前漏)
+    try:
+        ps.validate_spec("m", {
+            "transport": "rest_path", "path": "/v1/{addr}",
+            "bindings": {"{addr}": {"source": "bogus"}},
+        })
+        assert False
+    except ps.ParamSpecError as e:
+        assert "binding" in str(e) and "invalid" in str(e)
+
+
+def test_validate_rejects_bad_query_source():
+    try:
+        ps.validate_spec("m", {
+            "transport": "rest_query", "path": "/v1/tx",
+            "query": {"limit": {"source": "literal"}},  # 缺 value
+        })
+        assert False
+    except ps.ParamSpecError as e:
+        assert "query" in str(e) and "missing 'value'" in str(e)
+
+
+def test_validate_rejects_bad_call_object_shape():
+    try:
+        ps.validate_spec("m", {
+            "transport": "jsonrpc_list",
+            "call_object": {"shape": "bogus_shape"},
+        })
+        assert False
+    except ps.ParamSpecError as e:
+        assert "call_object shape" in str(e)
+
+
+def test_validate_accepts_valid_rest_path():
+    # 正向: 合法 rest_path 不报错
+    ps.validate_spec("m", {
+        "transport": "rest_path", "path": "/v2/accounts/{address}",
+        "bindings": {"{address}": {"source": "account", "encoding": "base32"}},
+    })
+
+
 if __name__ == "__main__":
     import traceback
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
