@@ -82,25 +82,88 @@ NS 对应(NORTH-STAR): NS-1 36链零代码加链 / NS-2 mixed 模式 per-method 
 - **🔴 param_spec.py 草稿现状(0 caller 孤岛, double check 与 design §4 schema 完全一致)**: 244 行, `_VALID_TRANSPORTS`(5: jsonrpc_list/jsonrpc_dict/rest_path/rest_query/rest_body)= design §4.1 维度A / `_VALID_SOURCES`(6: account/literal/block_height/tx_hash/contract_call/config_object)= design §4.3 维度C(注释明确"服从权威源不私拆 block_hash/block_number, 设计问题记 §6.6.5 留 B2/C") / `_VALID_SHAPES`(3: evm_call/aptos_view/tron_trigger)= design §4.2 call_object。函数: ParamSpecError/PARAM_FORMAT_PRESETS(22枚举)/expand_preset/resolve_param_spec/validate_spec(R2启动期校验)。**真问题=0 caller + 缺 spec→params 构造器(孤岛), 非 schema 错**(草稿是按 design §4 权威建的)。
 - **config_loader 现状演进(file-notes 笔记已过时, 代码实证)**: UNIFIED_BLOCKCHAIN_CONFIG 内嵌 heredoc **已废弃**(L589 注释 `legacy UNIFIED_BLOCKCHAIN_CONFIG heredoc`), 改读 config/chains/<name>.json(L501/588 `S1.1 (5bd01a6+)`), config/chains 实际 **36 链**(非笔记说的内嵌8链)。target_generator 产物 body 必须 **base64**(Vegeta target 格式约束); 下游 master_qps_executor.sh 只按路径消费 targets_{single,mixed}.json 不解析字段 → S2 改 body 构造不影响下游(降风险)。
 **重构目标(未做)**:
-*(待审核搬入 — 待逐行精读 design §4/fulllink 阶段2/callchain §4/chain-template §2.1/param-research §2 + research_notes 04/05 独有点后补)*
-**S2 文件核对进度(机械计数门槛)**: 已 read_file 逐行 = code现状(6 family+cli+config_loader+target_generator) ✅ / design §4 ✅ / param_spec.py ✅ / file-notes×2 ✅ / research_notes 04 ✅(独有点: §4 calldata池/§3 getLogs provider限制/§2 资源画像)/ research_notes 05 ✅(独有点: getProgramAccounts/queryEvents/getEvents 复杂filter矩阵 + Node-killer safety_max)。**待逐行真读(此前仅grep, 不算精读)**: fulllink 阶段2 / callchain §4 / chain-template §2.1 / param-research §2。**X=7/N=11, 未核完**。
+- chain template 加 `param_spec.<method>`(design §4.2: transport × slots/fields × source 3维), 框架据此构造请求, 替代 param_format 枚举硬编码。
+- **3 维 DSL**: transport(jsonrpc_list/jsonrpc_dict/rest_path/rest_query/rest_body 5种)× slot/field(list下标/dict键/path占位符)× source(account/literal/block_height/tx_hash/contract_call/config_object 6种)。覆盖 184 实测 14 类参数形态(design §4.3 验证)。
+- **6 family `_build_params` 改造**: 优先读 param_spec(DSL), 无则 fallback param_format 枚举展开成等价 param_spec(单一构造路径, 非两套并存; param_spec.py PARAM_FORMAT_PRESETS 已做枚举→spec 桥)。
+- **接口签名改造(与 S1 强耦合)**: build_vegeta_target 单 address 槽 → (method, inputs:dict, rpc_url, param_spec), 四处联动(target_generator TSV/cli.py解析/base签名/_build_params), 缺一断链。
+- **R2/R3 校验(cli.py 启动期 fail-fast)**: param_spec 缺失/解析失败必告警退出, 禁静默退化 [address](6866cba 对称fallback假绿教训, design S2.5)。
+- **统一 4 套按链分派**(缺口#1): Python侧(fetch create_adapter chain_type + chain_adapters adapter_family)+ Shell侧(config_loader MAINNET case + get_block_height)。Shell 侧走 D5 声明式收敛(纯 Shell+jq 读 chain template, 不 fork Python)。
+- **保留 _meta.adapter_family**(缺口#4): config_loader L597 `del(._meta)` 改为保留 adapter_family + block_height_spec, 否则 fetch 按 family 分派拿不到。
+- **mixed weight 真驱动**(缺口#9): config_loader L626/L540/L674 取 rpc_methods.mixed(均权)→ 改读 mixed_weighted(36链已有weight=1) 加权; target_generator round-robin 改加权。
+- **design §4 schema 缺的维度(真读6 family + chains文档挖出, 需补进 param_spec)**: ① bitcoin HTTP Basic Auth header ② substrate 可选参数(block_hash?) ③ 同链多 endpoint(hedera _meta.json_rpc_url/algorand node vs indexer) ④ per-request 协议路由(hedera _is_jsonrpc_method 按前缀) ⑤ 占位符"counts as success"妥协(接真值池后消除) ⑥ 链级 DSL 字段(chains文档 §7/§9: protocol_kind/rollup_type/module_set/denom_format/dual_address/finality/auth header/response_path — 与 method级 param_spec 分层, 见 §3 决策待定)。
+- **param_spec.py 草稿现状**: 244行, _VALID_TRANSPORTS(5)/_VALID_SOURCES(6)/_VALID_SHAPES(3) 已对照 design §4 修正; 真问题=0 caller 孤岛 + 缺 spec→params 构造器; docstring source 列表与 _VALID_SOURCES 不一致(待修)。
+- **复杂参数真值地基**: contract_call/filter 的真值见 §5.2 calldata池 + §5.3 filter矩阵 + §5.4 safety守卫。
+**完成判定**: L1 每family param_spec 构造单测(byte==§3实测) / L2 cli.py build-target shim 对每(chain×method) / L3 整框架跑 mixed weight 生效 + 新 method 零代码可配 + 老 _get_param_format/枚举退役。
+**权威依据**: design §4(DSL)+ §6.2.3 S2 + fulllink §5阶段2 + callchain §4.2 调用链不断裂点表 + 184 实测文档 + §5.2/§5.3/§5.4 独有事实。
 
 ### 单元 S3 — 响应链 + 关联键 + 归因(缺口 #5/#6/#7/#8/#11/#12)
-*(待审核搬入)*
+**涉及代码**: 4 family adapter body id=1(jsonrpc.py:42/104, substrate.py:29/49, tendermint.py:39/62, bitcoin_jsonrpc.py:40/67 共8处)、proxy(handler.go/sink.go/jsonrpc.go:88/rest.go:74)、analysis/per_method_attribution.py、visualization/per_method_charts.py:L241、report_generator.py:4303-4309、common_functions.sh get_block_height、lib/proxy_lifecycle.sh:143。
+**现状(代码实证)**: proxy sink 9列(无req/resp_bytes, design §5.7 校准 Q4-9 文档过时); per-method 归因实测频次权重(design §5.7, 非Q4-7预设1/10/100); 响应主路径不解析body(handler.go:103 不缓冲); parse_block_height 仅 health check(生产 dead path)。
+**重构目标(未做)**:
+- **S3.1 重建 request_id 关联键**(缺口#5): 4 family 8处 body 硬编码 id=1 → 唯一 id(base.py helper); rest.go RequestID="" 需在 TargetBuilder 注入 header/query X-Request-Id + rest.go 读 req.Header(非body); batch 关联键=(RequestID,BatchIdx)复合。proxy Phase 0.5 启动时序绝不动(否则 vegeta 绕过 proxy)。
+- **S3.2 response_spec 响应DSL**(缺口#6/#7): chain template 声明响应提取(design §5: envelope 5种×locator 3种×type 5种, 覆盖15类实测响应)。三端同源(param_spec/proxy_extraction/response_spec 都以 method 为键 + method 名串联)+ 交叉校验防 handler.go:77 __unmatched__ 静默消失。**响应DSL 仅 PROXY_RESPONSE_CAPTURE 开关开 + health check 用, 非压测主路径**(design §5.0/§5.6)。
+- **S3.3 attribution 补四维**(缺口#8): per_method_attribution 读 unified CSV disk/net 列(数据已采)+ per_method_charts.py:L241 只画cpu→补 mem/EBS/Net 四维。⚠️ 用生产 unified CSV 真实列名 mem_used(非默认 mem_used_mb, 否则归因恒0静默, report L4305已修)。出图统一 matplotlib+UnifiedChartStyle(已定, 非自拼SVG)。
+- **S3.4 减 proxy 基线**(缺口#11): attribution 读 proxy_self.csv 减 proxy 自身 cpu/mem(Q4-10/ADR-0004, 现生产3处采集消费0处=死数据)。
+- **S3.5 块高归一**(缺口#12): get_block_height 8链case → 读 block_height_spec(五档 sync_strategy, 见块高实测文档)。Shell DSL化不fork Python(D5, 每秒高频防污染测量)。get_block_height 本地自查不打外部主网(D5.1, 防限流)。Python parse_block_height 是 dead path(仅测试一致性)。hex/dec 统一 _decode_height。CSV 6字段向后兼容(mainnet_block_height 改名 network_block_height 需同步3 reader)。块高契约: 五档产出落后量→block_height_time_exceeded.flag→bottleneck 场景C(不变)。
+- **S3.7 协议错配修复**(34 method, callchain §2.1): tendermint 整族(adapter构造jsonrpc/配置LCD REST path)走 rest_paths declarative; polkadot 混协议走 hedera_dual 式 per-request 路由; near dict / tron REST body / avax dict。复用 rest.py + hedera_dual.py 现成范式, 不新造。按链非按family。
+**完成判定**: L1 关联键/response_spec/四维单测 / L2 proxy全链路 id关联 / L3 整框架 mixed 四维归因出图 + 响应按method关联 + 块高36链 + 场景C触发。
+**权威依据**: design §5/§6.2.4 S3 + fulllink §4/§8 + 块高实测文档 + §5.6 归因机制。
 
 ### 单元 S0 — 前置工具链(L3 地基)
-*(待审核搬入: F1已完成/fixture审计/F2)*
+**目标**: 防"L1+L2绿/L3未知"债累积(parallel-entry multi-stage L3 铁律), S0 一次性建好不拖到最后。
+- **S0.1 mock 节点**: 复用 tools/fake-node/(184 fixture 已入库 commit 91f380b)+ mock_rpc_server.py。6 family 本地起 mock 返 fixture。
+- **S0.2 workload**: vegeta(保留, 见§3决策)+ target_generator.sh, 对 mock 发 mixed。
+- **S0.3 e2e harness**: 真 L3 = blockchain_node_benchmark.sh 无 skip + artifact-assert HTML/PNG(非 e2e_smoke --validate, 那是smoke)。
+- **S0.4 baseline audit**: tests/test_chain_adapters.py(R0) 记改造前基线。
+- **F1 adapter_family CI 门**(✅已完成 ci/check_adapter_family.sh, ⏸️待挂CI流程): 36链必有 _meta.adapter_family + 在6注册family内 + 缺失fail-fast。**非自动推断**(proto=rest 横跨3 family无法推断, 领域知识人工填+CI校验)。
+- **F2 e2e method 构造验证**(GAP-B): e2e 现黑盒探活(mock硬编eth_blockNumber)不验method构造 → 补 method×chain build-target 断言 address进body/url + param顺序(parallel-entry Step4-bis, 防6866cba对称fallback)。依赖 B1/B3 接口定稿后做。
+- **S0 fixture 覆盖**: 157/184 有 fixture, 27缺(命名漂移+结构性不可达)。fixture 补全后置(随 B/C/D schema 落地定 method 命名规范后 record_all_184 重录)。
+**完成判定**: 6 family mock可起 + vegeta可打 + e2e真跑出HTML + baseline数字 + F1挂CI + F2 harness。**S0 不过不进 S1**。
+**权威依据**: design §6.2.1 S0 + §6.5.3 治理缺口 + §6.6 S0执行记录。
 
 ## 2. 调用链依赖拓扑(改代码顺序)
 > 哪些单元必须先于哪些做(防孤岛/断链)
 
-*(待审核搬入)*
+```
+S0 前置工具链(mock/workload/e2e/baseline/F1/F2)
+  ↓ 不过不进 S1
+S1 输入供给层(InputProvider 多池) ─┐
+  ↓                                  │ S1+S2+B3 是原子单元不可拆
+S2 参数 DSL(param_spec)─────────────┤ (build_vegeta_target 取值 + param_spec.source
+  ↓ (接口签名 inputs:dict 一并改)    │  + 接口签名 单address→多源 强耦合, 拆=孤岛)
+S3 响应链 + 关联键 + 归因 + 块高归一 + 协议错配
+```
+**强耦合(必须一并改, 缺一断链)**:
+- **S1+S2.5+B3 共享 build_vegeta_target 接口瓶颈**: 单 address 槽 → inputs:dict, 分开改=N次改同一签名。
+- **S1 必先于 S2**: 输入供给是地基, 否则 param_spec 声明 tx_hash source 也填不出真值→退回占位(callchain §6.5)。
+- **fetch CHAIN_CONFIG 保留 _meta.adapter_family**(改 config_loader del._meta)是 S1 整合 + S2 family分派的前置(缺口#4)。
+- **S3.7 协议错配**复用 S3.2 response_spec + rest_paths 范式, 按链处理。
+- **块高 S3.5** 与 S2.2b Shell DSL化同走 D5(读 chain template 声明), 同源不冲突。
+**family 分波(风险倒序)**: jsonrpc(16, 最稳先行)→ substrate → tendermint → bitcoin → rest → hedera_dual(殿后)。每波 L1+L2+L3 全过才 done。
 
 ## 3. 已锁定决策(带依据)
-*(待审核搬入: vegeta保留/出图matplotlib/块高单一声明源/mixed weight/字段名否决改名 等)*
+- **vegeta 保留**(不换): 开环恒定速率(避免 coordinated omission)+ 文件驱动异构 target + Go 零依赖, 命中区块链 HTTP 异构压测。候选 k6/wrk/bombardier/locust/ethspam 均不如。压测发生器层不动。撤销线: 单节点>50k QPS 或需多机分布式。依据 vegeta-vs-alternatives-research。
+- **出图统一 matplotlib + UnifiedChartStyle**(2026-06-02 用户拍板): per-method 四维图参照 _generate_resource_distribution_chart, 不用自拼 SVG(避免 HTML 混排 SVG/PNG 体系割裂)。
+- **block_height_spec 单一声明源收编三套**: 现状 Shell get_block_height(8链case live)+ Python parse_block_height(36 family dead)+ _meta.health_probe(5链 dead)三套并存; 不留债=block_height_spec 作单一声明源, 三套读同源(非新造第4套)。五档 sync_strategy(dual_height/slot_diff/sync_progress/peer_metrics/freshness)。
+- **mixed weight 直接复用 mixed_weighted 零新增**(决策B): 36/36链已有 mixed_weighted(weight值都=1, 代码没读), S2.4 直接读它驱动, 不另造字段。
+- **mainnet_block_height 改名否决**(默认): 改 network_block_height 断 performance_visualizer 等 reader 无兜底, 收益仅语义 → 保留旧名加注释(若必改需同步3 reader)。
+- **param_format 枚举作 param_spec 预设快捷**(B1): 单一读取路径(param_spec有→用/无→PARAM_FORMAT_PRESETS展开/都无fail-fast), 避 parallel-entry。
+- **D5 Shell DSL化不fork Python**: 块高每秒高频, Shell get_block_height 纯Shell+jq读block_height_spec, 不调Python(防fork污染节点资源基线测量)。
+- **F1 adapter_family CI校验非自动推断**: proto=rest横跨3 family无法推断, 人工填+CI校验在6注册family内。
+- **fixture + 请求示例入库**(用户2026-06-02拍板, 突破"fixtures不进git"铁律): 因无法部署36真节点+公共节点限流, clone后无法现录 → 入库供离线二次开发(写明破例理由防后续按旧铁律删)。
+- **响应DSL定位瘦身**(design §5.0, 用户两次元问句推翻): 压测主路径不解析响应body(对NS-2资源归因零信息量), response_spec 仅 PROXY_RESPONSE_CAPTURE开关 + health check块高用。
+- **chains文档链级DSL字段(待定, §3未锁)**: chains文档§7/§9积累 protocol_kind/rollup_type/module_set/denom_format/dual_address/finality/auth/response_path 等链级字段(design §4 没纳入), 收敛为"7必+1推+4缓"(moonbeam汇总)。**待决: 链级字段整合进 param_spec 还是独立 chain-level schema 两层**(影响 S2 schema 边界)。polkadot SCALE/UTXO method chaining 是 NS-3 零代码的真边界(纯DSL无法表达, 需sidecar/adapter)。
 
-## 4. 不留债硬约束
-*(待审核搬入)*
+## 4. 不留债硬约束(design §6.5.5 + 全程遵守)
+1. **字段名全保留**(csv_schema_registry 单源, block段6字段): 不改名→8 consumer 零断裂; mainnet_block_height 改名=否决。
+2. **block_height_diff = 最硬契约**(performance_visualizer required 无兜底 + 3 consumer): 列名+required不变, 五档产出落后量都填这列。
+3. **配置债收敛单源**: BLOCK_HEIGHT_DIFF_THRESHOLD(internal_config L59=50) 与 rpc_deep_analyzer.py L35 SYNC_THRESHOLD=20 合一。
+4. **接口签名联动改**: build_vegeta_target 单address槽→(method,inputs:dict), 四处一并改缺一断链。
+5. **fallback fail-fast**: param_spec 缺失/解析失败必告警退出, 禁静默 [address](cli L55/jsonrpc L97/各adapter default, 6866cba教训)。
+6. **D5 Shell不fork Python**: 块高每秒高频纯Shell+jq, 防fork污染测量。
+7. **L3 每阶段全过才done**(parallel-entry多阶段): 每S阶段整框架e2e, 块高场景C契约必验。
+8. **死代码处置四分类**(用户2026-06-04): grep 0 caller≠可删, 必读逻辑+查git+扩范围验等价, 分(a)我重构弄断(b)重构遗漏功能(c)调用链断裂(d)真无意义; bc修复接回不删。
+9. **每个功能点真完成判定**: (a)生产主链真caller≥1 live (b)L3触达 (c)老路退役 (d)commit SHA。"建模块+单测"≠完成(param_spec.py孤岛教训)。
 
 ## 5. 独有事实合并节(从 research_notes 01-07 合并, 原文件待删, 来源标注)
 
