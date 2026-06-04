@@ -9,6 +9,11 @@
 > - 重构目标列 = 重构后应变成的样子(明确"未做")。
 > - 已完成列 = 已落地且接进调用链 + L 验证过的(带 commit)。
 > - 每条搬入前查 diff 防丢失; 涉及 skill 同步更新 skill。
+> - **每个内容点搬入前必全范围搜索(grep -rl 穷举所有文件)+ token-level 读全 + 交叉确认无过时/矛盾, 才更新; 无法确认则停下问用户(用户 2026-06-04 定)。**
+>
+> 📋 旧文档收敛状态:
+> - 原料(审核后搬入本SSOT, 全搬完即删/标存档): design / fulllink / callchain / requirements / param-research。
+> - **SELF-EXEC-PROMPT-rpc-dsl.md = 待删原料**(已加降级标记, RPC事实过时仅作搬运索引; 待 SSOT 全单元搬完确认覆盖后删; skill 5处引用是方法论案例不依赖文件内容)。
 
 ---
 
