@@ -41,11 +41,12 @@ NS 对应(NORTH-STAR): NS-1 36链零代码加链 / NS-2 mixed 模式 per-method 
 > 每个单元: 涉及代码文件:行号 / 现状(实证) / 重构目标(未做) / 依赖谁先做 / 完成判定 / 权威依据来源
 
 ### 单元 S1 — 输入供给层 InputProvider(缺口 #2/#3/#6-fetch/#10 + R-A/R-B/R-D)
-**涉及代码**: tools/fetch_active_accounts.py(create_adapter L665-668 / tx_hash·block 经手 L204·313·335 `{"signature":...}`/latest_block/transactionHash / 写盘 L817-819 单列account)、tools/target_generator.sh(读单列 L193-225 / round-robin L246-262)、config_loader.sh(ACCOUNTS_OUTPUT_FILE 约定)。
-**现状(代码实证 2026-06-04, grep 验证)**:
-- create_adapter 只 4 adapter 类覆盖部分 chain_type(L665 solana / L667 ethereum,bsc,base,scroll,polygon / starknet / sui), **bitcoin/UTXO 无 adapter → raise(缺口#2)**。
+**涉及代码**: tools/fetch_active_accounts.py(create_adapter def L661 / 分派体 L665-674: solana L665·ethereum,bsc,base,scroll,polygon L667·starknet L669·sui L671·else raise L673 / tx_hash·block 经手 L204·313·335 `{"signature":...}`/latest_block/transactionHash / 写盘 L816-818 单列account)、tools/target_generator.sh(读单列 L193-225: L193 文件检查→L225 `done < ACCOUNTS_OUTPUT_FILE` / round-robin L258-263: L258 account_index=0·L260 `method_index=$((account_index % method_count))`均权·L263 +1)、config_loader.sh(ACCOUNTS_OUTPUT_FILE 约定)。
+**现状(代码实证 2026-06-04, grep+read_file double check 行号准确)**:
+- create_adapter(def L661) 只 4 adapter 类覆盖部分 chain_type(L665 solana / L667 ethereum,bsc,base,scroll,polygon / L669 starknet / L671 sui / **L673 else raise**), **bitcoin/UTXO 无 adapter → raise(缺口#2)**。
 - fetch 经手 tx_hash/block(L204 signature / L313 latest_block / L335 transactionHash)但写盘只 account 单列(缺口#3)。
 - target_generator 读单列 account 喂所有 method(缺口#10)。**实证: audit 16 个 P1_RPC_ERROR, error.data.reason 精确点名缺 filter/transaction_hash → 不是推测, 是节点报错点名缺输入**。
+- 写盘块 L816-818(open L816 / for top_accounts L817 / `f.write(f"{addr}\n")` L818)= 只落 account 单列, tx_hash/block 不落盘(缺口#3 落点)。
 - 占位符污染(缺口连带): jsonrpc.py:84 tx_hash 无真值→全0占位→节点返null→per-method 归因偏低失真。
 - **🔴 关键概念区分(消除常见误解, chain-template-guide L50)**: `transaction_hash`/`txid`/`block_number` 枚举**已存在于参数构造层**(param_formats 能构造 tx_hash/区块号参数), 但 —— **输入供给层只产 account 一池, 没有 tx_hash/block 池**。∴ 这些枚举能\"构造\"tx_hash 参数, 却**拿不到真实 tx_hash 值**(靠占位符兜底→节点报错)。即: **参数构造已支持, 真实输入供给没跟上**——S1 补的是后者(输入供给), 不是前者(枚举/构造)。
 **重构目标(未做)**:
