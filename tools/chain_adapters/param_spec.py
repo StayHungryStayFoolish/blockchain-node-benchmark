@@ -91,17 +91,17 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
         "transport": "jsonrpc_list",
         "slots": [{"source": "literal", "value": "latest"}, {"source": "literal", "value": False}],
     },
-    "block_number_int": {  # zks_getBlockDetails: [<int>]  (block_number 池)
+    "block_number_int": {  # zks_getBlockDetails: [<int>]  (block_height 池, 整数块号)
         "transport": "jsonrpc_list",
-        "slots": [{"source": "block_number"}],
+        "slots": [{"source": "block_height"}],
     },
-    "block_hash": {  # substrate chain_getBlock 等: [block_hash]
+    "block_hash": {  # substrate chain_getBlock 等: [区块哈希]
         "transport": "jsonrpc_list",
-        "slots": [{"source": "block_hash"}],
+        "slots": [{"source": "block_height"}],
     },
     "object_single": {  # linea_estimateGas: [{from,to,value}]
         "transport": "jsonrpc_list",
-        "slots": [{"source": "contract_call", "call_object": {"shape": "evm_tx_object"}}],
+        "slots": [{"source": "contract_call", "call_object": {"shape": "evm_call"}}],
     },
     "eth_call_object_latest": {  # eth_call: [{to,data}, "latest"]
         "transport": "jsonrpc_list",
@@ -114,15 +114,15 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
         "transport": "jsonrpc_list",
         "slots": [
             {"source": "account"},
-            {"source": "literal", "value": {"showType": True, "showContent": True, "showDisplay": False}},
+            {"source": "config_object", "value": {"showType": True, "showContent": True, "showDisplay": False}},
         ],
     },
 
     # ── 批2: 半结构化枚举(枚举名塞了 list 结构, 语义在 §3 矩阵)──
     "[null]": {"transport": "jsonrpc_list", "slots": [{"source": "literal", "value": None}]},
-    "[block_number]": {"transport": "jsonrpc_list", "slots": [{"source": "block_number"}]},
-    "[height]": {"transport": "jsonrpc_list", "slots": [{"source": "height"}]},
-    "[blockhash]": {"transport": "jsonrpc_list", "slots": [{"source": "block_hash"}]},
+    "[block_number]": {"transport": "jsonrpc_list", "slots": [{"source": "block_height"}]},
+    "[height]": {"transport": "jsonrpc_list", "slots": [{"source": "block_height"}]},
+    "[blockhash]": {"transport": "jsonrpc_list", "slots": [{"source": "block_height"}]},
     "[conf_target]": {"transport": "jsonrpc_list", "slots": [{"source": "literal", "value": 6}]},
     "[txhash,verbose]": {  # bch getrawtransaction: [txhash, true]
         "transport": "jsonrpc_list",
@@ -134,7 +134,7 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
     },
     "[blockhash,verbosity]": {  # bitcoin getblock: [blockhash, 1]
         "transport": "jsonrpc_list",
-        "slots": [{"source": "block_hash"}, {"source": "literal", "value": 1}],
+        "slots": [{"source": "block_height"}, {"source": "literal", "value": 1}],
     },
     "[hash,signer_id]": {  # near tx: [tx_hash, account]
         "transport": "jsonrpc_list",
@@ -178,10 +178,14 @@ def resolve_param_spec(
 
 
 _VALID_TRANSPORTS = {"jsonrpc_list", "jsonrpc_dict", "rest_path", "rest_query", "rest_body"}
+# source 集 = design §4.2 schema L388 + §4.3 维度C 权威定义(不自创细分)。
+# 注: 沉淀把 block_hash(字符串)/block_number(整数) 统一归 block_height —— 服从权威源,
+#     "是否该拆 block_hash vs block_number" 的设计问题记 §6.6.5 留 B2/C 处理,此处不私拆。
 _VALID_SOURCES = {
-    "account", "tx_hash", "block_hash", "block_number", "slot", "height",
-    "round", "asset_id", "pool_id", "literal", "contract_call",
+    "account", "literal", "block_height", "tx_hash", "contract_call", "config_object",
 }
+# call_object.shape = design §4.2 L406 权威(3个), 不自创。
+_VALID_SHAPES = {"evm_call", "aptos_view", "tron_trigger"}
 
 
 def validate_spec(method: str, spec: dict) -> None:
@@ -234,7 +238,6 @@ def validate_spec(method: str, spec: dict) -> None:
     co = spec.get("call_object")
     if co is not None:
         shape = co.get("shape")
-        _VALID_SHAPES = {"evm_call", "evm_tx_object", "aptos_view", "tron_trigger"}
         if shape not in _VALID_SHAPES:
             raise ParamSpecError(
                 f"method {method!r}: call_object shape {shape!r} invalid, must be one of {sorted(_VALID_SHAPES)}"
