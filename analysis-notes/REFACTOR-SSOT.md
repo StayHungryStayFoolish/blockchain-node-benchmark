@@ -35,21 +35,34 @@ NS 对应(NORTH-STAR): NS-1 36链零代码加链 / NS-2 mixed 模式 per-method 
 ## 1. 重构功能单元 × 三态 × 依赖
 > 每个单元: 涉及代码文件:行号 / 现状(实证) / 重构目标(未做) / 依赖谁先做 / 完成判定 / 权威依据来源
 
-### 单元 S1 — 输入供给层 InputProvider(缺口 #2/#3/#6-fetch/#10 + R-B)
-**涉及代码**: tools/fetch_active_accounts.py(create_adapter L665-668 / tx_hash 经手 L204·335·395 `{"signature":...}` / 写盘 L817-819 单列account)、tools/target_generator.sh(读单列 L193-225 / round-robin L246-262)、config_loader.sh(ACCOUNTS_OUTPUT_FILE 约定)。
-**现状(代码实证 2026-06-04)**:
+### 单元 S1 — 输入供给层 InputProvider(缺口 #2/#3/#6-fetch/#10 + R-A/R-B/R-D)
+**涉及代码**: tools/fetch_active_accounts.py(create_adapter L665-668 / tx_hash·block 经手 L204·313·335 `{"signature":...}`/latest_block/transactionHash / 写盘 L817-819 单列account)、tools/target_generator.sh(读单列 L193-225 / round-robin L246-262)、config_loader.sh(ACCOUNTS_OUTPUT_FILE 约定)。
+**现状(代码实证 2026-06-04, grep 验证)**:
 - create_adapter 只 4 adapter 类覆盖部分 chain_type(L665 solana / L667 ethereum,bsc,base,scroll,polygon / starknet / sui), **bitcoin/UTXO 无 adapter → raise(缺口#2)**。
-- fetch 经手 tx_hash(L204/335/395 `{"signature":...}`)但写盘只 account 单列(缺口#3)。
-- target_generator 读单列 account 喂所有 method(缺口#10)。
+- fetch 经手 tx_hash/block(L204 signature / L313 latest_block / L335 transactionHash)但写盘只 account 单列(缺口#3)。
+- target_generator 读单列 account 喂所有 method(缺口#10)。**实证: audit 16 个 P1_RPC_ERROR, error.data.reason 精确点名缺 filter/transaction_hash → 不是推测, 是节点报错点名缺输入**。
 - 占位符污染(缺口连带): jsonrpc.py:84 tx_hash 无真值→全0占位→节点返null→per-method 归因偏低失真。
 **重构目标(未做)**:
 - 方案c分层: InputProvider(async抓输入,6 family)/ TargetBuilder(sync构造)解耦。
 - fetch_inputs(chain_template)→ 多池 {account[],tx_hash[],block[],utxo[],...}(非单account)。
 - 6 family 各实现(bitcoin UTXO/txid 无account 单独处理)。
-- fetch 写盘改多池;target_generator 多池按 param_spec.source 取(不再一池喂全部)。
-**依赖**: S1.4(多池消费)与 S2(param_spec)+ B3(build_vegeta_target 接口签名)**强耦合**——多池多参数必须一并改接口签名。**∴ S1.4/S2/B3 是一个原子单元,不可拆**(拆=孤岛, 2026-06-03 教训)。
-**完成判定**: L1 每family InputProvider 单测 / L2 抓输入→构造 target 链路通 / L3 整框架对 mock 跑 mixed,需 tx_hash 的 method 不再 -32602 + 真值非占位。
-**权威依据**: design §6.2.2 + fulllink §3/§9.1 + R-B(requirements)。
+- fetch 写盘改多池(account/tx_hash/block 各池)。**取值层职责见下方"三层职责架构"(取值在 build_vegeta_target, 非 target_generator)。**
+- **🔴 R-A 硬约束: 真实节点路径必须保留不破坏**(7个月前设计: 从被测节点取真实链上account→拼vegeta压测; 重构只扩展不破坏这条 live path)。
+- **🔴 R-D 两条输入路径分治, 共用同一 param_spec DSL**: ① 真节点路径(生产/真机L3): fetch 顺手保留 tx_hash/block 多池 ② fake-node 路径(本地/CI): 输入池从 fixture 的 `<method>.request.json` 真实参数提取(或占位)。两路径只是池填充来源不同(真节点抓 vs fixture), DSL 共用。
+**🔴 三层职责架构(已确认: fulllink §7 整合方案c[已拍板] + 用户 2026-06-04 确认。校正 design S1.4 措辞不准)**:
+- **fetch 层(InputProvider, async)**: 抓 + 分池存 → accounts.txt + tx_hash_pool.txt + block_id_pool.txt(按family各一套抓取逻辑, fetch_active_accounts.py 降为薄 wrapper 调 get_adapter(chain).fetch_*)。
+- **target_generator.sh 层**: 只管 method 分配 + 权重(single/mixed round-robin/weight), **不改**(不碰取值, round-robin/TSV 管道契约不变, fulllink §7 L43)。
+- **build_vegeta_target 层(TargetBuilder, sync)**: 拿到 method 后, **按 param_spec.source 从对应池取值 + 拼协议请求**(取值精确落点在此, 非 target_generator)。
+- → 三层职责干净(抓存/分配/取值构造各管各的)= 不留债 + 优雅(满足用户硬约束)。**design S1.4 写"target_generator 取值"措辞不准, 以 §7 权威为准: 取值在 build_vegeta_target。**
+**依赖**: build_vegeta_target 取值 与 S2(param_spec.source)+ B3(接口签名:单address槽→多源)**强耦合**——必须一并改。**∴ S1(InputProvider+取值)/S2/B3 是一个原子单元,不可拆**(拆=孤岛, 2026-06-03 教训)。
+**完成判定**: L1 每family InputProvider 单测 + build_vegeta_target 从池取值单测 / L2 抓输入→分池→构造 target 链路通 / L3 整框架对 mock 跑 mixed,需 tx_hash 的 method 不再 -32602 + 真值非占位。
+**待决(OQ)**: 输入池粒度——tx_hash/block 池够不够? contract_call/business_id 输入怎么供给(硬编已知合约 vs chain template 声明)?(fulllink §6 L157)
+**🔴 输入需求精确分类(callchain §6.2 + fulllink L75 两文档交叉验证一致)**: 184 method 中 none/fixed 79(不需输入) + account 55(fetch已供) + **tx_hash 17 / block_id 17 / contract_call 6 / business(pool_id/asset_id/epoch/twap) 5 = ~45 需非account输入但框架无供给源**。这是 S1 范围量化。
+**🔴 复用 fetch 别重复造(callchain §6.4)**: fetch 内部已查 getBlockByNumber(L313)/transactionHash(L335)/signatures(L256)= 已有抓 block/tx 能力, 只是产出只留 account。S1 = 让 fetch 额外产出 block/tx 池, **不新写一套**。
+**🔴 输入供给是必先做的地基(callchain §6.5)**: 阶段1输入供给必须最先做; 否则 param_spec 声明了 tx_hash source 也没真值可填 → 退回占位符兜底 = 没真解决债。
+**🔴 整合接口障碍(fulllink §10 L325)**: fetch 收到的 CHAIN_CONFIG 不含 _meta.adapter_family(被 jq del 掉=缺口#4)。§7 整合要按 adapter_family 分派 → 必须改 config_loader 保留 _meta.adapter_family 进 CHAIN_CONFIG, 或 InputProvider 另读 chain 文件取 family。这是阶段1整合的具体接口改动点。
+**🔴 fetch method ≠ 压测 method(fulllink §9.2 L310)**: InputProvider 取输入用的 method(chain template `methods` 字段)与压测 method(`rpc_methods` 字段)不同, 整合时两个 method 来源都要保留。
+**权威依据**: fulllink §7(整合方案c, 权威)+ §3/§9/§10 + design §6.2.2(S1.4措辞已校正)+ callchain §1/§2/§6 + R-A/R-B/R-D。行号以代码实证为准。
 
 ### 单元 S2 — 参数 DSL param_spec(缺口 #1/#4/#9)
 *(待审核搬入)*
