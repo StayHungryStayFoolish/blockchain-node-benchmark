@@ -270,7 +270,7 @@ PoC 选 solana(NORTH-STAR §3 路线已定),以下 8 条硬验收(对齐 1-C `mi
 - **上游 SSOT**:`docs/NORTH-STAR.md` §1 NS-1/2/3 / §3 Q4-1~6 / §4 范围边界 / §7 阶段路线
 - **同期架构文档**:`docs/architecture/per-method-proxy-architecture-zh.md` (1-A) / `chain-template-zero-code-spec-zh.md` (1-B) / `migration-from-legacy-zh.md` (1-C)
 - **待决项 → 本档收敛**:`docs/architecture/OPEN-QUESTIONS.md` OQ-1 / OQ-3 / OQ-4 / OQ-8
-- **同系列研究档(权重表来源)**:`analysis-notes/research_notes/01-evm-rpc-resource.md` / `02-solana-sui-aptos-rpc-resource.md` / `03-bitcoin-starknet-rpc-resource.md` / `03b-evm-l2-rpc-resource.md` / `04-evm-complex-params.md` / `05-multichain-complex-params.md` / `06-fixture-pool-engineering.md`
+- **同系列研究档(权重表来源)**:资源画像/calldata池/fixture工程已合并入 `analysis-notes/REFACTOR-SSOT.md` §5.1-5.5(原 research_notes 01-06 已删, 内容收编进 SSOT 单源, 含来源标注)
 - **现状字段实查**:`docs/monitoring-mechanism-zh.md` 第 1 层 主监控章节(CPU/MEM/EBS/Net/ENA/区块/QPS 字段数以该文档实查为准)
 - **代码现状**:`tools/chain_adapters/base.py` 7 族 register / `tools/fetch_active_accounts.py` L661 create_adapter + L677 fetch_all_signatures / `blockchain_node_benchmark.sh` 真入口
 
