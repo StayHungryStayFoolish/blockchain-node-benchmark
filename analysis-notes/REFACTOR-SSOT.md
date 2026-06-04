@@ -47,6 +47,7 @@ NS 对应(NORTH-STAR): NS-1 36链零代码加链 / NS-2 mixed 模式 per-method 
 - fetch 经手 tx_hash/block(L204 signature / L313 latest_block / L335 transactionHash)但写盘只 account 单列(缺口#3)。
 - target_generator 读单列 account 喂所有 method(缺口#10)。**实证: audit 16 个 P1_RPC_ERROR, error.data.reason 精确点名缺 filter/transaction_hash → 不是推测, 是节点报错点名缺输入**。
 - 占位符污染(缺口连带): jsonrpc.py:84 tx_hash 无真值→全0占位→节点返null→per-method 归因偏低失真。
+- **🔴 关键概念区分(消除常见误解, chain-template-guide L50)**: `transaction_hash`/`txid`/`block_number` 枚举**已存在于参数构造层**(param_formats 能构造 tx_hash/区块号参数), 但 —— **输入供给层只产 account 一池, 没有 tx_hash/block 池**。∴ 这些枚举能\"构造\"tx_hash 参数, 却**拿不到真实 tx_hash 值**(靠占位符兜底→节点报错)。即: **参数构造已支持, 真实输入供给没跟上**——S1 补的是后者(输入供给), 不是前者(枚举/构造)。
 **重构目标(未做)**:
 - 方案c分层: InputProvider(async抓输入,6 family)/ TargetBuilder(sync构造)解耦。
 - fetch_inputs(chain_template)→ 多池 {account[],tx_hash[],block[],utxo[],...}(非单account)。
