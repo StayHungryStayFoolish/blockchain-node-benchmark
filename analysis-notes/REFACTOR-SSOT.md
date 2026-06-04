@@ -101,3 +101,65 @@ NS 对应(NORTH-STAR): NS-1 36链零代码加链 / NS-2 mixed 模式 per-method 
 
 ## 4. 不留债硬约束
 *(待审核搬入)*
+
+## 5. 独有事实合并节(从 research_notes 01-07 合并, 原文件待删, 来源标注)
+
+> 本节合并 research_notes 早期调研的【独有内容】(两份实测文档 184+块高 没有的维度): 资源画像 / calldata 池 / fixture 工程 / safety 守卫 / per-method 归因机制。合并后原 research 文件删除(执行 A: 彻底单源)。**来源逐条标注供追溯**。⚠️ research 01-03b/05/06 头部的 "8 链 OUT-OF-SCOPE / 真 8 链" 标注是 8 链时代(v1.4, 2026-05-20)遗留, 现 36 链已全实测推翻, 合并时已剔除该过时标注。
+
+### 5.1 per-method 资源画像(weight 配置依据, 来源 research 01/02/03/03b)
+> 用途: NS-2 per-method 资源归因的 weight 粗粒度配置依据(Q4-7: 公开资料先配粗粒度 1/10/100 三档, 后期实测迭代)。**注: 流量占比数字是定性, 不作精确权重, 用户按实际校准**(research 02 §四原话)。
+
+**EVM(research 01)**: eth_call(CPU+Mem, EVM全量执行, 1-100ms可到秒级) / eth_getLogs(CPU+Disk, bloom+receipt扫描, 10ms-数秒, 大范围退化全扫) / eth_estimateGas(极高, 二分重放eth_call, 实测7s vs eth_call 60ms) / debug_traceTransaction(CPU+RAM双重, 100ms-数十秒, archive) / eth_blockNumber(Memory, µs, 但流量榜第二=轮询心跳隐形QPS杀手) / eth_getBalance/getCode/getStorageAt(Disk-Random trie, sub-ms-ms)。Geth 默认不暴露 per-method metric(需改源码或代理拦截)→ 强化 proxy(NS-2)必要性。
+**Solana(research 02)**: getProgramAccounts(CPU+Mem+Disk 极重, 全AccountsDB扫描无分页, 100ms-数十秒, OOM头号杀手, Helius/Triton/Alchemy 全限制) / getBalance(略重于getAccountInfo, deserialize-then-discard) / getMultipleAccounts(N次查并发) / getBlock(Disk+Net) / getSlot/getBlockHeight(Memory <1ms 但占量大头)。
+**Sui(research 02)**: sui_getObject(Disk单点) / multiGetObjects(>20 batch 超线性 cache驱逐) / queryEvents/queryTransactionBlocks(indexer扫描)。Mysten 限制: 50 item(multiGet)/1000 result(query)。
+**Bitcoin(research 03)**: getblock(verbosity=2, I/O+CPU, 大块数十MB带宽瓶颈) / getrawtransaction(有txindex 1ms 无则历史tx报错, txindex需50-80GB) / scantxoutset(CPU+I/O极高, 数十秒-分钟, 遍历1.5亿UTXO, EXPERIMENTAL公开节点禁) / estimatesmartfee(Memory <1ms)。**Bitcoin Core 原生不暴露 per-method metric, 8链中唯一需外挂exporter/代理拦截**(强化 proxy 必要性)。
+**Starknet(research 03)**: starknet_call(CPU极高 Cairo VM) / estimateFee(批量是DoS向量, 公网均限速) / getStateUpdate(state diff MB级)。
+**EVM L2(research 03b)**: scroll(reth, eth_*完全兼容, ~50-200GB状态) / polygon(bor+heimdall双进程, ~3TB archive, 150TPS高IOPS)。出块快(scroll 3s/polygon 2s)放大 eth_blockNumber 轮询压力。
+
+### 5.2 calldata 池构造(contract_call source 真值来源, 来源 research 04 §4)
+> design §4 param_spec 声明 `source:contract_call` {to,data}, 但**没说 to/data 真值从哪来**。本节补: contract_call 的 calldata 真值来源 = 高频 selector + calldata 池。**这是 S1 contract_call 输入供给 + S2 param_spec contract_call source 的真值地基**。
+
+**高频 ERC-20 selector**: totalSupply()=0x18160ddd / decimals()=0x313ce567 / symbol()=0x95d89b41 / name()=0x06fdde03 / balanceOf(address)=0x70a08231+32B padded addr / allowance=0xdd62ed3e+2×32B。
+**ERC-721/1155**: ownerOf(uint256)=0x6352211e / tokenURI=0xc87b56dd / balanceOf(addr,id) 1155=0x00fdd58e。
+**DeFi**: Uniswap V2 getReserves()=0x0902f1ac / V3 slot0()=0x3850c7bd / Chainlink latestRoundData()=0xfeaf968c / Aave V3 getReserveData=0x35ea6a75 / Multicall3 aggregate3=0x82ad56cb。
+**calldata 池生成**: pad32 + selector + padded addr(纯 shell+jq, research 04 §4.4)。**fixture 来源**: Etherscan txlist / Dune ethereum.traces staticcall / The Graph subgraph / Alchemy enhanced API。
+**eth_call state override(第3参)**: {to,data,from,gas,gasPrice,value} + state override {contract:{balance,code,stateDiff}}(research 04 §1.6, design §4 call_object 只有 to/data, 这是完整字段)。
+**eth_getLogs filter 完整结构**(research 04 §1.8): {fromBlock,toBlock,address(单值或数组),topics(OR数组+null通配)} 或 {blockHash}。
+
+### 5.3 复杂参数 filter 矩阵(jsonrpc_dict 嵌套, 来源 research 05)
+> design §4 给了 transport 维度, 但没给复杂 dict/filter 的真实嵌套结构。本节补 S2 复杂参数实现的真值地基。
+
+**solana getProgramAccounts**(research 05 §1.3): params=[programId, {commitment,encoding,dataSlice:{offset,length},filters:[{dataSize},{memcmp:{offset,bytes,encoding}}]}]。厂商约束: Helius 必须含 filter 否则-32602 / Triton dataSize 须第一位 / QuickNode dataSlice 缺失truncate。
+**sui suix_queryEvents filter 字典**(§2.4): {All:[]}(killer) / {Transaction:digest} / {MoveModule:{package,module}} / {MoveEventType} / {Sender} / {TimeRange} / {And/Or:[...]}。
+**starknet_getEvents 过滤矩阵**(§4.2): {filter:{from_block,to_block,address,keys(二维数组: 外层=event key位置, 内层=该位置OR列表),chunk_size≤100,continuation_token}}。address+key 全空+宽block range=killer。
+**sui getObject options 成本**(§2.2): showType/showOwner(1.1×)/showContent(1.8-3×)/showDisplay(2-4×)/全true(4-6× killer)。
+**aptos /v1/view**(05 §3.2): {function,type_arguments[],arguments[]}(Move view, design §4 rest_body call_object shape=aptos_view)。
+
+### 5.4 safety 守卫默认值(node-killer 防护, 来源 research 04/05/06)
+> 184 method 中部分是 node-killer(无filter的getProgramAccounts/scantxoutset/debug_trace等), 框架加载 chain.json 时先校验 safety, fail-fast。**这是 S2/S3 必须保留的守卫机制, design §4 没覆盖**。
+
+| 守卫 | 默认值 | 依据 |
+|---|---|---|
+| eth_getLogs.safety_max_block_range | 1024 | Infura/Alchemy硬限10000, Cloudflare800, 自建geth>2k P99恶化 |
+| eth_getLogs.max_response_size_mb | 10 | Alchemy/Infura 硬限 10-150MB |
+| eth_feeHistory.max_block_count | 1024 | EIP-1559 通用上限 |
+| debug_traceTransaction.enabled | **false** | P99 10-60s, 需 --allow-trace |
+| eth_call.max_gas | 50000000 | geth --rpc.gascap |
+| getProgramAccounts.requireFilters | **true** | Triton/Helius/QuickNode 主网已强制 |
+| getBlock.transactionDetails | "signatures" | 默认最轻 |
+| getSignaturesForAddress.max_limit | 1000 | Solana 官方上限 |
+| scantxoutset/dumptxoutset/gettxoutsetinfo.enabled | **false** | 锁UTXO集分钟级, 绝不压测 |
+| starknet_getEvents.require_address_or_key | true | 防全表扫描 |
+**执行准则**: runner 加载 chain.json 先校验 safety; method.weight>0 且 safety=false/超限 → fail-fast。CLI `--unsafe-allow=...` 临时解锁写 manifest。
+
+### 5.5 fixture 池工程(S1 输入池设计依据, 来源 research 06)
+> S1 输入供给层(account/tx_hash/block/utxo/calldata 多池)的容量/采样/刷新工业界依据。
+
+**双层架构**: `fixtures/`(仓库内基线, 入库, ≤50KB/文件≤200KB/目录, CI冒烟) + `fixtures.d/`(用户大池, gitignore, 5-50MB, 真实压测)。业界 fixture 极少超 10k/类。
+**每链池**(EVM): addresses_hot(50, hot10+warm40)/cold(100) / tx_hashes(100) / blocks_range / contracts_erc20(10主流) / topics_logs(5) / slots(8)。基线≈15-25KB, 用户池1-5MB。
+**4 种 sampler**(research 06 §3.3): uniform(等概率, tx/cold) / weighted(按weights_field, 合约/program) / sequential(顺序步进绕回, eth_getLogs区段) / hot_cold_mix(hot_ratio概率取hot否则cold, 账户类模拟真实流量)。**hot/cold 比默认 0.2**(Zipf top20%=80%流量, Cloudflare/Alchemy)。
+**采样 schema**(chains/<chain>.json): pools{file,format} + methods{weight, sampler{kind,pool,hot_ratio}, params_template, calldata_templates}。**注: 这套 sampler/params_template 是 research 06(2026-05-19)的另一套设计, 与 design §4 param_spec(transport×slot×source)是不同维度** —— param_spec 管"参数怎么构造", sampler 管"从池里怎么采样"。两者互补, S1/S2 实现时 param_spec.source 指定取哪个池, sampler 指定怎么从池采样。
+**刷新**: fixtures/ 手动季度刷; fixtures.d/ cron(hot池每天/小时, blocks_range每次跑前)。manifest.json 记 fetched_at + latest_block_at_fetch + sha256。**漂移容忍**: 不锚定block hash, 小时-天级(blocks_range≤6h EVM/30min Solana, tx_hashes≤7天, addresses_hot≤14天)。
+
+### 5.6 per-method 归因机制(NS-2 核心, 来源 research 07)
+> proxy 采集 method 时序 + 分析层加权 group_by 归因资源(Q4-7)。proxy sink 9 列(timestamp_ns/method_name/protocol/request_id/batch_idx/status_code/latency_ms/upstream/client_addr)。**响应业务内容对资源归因零信息量**(压测主路径不解析响应 body, 见 184 文档头 + design §5.0)。权重=实测频次(count/total_count, design §5.7 已迭代, 非预设1/10/100)。详见 research 07 + ADR-0001。
