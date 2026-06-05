@@ -198,7 +198,7 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
     # fixture 真机 body 实证。address/owner_address 从 account 池, value(txid) 从 tx_hash 池, visible literal。
     "body_address_visible": {"transport": "rest_body", "http_method": "POST", "body_template": {"address": "{account}", "visible": True}},  # /wallet/getaccount
     "body_value_txid_nopfx": {"transport": "rest_body", "http_method": "POST", "body_template": {"value": "{tx_hash}"}},  # /wallet/gettransactionbyid
-    "body_owner_contract_selector_parameter": {"transport": "rest_body", "http_method": "POST", "body_template": {"owner_address": "{account}", "contract_address": "{account}", "function_selector": "totalSupply()", "visible": True}},  # /wallet/triggerconstantcontract(contract_address 应业务合约, 批4 business 池)
+    "body_owner_contract_selector_parameter": {"transport": "rest_body", "http_method": "POST", "body_template": {"owner_address": "{account}", "contract_address": "{business_id}", "function_selector": "totalSupply()", "visible": True}},  # /wallet/triggerconstantcontract: owner=用户account, contract_address=业务合约(business_id池, 非account! 实测 TR7NH USDT合约≠用户TJRy, 同cardano教训)
     "rest_post_empty": {"transport": "rest_body", "http_method": "POST", "body_template": {}},  # tron /wallet/getnowblock 等 REST POST 空 body(区别于 jsonrpc no_params 空 list)
 }
 

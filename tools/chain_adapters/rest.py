@@ -135,10 +135,10 @@ class RestAdapter(ChainAdapter):
             for src in ("account", "tx_hash", "block_height"):
                 if "{" + src + "}" in body_str:
                     body_str = body_str.replace("{" + src + "}", str(_take(inputs, src, 0)))
-            # business 占位(policy/asset_name 等)从 business_id 池取; 池空 fail-fast
-            # (不退 account — policy_id/asset_name 是资产标识非地址, 退 account 会填错值,
-            #  2026-06-05 自检发现的真 bug)。批4 补 business_id 池后真值生效。
-            for biz in re.findall(r"\{(policy|asset_name|workchain|shard|seqno)\}", body_str):
+            # business 占位(business_id/policy/asset_name 等)从 business_id 池取; 池空 fail-fast
+            # (不退 account — 合约地址/资产标识/池ID 等业务标识非用户账户地址, 退 account 会填错值,
+            #  2026-06-05 自检发现的真 bug: cardano policy + tron contract_address 都犯过)。批4 补 business_id 池。
+            for biz in re.findall(r"\{(business_id|policy|asset_name|workchain|shard|seqno)\}", body_str):
                 val = _take(inputs, "business_id", 0)
                 body_str = body_str.replace("{" + biz + "}", str(val))
             body = json.loads(body_str)
