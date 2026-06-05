@@ -1,0 +1,1 @@
+{"_http": "GET", "path": "/accounts/{addr}/balance-info", "note": "REST GET \u65e0 body"}
