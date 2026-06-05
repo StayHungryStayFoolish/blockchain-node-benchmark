@@ -112,12 +112,13 @@ NS 对应(NORTH-STAR): NS-1 36链零代码加链 / NS-2 mixed 模式 per-method 
 ### 单元 S0 — 前置工具链(L3 地基)
 **目标**: 防"L1+L2绿/L3未知"债累积(parallel-entry multi-stage L3 铁律), S0 一次性建好不拖到最后。
 - **S0.1 mock 节点**: 复用 tools/fake-node/(184 fixture 已入库 commit 91f380b)+ mock_rpc_server.py。6 family 本地起 mock 返 fixture。
+- **🔴 R-FN fake-node 按 method 返回对应响应结构(用户需求, 2026-06-05 补记 — 之前漏记)**: fake mode 必须按框架 single/mixed 配置, **压测时逐 method 请求返回该 method 对应的真实响应结构**(method A→A的响应/method B→B的响应), 使 fake-node 压测路径与真实节点一致 → per-method 资源监控+归因才有意义。**现状已实现机制**: 6 family handler 全 byte passthrough(jsonrpc/substrate/rest L58-81: `Handle(method,_,fixture)` 按 method 名选 `fixtures/<chain>/<method>.json` 字节原样返回, `len(fixture)==0` → 报错)。**∴ fixture 是 fake-node 跑通的硬前提**: 任一 method 缺 fixture, fake-node mixed 打到它即 `no fixture wired` 报错。fixture 补全不是锦上添花, 是 S0 前置必做(推翻旧"后置"描述)。
 - **S0.2 workload**: vegeta(保留, 见§3决策)+ target_generator.sh, 对 mock 发 mixed。
 - **S0.3 e2e harness**: 真 L3 = blockchain_node_benchmark.sh 无 skip + artifact-assert HTML/PNG(非 e2e_smoke --validate, 那是smoke)。
 - **S0.4 baseline audit**: tests/test_chain_adapters.py(R0) 记改造前基线。
 - **F1 adapter_family CI 门**(✅已完成 ci/check_adapter_family.sh, ⏸️待挂CI流程): 36链必有 _meta.adapter_family + 在6注册family内 + 缺失fail-fast。**非自动推断**(proto=rest 横跨3 family无法推断, 领域知识人工填+CI校验)。
 - **F2 e2e method 构造验证**(GAP-B): e2e 现黑盒探活(mock硬编eth_blockNumber)不验method构造 → 补 method×chain build-target 断言 address进body/url + param顺序(parallel-entry Step4-bis, 防6866cba对称fallback)。依赖 B1/B3 接口定稿后做。
-- **S0 fixture 覆盖**: 157/184 有 fixture, 27缺(命名漂移+结构性不可达)。fixture 补全后置(随 B/C/D schema 落地定 method 命名规范后 record_all_184 重录)。
+- **🔴 S0 fixture 覆盖(2026-06-05 精确核对, 推翻旧"157/27缺/后置")**: 156/184 有 fixture(转换规则 空格→_ /→_ 实证), **真缺 28 个**, 分两类: **类A 20个**=实测文档 §3 有真实响应体只是漏落盘(celestia/injective/osmosis/sei/tron 等 ✅真机成功 + 少数⚠️受限响应已记)→ 从实测文档直接提取响应落 fixture(真实数据非mock); **类B 8个**=公开 endpoint 测不到(结构性不可达)→ **按官方文档参数+响应结构 mock fixture(用户拍板甲方案: SCALE 也 mock, fake-node byte passthrough 不需理解内容)**: bitcoin/dogecoin/bch getreceivedbyaddress(wallet类禁, numeric标量响应, 官方结构已查 `{"result":0.05,"error":null,"id":"curltest"}`) + acala/kusama/polkadot system_account(substrate state_getStorage 返 SCALE hex, 按 frame_system AccountInfo 结构 mock, fixture 标"按官方文档mock") + polkadot Sidecar REST(balance-info/blocks/staking, 普通JSON可mock)。**mock fixture 必须标来源(官方文档非实测), 禁凭印象编**。**SCALE 响应提取是 NS-3 DSL 真边界**(response_spec 提余额需客户端SCALE解码)→ system_account 标 KNOWN_BROKEN(fake-node能重放✅, 但框架声明式提取标边界), 不阻塞 fake-node。**完成判定**: 36链每 method 都有 fixture(类A补录+类B mock)+ fake-node mixed 全 method 不报 no-fixture。
 **完成判定**: 6 family mock可起 + vegeta可打 + e2e真跑出HTML + baseline数字 + F1挂CI + F2 harness。**S0 不过不进 S1**。
 **权威依据**: design §6.2.1 S0 + §6.5.3 治理缺口 + §6.6 S0执行记录。
 
