@@ -94,23 +94,6 @@ def _vegeta_get(url: str, headers: Optional[dict] = None) -> dict:
     }
 
 
-def _account_from_inputs(inputs: dict) -> str:
-    """过渡 helper(批1/批2): 从 inputs 多池取 account[0] 作兼容 address。
-
-    批3 各 family 内部切到 param_spec.build_params_from_spec 后, 这些过渡调用
-    随老 _build_params 一起删除。仅 jsonrpc 已走新构造器, 其余 5 family 暂用此兼容。
-    """
-    acc = inputs.get("account")
-    if acc:
-        return acc[0]
-    # account 池空时退其它池首值(过渡期容错; 批3 真值池接入后由构造器 fail-fast 管控)
-    for k in ("tx_hash", "block_height", "contract_call"):
-        if inputs.get(k):
-            v = inputs[k][0]
-            return v if isinstance(v, str) else str(v)
-    return ""
-
-
 def _try_int(s) -> Optional[int]:
     """Parse decimal int from str/int. Returns None on failure."""
     if s is None:

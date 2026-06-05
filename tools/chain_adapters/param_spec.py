@@ -155,8 +155,8 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
     "path_txid_base32": {"transport": "rest_path", "bindings": {"txid": {"source": "tx_hash"}}},
     "path_height": {"transport": "rest_path", "bindings": {"height": {"source": "block_height"}}},
     "path_round_int": {"transport": "rest_path", "bindings": {"round": {"source": "block_height"}}},
-    "path_asset_id_int": {"transport": "rest_path", "bindings": {"asset_id": {"source": "block_height"}}},  # 数值池复用 block_height(business 数值)
-    "path_pool_id": {"transport": "rest_path", "bindings": {"pool_id": {"source": "block_height"}}},
+    "path_asset_id_int": {"transport": "rest_path", "bindings": {"asset_id": {"source": "business_id"}}},  # 资产ID(独立 business_id 池, 非块高)
+    "path_pool_id": {"transport": "rest_path", "bindings": {"pool_id": {"source": "business_id"}}},  # 池ID(独立 business_id 池)
     "path_block_and_vp": {"transport": "rest_path", "bindings": {"block": {"source": "block_height"}, "vp": {"source": "literal", "value": "0"}}},
     "path_addr_query_limit": {"transport": "rest_query", "bindings": {"address": {"source": "account"}, "addr": {"source": "account"}}, "query": {"limit": {"source": "literal", "value": "10"}}},
     # rest_query: path(可能含占位) + query string
@@ -294,6 +294,8 @@ _VALID_TRANSPORTS = {"jsonrpc_list", "jsonrpc_dict", "rest_path", "rest_query", 
 #     "是否该拆 block_hash vs block_number" 的设计问题记 §6.6.5 留 B2/C 处理,此处不私拆。
 _VALID_SOURCES = {
     "account", "literal", "block_height", "tx_hash", "contract_call", "config_object",
+    "business_id",  # 批3b自检修复(2026-06-05): 业务标识池(asset_id/pool_id/epoch),
+                    # 与 block_height 语义不同(资产ID/池ID≠块高), 独立池避免占位污染变种。
 }
 # call_object.shape = design §4.2 L406 权威(3个), 不自创。
 _VALID_SHAPES = {"evm_call", "aptos_view", "tron_trigger"}

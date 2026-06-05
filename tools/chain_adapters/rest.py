@@ -51,33 +51,6 @@ class RestAdapter(ChainAdapter):
                 self._chain_cache[chain_name] = json.load(f)
         return self._chain_cache[chain_name]
 
-    def _resolve_path(self, chain_name: str, method: str, address: str) -> tuple[str, str, dict | None]:
-        """Return (http_method, path_with_substituted_address, body_dict_or_None).
-
-        body comes from optional `_meta.rest_paths[method].body` template.
-        Body may contain placeholders ({address}, {addresses_array}) which are
-        substituted; pass `None` for GET methods.
-        """
-        tpl = self._load_chain(chain_name)
-        rest_paths = tpl.get("_meta", {}).get("rest_paths", {})
-        if method not in rest_paths:
-            raise ValueError(
-                f"REST chain {chain_name}: method {method!r} not in _meta.rest_paths. "
-                f"Available: {list(rest_paths)}"
-            )
-        spec = rest_paths[method]
-        path = spec["path"].replace("{address}", address)
-        body = None
-        if "body" in spec:
-            # Deep-substitute {address} / {addresses_array} inside body template
-            body_template = spec["body"]
-            body_json_str = json.dumps(body_template)
-            body_json_str = body_json_str.replace("{address}", address)
-            # Special: PostgREST-style array fields like _addresses, _tx_hashes
-            # may be templated as ["{address}"] to receive the single account.
-            body = json.loads(body_json_str)
-        return spec.get("method", "GET"), path, body
-
     def _path_from_method_or_map(self, chain_name: str, method: str) -> tuple[str, str]:
         """返回 (http_method, path_template)。两种来源:
         ① method 名带 HTTP 动词前缀("GET /cosmos/.../{addr}")→ 拆出动词 + path
