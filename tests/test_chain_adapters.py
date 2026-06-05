@@ -359,21 +359,16 @@ def test_evm_compat_5chains_standard_enum():
 # (chain, expected_failure_mode, fix_wave_owner, reason)
 KNOWN_BROKEN_CLI = {
     # ─────────────────────────────────────────────────────────────────────
-    # 批3b(2026-06-05) REST 声明式构造 + 占位污染修复后: 8 链转 healthy
-    # (algorand/aptos/cardano/celestia/cosmos-hub/injective/osmosis/tezos —
-    # rest.py 按 param_spec transport 构造 path/query/body, 占位从 inputs 多池取值;
-    # tendermint LCD path method 委托 RestAdapter 修 S3.7 协议错配)。
-    # 剩 4 链专有复杂参数待批3b 收尾 + 批4 真值池:
+    # 批3b收尾(2026-06-05): near(query dispatcher dict)/ton(toncenter v2 官方结构,
+    # rest_path+rest_body)/hedera(REST method 配 path_addr) 补 PRESET/param_format
+    # 后转 healthy(35/36)。剩 tron 归 S3.7 架构(非补配置):
     # ─────────────────────────────────────────────────────────────────────
-    "hedera": ("hedera_dual_rest", "批3b收尾", "hedera_dual REST 侧 method 缺 param_format + 未走 rest 构造修复"),
-    "near": ("near_query_dispatcher", "批3b收尾", "query dispatcher_request_type 等 near 专有枚举缺 PRESET"),
-    "ton": ("ton_complex_params", "批3b收尾+批4", "自然语言枚举(getAddressBalance 等)需显式 param_spec + 真值"),
-    "tron": ("tron_rest_body", "批3b收尾", "/wallet/* REST body_* 枚举缺 PRESET(body_address_visible 等)"),
+    "tron": ("mixed_protocol_routing", "S3.7", "混协议(/wallet/* REST body + eth_* jsonrpc), family=jsonrpc 单一 → 需 hedera_dual 式 per-request 路由(S3.7, 与 polkadot 混协议一起做), 非补 PRESET 能解决"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 4, (
-    f"KNOWN_BROKEN_CLI 应为 4 条(批3b 后 32/36 healthy, 剩 hedera/near/ton/tron "
-    f"专有复杂参数待批3b收尾+批4)。must shrink never grow。got {len(KNOWN_BROKEN_CLI)}"
+assert len(KNOWN_BROKEN_CLI) == 1, (
+    f"KNOWN_BROKEN_CLI 应为 1 条(批3b收尾后 35/36 healthy, 剩 tron 归 S3.7 per-request "
+    f"路由架构改动)。must shrink never grow。got {len(KNOWN_BROKEN_CLI)}"
 )
 
 

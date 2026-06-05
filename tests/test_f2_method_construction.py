@@ -133,8 +133,11 @@ def main():
                     decoded_body = base64.b64decode(body_b64).decode()
                     bj = json.loads(decoded_body)
                     # ton 等链 body 是双重编码(JSON 字符串内含 JSON), 解出来是 str 不是 dict — 合法, 跳过 .method 校验
-                    # JSON-RPC: .method 应等于输入 method(REST 路由类 method 名含路径不强求)
-                    if isinstance(bj, dict) and "method" in bj and not (" " in method or method.startswith("/")):
+                    # JSON-RPC: .method 应等于输入 method —— 仅对【真 JSON-RPC body】(含 jsonrpc 字段)校验。
+                    # REST body(如 ton runGetMethod {address,method:'seqno',stack})里的 method 是业务字段
+                    # (TON get-method 名)非 JSON-RPC method, 不校验(否则误报)。
+                    is_jsonrpc_body = isinstance(bj, dict) and "jsonrpc" in bj
+                    if is_jsonrpc_body and "method" in bj and not (" " in method or method.startswith("/")):
                         if bj["method"] != method:
                             l1_fail.append((chain, method, f"body.method={bj['method']} ≠ 输入"))
                             continue

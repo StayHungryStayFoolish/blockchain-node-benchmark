@@ -6,7 +6,10 @@
     "mirror_balance_query": "query_account_3part",
     "mirror_tx_lookup": "path_tx_id_3part_dash",
     "eth_getBalance": "address_latest",
-    "eth_call": "address_with_options"
+    "eth_call": "address_with_options",
+    "GET /api/v1/accounts/{addr}": "path_addr",
+    "GET /api/v1/balances?account.id={addr}": "path_addr",
+    "GET /api/v1/transactions/{addr}": "path_addr"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",

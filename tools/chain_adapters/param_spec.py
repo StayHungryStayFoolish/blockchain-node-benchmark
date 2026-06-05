@@ -141,6 +141,23 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
         "slots": [{"source": "tx_hash"}, {"source": "account"}],
     },
 
+    # ── 批3b收尾: near dict 参数(query dispatcher, fixture 真机结构实证) ──
+    # near query 是 dispatcher: params 是 dict, request_type 判别查询类型(jsonrpc_dict)。
+    # 真机 fixture: {request_type:'view_account', finality:'final', account_id:'<addr>'}
+    "query_dispatcher_request_type": {
+        "transport": "jsonrpc_dict",
+        "fields": {
+            "request_type": {"source": "literal", "value": "view_account"},
+            "finality": {"source": "literal", "value": "final"},
+            "account_id": {"source": "account"},
+        },
+    },
+    # near block: params={finality:'final'}(真机 fixture 实证)
+    "block_finality_or_id": {
+        "transport": "jsonrpc_dict",
+        "fields": {"finality": {"source": "literal", "value": "final"}},
+    },
+
     # ── 批3b: REST transport 预设(rest_path/rest_query/rest_body) ──
     # method 名本身是 path 模板(GET /cosmos/.../{addr}); PRESET 声明 transport +
     # 占位名→source 池映射。rest.py 按此从 inputs 多池取值替换占位 / 拼 query / 填 body。
@@ -169,6 +186,13 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
     "body_block_hashes_array": {"transport": "rest_body", "http_method": "POST", "body_template": {"_block_hashes": ["{block_height}"]}},
     "asset_policy_name": {"transport": "rest_body", "http_method": "POST", "body_template": {"_asset_list": [["{policy}", "{asset_name}"]]}},
     "move_view_call": {"transport": "rest_body", "http_method": "POST", "body_template": {"function": "0x1::coin::balance", "type_arguments": ["0x1::aptos_coin::AptosCoin"], "arguments": ["{account}"]}},
+
+    # ── 批3b收尾: ton 自然语言枚举 → 规整 PRESET(toncenter v2 官方结构, path 自带 query) ──
+    # ton rest_paths path 已含 query(?address={address}&limit=10), 用 rest_path + {address} bindings 即可。
+    "{address: friendly_base64url|raw}": {"transport": "rest_path", "bindings": {"address": {"source": "account"}}},
+    "{address, limit, lt?, hash?}": {"transport": "rest_path", "bindings": {"address": {"source": "account"}}},  # limit 已在 path 写死, lt/hash 可选不填
+    "{workchain: int, shard: dec_string, seqno: int}": {"transport": "rest_path", "bindings": {}},  # path 已写死 workchain/shard/seqno(masterchain 定值), 无占位
+    "{address, method: string, stack: array}": {"transport": "rest_body", "http_method": "POST", "body_template": {"address": "{account}", "method": "seqno", "stack": []}},  # runGetMethod
 }
 
 
