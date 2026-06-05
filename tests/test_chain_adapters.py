@@ -154,8 +154,8 @@ def test_parse_block_height_per_family():
     assert h == 870000, f"bitcoin: got {h}"
     _ok("BitcoinJsonRpcAdapter parses int result")
 
-    # Substrate
-    a = get_adapter("polkadot")
+    # Substrate (kusama — 仍 substrate family; polkadot 2026-06-05 改 hedera_dual 混协议路由)
+    a = get_adapter("kusama")
     h = a.parse_block_height(json.dumps({"result": {"number": "0x1A2B3C"}}))
     assert h == 0x1A2B3C, f"substrate: got {h}"
     _ok("SubstrateAdapter parses .result.number 0x-hex")
@@ -624,23 +624,23 @@ def test_hedera_dual_adapter_routing():
 # Test 12: _is_jsonrpc_method regex boundary
 # ─────────────────────────────────────────────────────────────────────────────
 def test_is_jsonrpc_method_regex():
-    print("\n[12] _is_jsonrpc_method routing regex boundary")
-    from chain_adapters.hedera_dual import _is_jsonrpc_method
-    # Positive cases — JSON-RPC namespaces
-    for m in ["eth_getBalance", "eth_call", "eth_blockNumber",
-              "net_version", "web3_clientVersion",
-              "debug_traceTransaction", "trace_block"]:
-        assert _is_jsonrpc_method(m), f"{m!r} should route to JSON-RPC"
-    # Negative cases — REST path keys, never JSON-RPC
-    for m in ["GET /api/v1/accounts/{addr}",
+    print("\n[12] dual adapter 通用路由判定(path风格→rest / 非path→jsonrpc)")
+    from chain_adapters.hedera_dual import _is_jsonrpc_method, _is_rest_method
+    # 批3 收官泛化(2026-06-05): 路由从"只 eth_* 才 jsonrpc"改为通用"path风格→rest, 否则→jsonrpc",
+    # 以支持 polkadot 混协议(substrate method system_account/chain_getHeader 不带 eth_ 但走 jsonrpc)。
+    # Positive (jsonrpc): EVM eth_* + substrate state_/chain_/system_/account_ (都非 path 风格)
+    for m in ["eth_getBalance", "eth_call", "eth_blockNumber", "net_version",
+              "system_account", "chain_getHeader", "account_nextIndex",  # substrate jsonrpc(polkadot)
+              "query"]:                                                    # near dispatcher
+        assert _is_jsonrpc_method(m), f"{m!r} should route to JSON-RPC (非 path 风格)"
+    # Negative (rest): path 风格 method(/ 开头 或 GET/POST 前缀)
+    for m in ["GET /api/v1/accounts/{addr}",       # hedera Mirror REST
               "GET /api/v1/balances?account.id={addr}",
-              "POST /api/v1/contracts/call",
-              "mirror_account_query",  # legacy logical name
-              "getAccount",            # camelCase non-eth
-              "ethReporter",           # starts with "eth" but no underscore
-              "_eth_getBalance"]:      # leading underscore
-        assert not _is_jsonrpc_method(m), f"{m!r} should NOT route to JSON-RPC"
-    _ok("regex correctly distinguishes 7 JSON-RPC namespaces from REST/other forms")
+              "POST /v1/view",                       # aptos
+              "/wallet/getaccount",                  # tron REST POST body
+              "/cosmos/bank/v1beta1/balances/{addr}"]:  # cosmos LCD REST
+        assert _is_rest_method(m) and not _is_jsonrpc_method(m), f"{m!r} should route to REST (path 风格)"
+    _ok("通用路由: path风格→rest / 非path(eth_*+substrate)→jsonrpc, 覆盖 hedera/tron/polkadot 三混协议链")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

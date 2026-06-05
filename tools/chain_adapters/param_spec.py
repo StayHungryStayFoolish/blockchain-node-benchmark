@@ -170,7 +170,7 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
     "path_hash": {"transport": "rest_path", "bindings": {"hash": {"source": "tx_hash"}}},
     "path_hash_upper_hex_no_prefix": {"transport": "rest_path", "bindings": {"hash": {"source": "tx_hash"}}},
     "path_txid_base32": {"transport": "rest_path", "bindings": {"txid": {"source": "tx_hash"}}},
-    "path_height": {"transport": "rest_path", "bindings": {"height": {"source": "block_height"}}},
+    "path_height": {"transport": "rest_path", "bindings": {"height": {"source": "block_height"}, "n": {"source": "block_height"}, "block": {"source": "block_height"}}},  # {height}/{n}/{block} 占位名都从 block_height 池(polkadot /blocks/{n} 用 {n})
     "path_round_int": {"transport": "rest_path", "bindings": {"round": {"source": "block_height"}}},
     "path_asset_id_int": {"transport": "rest_path", "bindings": {"asset_id": {"source": "business_id"}}},  # 资产ID(独立 business_id 池, 非块高)
     "path_pool_id": {"transport": "rest_path", "bindings": {"pool_id": {"source": "business_id"}}},  # 池ID(独立 business_id 池)

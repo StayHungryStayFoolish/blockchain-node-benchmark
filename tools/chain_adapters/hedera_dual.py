@@ -32,14 +32,26 @@ from .jsonrpc import JsonRpcAdapter
 _JSONRPC_METHOD_RE = re.compile(r"^(eth_|net_|web3_|debug_|trace_)")
 
 
-def _is_jsonrpc_method(method: str) -> bool:
-    """Decide if a method name should be routed to the JSON-RPC Relay.
+def _is_rest_method(method: str) -> bool:
+    """通用路由判定(批3 收官泛化, 覆盖 hedera/tron/polkadot 三种混协议链):
+    method 是 path 风格 → REST; 否则 → jsonrpc(EVM eth_* 或 substrate state_/chain_/system_ 等)。
 
-    True for eth_* / net_* / web3_* / debug_* / trace_* (standard EVM
-    JSON-RPC namespaces). False for REST path-style keys like
-    'GET /api/v1/accounts/{addr}'.
+    path 风格 = '/' 开头(/wallet/.. /cosmos/..) 或 'GET '/'POST ' 前缀(GET /api/v1/..)。
+    覆盖验证(config 实证):
+      hedera:  eth_*→jsonrpc / GET /api/v1/*→rest  ✅
+      tron:    eth_blockNumber→jsonrpc / /wallet/*→rest  ✅
+      polkadot: system_account/chain_getHeader→jsonrpc(substrate) / GET /accounts|/blocks→rest  ✅
+    比旧 _is_jsonrpc_method(只认 eth_*) 更通用且对 hedera/tron 等价(非path method 即 eth_*)。
     """
-    return bool(_JSONRPC_METHOD_RE.match(method))
+    m = method.strip()
+    return m.startswith("/") or m.startswith("GET ") or m.startswith("POST ")
+
+
+def _is_jsonrpc_method(method: str) -> bool:
+    """Backward-compat alias. 现按通用路由: 非 REST path 风格 = jsonrpc。
+    (旧实现只匹配 eth_*; 泛化后改为 'not _is_rest_method' 以支持 polkadot substrate jsonrpc。)
+    """
+    return not _is_rest_method(method)
 
 
 @register("hedera_dual")
