@@ -1,0 +1,40 @@
+name: chain-template-governance
+
+# S0 治理门 CI 化(2026-06-05, RPC method 抽象重构 S0)。
+# 守护两类 chain template / fixture 一致性, 防加新链/新 method 时静默漏配:
+#   F1 (check_adapter_family.sh): 36 链 _meta.adapter_family 必填 + 在 6 注册 family 内。
+#        缺/非法 → get_adapter raise / proxy_extraction 生成失败 / fake-node 启动失败。
+#   fixture 覆盖 (check_fixture_coverage.py): config 配的每个 method 必有 fixture,
+#        否则 fake-node mixed byte-passthrough 打到它即 `no fixture wired` 报错。
+# Skill: parallel-entry-trap(加新 method 漏 fixture / 漏 adapter_family 是典型静默债)。
+
+on:
+  push:
+    branches: [master, main, feat/architecture-docs]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  chain-template-governance:
+    name: adapter_family + fixture coverage gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Ensure jq present (F1 needs it)
+        run: jq --version || sudo apt-get update && sudo apt-get install -y jq
+
+      - name: F1 — adapter_family governance gate
+        run: bash ci/check_adapter_family.sh
+
+      - name: fixture coverage gate (config method <-> fixture 184/184)
+        run: python3 ci/check_fixture_coverage.py
