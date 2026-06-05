@@ -89,7 +89,7 @@ NS 对应(NORTH-STAR): NS-1 36链零代码加链 / NS-2 mixed 模式 per-method 
 - **R2/R3 校验(cli.py 启动期 fail-fast)**: param_spec 缺失/解析失败必告警退出, 禁静默退化 [address](6866cba 对称fallback假绿教训, design S2.5)。
 - **统一 4 套按链分派**(缺口#1): Python侧(fetch create_adapter chain_type + chain_adapters adapter_family)+ Shell侧(config_loader MAINNET case + get_block_height)。Shell 侧走 D5 声明式收敛(纯 Shell+jq 读 chain template, 不 fork Python)。
 - **保留 _meta.adapter_family**(缺口#4): config_loader L597 `del(._meta)` 改为保留 adapter_family + block_height_spec, 否则 fetch 按 family 分派拿不到。
-- **mixed weight 真驱动**(缺口#9): config_loader L626/L540/L674 取 rpc_methods.mixed(均权)→ 改读 mixed_weighted(36链已有weight=1) 加权; target_generator round-robin 改加权。
+- **mixed weight 真驱动**(缺口#9): config_loader L626/L540/L674 取 rpc_methods.mixed(均权)→ 改读 mixed_weighted 加权; target_generator round-robin(L260 `account_index % method_count` 均权)改加权。**算法(语义乙=百分比, 见§3决策)**: ① 加载校验 `sum(weight)==100` fail-fast ② 加权 round-robin = 按 weight 把 method 重复进轮询数组(weight=30 进30次), 数组长度=100, 对地址轮询取模 → 该 method 自然占 30% ③ weight 是百分比直接用, 框架不再归一化(总和已=100)。**配套**: 36链 weight 现全=1需补真实占比(见§3"36链weight现状"条)。**注释要求**: target_generator 加权逻辑处 + config/chains schema 处都加注释"weight=百分比占比,一链总和=100"。
 - **design §4 schema 缺的维度(真读6 family + chains文档挖出, 需补进 param_spec)**: ① bitcoin HTTP Basic Auth header ② substrate 可选参数(block_hash?) ③ 同链多 endpoint(hedera _meta.json_rpc_url/algorand node vs indexer) ④ per-request 协议路由(hedera _is_jsonrpc_method 按前缀) ⑤ 占位符"counts as success"妥协(接真值池后消除) ⑥ 链级 DSL 字段(chains文档 §7/§9: protocol_kind/rollup_type/module_set/denom_format/dual_address/finality/auth header/response_path — 与 method级 param_spec 分层, 见 §3 决策待定)。
 - **param_spec.py 草稿现状**: 244行, _VALID_TRANSPORTS(5)/_VALID_SOURCES(6)/_VALID_SHAPES(3) 已对照 design §4 修正; 真问题=0 caller 孤岛 + 缺 spec→params 构造器; docstring source 列表与 _VALID_SOURCES 不一致(待修)。
 - **复杂参数真值地基**: contract_call/filter 的真值见 §5.2 calldata池 + §5.3 filter矩阵 + §5.4 safety守卫。
@@ -146,13 +146,15 @@ S3 响应链 + 关联键 + 归因 + 块高归一 + 协议错配
 - **出图统一 matplotlib + UnifiedChartStyle**(2026-06-02 用户拍板): per-method 四维图参照 _generate_resource_distribution_chart, 不用自拼 SVG(避免 HTML 混排 SVG/PNG 体系割裂)。
 - **block_height_spec 单一声明源收编三套**: 现状 Shell get_block_height(8链case live)+ Python parse_block_height(36 family dead)+ _meta.health_probe(5链 dead)三套并存; 不留债=block_height_spec 作单一声明源, 三套读同源(非新造第4套)。五档 sync_strategy(dual_height/slot_diff/sync_progress/peer_metrics/freshness)。
 - **mixed weight 直接复用 mixed_weighted 零新增**(决策B): 36/36链已有 mixed_weighted(weight值都=1, 代码没读), S2.4 直接读它驱动, 不另造字段。
+- **🔴 weight 语义 = 百分比占比, 总和必须 = 100**(2026-06-05 用户拍板, 语义乙): `mixed_weighted[].weight` 是该 method 在 mixed 压测流量中的【百分比占比】(整数), 一个链所有 method 的 weight 之和 **必须 = 100**(如 5 method 配 40/30/20/10/0 ❌不行,须凑满100; 典型 30/25/20/15/10)。**理由**: 贴合实际业务——使用时按不同 method 的真实调用占比配置(用户原话:"实际业务中会有多个方法,根据不同占比配置")。语义直观(直接读就是百分比), 注释必须写明"weight=百分比,总和=100"。**校验(硬约束5 fail-fast)**: 框架加载 chain.json 时校验 `sum(weight)==100`, 不等于 100 → 告警退出, 禁静默归一化(避免用户配错却被框架悄悄改)。**落地**: 加权 round-robin(weight=30 → 该 method 在轮询数组出现 30 次), 压测流量按占比确定可复现(不用随机抽样, vegeta 需可复现)。**配置端(百分比占比)与归因端(实测频次占比 `count(method)/total`)语义一致, 闭环**。
+- **🔴 36链 weight 现状=占位1(和≠100)→ S2 配套补真实占比**(诚实标注, 非"字段已就绪"): 实证 36/36 链 mixed_weighted weight 全=1, 和=method数(4~7), **均 ≠ 100**。语义乙落地后, S2.4 必须给 36 链补真实百分比占比(默认策略: 均分到100, 如 5 method 各 20、4 method 各 25; 用户后续按真实业务调)。**这是 S2 的配套工作项, 不做=校验 fail-fast 全链跑不起来**。
 - **mainnet_block_height 改名否决**(默认): 改 network_block_height 断 performance_visualizer 等 reader 无兜底, 收益仅语义 → 保留旧名加注释(若必改需同步3 reader)。
 - **param_format 枚举作 param_spec 预设快捷**(B1): 单一读取路径(param_spec有→用/无→PARAM_FORMAT_PRESETS展开/都无fail-fast), 避 parallel-entry。
 - **D5 Shell DSL化不fork Python**: 块高每秒高频, Shell get_block_height 纯Shell+jq读block_height_spec, 不调Python(防fork污染节点资源基线测量)。
 - **F1 adapter_family CI校验非自动推断**: proto=rest横跨3 family无法推断, 人工填+CI校验在6注册family内。
 - **fixture + 请求示例入库**(用户2026-06-02拍板, 突破"fixtures不进git"铁律): 因无法部署36真节点+公共节点限流, clone后无法现录 → 入库供离线二次开发(写明破例理由防后续按旧铁律删)。
 - **响应DSL定位瘦身**(design §5.0, 用户两次元问句推翻): 压测主路径不解析响应body(对NS-2资源归因零信息量), response_spec 仅 PROXY_RESPONSE_CAPTURE开关 + health check块高用。
-- **chains文档链级DSL字段(待定, §3未锁)**: chains文档§7/§9积累 protocol_kind/rollup_type/module_set/denom_format/dual_address/finality/auth/response_path 等链级字段(design §4 没纳入), 收敛为"7必+1推+4缓"(moonbeam汇总)。**待决: 链级字段整合进 param_spec 还是独立 chain-level schema 两层**(影响 S2 schema 边界)。polkadot SCALE/UTXO method chaining 是 NS-3 零代码的真边界(纯DSL无法表达, 需sidecar/adapter)。
+- **🔴 链级DSL字段 = 独立两层 schema(决策乙, 2026-06-05 用户拍板)**: chains文档§7/§9积累 protocol_kind/rollup_type/module_set/denom_format/dual_address/finality/auth/response_path 等链级字段(design §4 没纳入), 收敛为"7必+1推+4缓"(moonbeam汇总)。**已决: config/chains/<链>.json 分两层 —— `chain_meta`(链级, 整链共享: endpoints/auth/protocol_kind/finality/response_path 等) + `param_spec`(method级, 每method一份: 参数怎么构造/响应怎么解析)。** 理由: 链级字段与具体 method 无关, 单层混放会与 method 名撞名+语义不清, 两层边界清晰、各自独立演进(符合"更优雅统一"诉求)。S2 param_spec.py 接入时按两层结构读 JSON。polkadot SCALE/UTXO method chaining 是 NS-3 零代码的真边界(纯DSL无法表达, 需sidecar/adapter, 标 KNOWN_BROKEN 不阻塞)。
 
 ## 4. 不留债硬约束(design §6.5.5 + 全程遵守)
 1. **字段名全保留**(csv_schema_registry 单源, block段6字段): 不改名→8 consumer 零断裂; mainnet_block_height 改名=否决。
