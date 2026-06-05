@@ -5,7 +5,7 @@
     "/wallet/getaccount": "body_address_visible",
     "/wallet/triggerconstantcontract": "body_owner_contract_selector_parameter",
     "/wallet/gettransactionbyid": "body_value_txid_nopfx",
-    "/wallet/getnowblock": "no_params",
+    "/wallet/getnowblock": "rest_post_empty",
     "eth_blockNumber": "no_params"
   },
   "params": {
@@ -70,8 +70,27 @@
     ],
     "original_notes": "双协议(HTTP REST POST + JSON-RPC);base58check ↔ hex41 双格式;USDT-TRC20 合约为基准 target",
     "adapter_required": true,
-    "adapter_family": "jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family": "hedera_dual",
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "json_rpc_url": "${LOCAL_RPC_URL}/jsonrpc",
+    "rest_paths": {
+      "/wallet/getaccount": {
+        "method": "POST",
+        "path": "/wallet/getaccount"
+      },
+      "/wallet/triggerconstantcontract": {
+        "method": "POST",
+        "path": "/wallet/triggerconstantcontract"
+      },
+      "/wallet/gettransactionbyid": {
+        "method": "POST",
+        "path": "/wallet/gettransactionbyid"
+      },
+      "/wallet/getnowblock": {
+        "method": "POST",
+        "path": "/wallet/getnowblock"
+      }
+    }
   },
   "proxy_extraction": {
     "extractors": [

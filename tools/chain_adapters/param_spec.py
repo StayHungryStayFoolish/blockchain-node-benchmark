@@ -193,6 +193,13 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
     "{address, limit, lt?, hash?}": {"transport": "rest_path", "bindings": {"address": {"source": "account"}}},  # limit 已在 path 写死, lt/hash 可选不填
     "{workchain: int, shard: dec_string, seqno: int}": {"transport": "rest_path", "bindings": {}},  # path 已写死 workchain/shard/seqno(masterchain 定值), 无占位
     "{address, method: string, stack: array}": {"transport": "rest_body", "http_method": "POST", "body_template": {"address": "{account}", "method": "seqno", "stack": []}},  # runGetMethod
+
+    # ── 批3b收尾: tron /wallet REST POST body(混协议链, /wallet→REST + eth_→jsonrpc 走 dual adapter) ──
+    # fixture 真机 body 实证。address/owner_address 从 account 池, value(txid) 从 tx_hash 池, visible literal。
+    "body_address_visible": {"transport": "rest_body", "http_method": "POST", "body_template": {"address": "{account}", "visible": True}},  # /wallet/getaccount
+    "body_value_txid_nopfx": {"transport": "rest_body", "http_method": "POST", "body_template": {"value": "{tx_hash}"}},  # /wallet/gettransactionbyid
+    "body_owner_contract_selector_parameter": {"transport": "rest_body", "http_method": "POST", "body_template": {"owner_address": "{account}", "contract_address": "{account}", "function_selector": "totalSupply()", "visible": True}},  # /wallet/triggerconstantcontract(contract_address 应业务合约, 批4 business 池)
+    "rest_post_empty": {"transport": "rest_body", "http_method": "POST", "body_template": {}},  # tron /wallet/getnowblock 等 REST POST 空 body(区别于 jsonrpc no_params 空 list)
 }
 
 

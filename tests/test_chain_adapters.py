@@ -359,16 +359,17 @@ def test_evm_compat_5chains_standard_enum():
 # (chain, expected_failure_mode, fix_wave_owner, reason)
 KNOWN_BROKEN_CLI = {
     # ─────────────────────────────────────────────────────────────────────
-    # 批3b收尾(2026-06-05): near(query dispatcher dict)/ton(toncenter v2 官方结构,
-    # rest_path+rest_body)/hedera(REST method 配 path_addr) 补 PRESET/param_format
-    # 后转 healthy(35/36)。剩 tron 归 S3.7 架构(非补配置):
+    # 批3 完整完成(2026-06-05): 36/36 链 build-target healthy。
+    # tron(混协议 /wallet REST + eth_ jsonrpc)复用 hedera_dual 通用 dual 路由
+    # (family=hedera_dual: _is_jsonrpc_method 分派, /wallet→rest_body, eth_→jsonrpc;
+    #  补 /wallet body PRESET + rest_post_empty)→ 转 healthy。
+    # KNOWN_BROKEN_CLI 清空(批1+2 的 12 → 批3b 1 → 批3完成 0, must shrink 达成)。
     # ─────────────────────────────────────────────────────────────────────
-    "tron": ("mixed_protocol_routing", "S3.7", "混协议(/wallet/* REST body + eth_* jsonrpc), family=jsonrpc 单一 → 需 hedera_dual 式 per-request 路由(S3.7, 与 polkadot 混协议一起做), 非补 PRESET 能解决"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 1, (
-    f"KNOWN_BROKEN_CLI 应为 1 条(批3b收尾后 35/36 healthy, 剩 tron 归 S3.7 per-request "
-    f"路由架构改动)。must shrink never grow。got {len(KNOWN_BROKEN_CLI)}"
+assert len(KNOWN_BROKEN_CLI) == 0, (
+    f"KNOWN_BROKEN_CLI 应为 0 条(批3 完整完成, 36/36 链 build-target healthy)。"
+    f"got {len(KNOWN_BROKEN_CLI)}"
 )
 
 
