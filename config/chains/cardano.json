@@ -7,7 +7,8 @@
     "POST_ADDRESS_INFO": "body_addresses_array",
     "POST_TX_INFO": "body_tx_hashes_array",
     "POST_BLOCK_TXS": "body_block_hashes_array",
-    "GET_EPOCH_INFO": "query_epoch_int"
+    "GET_EPOCH_INFO": "query_epoch_int",
+    "POST_ASSET_INFO": "asset_policy_name"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
@@ -122,6 +123,18 @@
       "GET_EPOCH_INFO": {
         "method": "GET",
         "path": "/epoch_info"
+      },
+      "POST_ASSET_INFO": {
+        "method": "POST",
+        "path": "/asset_info",
+        "body": {
+          "_asset_list": [
+            [
+              "{policy}",
+              "{asset_name}"
+            ]
+          ]
+        }
       }
     },
     "health_probe": {

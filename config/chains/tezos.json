@@ -94,6 +94,10 @@
       "GET /chains/main/blocks/head/votes/current_period": {
         "method": "GET",
         "path": "/chains/main/blocks/head/votes/current_period"
+      },
+      "GET /chains/main/blocks/{block}/operations/{vp}": {
+        "method": "GET",
+        "path": "/chains/main/blocks/{block}/operations/{vp}"
       }
     },
     "health_probe": {
