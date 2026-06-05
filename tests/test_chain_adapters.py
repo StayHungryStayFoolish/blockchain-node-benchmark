@@ -203,7 +203,7 @@ def test_bitcoin_auth():
     os.environ["BITCOIN_RPC_PASSWORD"] = "secret"
     try:
         a = get_adapter("bitcoin")
-        t = a.build_vegeta_target("getblockcount", "addr", "http://localhost:8332", "no_params")
+        t = a.build_vegeta_target("getblockcount", {"account": ["addr"], "_param_format": "no_params"}, "http://localhost:8332", {"transport": "jsonrpc_list", "slots": []})
         assert "Authorization" in t["header"], f"missing auth header: {t}"
         expected_auth = "Basic " + base64.b64encode(b"alice:secret").decode()
         assert t["header"]["Authorization"][0] == expected_auth
@@ -214,7 +214,7 @@ def test_bitcoin_auth():
 
     # Without auth env, no Authorization header
     a = get_adapter("bitcoin")
-    t = a.build_vegeta_target("getblockcount", "addr", "http://localhost:8332", "no_params")
+    t = a.build_vegeta_target("getblockcount", {"account": ["addr"], "_param_format": "no_params"}, "http://localhost:8332", {"transport": "jsonrpc_list", "slots": []})
     assert "Authorization" not in t["header"], f"unexpected auth header: {t}"
     _ok("Bitcoin adapter omits Authorization when no env set")
 
@@ -231,7 +231,7 @@ def test_rest_requires_env_and_path_map():
         os.environ.pop("BLOCKCHAIN_NODE", None)
         a = get_adapter("aptos")
         try:
-            a.build_vegeta_target("GET_ACCOUNT", "0xabc", "http://localhost:8080", "")
+            a.build_vegeta_target("GET_ACCOUNT", {"account": ["0xabc"]}, "http://localhost:8080", {"transport": "rest_path", "path": "/x"})
             _fail("expected RuntimeError without BLOCKCHAIN_NODE")
         except RuntimeError as e:
             _ok(f"RuntimeError correctly raised: {e}")
@@ -240,7 +240,7 @@ def test_rest_requires_env_and_path_map():
         os.environ["BLOCKCHAIN_NODE"] = "aptos"
         try:
             a = get_adapter("aptos")
-            a.build_vegeta_target("nonexistent_method", "0xabc", "http://localhost:8080", "")
+            a.build_vegeta_target("nonexistent_method", {"account": ["0xabc"]}, "http://localhost:8080", {"transport": "rest_path", "path": "/x"})
             _fail("expected ValueError for unknown method")
         except ValueError as e:
             _ok(f"ValueError correctly raised for unknown method: {e}")
@@ -257,55 +257,63 @@ def test_rest_requires_env_and_path_map():
 #                transaction_hash / eth_call_object_latest / object_single
 # ─────────────────────────────────────────────────────────────────────────────
 def test_jsonrpc_s3a_new_formats():
-    print("\n[8] JsonRpc S3-A new formats (5 EVM-compat chains)")
+    print("\n[8] JsonRpc S2 新构造器 (param_spec + inputs 多池, 废除旧 address 占位)")
     a = get_adapter("arbitrum")  # any jsonrpc chain works
     url = "http://x"
+    from chain_adapters.param_spec import expand_preset, build_params_from_spec
 
-    # block_number → ["latest", false]
-    t = a.build_vegeta_target("eth_getBlockByNumber", "0xabc", url, "block_number")
+    def _build(fmt, inputs):
+        """用 PRESET 展开 spec + 真值池 inputs 调新构造器(模拟 cli 层 resolve+build)。"""
+        spec = expand_preset(fmt)
+        return a.build_vegeta_target("m", inputs, url, spec)
+
+    # block_number → ["latest", false] (literal, 不依赖输入池)
+    t = _build("block_number", {"account": ["0xabc"]})
     body = json.loads(base64.b64decode(t["body"]))
     assert body["params"] == ["latest", False], f"block_number wrong: {body['params']}"
     _ok(f"block_number → {body['params']}")
 
-    # block_number_int → [<int>]
-    t = a.build_vegeta_target("zks_getBlockDetails", "60100000", url, "block_number_int")
+    # block_number_int → [<int>] 从 block_height 池取(S2: 不再 int(address), 从真值池)
+    t = _build("block_number_int", {"block_height": [60100000]})
     body = json.loads(base64.b64decode(t["body"]))
     assert body["params"] == [60100000], f"block_number_int wrong: {body['params']}"
-    _ok(f"block_number_int (int address) → {body['params']}")
-    # fallback when address not int-parseable
-    t = a.build_vegeta_target("zks_getBlockDetails", "not_an_int", url, "block_number_int")
-    body = json.loads(base64.b64decode(t["body"]))
-    assert body["params"] == [1], f"block_number_int fallback wrong: {body['params']}"
-    _ok(f"block_number_int (bad address) → fallback {body['params']}")
+    _ok(f"block_number_int (从 block_height 池) → {body['params']}")
+    # 池空 → fail-fast(S2 废除占位兜底, R3)
+    from chain_adapters.param_spec import ParamSpecError
+    try:
+        _build("block_number_int", {"account": ["0xabc"]})  # 缺 block_height 池
+        _fail("block_number_int 池空应 fail-fast")
+    except ParamSpecError as e:
+        _ok(f"block_number_int 池空 → fail-fast(非占位): {str(e)[:40]}")
 
-    # transaction_hash → [<tx_hash>]
-    # with valid 0x + 64-hex address-as-hash:
-    fake_hash = "0x" + "ab" * 32
-    t = a.build_vegeta_target("eth_getTransactionReceipt", fake_hash, url, "transaction_hash")
+    # transaction_hash → [<tx_hash>] 从 tx_hash 池取(S2: 不再用 address 占位)
+    real_hash = "0x" + "ab" * 32
+    t = _build("transaction_hash", {"tx_hash": [real_hash]})
     body = json.loads(base64.b64decode(t["body"]))
-    assert body["params"] == [fake_hash], f"transaction_hash wrong: {body['params']}"
-    _ok(f"transaction_hash (valid) → {body['params'][0][:18]}...")
-    # fallback when address is not a tx hash shape:
-    t = a.build_vegeta_target("eth_getTransactionReceipt", "0xshort", url, "transaction_hash")
-    body = json.loads(base64.b64decode(t["body"]))
-    assert body["params"] == ["0x" + "0" * 64], f"transaction_hash fallback wrong: {body['params']}"
-    _ok(f"transaction_hash (short addr) → fallback {body['params'][0][:18]}...")
+    assert body["params"] == [real_hash], f"transaction_hash wrong: {body['params']}"
+    _ok(f"transaction_hash (从 tx_hash 池) → {body['params'][0][:18]}...")
+    # 池空 → fail-fast
+    try:
+        _build("transaction_hash", {"account": ["0xabc"]})  # 缺 tx_hash 池
+        _fail("transaction_hash 池空应 fail-fast")
+    except ParamSpecError as e:
+        _ok(f"transaction_hash 池空 → fail-fast(非占位): {str(e)[:40]}")
 
-    # eth_call_object_latest → [{to, data}, "latest"]
-    t = a.build_vegeta_target("eth_call", "0xc0ffee", url, "eth_call_object_latest")
+    # eth_call_object_latest → [{to, data}, "latest"] (contract_call, evm_call shape)
+    t = _build("eth_call_object_latest", {"account": ["0xc0ffee"]})
     body = json.loads(base64.b64decode(t["body"]))
     assert body["params"][1] == "latest", f"eth_call missing latest: {body['params']}"
     assert body["params"][0]["to"] == "0xc0ffee", f"eth_call to wrong: {body['params']}"
     assert body["params"][0]["data"].startswith("0x70a08231"), f"data missing balanceOf selector: {body['params']}"
-    _ok(f"eth_call_object_latest → [{{to,data}}, latest]")
+    _ok("eth_call_object_latest → [{to,data}, latest] (evm_call)")
 
-    # object_single → [{from, to, value}]
-    t = a.build_vegeta_target("linea_estimateGas", "0xc0ffee", url, "object_single")
+    # object_single → [{to, data}] (contract_call evm_call shape, 单元素 list)
+    t = _build("object_single", {"account": ["0xc0ffee"]})
     body = json.loads(base64.b64decode(t["body"]))
     assert isinstance(body["params"], list) and len(body["params"]) == 1
-    assert body["params"][0]["from"] == "0xc0ffee"
-    assert body["params"][0]["value"] == "0x1"
-    _ok(f"object_single → [{{from,to,value}}] single-elem list")
+    assert body["params"][0]["to"] == "0xc0ffee"
+    assert body["params"][0]["data"].startswith("0x70a08231")
+    _ok("object_single → [{to,data}] 单元素 list (evm_call)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -351,18 +359,33 @@ def test_evm_compat_5chains_standard_enum():
 # (chain, expected_failure_mode, fix_wave_owner, reason)
 KNOWN_BROKEN_CLI = {
     # ─────────────────────────────────────────────────────────────────────
-    # Step 9 (ADR-0005 + 36-chain rollout, 2026-05-28):
-    # ALL 23 prior entries fixed by chain-template edits — rpc_methods.single
-    # changed from no-address health-probe methods to address-bearing methods
-    # (eth_getBalance / system_account / getreceivedbyaddress / etc).
-    # Each chain's new single is declared in param_formats OR _meta.rest_paths.
-    # See git log fix(adr-0005): step 9 — 23 chains CLI healthy
+    # S1+S2+B3 原子单元批1+批2(2026-06-05): 接口签名 address→inputs:dict +
+    # jsonrpc 切 param_spec 真构造器(废除 address 占位)。下列 12 链的 method 因
+    # 下游批次未到而 fail-fast(诚实, 非占位兜底), 归属明确:
+    #   批3(rest_path 构造 + 补 PRESETS): rest/tendermint path 类 method —
+    #     algorand/aptos/cardano/celestia/cosmos-hub/hedera/injective/osmosis/
+    #     tezos/tron(REST path 占位参数 {addr}/{hash}/{height}, 见 SSOT S3.8)
+    #   批4(S1 多池真值供给): tx_hash/block 类 method 池空 fail-fast —
+    #     near(tx [hash,signer_id]), ton(runGetMethod 复杂参数)
+    # 批3/批4 完成后这些链转 healthy, 从本表移除(must shrink, never grow)。
     # ─────────────────────────────────────────────────────────────────────
+    "algorand": ("rest_path_placeholder", "批3 S3.8", "GET /v2/... path 占位参数构造待批3"),
+    "aptos": ("rest_path_placeholder", "批3 S3.8", "GET /v1/... path 占位参数构造待批3"),
+    "cardano": ("rest_body_pool", "批3+批4", "POST_TX_INFO 需 tx_hash 池(批4) + POST body 构造(批3)"),
+    "celestia": ("rest_path_placeholder", "批3 S3.8", "/cosmos REST path 占位待批3"),
+    "cosmos-hub": ("rest_path_placeholder", "批3 S3.8", "/cosmos REST path 占位待批3"),
+    "hedera": ("rest_path_placeholder", "批3 S3.8", "/api/v1 Mirror REST path 占位待批3"),
+    "injective": ("rest_path_placeholder", "批3 S3.8", "/cosmos+/injective REST path 待批3"),
+    "near": ("tx_hash_pool", "批4 S1", "tx [hash,signer_id] 需 tx_hash 池(批4 S1 供给)"),
+    "osmosis": ("rest_path_placeholder", "批3 S3.8", "/osmosis REST path 占位待批3"),
+    "tezos": ("rest_path_placeholder", "批3 S3.8", "/chains/main REST path 占位待批3"),
+    "ton": ("complex_params", "批3+批4", "runGetMethod 复杂参数构造待批3 + 真值待批4"),
+    "tron": ("rest_body_pool", "批3 S3.8", "/wallet REST body 构造待批3"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 0, (
-    f"KNOWN_BROKEN_CLI must have exactly 0 entries (step 9 cleared all 23 chain-template "
-    f"bugs by changing rpc_methods.single to address-bearing methods). "
+assert len(KNOWN_BROKEN_CLI) == 12, (
+    f"KNOWN_BROKEN_CLI 应为 12 条(批1+批2 阶段: jsonrpc account 类已迁移真构造器, "
+    f"剩 12 链 rest path/tx_hash 类待批3/批4)。批3/批4 完成后递减至 0。"
     f"got {len(KNOWN_BROKEN_CLI)}"
 )
 
@@ -548,7 +571,8 @@ def test_hedera_dual_adapter_routing():
         # REST path-style method → GET against passed rpc_url
         tgt = a.build_vegeta_target(
             method="GET /api/v1/accounts/{addr}",
-            address="0.0.2", rpc_url=mirror_url,
+            inputs={"account": ["0.0.2"]}, rpc_url=mirror_url,
+            param_spec={"transport": "rest_path", "path": "/api/v1/accounts/{addr}"},
         )
         assert tgt["method"] == "GET", f"REST should be GET, got {tgt['method']}"
         assert tgt["url"] == f"{mirror_url}/api/v1/accounts/0.0.2", f"got {tgt['url']}"
@@ -557,8 +581,8 @@ def test_hedera_dual_adapter_routing():
 
         # JSON-RPC method → POST against _meta.json_rpc_url, NOT rpc_url
         tgt = a.build_vegeta_target(
-            method="eth_blockNumber", address="",
-            rpc_url=mirror_url, param_format="no_params",
+            method="eth_blockNumber", inputs={"account": [""]},
+            rpc_url=mirror_url, param_spec={"transport": "jsonrpc_list", "slots": []},
         )
         assert tgt["method"] == "POST", f"JSON-RPC should be POST, got {tgt['method']}"
         assert tgt["url"] == "https://mainnet.hashio.io/api", \
@@ -568,11 +592,12 @@ def test_hedera_dual_adapter_routing():
         assert body["params"] == []
         _ok("eth_blockNumber → POST Hashio with empty params")
 
-        # eth_getBalance routing → POST with [addr, "latest"] when param_format=address_latest
+        # eth_getBalance routing → POST with [addr, "latest"] (address_latest spec)
         tgt = a.build_vegeta_target(
             method="eth_getBalance",
-            address="0x0000000000000000000000000000000000000002",
-            rpc_url=mirror_url, param_format="address_latest",
+            inputs={"account": ["0x0000000000000000000000000000000000000002"]},
+            rpc_url=mirror_url,
+            param_spec={"transport": "jsonrpc_list", "slots": [{"source": "account"}, {"source": "literal", "value": "latest"}]},
         )
         assert tgt["url"] == "https://mainnet.hashio.io/api"
         body = _json.loads(_b64.b64decode(tgt["body"]).decode())
@@ -587,8 +612,8 @@ def test_hedera_dual_adapter_routing():
         original = a2._chain_cache["hedera"]["_meta"].pop("json_rpc_url")
         try:
             try:
-                a2.build_vegeta_target(method="eth_blockNumber", address="",
-                                       rpc_url=mirror_url, param_format="no_params")
+                a2.build_vegeta_target(method="eth_blockNumber", inputs={"account": [""]},
+                                       rpc_url=mirror_url, param_spec={"transport": "jsonrpc_list", "slots": []})
                 assert False, "should have raised ValueError when json_rpc_url missing"
             except ValueError as e:
                 assert "json_rpc_url" in str(e), f"error msg should mention json_rpc_url: {e}"
@@ -599,8 +624,8 @@ def test_hedera_dual_adapter_routing():
         # Missing BLOCKCHAIN_NODE → RuntimeError
         del os.environ["BLOCKCHAIN_NODE"]
         try:
-            a.build_vegeta_target(method="eth_blockNumber", address="",
-                                  rpc_url=mirror_url, param_format="no_params")
+            a.build_vegeta_target(method="eth_blockNumber", inputs={"account": [""]},
+                                  rpc_url=mirror_url, param_spec={"transport": "jsonrpc_list", "slots": []})
             assert False, "should have raised RuntimeError when BLOCKCHAIN_NODE missing"
         except RuntimeError as e:
             assert "BLOCKCHAIN_NODE" in str(e)

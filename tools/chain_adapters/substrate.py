@@ -23,9 +23,13 @@ from .base import ChainAdapter, register, _vegeta_post_json, _try_int
 class SubstrateAdapter(ChainAdapter):
 
     def build_vegeta_target(
-        self, method: str, address: str, rpc_url: str, param_format: str = "",
+        self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
-        params = self._build_params(param_format, address)
+        # 批1 过渡: 签名已统一为 (inputs, param_spec); 内部暂用兼容 address 喂老 _build_params。
+        # param_format 由 cli 塞进 inputs["_param_format"](过渡键); 批3 切到
+        # param_spec.build_params_from_spec(需先补 substrate 专有枚举进 PRESETS)后删除此过渡。
+        from .base import _account_from_inputs
+        params = self._build_params(inputs.get("_param_format", ""), _account_from_inputs(inputs))
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
 

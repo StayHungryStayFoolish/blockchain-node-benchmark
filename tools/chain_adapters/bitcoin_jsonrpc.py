@@ -34,9 +34,12 @@ class BitcoinJsonRpcAdapter(ChainAdapter):
         return f"Basic {creds}"
 
     def build_vegeta_target(
-        self, method: str, address: str, rpc_url: str, param_format: str = "",
+        self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
-        params = self._build_params(param_format, address)
+        # 批1 过渡: 签名统一为 (inputs, param_spec); 内部暂用兼容 address + inputs["_param_format"]
+        # 喂老 _build_params(bitcoin 有 minconf/verbosity 等专有枚举, 批3 补 PRESETS 后切构造器)。
+        from .base import _account_from_inputs
+        params = self._build_params(inputs.get("_param_format", ""), _account_from_inputs(inputs))
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         body_str = json.dumps(body, separators=(",", ":"))
         header = {"Content-Type": ["application/json"]}

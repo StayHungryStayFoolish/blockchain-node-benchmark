@@ -35,11 +35,20 @@ class ChainAdapter(ABC):
     def build_vegeta_target(
         self,
         method: str,
-        address: str,
+        inputs: dict,
         rpc_url: str,
-        param_format: str = "",
+        param_spec: dict,
     ) -> dict:
-        """Build a vegeta target dict for one RPC request."""
+        """Build a vegeta target dict for one RPC request.
+
+        S1+S2+B3 原子单元(2026-06-05): 签名从单 address 槽改为多源 inputs。
+          inputs: dict — 输入池, 按 source 分键: {"account":[...], "tx_hash":[...],
+                  "block_height":[...], "contract_call":[...], ...}。批1 暂传
+                  {"account":[address]} 兼容; S1 填齐多池。
+          param_spec: dict — 声明式参数构造规范(param_spec.resolve_param_spec 解析出),
+                  含 transport + slots/fields/path/bindings。取代旧 param_format 枚举字符串
+                  (枚举经 PARAM_FORMAT_PRESETS 展开成 param_spec, 单一构造路径)。
+        """
 
     @abstractmethod
     def health_check_request(self, rpc_url: str) -> dict:
@@ -83,6 +92,23 @@ def _vegeta_get(url: str, headers: Optional[dict] = None) -> dict:
         "url": url,
         "header": h,
     }
+
+
+def _account_from_inputs(inputs: dict) -> str:
+    """过渡 helper(批1/批2): 从 inputs 多池取 account[0] 作兼容 address。
+
+    批3 各 family 内部切到 param_spec.build_params_from_spec 后, 这些过渡调用
+    随老 _build_params 一起删除。仅 jsonrpc 已走新构造器, 其余 5 family 暂用此兼容。
+    """
+    acc = inputs.get("account")
+    if acc:
+        return acc[0]
+    # account 池空时退其它池首值(过渡期容错; 批3 真值池接入后由构造器 fail-fast 管控)
+    for k in ("tx_hash", "block_height", "contract_call"):
+        if inputs.get(k):
+            v = inputs[k][0]
+            return v if isinstance(v, str) else str(v)
+    return ""
 
 
 def _try_int(s) -> Optional[int]:

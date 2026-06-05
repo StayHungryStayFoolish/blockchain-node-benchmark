@@ -56,6 +56,31 @@ def _get_param_format(chain: str, method: str) -> str:
     return "single_address"
 
 
+def _build_inputs_and_spec(chain: str, method: str, address: str, param_format_override: str):
+    """构建 (inputs, param_spec) 供 build_vegeta_target 新签名(S2)。
+
+    - param_spec: resolve_param_spec(method, chain.param_spec, chain.param_formats) 解析出声明式结构
+    - inputs: 批1 过渡 = {"account":[address], "_param_format": fmt(给5family老逻辑过渡键)}
+              S1 填齐 tx_hash/block_height/contract_call 多池后, jsonrpc 走构造器,
+              过渡键随 5family 切构造器一并删。
+    """
+    from chain_adapters import param_spec as ps  # noqa
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    chain_file = os.path.join(repo_root, "config", "chains", f"{chain}.json")
+    chain_param_spec = None
+    chain_param_formats = None
+    if os.path.exists(chain_file):
+        with open(chain_file) as f:
+            tpl = json.load(f)
+        chain_param_spec = tpl.get("param_spec")
+        chain_param_formats = tpl.get("param_formats")
+    fmt = param_format_override or _get_param_format(chain, method)
+    # resolve_param_spec: param_spec[method] 优先, 否则 param_formats 枚举展开(单一构造路径)
+    spec = ps.resolve_param_spec(method, chain_param_spec, chain_param_formats)
+    inputs = {"account": [address], "_param_format": fmt}
+    return inputs, spec
+
+
 def cmd_build_target(args):
     adapter = get_adapter(args.chain)
     # Honor BLOCKCHAIN_NODE so RestAdapter can resolve _meta.rest_paths
@@ -66,12 +91,12 @@ def cmd_build_target(args):
     # BLOCKCHAIN_NODE=aptos into the test_10 subprocess and all algorand
     # CLI calls then queried aptos's rest_paths).
     os.environ["BLOCKCHAIN_NODE"] = args.chain
-    param_format = args.param_format or _get_param_format(args.chain, args.method)
+    inputs, spec = _build_inputs_and_spec(args.chain, args.method, args.address, args.param_format)
     target = adapter.build_vegeta_target(
         method=args.method,
-        address=args.address,
+        inputs=inputs,
         rpc_url=args.rpc_url,
-        param_format=param_format,
+        param_spec=spec,
     )
     # Vegeta accepts compact JSON, one target per line
     print(json.dumps(target, separators=(",", ":")))
@@ -86,8 +111,8 @@ def cmd_build_targets_batch(args):
     """
     adapter = get_adapter(args.chain)
     os.environ["BLOCKCHAIN_NODE"] = args.chain  # always override; see cmd_build_target
-    # Pre-cache param_format per method
-    pf_cache: dict[str, str] = {}
+    # Pre-cache (inputs-template, param_spec) per method — resolve_param_spec once per method
+    spec_cache: dict[str, dict] = {}
     out = sys.stdout
     for line in sys.stdin:
         line = line.rstrip("\n")
@@ -101,11 +126,14 @@ def cmd_build_targets_batch(args):
             if len(parts) != 2:
                 continue
             method, address = parts
-        if method not in pf_cache:
-            pf_cache[method] = _get_param_format(args.chain, method)
+        if method not in spec_cache:
+            # param_spec 与 method 一对一(不随 address 变), 缓存; inputs 随 address 每行新建
+            _, spec_cache[method] = _build_inputs_and_spec(args.chain, method, address, "")
+        spec = spec_cache[method]
+        inputs = {"account": [address], "_param_format": _get_param_format(args.chain, method)}
         target = adapter.build_vegeta_target(
-            method=method, address=address,
-            rpc_url=args.rpc_url, param_format=pf_cache[method],
+            method=method, inputs=inputs,
+            rpc_url=args.rpc_url, param_spec=spec,
         )
         out.write(json.dumps(target, separators=(",", ":")) + "\n")
     out.flush()

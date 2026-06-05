@@ -79,13 +79,18 @@ class RestAdapter(ChainAdapter):
         return spec.get("method", "GET"), path, body
 
     def build_vegeta_target(
-        self, method: str, address: str, rpc_url: str, param_format: str = "",
+        self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
         """For REST, `method` is a logical method NAME mapped via _meta.rest_paths.
         rpc_url base is the chain's base URL (LOCAL_RPC_URL). The full URL is
         rpc_url + path. The chain name is taken from BLOCKCHAIN_NODE env var
         (master_qps_executor sets this).
+
+        批1 过渡: 签名统一为 (inputs, param_spec); 内部用兼容 address 替换 {address}。
+        REST path 占位参数({addr}/{hash}/{height})路由是 S3.8 待修(归 S2/S3 REST 处理)。
         """
+        from .base import _account_from_inputs
+        address = _account_from_inputs(inputs)
         chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
         if not chain_name:
             raise RuntimeError("RestAdapter requires BLOCKCHAIN_NODE env var")

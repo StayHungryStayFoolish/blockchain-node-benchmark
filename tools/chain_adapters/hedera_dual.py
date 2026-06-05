@@ -84,20 +84,21 @@ class HederaDualAdapter(ChainAdapter):
     # ─── ABC contract ──────────────────────────────────────────────────────
 
     def build_vegeta_target(
-        self, method: str, address: str, rpc_url: str, param_format: str = "",
+        self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
+        # 批1 过渡: 签名统一为 (inputs, param_spec); 双模式委托 jsonrpc/rest 传新签名。
         chain_name = self._get_chain_name()
         if _is_jsonrpc_method(method):
             jsonrpc_url = self._get_jsonrpc_url(chain_name)
             return self._jsonrpc.build_vegeta_target(
-                method=method, address=address,
-                rpc_url=jsonrpc_url, param_format=param_format,
+                method=method, inputs=inputs,
+                rpc_url=jsonrpc_url, param_spec=param_spec,
             )
         # REST path-style: delegate to RestAdapter (uses BLOCKCHAIN_NODE +
         # _meta.rest_paths from chain template, same as before)
         return self._rest.build_vegeta_target(
-            method=method, address=address,
-            rpc_url=rpc_url, param_format=param_format,
+            method=method, inputs=inputs,
+            rpc_url=rpc_url, param_spec=param_spec,
         )
 
     def health_check_request(self, rpc_url: str) -> dict:

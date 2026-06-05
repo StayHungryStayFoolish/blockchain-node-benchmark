@@ -26,16 +26,15 @@ from .base import ChainAdapter, register, _vegeta_post_json, _try_int
 class TendermintAdapter(ChainAdapter):
 
     def build_vegeta_target(
-        self, method: str, address: str, rpc_url: str, param_format: str = "",
+        self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
         """Tendermint RPC: POST JSON-RPC with object params.
 
-        param_format conventions:
-            no_params          → params: {}
-            single_address     → params: {"address": "<addr>"} (caller-chain-specific)
-            height_param       → params: {"height": "<addr>"} (block-height query, address holds height)
+        批1 过渡: 签名统一为 (inputs, param_spec); 内部暂用兼容 address + inputs["_param_format"]
+        喂老 _build_params(tendermint 用 dict 参数+abci 等专有格式, 批3 补 PRESETS 后切构造器)。
         """
-        params = self._build_params(param_format, address)
+        from .base import _account_from_inputs
+        params = self._build_params(inputs.get("_param_format", ""), _account_from_inputs(inputs))
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
 

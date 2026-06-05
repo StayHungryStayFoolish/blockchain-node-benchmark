@@ -148,6 +148,88 @@ def expand_preset(param_format: str) -> Optional[dict]:
     return PARAM_FORMAT_PRESETS.get(param_format)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 构造器: param_spec + inputs → 实际请求参数(S2 核心, design §4.2 执行端)
+#
+# resolve_param_spec 给出【结构】(transport + slots/fields/...), build_params_from_spec
+# 按结构从 inputs 多池取真值, 组装成协议参数。这是 param_spec.py 从"孤岛草稿"接入
+# 生产的关键缺失件(SSOT: 缺 spec→params 构造器)。
+#
+# inputs 契约(S1 多池供给, 批1 暂 {"account":[address]}):
+#   {"account": [...], "tx_hash": [...], "block_height": [...], "contract_call": [...]}
+#   每池是 list; 构造时取第 idx 个(默认 0, mixed 轮询时由调用方传 idx 轮换)。
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ERC-20 balanceOf(address) selector + 32B padded — calldata 池最常用(§5.2)
+_EVM_BALANCEOF_SELECTOR = "0x70a08231"
+
+
+def _take(inputs: dict, source: str, idx: int):
+    """从 inputs[source] 池取第 idx 个值。池空/缺 → ParamSpecError(fail-fast, 非占位)。"""
+    pool = inputs.get(source)
+    if not pool:
+        raise ParamSpecError(
+            f"inputs pool {source!r} empty/missing — S1 输入供给未填该池, 拒绝占位兜底(R3)。"
+            f" 现有池: {sorted(k for k, v in inputs.items() if v)}"
+        )
+    return pool[idx % len(pool)]
+
+
+def _build_call_object(shape: str, inputs: dict, idx: int, extra: Optional[dict]) -> dict:
+    """contract_call source → 合约调用对象(design §4.2 call_object, §5.2 calldata)。"""
+    if shape == "evm_call":
+        # eth_call/estimateGas: {to: <合约/账户>, data: <selector+args>}
+        # 真值地基 §5.2: to 来自 contract_call 池(或退 account), data 用高频 selector
+        to = None
+        cc = inputs.get("contract_call")
+        if cc:
+            obj = cc[idx % len(cc)]
+            if isinstance(obj, dict):
+                return obj  # 池里已是完整 {to,data}
+            to = obj
+        if to is None:
+            to = _take(inputs, "account", idx)  # 退账户地址作 to(余额查询语义)
+        return {"to": to, "data": _EVM_BALANCEOF_SELECTOR + "0" * 64}
+    if shape == "aptos_view":
+        # Move view: {function, type_arguments, arguments}(§5.3 aptos /v1/view)
+        return extra.get("value", {}) if extra else {}
+    if shape == "tron_trigger":
+        return extra.get("value", {}) if extra else {}
+    raise ParamSpecError(f"call_object shape {shape!r} 未实现构造")
+
+
+def _resolve_slot_value(slot: dict, inputs: dict, idx: int):
+    """单个 slot → 实际值(按 source 从池取 / literal 直取 / contract_call 拼对象)。"""
+    src = slot.get("source")
+    if src == "literal":
+        return slot["value"]
+    if src == "config_object":
+        return slot["value"]
+    if src == "contract_call":
+        co = slot.get("call_object", {})
+        return _build_call_object(co.get("shape", "evm_call"), inputs, idx, slot)
+    if src in ("account", "tx_hash", "block_height"):
+        return _take(inputs, src, idx)
+    raise ParamSpecError(f"slot source {src!r} 构造未实现")
+
+
+def build_params_from_spec(spec: dict, inputs: dict, idx: int = 0):
+    """param_spec + inputs → 实际请求参数(jsonrpc_list→list, jsonrpc_dict→dict)。
+
+    rest_* transport 的 path/bindings 构造归 RestAdapter(S3.8 占位路由), 此处只处理
+    jsonrpc_list/jsonrpc_dict(覆盖 24 PRESET 主力 + jsonrpc/bitcoin/substrate family)。
+    """
+    transport = spec.get("transport")
+    if transport == "jsonrpc_list":
+        return [_resolve_slot_value(s, inputs, idx) for s in spec.get("slots", [])]
+    if transport == "jsonrpc_dict":
+        return {k: _resolve_slot_value(f, inputs, idx) for k, f in spec.get("fields", {}).items()}
+    # rest_* 由 adapter 侧用 path+bindings 构造(S3.8), 不在此构造 list/dict 参数
+    raise ParamSpecError(
+        f"transport {transport!r} 参数构造不在 build_params_from_spec(rest_* 走 adapter path 构造)"
+    )
+
+
 def resolve_param_spec(
     method: str,
     chain_param_spec: Optional[dict],
