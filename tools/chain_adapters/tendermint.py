@@ -20,6 +20,7 @@ import os
 from typing import Optional
 
 from .base import ChainAdapter, register, _vegeta_post_json, _try_int
+from .param_spec import build_params_from_spec
 
 
 @register("tendermint")
@@ -28,33 +29,15 @@ class TendermintAdapter(ChainAdapter):
     def build_vegeta_target(
         self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
-        """Tendermint RPC: POST JSON-RPC with object params.
+        """Tendermint RPC: POST JSON-RPC.
 
-        批1 过渡: 签名统一为 (inputs, param_spec); 内部暂用兼容 address + inputs["_param_format"]
-        喂老 _build_params(tendermint 用 dict 参数+abci 等专有格式, 批3 补 PRESETS 后切构造器)。
+        批3a: 切 param_spec 真构造器。tendermint 的非 path method(no_params/
+        address_latest/address_with_options)是 jsonrpc_list 类(PRESET 已覆盖)。
+        path 风格 method(/cosmos/... LCD REST)走批3b REST 构造, 在此 fail-fast(归批3b)。
         """
-        from .base import _account_from_inputs
-        params = self._build_params(inputs.get("_param_format", ""), _account_from_inputs(inputs))
+        params = build_params_from_spec(param_spec, inputs)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
-
-    @staticmethod
-    def _build_params(param_format: str, address: str) -> dict:
-        if param_format in ("no_params", ""):
-            return {}
-        if param_format == "single_address":
-            return {"address": address}
-        if param_format == "height_param":
-            return {"height": address}
-        if param_format == "abci_balance_query":
-            # Cosmos bank balance query
-            return {
-                "path": "/cosmos.bank.v1beta1.Query/Balance",
-                "data": address,
-                "prove": False,
-            }
-        # default: single address as object
-        return {"address": address}
 
     def health_check_request(self, rpc_url: str) -> dict:
         """Tendermint health = `status` method."""

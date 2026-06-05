@@ -20,6 +20,7 @@ import os
 from typing import Optional
 
 from .base import ChainAdapter, register, _vegeta_post_json, _try_int, _b64
+from .param_spec import build_params_from_spec
 
 
 @register("bitcoin_jsonrpc")
@@ -36,10 +37,9 @@ class BitcoinJsonRpcAdapter(ChainAdapter):
     def build_vegeta_target(
         self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
-        # 批1 过渡: 签名统一为 (inputs, param_spec); 内部暂用兼容 address + inputs["_param_format"]
-        # 喂老 _build_params(bitcoin 有 minconf/verbosity 等专有枚举, 批3 补 PRESETS 后切构造器)。
-        from .base import _account_from_inputs
-        params = self._build_params(inputs.get("_param_format", ""), _account_from_inputs(inputs))
+        # 批3a: 切 param_spec 真构造器(bitcoin 全 method 枚举已在 PARAM_FORMAT_PRESETS,
+        # jsonrpc_list 类)。删除老 _build_params 枚举 if-else。
+        params = build_params_from_spec(param_spec, inputs)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         body_str = json.dumps(body, separators=(",", ":"))
         header = {"Content-Type": ["application/json"]}
@@ -52,19 +52,6 @@ class BitcoinJsonRpcAdapter(ChainAdapter):
             "header": header,
             "body": _b64(body_str),
         }
-
-    @staticmethod
-    def _build_params(param_format: str, address: str) -> list:
-        if param_format == "no_params":
-            return []
-        if param_format == "single_address":
-            return [address]
-        if param_format == "address_minconf_includewatchonly":
-            # getreceivedbyaddress format: [address, minconf, include_watchonly]
-            return [address, 1, False]
-        if param_format == "txid":
-            return [address, True]  # getrawtransaction(txid, verbose)
-        return [address]
 
     def health_check_request(self, rpc_url: str) -> dict:
         body = {"jsonrpc": "2.0", "id": 1, "method": "getblockcount", "params": []}

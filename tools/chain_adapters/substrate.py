@@ -17,6 +17,7 @@ import json
 from typing import Optional
 
 from .base import ChainAdapter, register, _vegeta_post_json, _try_int
+from .param_spec import build_params_from_spec
 
 
 @register("substrate")
@@ -25,28 +26,11 @@ class SubstrateAdapter(ChainAdapter):
     def build_vegeta_target(
         self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
-        # 批1 过渡: 签名已统一为 (inputs, param_spec); 内部暂用兼容 address 喂老 _build_params。
-        # param_format 由 cli 塞进 inputs["_param_format"](过渡键); 批3 切到
-        # param_spec.build_params_from_spec(需先补 substrate 专有枚举进 PRESETS)后删除此过渡。
-        from .base import _account_from_inputs
-        params = self._build_params(inputs.get("_param_format", ""), _account_from_inputs(inputs))
+        # 批3a: 切 param_spec 真构造器(substrate jsonrpc_list 类枚举已在 PRESETS)。
+        # path_* 类 method(polkadot Sidecar)走批3b REST 构造, 在此 fail-fast(归批3b)。
+        params = build_params_from_spec(param_spec, inputs)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
-
-    @staticmethod
-    def _build_params(param_format: str, address: str) -> list:
-        if param_format in ("no_params", ""):
-            return []
-        if param_format == "single_address":
-            return [address]
-        if param_format == "storage_key":
-            # state_getStorage: [storage_key, block_hash?]
-            return [address]
-        if param_format == "block_hash":
-            return [address]
-        if param_format == "address_with_block":
-            return [address, None]
-        return [address]
 
     def health_check_request(self, rpc_url: str) -> dict:
         """Substrate health = `chain_getHeader` (no params) → result.number is 0x-hex."""
