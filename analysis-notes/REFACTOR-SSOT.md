@@ -94,6 +94,11 @@ NS 对应(NORTH-STAR): NS-1 36链零代码加链 / NS-2 mixed 模式 per-method 
 - **param_spec.py 草稿现状**: 244行, _VALID_TRANSPORTS(5)/_VALID_SOURCES(6)/_VALID_SHAPES(3) 已对照 design §4 修正; 真问题=0 caller 孤岛 + 缺 spec→params 构造器; docstring source 列表与 _VALID_SOURCES 不一致(待修)。
 - **复杂参数真值地基**: contract_call/filter 的真值见 §5.2 calldata池 + §5.3 filter矩阵 + §5.4 safety守卫。
 **完成判定**: L1 每family param_spec 构造单测(byte==§3实测) / L2 cli.py build-target shim 对每(chain×method) / L3 整框架跑 mixed weight 生效 + 新 method 零代码可配 + 老 _get_param_format/枚举退役。
+**🔴 S1+S2+B3 原子单元批次执行计划(2026-06-05 落盘, 可接续锚点 — 每批独立 commit+L1, 防重构改一半被压缩)**:
+- **批1 接口签名改造(向后兼容)**: base.py L34-41 `build_vegeta_target(method,address,rpc_url,param_format)` → `(method, inputs:dict, rpc_url, param_spec:dict)`; 6 adapter 同步改签名(jsonrpc.py:38 / rest.py:81 / tendermint / substrate / bitcoin_jsonrpc:36 / hedera_dual); cli.py L70+L106 两处调用改传 inputs dict(暂 `{"account":[address]}` 兼容)。**批1 L1 门**: F2 184/184 不退化 + R0 12组过。**批1 不改构造逻辑**(只改签名+透传), 占位基线仍=10。
+- **批2 param_spec 构造器 + jsonrpc 接入**: param_spec.py 新增 `build_params_from_spec(spec, inputs)→list/dict`(按 spec.transport+slots/fields 从 inputs 各池取值, 是 PARAM_FORMAT_PRESETS 已声明结构的执行端); jsonrpc.py `_build_params` 改调 resolve_param_spec+build_params_from_spec(枚举退役为 preset)。**批2 L1 门**: jsonrpc 链每 method 构造 == §3 实测 byte。
+- **批3 推广 5 family + 老枚举退役**: rest/tendermint/substrate/bitcoin/hedera 各接 param_spec 构造器; 6 adapter 老 `_build_params` if-else 删除(成 dead 后删, 成因d); cli.py `_get_param_format` 退役(resolve_param_spec 接管)。**批3 L1 门**: F2 L2 占位基线下降(真值池接入后) + R0 过 + ci_smoke 19/0。
+- **批4 S1 fetch 多池 + mixed weight 真驱动**: fetch_active_accounts.py create_adapter L673 补 bitcoin/UTXO adapter(缺口#2); 写盘 L816-818 改多池 account/tx_hash/block(缺口#3); config_loader L597 保留 _meta.adapter_family(缺口#4); config_loader L540/626/674 读 mixed_weighted + target_generator L260 加权 round-robin(缺口#9, 百分比语义见§3); 36链补真实占比(§3规则)。**批4 L2/L3 门**: fake-node mixed 真跑 weight 比例生效 + 需 tx_hash 的 method 不再占位。
 **权威依据**: design §4(DSL)+ §6.2.3 S2 + fulllink §5阶段2 + callchain §4.2 调用链不断裂点表 + 184 实测文档 + §5.2/§5.3/§5.4 独有事实。
 
 ### 单元 S3 — 响应链 + 关联键 + 归因(缺口 #5/#6/#7/#8/#11/#12)
