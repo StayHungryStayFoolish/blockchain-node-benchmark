@@ -155,6 +155,34 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
             "account_id": {"source": "account"},
         },
     },
+    # ── 批4-c-1收尾: avalanche-x avm.* dict 参数(encoding 字段, fixture 真机结构实证) ──
+    # avm.getBlockByHeight: {height:<块高>, encoding:'hex'}
+    "height_encoding": {
+        "transport": "jsonrpc_dict",
+        "fields": {
+            "height": {"source": "block_height"},
+            "encoding": {"source": "literal", "value": "hex"},
+        },
+    },
+    # avm.getTx: {txID:<交易ID>, encoding:'json'}
+    "txid_encoding": {
+        "transport": "jsonrpc_dict",
+        "fields": {
+            "txID": {"source": "tx_hash"},
+            "encoding": {"source": "literal", "value": "json"},
+        },
+    },
+    # avm.getUTXOs: {addresses:[<account>], limit:5, encoding:'hex'} —— addresses 是数组,
+    # build_params_from_spec jsonrpc_dict 取单值; UTXO 数组语义由 _resolve_slot_value 处理。
+    # 实测 fixture addresses=[X-avax1...], account 池单值, 包成数组由 field source 表达。
+    "addresses_limit_encoding": {
+        "transport": "jsonrpc_dict",
+        "fields": {
+            "addresses": {"source": "account", "wrap_array": True},
+            "limit": {"source": "literal", "value": 5},
+            "encoding": {"source": "literal", "value": "hex"},
+        },
+    },
     # near block: params={finality:'final'}(真机 fixture 实证)
     "block_finality_or_id": {
         "transport": "jsonrpc_dict",
@@ -271,8 +299,12 @@ def _resolve_slot_value(slot: dict, inputs: dict, idx: int):
     if src == "contract_call":
         co = slot.get("call_object", {})
         return _build_call_object(co.get("shape", "evm_call"), inputs, idx, slot)
-    if src in ("account", "tx_hash", "block_height"):
-        return _take(inputs, src, idx)
+    if src in ("account", "tx_hash", "block_height", "business_id"):
+        val = _take(inputs, src, idx)
+        # wrap_array: 该 slot/field 值需包成单元素数组(如 avm.getUTXOs addresses:[addr])
+        if slot.get("wrap_array"):
+            return [val]
+        return val
     raise ParamSpecError(f"slot source {src!r} 构造未实现")
 
 
@@ -454,35 +486,43 @@ def extract_pools_from_fixture(chain: str, method: str, spec: dict) -> dict:
                     pools.setdefault(src, []).append(params[k])
 
     elif transport in ("rest_path", "rest_query", "rest_body"):
-        # REST: path/body 含真值。bindings 声明占位 source; 从 request.json 的 path/body
-        # 提取占位实际值。path 占位 {addr}/{hash}/{height} 与 bindings source 对应。
-        path = req.get("path", "")
+        # REST: 从 request.json 的 path/body 提取占位真值, 按占位 source 归对池。
         bindings = spec.get("bindings", {})
-        # path 占位值: 用 bindings 的占位名 + 真实 path 反推不可靠(路径分段),
-        # 改为: bindings source 决定该占位归哪个池, 真值从 path 末段/body 取。
-        # 简化稳健策略: path 最后一段(非空)= 该 REST method 的主标识真值,
-        # 按 bindings 里首个非 account source 归池(单占位 REST 主流, 实测覆盖)。
-        seg = [s for s in path.split("/") if s and "{" not in s]
-        last_val = seg[-1] if seg else None
-        for ph, b in bindings.items():
-            src = b.get("source")
-            if src in _POOL_SOURCES and last_val is not None:
-                pools.setdefault(src, []).append(last_val)
-                break
-        # body 真值(POST: cardano _tx_hashes / tron contract 等)
-        body = req.get("body")
-        if isinstance(body, dict):
-            for v in _walk_body_values(body):
-                # body 真值归 business_id/tx_hash 视 bindings; 无 bindings 时存 business_id
-                # (POST 类多为业务标识/批量哈希)。精确归池由 bindings source 决定。
-                tgt = None
-                for b in bindings.values():
-                    if b.get("source") in _POOL_SOURCES:
-                        tgt = b["source"]
-                        break
-                if tgt:
-                    pools.setdefault(tgt, []).append(v)
+        body_template = spec.get("body_template")
+
+        # --- path 占位(rest_path/rest_query): bindings 声明每个占位的 source ---
+        path = req.get("path", "")
+        if path and bindings:
+            seg = [s for s in path.split("/") if s and "{" not in s]
+            last_val = seg[-1] if seg else None
+            for ph, b in bindings.items():
+                src = b.get("source")
+                if src in _POOL_SOURCES and last_val is not None:
+                    pools.setdefault(src, []).append(last_val)
                     break
+
+        # --- body 占位(rest_body): body_template 的 {X} 占位名 = 池名(或映射到 business_id) ---
+        # request.json body 形态两种: ① 有包装 {"http","path","body":{...}} ② 整个 req 即 body
+        if body_template is not None:
+            actual_body = req.get("body")
+            if not isinstance(actual_body, (dict, list)):
+                # 无 body 包装 → 整个 request(去掉 http/path/id 等元字段)当 body
+                actual_body = {k: v for k, v in req.items()
+                               if k not in ("http", "path", "method", "jsonrpc", "id")}
+            # body_template 占位名 → 池(policy/asset_name/workchain/shard/seqno → business_id)
+            _BIZ_ALIASES = ("policy", "asset_name", "workchain", "shard", "seqno", "business_id")
+            tmpl_str = json.dumps(body_template)
+            placeholders = re.findall(r"\{([a-z_]+)\}", tmpl_str)
+            real_vals = list(_walk_body_values(actual_body))
+            # 占位顺序 == body_template 标量出现顺序 == request body 标量顺序(同 method 两面)
+            vi = 0
+            for ph in placeholders:
+                if vi >= len(real_vals):
+                    break
+                pool = "business_id" if ph in _BIZ_ALIASES else ph
+                if pool in _POOL_SOURCES:
+                    pools.setdefault(pool, []).append(real_vals[vi])
+                vi += 1
     return pools
 
 

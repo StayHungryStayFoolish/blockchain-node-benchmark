@@ -138,9 +138,15 @@ class RestAdapter(ChainAdapter):
             # business 占位(business_id/policy/asset_name 等)从 business_id 池取; 池空 fail-fast
             # (不退 account — 合约地址/资产标识/池ID 等业务标识非用户账户地址, 退 account 会填错值,
             #  2026-06-05 自检发现的真 bug: cardano policy + tron contract_address 都犯过)。批4 补 business_id 池。
+            # business 占位按【出现顺序递增 idx】取值: 同一 body 多个业务占位
+            # (如 cardano {policy}+{asset_name})是语义不同的值, 必须取 business_id
+            # 池的不同元素(idx 0,1,2...), 不能都取 idx=0(否则 policy/asset_name 填同值,
+            #  2026-06-05 token-level 实测 bug: 两值都填成 policy)。
+            _biz_idx = 0
             for biz in re.findall(r"\{(business_id|policy|asset_name|workchain|shard|seqno)\}", body_str):
-                val = _take(inputs, "business_id", 0)
-                body_str = body_str.replace("{" + biz + "}", str(val))
+                val = _take(inputs, "business_id", _biz_idx)
+                body_str = body_str.replace("{" + biz + "}", str(val), 1)
+                _biz_idx += 1
             body = json.loads(body_str)
             return _vegeta_post_json(full_url, body)
 
