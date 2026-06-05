@@ -94,6 +94,66 @@ func loadChainTemplate(chainsDir, chain string) (chainTemplate, string, error) {
 	return tpl, family, nil
 }
 
+// buildMethodsFromChainTemplate 是乙方案(2026-06-05 用户拍板)的核心:
+// fake-node 的 method 列表【单一真相源 = config/chains/<chain>.json 的 rpc_methods】,
+// 不再用 family yaml 的 methods 段(那是 parallel-entry 漂移源 — yaml 与 config 各自维护,
+// 实测漂移 89 个 method: config 配了但 yaml 没声明 → fake-node mixed 打过去 404)。
+//
+// 规则:
+//   - method 列表 = rpc_methods.single + rpc_methods.mixed_weighted[].method(去重)
+//   - fixture 文件名 = 双转换规则(与 ci/check_fixture_coverage.py fixture_name() 一致):
+//       带 HTTP 动词前缀(含空格, 如 "GET /v2/x")→ 空格→_ 且 /→_  ("GET__v2_x")
+//       以 / 开头无动词(如 "/status")→ /→_ 去前导_  ("status")
+//       否则原样(eth_getBalance / system_account)
+//   - tier = yaml 若声明了该 method 则取其 tier, 否则默认 "mid"(yaml 降级为可选 tier 微调源)
+func fixtureNameFromMethod(method string) string {
+	if strings.Contains(method, " ") {
+		// 带 HTTP 动词前缀: "GET /v2/x" → "GET__v2_x"
+		return strings.ReplaceAll(strings.ReplaceAll(method, " ", "_"), "/", "_") + ".json"
+	}
+	// "/status" → "status" ; "eth_getBalance"/"system_account" 原样
+	return strings.TrimPrefix(strings.ReplaceAll(method, "/", "_"), "_") + ".json"
+}
+
+func buildMethodsFromChainTemplate(tpl chainTemplate, yamlMethods map[string]MethodSpec) (map[string]MethodSpec, error) {
+	rm, ok := tpl["rpc_methods"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("chain template: rpc_methods missing or not an object")
+	}
+	out := make(map[string]MethodSpec)
+	add := func(method string) {
+		if method == "" {
+			return
+		}
+		if _, exists := out[method]; exists {
+			return
+		}
+		tier := "mid" // default; yaml 可微调
+		if ys, ok := yamlMethods[method]; ok && ys.Tier != "" {
+			tier = ys.Tier
+		}
+		out[method] = MethodSpec{Fixture: fixtureNameFromMethod(method), Tier: tier}
+	}
+	// single
+	if s, ok := rm["single"].(string); ok {
+		add(s)
+	}
+	// mixed_weighted[].method
+	if mw, ok := rm["mixed_weighted"].([]any); ok {
+		for _, item := range mw {
+			if m, ok := item.(map[string]any); ok {
+				if name, ok := m["method"].(string); ok {
+					add(name)
+				}
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("chain template rpc_methods produced 0 methods (single+mixed_weighted both empty?)")
+	}
+	return out, nil
+}
+
 // ---- YAML loading ----
 
 func loadConfig(path string) (*Config, error) {
@@ -129,11 +189,11 @@ func loadConfig(path string) (*Config, error) {
 // Missing fixtures are warned (not fatal) so a chain's fixtures dir only needs
 // the methods it actually uses. RPC calls to a method with no fixture return
 // 404 at request time.
-func loadFixtures(cfg *Config, fixturesDir, chain string) (map[string][]byte, error) {
+func loadFixtures(methods map[string]MethodSpec, fixturesDir, chain string) (map[string][]byte, error) {
 	out := make(map[string][]byte)
 	chainDir := filepath.Join(fixturesDir, chain)
 	loaded, missing := 0, 0
-	for method, spec := range cfg.Methods {
+	for method, spec := range methods {
 		path := filepath.Join(chainDir, spec.Fixture)
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -520,9 +580,17 @@ func main() {
 	if cfg.Family != "" && cfg.Family != family {
 		log.Fatalf("config family mismatch: yaml says %q but chain dispatches %q", cfg.Family, family)
 	}
-	log.Printf("config %s: %d methods, family=%s", cfgPath, len(cfg.Methods), family)
 
-	fixtures, err := loadFixtures(cfg, *fixturesDir, chain)
+	// 乙方案(2026-06-05): method 列表【单一真相源 = config/chains rpc_methods】,
+	// 不用 yaml 的 methods 段(消除 yaml↔config 漂移)。yaml 仅供 tier 微调 + IO。
+	methods, err := buildMethodsFromChainTemplate(tpl, cfg.Methods)
+	if err != nil {
+		log.Fatalf("build methods from chain template (%s): %v", chain, err)
+	}
+	log.Printf("methods source = config/chains/%s.json rpc_methods: %d methods (yaml tier override: %d declared)",
+		chain, len(methods), len(cfg.Methods))
+
+	fixtures, err := loadFixtures(methods, *fixturesDir, chain)
 	if err != nil {
 		log.Fatalf("load fixtures: %v", err)
 	}
@@ -541,7 +609,7 @@ func main() {
 	go runIOWorker(cfg.IO, rng, stop)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", handleRPC(handler, fixtures, tiers, cfg.Methods))
+	mux.HandleFunc("/", handleRPC(handler, fixtures, tiers, methods))
 	mux.HandleFunc("/stats", handleStats)
 
 	srv := &http.Server{Addr: ":" + *port, Handler: mux}
