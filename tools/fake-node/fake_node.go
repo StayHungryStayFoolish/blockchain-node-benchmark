@@ -382,8 +382,16 @@ func handleRPC(handler handlers.Handler, fixtures map[string][]byte, tiers map[s
 
 // isPathBasedRequest returns true if the URL path is non-trivial (not "/"),
 // indicating a path-routed REST/path-style request rather than JSON-RPC envelope.
+//
+// 例外(2026-06-05 批3 跨语言一致性修复): "/jsonrpc" 是 JSON-RPC 约定路径(tron
+// api.trongrid.io 同时暴露 /wallet REST 和 /jsonrpc JSON-RPC; python adapter 把
+// EVM eth_* 的 target url 指向 LOCAL_RPC_URL/jsonrpc)。它承载 JSON-RPC envelope
+// (body 有 method), 必须按 envelope 处理(读 body.method), 不是 path-based 路由。
 func isPathBasedRequest(r *http.Request) bool {
 	p := strings.TrimSpace(r.URL.Path)
+	if p == "/jsonrpc" {
+		return false // JSON-RPC envelope 约定路径(tron eth_* 等), 按 body.method 路由
+	}
 	return p != "" && p != "/"
 }
 
