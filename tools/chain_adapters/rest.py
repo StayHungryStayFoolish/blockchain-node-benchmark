@@ -78,35 +78,102 @@ class RestAdapter(ChainAdapter):
             body = json.loads(body_json_str)
         return spec.get("method", "GET"), path, body
 
+    def _path_from_method_or_map(self, chain_name: str, method: str) -> tuple[str, str]:
+        """返回 (http_method, path_template)。两种来源:
+        ① method 名带 HTTP 动词前缀("GET /cosmos/.../{addr}")→ 拆出动词 + path
+        ② method 名是逻辑名 → _meta.rest_paths[method] 映射(cardano GET_TIP→/tip)
+        """
+        m = method.strip()
+        if m[:4].upper() in ("GET ", "POST") and " " in m:
+            verb, path = m.split(" ", 1)
+            return verb.upper(), path
+        if m.startswith("/"):
+            # method 名本身是 path(无 HTTP 动词前缀, 如 /cosmos/.../balances/{address})
+            # → 默认 GET(tendermint LCD / cosmos REST 多为 GET 查询)
+            return "GET", m
+        # 逻辑名 → rest_paths 映射
+        tpl = self._load_chain(chain_name)
+        rest_paths = tpl.get("_meta", {}).get("rest_paths", {})
+        if method in rest_paths:
+            spec = rest_paths[method]
+            return spec.get("method", "GET").upper(), spec["path"]
+        raise ValueError(
+            f"REST chain {chain_name}: method {method!r} 既非 'VERB /path' 形态, "
+            f"也不在 _meta.rest_paths。Available rest_paths: {list(rest_paths)}"
+        )
+
     def build_vegeta_target(
         self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
-        """For REST, `method` is a logical method NAME mapped via _meta.rest_paths.
-        rpc_url base is the chain's base URL (LOCAL_RPC_URL). The full URL is
-        rpc_url + path. The chain name is taken from BLOCKCHAIN_NODE env var
-        (master_qps_executor sets this).
+        """REST 声明式构造(批3b, S3.8): 按 param_spec transport 从 inputs 多池构造。
 
-        批1 过渡: 签名统一为 (inputs, param_spec); 内部用兼容 address 替换 {address}。
-        REST path 占位参数({addr}/{hash}/{height})路由是 S3.8 待修(归 S2/S3 REST 处理)。
+        path 来自 method 名("GET /cosmos/.../{addr}")或 _meta.rest_paths 映射。
+        param_spec.transport:
+          rest_path  — path 占位按 bindings 从 inputs 对应池取值替换(占位污染修复:
+                       {hash} 从 tx_hash 池, {height} 从 block_height 池, 非全 account)
+          rest_query — path + query string(bindings 替占位 + query 拼 ?k=v)
+          rest_body  — POST body_template 占位从 inputs 池填
         """
-        from .base import _account_from_inputs
-        address = _account_from_inputs(inputs)
+        from .param_spec import _take, ParamSpecError
         chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
         if not chain_name:
             raise RuntimeError("RestAdapter requires BLOCKCHAIN_NODE env var")
-        http_method, path, body = self._resolve_path(chain_name, method, address)
-        # Strip trailing slash from rpc_url, ensure path starts with /
+        http_method, path = self._path_from_method_or_map(chain_name, method)
+        transport = param_spec.get("transport", "rest_path")
+
+        # ── path 占位替换(bindings 声明每个占位的 source 池)──
+        bindings = param_spec.get("bindings", {})
+        placeholders = re.findall(r"\{(\w+)\}", path)
+        for ph in placeholders:
+            bind = bindings.get(ph)
+            if bind is None:
+                # 兼容历史: path 占位无 bindings 声明 → 默认 account 池(占位污染过渡)
+                val = _take(inputs, "account", 0)
+            elif bind.get("source") == "literal":
+                val = str(bind["value"])
+            else:
+                val = str(_take(inputs, bind["source"], 0))
+            path = path.replace("{" + ph + "}", val)
+
         base = rpc_url.rstrip("/")
         if not path.startswith("/"):
             path = "/" + path
         full_url = base + path
-        if http_method.upper() == "GET":
+
+        # ── rest_query: 拼 query string ──
+        if transport == "rest_query":
+            query = param_spec.get("query", {})
+            qs = []
+            for qk, qv in query.items():
+                if qv.get("source") == "literal":
+                    qs.append(f"{qk}={qv['value']}")
+                else:
+                    qs.append(f"{qk}={_take(inputs, qv['source'], 0)}")
+            if qs:
+                sep = "&" if "?" in full_url else "?"
+                full_url = full_url + sep + "&".join(qs)
             return _vegeta_get(full_url)
-        else:
-            # ADR-0005 fix: read body from _meta.rest_paths[method].body template
-            # (falls back to empty dict to preserve old behavior for chains that
-            # haven't declared a body template yet).
-            return _vegeta_post_json(full_url, body if body is not None else {})
+
+        # ── rest_body: POST body 模板从 inputs 池填 ──
+        if transport == "rest_body":
+            body_template = param_spec.get("body_template", {})
+            body_str = json.dumps(body_template)
+            # 替换 {account}/{tx_hash}/{block_height}/{policy}/{asset_name} 等占位
+            for src in ("account", "tx_hash", "block_height"):
+                if "{" + src + "}" in body_str:
+                    body_str = body_str.replace("{" + src + "}", str(_take(inputs, src, 0)))
+            # business 占位(policy/asset_name)— 无专池时退 account(过渡, 批4 补 business 池)
+            for biz in ("policy", "asset_name"):
+                if "{" + biz + "}" in body_str:
+                    biz_pool = inputs.get(biz) or inputs.get("account") or ["placeholder"]
+                    body_str = body_str.replace("{" + biz + "}", str(biz_pool[0]))
+            body = json.loads(body_str)
+            return _vegeta_post_json(full_url, body)
+
+        # ── rest_path(默认): 占位已替换, GET ──
+        if http_method == "POST":
+            return _vegeta_post_json(full_url, {})
+        return _vegeta_get(full_url)
 
     def health_check_request(self, rpc_url: str) -> dict:
         """REST health probe varies per chain. Default: GET / (root).

@@ -140,6 +140,35 @@ PARAM_FORMAT_PRESETS: dict[str, dict] = {
         "transport": "jsonrpc_list",
         "slots": [{"source": "tx_hash"}, {"source": "account"}],
     },
+
+    # ── 批3b: REST transport 预设(rest_path/rest_query/rest_body) ──
+    # method 名本身是 path 模板(GET /cosmos/.../{addr}); PRESET 声明 transport +
+    # 占位名→source 池映射。rest.py 按此从 inputs 多池取值替换占位 / 拼 query / 填 body。
+    # 占位污染修复: {address} 历史被硬塞, 这里声明真实 source(txid→tx_hash 非 account)。
+    #
+    # rest_path: path 占位替换。bindings 声明每个占位从哪个 source 池取。
+    "path_addr": {"transport": "rest_path", "bindings": {"addr": {"source": "account"}, "address": {"source": "account"}}},
+    "path_address": {"transport": "rest_path", "bindings": {"address": {"source": "account"}, "addr": {"source": "account"}}},
+    "path_addr_base32": {"transport": "rest_path", "bindings": {"address": {"source": "account"}, "addr": {"source": "account"}}},
+    "path_hash": {"transport": "rest_path", "bindings": {"hash": {"source": "tx_hash"}}},
+    "path_hash_upper_hex_no_prefix": {"transport": "rest_path", "bindings": {"hash": {"source": "tx_hash"}}},
+    "path_txid_base32": {"transport": "rest_path", "bindings": {"txid": {"source": "tx_hash"}}},
+    "path_height": {"transport": "rest_path", "bindings": {"height": {"source": "block_height"}}},
+    "path_round_int": {"transport": "rest_path", "bindings": {"round": {"source": "block_height"}}},
+    "path_asset_id_int": {"transport": "rest_path", "bindings": {"asset_id": {"source": "block_height"}}},  # 数值池复用 block_height(business 数值)
+    "path_pool_id": {"transport": "rest_path", "bindings": {"pool_id": {"source": "block_height"}}},
+    "path_block_and_vp": {"transport": "rest_path", "bindings": {"block": {"source": "block_height"}, "vp": {"source": "literal", "value": "0"}}},
+    "path_addr_query_limit": {"transport": "rest_query", "bindings": {"address": {"source": "account"}, "addr": {"source": "account"}}, "query": {"limit": {"source": "literal", "value": "10"}}},
+    # rest_query: path(可能含占位) + query string
+    "query_pagination": {"transport": "rest_query", "query": {"pagination.limit": {"source": "literal", "value": "10"}}},
+    "query_params": {"transport": "rest_query", "query": {}},  # 具体 query 由 method 自带(twap 等), 占位为空安全
+    "query_epoch_int": {"transport": "rest_query", "query": {}},
+    # rest_body: POST body 模板。fields 声明 body 各字段从哪个 source 取(数组形态)。
+    "body_addresses_array": {"transport": "rest_body", "http_method": "POST", "body_template": {"_addresses": ["{account}"]}},
+    "body_tx_hashes_array": {"transport": "rest_body", "http_method": "POST", "body_template": {"_tx_hashes": ["{tx_hash}"]}},
+    "body_block_hashes_array": {"transport": "rest_body", "http_method": "POST", "body_template": {"_block_hashes": ["{block_height}"]}},
+    "asset_policy_name": {"transport": "rest_body", "http_method": "POST", "body_template": {"_asset_list": [["{policy}", "{asset_name}"]]}},
+    "move_view_call": {"transport": "rest_body", "http_method": "POST", "body_template": {"function": "0x1::coin::balance", "type_arguments": ["0x1::aptos_coin::AptosCoin"], "arguments": ["{account}"]}},
 }
 
 
@@ -309,9 +338,9 @@ def validate_spec(method: str, spec: dict) -> None:
             raise ParamSpecError(f"method {method!r}: query {qk!r} source {src!r} invalid")
         if src == "literal" and "value" not in qv:
             raise ParamSpecError(f"method {method!r}: literal query {qk!r} missing 'value'")
-    # rest_* 需 path
-    if transport in ("rest_path", "rest_query") and not spec.get("path"):
-        raise ParamSpecError(f"method {method!r}: transport {transport} requires 'path'")
+    # rest_path/rest_query: path 来自 method 名(method 名本身是 path 模板, 如
+    # "GET /cosmos/.../{addr}"), 或 _meta.rest_paths 映射(逻辑名→path)。spec 不强制 path。
+    # 批3b: 占位替换/query 由 bindings/query 声明 source, rest.py 按 method名path + bindings 构造。
     # rest_body / POST 类需 http_method(GET 默认, POST 显式)
     hm = spec.get("http_method")
     if hm is not None and hm not in ("GET", "POST"):

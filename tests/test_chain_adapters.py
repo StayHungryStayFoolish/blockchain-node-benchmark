@@ -359,34 +359,21 @@ def test_evm_compat_5chains_standard_enum():
 # (chain, expected_failure_mode, fix_wave_owner, reason)
 KNOWN_BROKEN_CLI = {
     # ─────────────────────────────────────────────────────────────────────
-    # S1+S2+B3 原子单元批1+批2(2026-06-05): 接口签名 address→inputs:dict +
-    # jsonrpc 切 param_spec 真构造器(废除 address 占位)。下列 12 链的 method 因
-    # 下游批次未到而 fail-fast(诚实, 非占位兜底), 归属明确:
-    #   批3(rest_path 构造 + 补 PRESETS): rest/tendermint path 类 method —
-    #     algorand/aptos/cardano/celestia/cosmos-hub/hedera/injective/osmosis/
-    #     tezos/tron(REST path 占位参数 {addr}/{hash}/{height}, 见 SSOT S3.8)
-    #   批4(S1 多池真值供给): tx_hash/block 类 method 池空 fail-fast —
-    #     near(tx [hash,signer_id]), ton(runGetMethod 复杂参数)
-    # 批3/批4 完成后这些链转 healthy, 从本表移除(must shrink, never grow)。
+    # 批3b(2026-06-05) REST 声明式构造 + 占位污染修复后: 8 链转 healthy
+    # (algorand/aptos/cardano/celestia/cosmos-hub/injective/osmosis/tezos —
+    # rest.py 按 param_spec transport 构造 path/query/body, 占位从 inputs 多池取值;
+    # tendermint LCD path method 委托 RestAdapter 修 S3.7 协议错配)。
+    # 剩 4 链专有复杂参数待批3b 收尾 + 批4 真值池:
     # ─────────────────────────────────────────────────────────────────────
-    "algorand": ("rest_path_placeholder", "批3 S3.8", "GET /v2/... path 占位参数构造待批3"),
-    "aptos": ("rest_path_placeholder", "批3 S3.8", "GET /v1/... path 占位参数构造待批3"),
-    "cardano": ("rest_body_pool", "批3+批4", "POST_TX_INFO 需 tx_hash 池(批4) + POST body 构造(批3)"),
-    "celestia": ("rest_path_placeholder", "批3 S3.8", "/cosmos REST path 占位待批3"),
-    "cosmos-hub": ("rest_path_placeholder", "批3 S3.8", "/cosmos REST path 占位待批3"),
-    "hedera": ("rest_path_placeholder", "批3 S3.8", "/api/v1 Mirror REST path 占位待批3"),
-    "injective": ("rest_path_placeholder", "批3 S3.8", "/cosmos+/injective REST path 待批3"),
-    "near": ("tx_hash_pool", "批4 S1", "tx [hash,signer_id] 需 tx_hash 池(批4 S1 供给)"),
-    "osmosis": ("rest_path_placeholder", "批3 S3.8", "/osmosis REST path 占位待批3"),
-    "tezos": ("rest_path_placeholder", "批3 S3.8", "/chains/main REST path 占位待批3"),
-    "ton": ("complex_params", "批3+批4", "runGetMethod 复杂参数构造待批3 + 真值待批4"),
-    "tron": ("rest_body_pool", "批3 S3.8", "/wallet REST body 构造待批3"),
+    "hedera": ("hedera_dual_rest", "批3b收尾", "hedera_dual REST 侧 method 缺 param_format + 未走 rest 构造修复"),
+    "near": ("near_query_dispatcher", "批3b收尾", "query dispatcher_request_type 等 near 专有枚举缺 PRESET"),
+    "ton": ("ton_complex_params", "批3b收尾+批4", "自然语言枚举(getAddressBalance 等)需显式 param_spec + 真值"),
+    "tron": ("tron_rest_body", "批3b收尾", "/wallet/* REST body_* 枚举缺 PRESET(body_address_visible 等)"),
 }
 
-assert len(KNOWN_BROKEN_CLI) == 12, (
-    f"KNOWN_BROKEN_CLI 应为 12 条(批1+批2 阶段: jsonrpc account 类已迁移真构造器, "
-    f"剩 12 链 rest path/tx_hash 类待批3/批4)。批3/批4 完成后递减至 0。"
-    f"got {len(KNOWN_BROKEN_CLI)}"
+assert len(KNOWN_BROKEN_CLI) == 4, (
+    f"KNOWN_BROKEN_CLI 应为 4 条(批3b 后 32/36 healthy, 剩 hedera/near/ton/tron "
+    f"专有复杂参数待批3b收尾+批4)。must shrink never grow。got {len(KNOWN_BROKEN_CLI)}"
 )
 
 
