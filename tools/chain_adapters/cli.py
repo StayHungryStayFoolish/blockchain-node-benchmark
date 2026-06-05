@@ -55,7 +55,16 @@ def _build_inputs_and_spec(chain: str, method: str, address: str, param_format_o
             )
     else:
         spec = ps.resolve_param_spec(method, chain_param_spec, chain_param_formats)
+    # 输入池: account 来自 --address(CLI 传入)。批4-c-1: 需 tx_hash/block_height/
+    # business_id 的 method, 从该 method 的 <method>.request.json 提取真值填对应池
+    # (fake-node/CI 路径, SSOT §S1 R-D)。真节点路径(4-c-2)由 fetch 抓, 待真机窗口。
     inputs = {"account": [address]}
+    fixture_pools = ps.extract_pools_from_fixture(chain, method, spec)
+    for pool_key, vals in fixture_pools.items():
+        if pool_key == "account":
+            continue  # account 用 CLI --address, 不被 fixture 覆盖
+        if vals:
+            inputs.setdefault(pool_key, []).extend(vals)
     return inputs, spec
 
 

@@ -594,7 +594,9 @@ generate_auto_config() {
         if [[ ! -f "$chain_file" ]]; then
             CHAIN_CONFIG=""
         else
-            CHAIN_CONFIG=$(jq -c 'del(._meta)' "$chain_file")
+            # 缺口#4(SSOT §S1 L70): 保留 _meta.adapter_family(fetch InputProvider 按
+            # family 分派需要), 删 _meta 其余键(保持下游 shape 不变)。
+            CHAIN_CONFIG=$(jq -c '. as $r | (._meta.adapter_family // empty) as $fam | del(._meta) | if $fam != null and $fam != "" then . + {"_adapter_family": $fam} else . end' "$chain_file")
         fi
         # Cache parsing result
         if [[ "$CHAIN_CONFIG" != "null" && -n "$CHAIN_CONFIG" ]]; then

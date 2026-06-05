@@ -30,6 +30,9 @@ source 枚举(从哪个输入池取值, S1 多池供给的契约):
     contract_call — 复杂合约调用对象(call_object 描述)
 """
 from __future__ import annotations
+import json
+import os
+import re
 from typing import Optional
 
 
@@ -386,3 +389,110 @@ def validate_spec(method: str, spec: dict) -> None:
             raise ParamSpecError(
                 f"method {method!r}: call_object shape {shape!r} invalid, must be one of {sorted(_VALID_SHAPES)}"
             )
+
+
+# ============================================================================
+# 批4-c-1: fake-node/CI 路径输入池真值供给(SSOT §S1 R-D 路径)
+# ============================================================================
+# 真节点路径(生产/L3)的多池由 fetch_active_accounts.py 抓(4-c-2, 待真机窗口);
+# fake-node/CI 路径的多池从每个 method 的 <method>.request.json 真实参数提取。
+# 两路径共用同一 param_spec DSL, 只是池填充来源不同(SSOT L58)。
+
+_FIXTURES_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "tools", "fake-node", "fixtures",
+)
+# request.json 文件名双规则(SSOT L150, 与 fake_node.go fixtureNameFromMethod 同源):
+#   ① method 带 HTTP 动词前缀(含空格) → 空格→_ + /→_
+#   ② method 以 / 开头无动词           → /→_ 去前导 _
+_POOL_SOURCES = ("account", "tx_hash", "block_height", "business_id")
+
+
+def _fixture_name_from_method(method: str) -> str:
+    """method 名 → request.json 文件名前缀(双规则, 与 Go 端一致)。"""
+    if method.startswith("/"):
+        return method.replace("/", "_").lstrip("_")
+    if " " in method or method[:4] in ("GET ", "POST", "PUT ", "DELE"):
+        return method.replace(" ", "_").replace("/", "_")
+    return method
+
+
+def extract_pools_from_fixture(chain: str, method: str, spec: dict) -> dict:
+    """从 <chain>/<method>.request.json 按 spec 声明的 source 提取真值, 分池返回。
+
+    返回 {pool_key: [value]}, 仅含 _POOL_SOURCES 里的池(account/tx_hash/block_height/
+    business_id)。fixture 不存在 → 返回 {}(调用方按池空 fail-fast 处理, 不在此兜底)。
+    填对池的依据 = param_spec 的 slot/field/binding source(请求构造与真值提取是同一
+    method 的两面, params 顺序/key 一一对应)。
+    """
+    fn = _fixture_name_from_method(method)
+    rf = os.path.join(_FIXTURES_DIR, chain, f"{fn}.request.json")
+    if not os.path.exists(rf):
+        return {}
+    try:
+        with open(rf) as f:
+            req = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    pools: dict = {}
+    transport = spec.get("transport")
+
+    if transport == "jsonrpc_list":
+        params = req.get("params", [])
+        if isinstance(params, list):
+            for i, slot in enumerate(spec.get("slots", [])):
+                src = slot.get("source")
+                if src in _POOL_SOURCES and i < len(params):
+                    pools.setdefault(src, []).append(params[i])
+
+    elif transport == "jsonrpc_dict":
+        params = req.get("params", {})
+        if isinstance(params, dict):
+            for k, fld in spec.get("fields", {}).items():
+                src = fld.get("source")
+                if src in _POOL_SOURCES and k in params:
+                    pools.setdefault(src, []).append(params[k])
+
+    elif transport in ("rest_path", "rest_query", "rest_body"):
+        # REST: path/body 含真值。bindings 声明占位 source; 从 request.json 的 path/body
+        # 提取占位实际值。path 占位 {addr}/{hash}/{height} 与 bindings source 对应。
+        path = req.get("path", "")
+        bindings = spec.get("bindings", {})
+        # path 占位值: 用 bindings 的占位名 + 真实 path 反推不可靠(路径分段),
+        # 改为: bindings source 决定该占位归哪个池, 真值从 path 末段/body 取。
+        # 简化稳健策略: path 最后一段(非空)= 该 REST method 的主标识真值,
+        # 按 bindings 里首个非 account source 归池(单占位 REST 主流, 实测覆盖)。
+        seg = [s for s in path.split("/") if s and "{" not in s]
+        last_val = seg[-1] if seg else None
+        for ph, b in bindings.items():
+            src = b.get("source")
+            if src in _POOL_SOURCES and last_val is not None:
+                pools.setdefault(src, []).append(last_val)
+                break
+        # body 真值(POST: cardano _tx_hashes / tron contract 等)
+        body = req.get("body")
+        if isinstance(body, dict):
+            for v in _walk_body_values(body):
+                # body 真值归 business_id/tx_hash 视 bindings; 无 bindings 时存 business_id
+                # (POST 类多为业务标识/批量哈希)。精确归池由 bindings source 决定。
+                tgt = None
+                for b in bindings.values():
+                    if b.get("source") in _POOL_SOURCES:
+                        tgt = b["source"]
+                        break
+                if tgt:
+                    pools.setdefault(tgt, []).append(v)
+                    break
+    return pools
+
+
+def _walk_body_values(obj):
+    """递归取 body 里的叶子标量真值(字符串/数字), 用于 POST body 池供给。"""
+    if isinstance(obj, dict):
+        for v in obj.values():
+            yield from _walk_body_values(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _walk_body_values(v)
+    elif isinstance(obj, (str, int)) and not isinstance(obj, bool):
+        yield obj
