@@ -123,6 +123,12 @@ NS 对应(NORTH-STAR): NS-1 36链零代码加链 / NS-2 mixed 模式 per-method 
 - **批4 S1 fetch 多池 + mixed weight 真驱动**: fetch_active_accounts.py create_adapter L673 补 bitcoin/UTXO adapter(缺口#2); 写盘 L816-818 改多池 account/tx_hash/block(缺口#3); config_loader L597 保留 _meta.adapter_family(缺口#4); config_loader L540/626/674 读 mixed_weighted + target_generator L260 加权 round-robin(缺口#9, 百分比语义见§3); 36链补真实占比(§3规则)。**批4 L2/L3 门**: fake-node mixed 真跑 weight 比例生效 + 需 tx_hash 的 method 不再占位。
 **权威依据**: design §4(DSL)+ §6.2.3 S2 + fulllink §5阶段2 + callchain §4.2 调用链不断裂点表 + 184 实测文档 + §5.2/§5.3/§5.4 独有事实。
 
+- **🔴 批3 逐维度复查 — 删死函数 + 修 --param-format 失效(2026-06-05 commit, 用户"删码前确认成因(重构未集成/设计漏接/真死)?"探针逼出, 门 R0/F2 都测不出)**:
+  - **债6 `_get_param_format`(cli.py)0-caller 死函数 → 已删**。**成因核查(四分类, 非凭 caller=0 武断)**: git `-S'_get_param_format('` 追调用形态, 实证 **39c3f92(批3 4债清理)删其最后调用点 `fmt = override or _get_param_format(...)` 时把定义留下 = 成因a(重构转移孤儿)**, 非设计漏接非真无意义。**等价性实跑确认功能真被 resolve_param_spec 接管**: 分支1 旧返 `address_latest` ↔ 新 resolve `jsonrpc_list[account,literal]` 等价(都从 param_formats[method] 取); 分支2 旧静默 fallback `single_address` ↔ 新 R3 fail-fast = **有意行为改变**(design S2.5 拒绝静默兜底, 非丢功能)。
+  - **债7 `--param-format` flag 静默失效(成因b 重构遗漏功能回归)→ 已修**。**根因**: 39c3f92 删 `_get_param_format` 调用时, **连同 `override or` 的 override 生效逻辑一起砍**, 只留注释假称"保留向后兼容" → 用户传 `--param-format` 被静默吞掉(契约破坏: argparse L142 声明 + usage L7 文档化, 但函数体不用)。**修复**: `_build_inputs_and_spec` 中 param_format_override 非空时 `expand_preset` 覆盖 template, 无 PRESET → R3 fail-fast。**实跑三态验证**: 不传→走template(`eth_getBalance` params=[addr,latest]) / `--param-format no_params`→override生效(params=[]) / `--param-format BOGUS`→R3 fail-fast 报错。
+  - **元教训**: "删 0-caller 函数"必先 `git -S` 追成因(四分类: a重构转移/b重构遗漏/c调用链断/d真无意义)+ 逐分支实跑等价性, 不凭 caller=0 武断。成因核查本身刨出更深的债(债7): 同一 commit 删死调用时连带砍了 override 生效逻辑——这是"门绿≠逻辑对"的又一实证(R0/F2 不传 --param-format 测不到)。
+  - **全门**: R0 12组 / F2 0真bug(152 healthy) / ci_smoke PASS / build-target 36/36 healthy。
+
 ### 单元 S3 — 响应链 + 关联键 + 归因(缺口 #5/#6/#7/#8/#11/#12)
 **涉及代码**: 4 family adapter body id=1(jsonrpc.py:42/104, substrate.py:29/49, tendermint.py:39/62, bitcoin_jsonrpc.py:40/67 共8处)、proxy(handler.go/sink.go/jsonrpc.go:88/rest.go:74)、analysis/per_method_attribution.py、visualization/per_method_charts.py:L241、report_generator.py:4303-4309、common_functions.sh get_block_height、lib/proxy_lifecycle.sh:143。
 **现状(代码实证)**: proxy sink 9列(无req/resp_bytes, design §5.7 校准 Q4-9 文档过时); per-method 归因实测频次权重(design §5.7, 非Q4-7预设1/10/100); 响应主路径不解析body(handler.go:103 不缓冲); parse_block_height 仅 health check(生产 dead path)。

@@ -25,37 +25,6 @@ sys.path.insert(0, _TOOLS_DIR)
 from chain_adapters import get_adapter  # noqa: E402
 
 
-def _get_param_format(chain: str, method: str) -> str:
-    """Read param_format from chain template `param_formats.<method>`.
-
-    Mirrors config_loader.sh:600 `get_param_format_from_json()` (bash path):
-      - reads from `param_formats` (method→format map), NOT `params`
-        (which holds fetcher config like account_count/output_file).
-      - default fallback is "single_address" (matches bash line 105 case).
-
-    Pre-2026-05-24 bug history (cli-param-bug wave):
-      commit 6866cba (S2 skeleton) accidentally read tpl["params"] (fetcher
-      config dict whose values are bash env var names like "ACCOUNT_COUNT")
-      and fell back to "". The JsonRpcAdapter's own default fallback is also
-      `[address]`, so byte-equality test_3 happened to pass via symmetric
-      fallback — but real production calls had wrong params:
-        * eth_getBalance(addr) → [addr]   (should be [addr, "latest"])
-        * eth_blockNumber()    → [addr]   (should be [])
-      Discovered when hedera_dual mixed C1 live-curl returned HTTP 400.
-      See KNOWN_BROKEN_MIXED in tests/test_chain_adapters.py.
-    """
-    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    chain_file = os.path.join(repo_root, "config", "chains", f"{chain}.json")
-    if not os.path.exists(chain_file):
-        return "single_address"
-    with open(chain_file) as f:
-        tpl = json.load(f)
-    param_formats = tpl.get("param_formats", {})
-    if isinstance(param_formats, dict):
-        return param_formats.get(method, "single_address")
-    return "single_address"
-
-
 def _build_inputs_and_spec(chain: str, method: str, address: str, param_format_override: str):
     """构建 (inputs, param_spec) 供 build_vegeta_target 新签名(S2)。
 
@@ -74,9 +43,18 @@ def _build_inputs_and_spec(chain: str, method: str, address: str, param_format_o
             tpl = json.load(f)
         chain_param_spec = tpl.get("param_spec")
         chain_param_formats = tpl.get("param_formats")
-    # param_format_override(cli --param-format)保留向后兼容; resolve_param_spec 内部读
-    # param_formats 枚举展开, 不再走 _param_format 过渡键(批3 切构造器后老 _build_params 已删)。
-    spec = ps.resolve_param_spec(method, chain_param_spec, chain_param_formats)
+    # param_format_override(cli --param-format)显式覆盖 template 的 param_formats[method]:
+    # 用户临时测某 method 用不同 param_format 时不改 template。非空时直接 expand_preset,
+    # 走 R3 fail-fast(无 PRESET 映射则报错, 不静默退化)。空则按 template 解析。
+    if param_format_override:
+        spec = ps.expand_preset(param_format_override)
+        if spec is None:
+            raise ps.ParamSpecError(
+                f"--param-format {param_format_override!r}: no PARAM_FORMAT_PRESETS mapping. "
+                f"(R3: refusing silent fallback)"
+            )
+    else:
+        spec = ps.resolve_param_spec(method, chain_param_spec, chain_param_formats)
     inputs = {"account": [address]}
     return inputs, spec
 
