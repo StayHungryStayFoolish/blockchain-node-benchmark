@@ -95,30 +95,15 @@
       },
       "POST_ADDRESS_INFO": {
         "method": "POST",
-        "path": "/address_info",
-        "body": {
-          "_addresses": [
-            "{address}"
-          ]
-        }
+        "path": "/address_info"
       },
       "POST_TX_INFO": {
         "method": "POST",
-        "path": "/tx_info",
-        "body": {
-          "_tx_hashes": [
-            "{address}"
-          ]
-        }
+        "path": "/tx_info"
       },
       "POST_BLOCK_TXS": {
         "method": "POST",
-        "path": "/block_txs",
-        "body": {
-          "_block_hashes": [
-            "{address}"
-          ]
-        }
+        "path": "/block_txs"
       },
       "GET_EPOCH_INFO": {
         "method": "GET",
@@ -126,15 +111,7 @@
       },
       "POST_ASSET_INFO": {
         "method": "POST",
-        "path": "/asset_info",
-        "body": {
-          "_asset_list": [
-            [
-              "{policy}",
-              "{asset_name}"
-            ]
-          ]
-        }
+        "path": "/asset_info"
       }
     },
     "health_probe": {

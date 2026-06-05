@@ -21,15 +21,11 @@ method 路由规则 (per-request):
 from __future__ import annotations
 import json
 import os
-import re
 from typing import Optional
 
 from .base import ChainAdapter, register, _vegeta_get, _vegeta_post_json, _try_int
 from .rest import RestAdapter, _CHAINS_DIR
 from .jsonrpc import JsonRpcAdapter
-
-
-_JSONRPC_METHOD_RE = re.compile(r"^(eth_|net_|web3_|debug_|trace_)")
 
 
 def _is_rest_method(method: str) -> bool:
@@ -77,12 +73,18 @@ class HederaDualAdapter(ChainAdapter):
             raise RuntimeError("HederaDualAdapter requires BLOCKCHAIN_NODE env var")
         return chain_name
 
-    def _get_jsonrpc_url(self, chain_name: str) -> str:
+    def _get_jsonrpc_url(self, chain_name: str, rpc_url: str = "") -> str:
         """JSON-RPC url comes from chain template _meta.json_rpc_url.
 
         Required because LOCAL_RPC_URL (the single env var used as rpc_url
-        for this run) points at Mirror REST; JSON-RPC traffic needs a
-        separate endpoint (Hashio relay for hedera).
+        for this run) points at REST; JSON-RPC traffic needs its endpoint.
+
+        两种链形态(2026-06-05 批3 收官):
+          - 不同主机(hedera): json_rpc_url 是绝对 URL(https://mainnet.hashio.io/api), 原样用。
+          - 同主机不同 path(tron/polkadot): jsonrpc 与 REST 是同一 LOCAL_RPC_URL 节点的不同 path
+            (tron api.trongrid.io 同时暴露 /wallet 和 /jsonrpc)。config 用 `${LOCAL_RPC_URL}`
+            或 `${LOCAL_RPC_URL}/jsonrpc` 占位, 此处用运行时 rpc_url 展开(shell 占位 python 不自动展开,
+            必须在此替换, 否则字面 ${LOCAL_RPC_URL} 进 URL = 错 URL 真 bug, 批3 自检发现)。
         """
         tpl = self._load_chain(chain_name)
         url = tpl.get("_meta", {}).get("json_rpc_url")
@@ -91,6 +93,9 @@ class HederaDualAdapter(ChainAdapter):
                 f"hedera_dual chain {chain_name}: _meta.json_rpc_url not set; "
                 f"required for routing eth_*/net_*/web3_* methods."
             )
+        # 展开 ${LOCAL_RPC_URL} 占位为运行时 rpc_url(REST 与 jsonrpc 同节点的链)
+        if "${LOCAL_RPC_URL}" in url:
+            url = url.replace("${LOCAL_RPC_URL}", rpc_url.rstrip("/"))
         return url
 
     # ─── ABC contract ──────────────────────────────────────────────────────
@@ -98,10 +103,10 @@ class HederaDualAdapter(ChainAdapter):
     def build_vegeta_target(
         self, method: str, inputs: dict, rpc_url: str, param_spec: dict,
     ) -> dict:
-        # 批1 过渡: 签名统一为 (inputs, param_spec); 双模式委托 jsonrpc/rest 传新签名。
+        # 通用 dual 路由(批3): path风格→rest, 否则→jsonrpc(EVM eth_*/substrate)。
         chain_name = self._get_chain_name()
         if _is_jsonrpc_method(method):
-            jsonrpc_url = self._get_jsonrpc_url(chain_name)
+            jsonrpc_url = self._get_jsonrpc_url(chain_name, rpc_url)  # 传 rpc_url 展开 ${LOCAL_RPC_URL}
             return self._jsonrpc.build_vegeta_target(
                 method=method, inputs=inputs,
                 rpc_url=jsonrpc_url, param_spec=param_spec,

@@ -74,10 +74,10 @@ def _build_inputs_and_spec(chain: str, method: str, address: str, param_format_o
             tpl = json.load(f)
         chain_param_spec = tpl.get("param_spec")
         chain_param_formats = tpl.get("param_formats")
-    fmt = param_format_override or _get_param_format(chain, method)
-    # resolve_param_spec: param_spec[method] 优先, 否则 param_formats 枚举展开(单一构造路径)
+    # param_format_override(cli --param-format)保留向后兼容; resolve_param_spec 内部读
+    # param_formats 枚举展开, 不再走 _param_format 过渡键(批3 切构造器后老 _build_params 已删)。
     spec = ps.resolve_param_spec(method, chain_param_spec, chain_param_formats)
-    inputs = {"account": [address], "_param_format": fmt}
+    inputs = {"account": [address]}
     return inputs, spec
 
 
@@ -130,7 +130,7 @@ def cmd_build_targets_batch(args):
             # param_spec 与 method 一对一(不随 address 变), 缓存; inputs 随 address 每行新建
             _, spec_cache[method] = _build_inputs_and_spec(args.chain, method, address, "")
         spec = spec_cache[method]
-        inputs = {"account": [address], "_param_format": _get_param_format(args.chain, method)}
+        inputs = {"account": [address]}
         target = adapter.build_vegeta_target(
             method=method, inputs=inputs,
             rpc_url=args.rpc_url, param_spec=spec,
