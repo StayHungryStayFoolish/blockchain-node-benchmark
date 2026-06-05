@@ -173,11 +173,12 @@ S3 响应链 + 关联键 + 归因 + 块高归一 + 协议错配
 > 用途: NS-2 per-method 资源归因的 weight 粗粒度配置依据(Q4-7: 公开资料先配粗粒度 1/10/100 三档, 后期实测迭代)。**注: 流量占比数字是定性, 不作精确权重, 用户按实际校准**(research 02 §四原话)。
 
 **EVM(research 01)**: eth_call(CPU+Mem, EVM全量执行, 1-100ms可到秒级) / eth_getLogs(CPU+Disk, bloom+receipt扫描, 10ms-数秒, 大范围退化全扫) / eth_estimateGas(极高, 二分重放eth_call, 实测7s vs eth_call 60ms) / debug_traceTransaction(CPU+RAM双重, 100ms-数十秒, archive) / eth_blockNumber(Memory, µs, 但流量榜第二=轮询心跳隐形QPS杀手) / eth_getBalance/getCode/getStorageAt(Disk-Random trie, sub-ms-ms)。Geth 默认不暴露 per-method metric(需改源码或代理拦截)→ 强化 proxy(NS-2)必要性。
-**Solana(research 02)**: getProgramAccounts(CPU+Mem+Disk 极重, 全AccountsDB扫描无分页, 100ms-数十秒, OOM头号杀手, Helius/Triton/Alchemy 全限制) / getBalance(略重于getAccountInfo, deserialize-then-discard) / getMultipleAccounts(N次查并发) / getBlock(Disk+Net) / getSlot/getBlockHeight(Memory <1ms 但占量大头)。
+**Solana(research 02)**: getProgramAccounts(CPU+Mem+Disk 极重, 全AccountsDB扫描无分页, 100ms-数十秒, OOM头号杀手, Helius/Triton/Alchemy 全限制; 来源 Solana issue#26210 + Helius "Why getProgramAccounts is hard") / **getBalance 反直觉略重于 getAccountInfo**(deserialize-then-discard 多一道) / getMultipleAccounts(N次查并发) / getBlock(Disk+Net) / getSlot/getBlockHeight(Memory <1ms 但占量大头)。
 **Sui(research 02)**: sui_getObject(Disk单点) / multiGetObjects(>20 batch 超线性 cache驱逐) / queryEvents/queryTransactionBlocks(indexer扫描)。Mysten 限制: 50 item(multiGet)/1000 result(query)。
 **Bitcoin(research 03)**: getblock(verbosity=2, I/O+CPU, 大块数十MB带宽瓶颈) / getrawtransaction(有txindex 1ms 无则历史tx报错, txindex需50-80GB) / scantxoutset(CPU+I/O极高, 数十秒-分钟, 遍历1.5亿UTXO, EXPERIMENTAL公开节点禁) / estimatesmartfee(Memory <1ms)。**Bitcoin Core 原生不暴露 per-method metric, 8链中唯一需外挂exporter/代理拦截**(强化 proxy 必要性)。
-**Starknet(research 03)**: starknet_call(CPU极高 Cairo VM) / estimateFee(批量是DoS向量, 公网均限速) / getStateUpdate(state diff MB级)。
-**EVM L2(research 03b)**: scroll(reth, eth_*完全兼容, ~50-200GB状态) / polygon(bor+heimdall双进程, ~3TB archive, 150TPS高IOPS)。出块快(scroll 3s/polygon 2s)放大 eth_blockNumber 轮询压力。
+**Starknet(research 03)**: starknet_call(CPU极高 Cairo VM) / estimateFee(批量是DoS向量, 公网均限速) / getStateUpdate(state diff MB级)。**实现差异: Pathfinder(Rust, SQLite) vs Juno(Go, Pebble)**, Pathfinder 历史状态查询优于 Juno, 高并发更稳。
+**EVM L2(research 03b)**: scroll(reth, eth_*完全兼容, ~50-200GB状态) / polygon(bor+heimdall双进程, ~3TB archive, 150TPS高IOPS)。出块快(scroll 3s/polygon 2s)放大 eth_blockNumber 轮询压力。**mock 复用 handle_evm**(mock_rpc_server.py CHAIN_HANDLERS), **mixed 权重默认 40/30/20/10**(设计意图, 代码实测是 round-robin 均权=R5缺口, mixed_weighted 实际 weight 都=1)。
+**per-method metric 暴露端口(research 02 §五, 块高文档§93/§98 印证)**: Geth/Bitcoin Core/Erigon/Nethermind 默认**不**按 method 暴露(需改源码或代理拦截 → 强化 proxy NS-2 必要性); agave(solana :8899) / **sui-node :9184**(json_rpc_request_latency + state_sync highest_known_checkpoint) / **aptos-node :9101**(aptos_api_* + highest_advertised_data) **暴露 per-method 维度**。sui/aptos 网络最高仅在 metrics 端口(块高 peer_metrics 档)。
 
 ### 5.2 calldata 池构造(contract_call source 真值来源, 来源 research 04 §4)
 > design §4 param_spec 声明 `source:contract_call` {to,data}, 但**没说 to/data 真值从哪来**。本节补: contract_call 的 calldata 真值来源 = 高频 selector + calldata 池。**这是 S1 contract_call 输入供给 + S2 param_spec contract_call source 的真值地基**。
@@ -220,7 +221,7 @@ S3 响应链 + 关联键 + 归因 + 块高归一 + 协议错配
 
 **双层架构**: `fixtures/`(仓库内基线, 入库, ≤50KB/文件≤200KB/目录, CI冒烟) + `fixtures.d/`(用户大池, gitignore, 5-50MB, 真实压测)。业界 fixture 极少超 10k/类。
 **每链池**(EVM): addresses_hot(50, hot10+warm40)/cold(100) / tx_hashes(100) / blocks_range / contracts_erc20(10主流) / topics_logs(5) / slots(8)。基线≈15-25KB, 用户池1-5MB。
-**4 种 sampler**(research 06 §3.3): uniform(等概率, tx/cold) / weighted(按weights_field, 合约/program) / sequential(顺序步进绕回, eth_getLogs区段) / hot_cold_mix(hot_ratio概率取hot否则cold, 账户类模拟真实流量)。**hot/cold 比默认 0.2**(Zipf top20%=80%流量, Cloudflare/Alchemy)。
+**4 种 sampler**(research 06 §3.3): uniform(等概率, tx/cold) / weighted(按weights_field, 合约/program) / sequential(顺序步进绕回, eth_getLogs区段) / hot_cold_mix(hot_ratio概率取hot否则cold, 账户类模拟真实流量)。**hot/cold 比默认 0.2**(Zipf top20%=80%流量, Cloudflare/Alchemy)。**业界工具来源**: ChainForge(chainbound)/ paradigm flood(jsonrpcbench)/ Versus(Infura, CSV-driven)/ paradigm rpc-bench。
 **采样 schema**(chains/<chain>.json): pools{file,format} + methods{weight, sampler{kind,pool,hot_ratio}, params_template, calldata_templates}。**注: 这套 sampler/params_template 是 research 06(2026-05-19)的另一套设计, 与 design §4 param_spec(transport×slot×source)是不同维度** —— param_spec 管"参数怎么构造", sampler 管"从池里怎么采样"。两者互补, S1/S2 实现时 param_spec.source 指定取哪个池, sampler 指定怎么从池采样。
 **刷新**: fixtures/ 手动季度刷; fixtures.d/ cron(hot池每天/小时, blocks_range每次跑前)。manifest.json 记 fetched_at + latest_block_at_fetch + sha256。**漂移容忍**: 不锚定block hash, 小时-天级(blocks_range≤6h EVM/30min Solana, tx_hashes≤7天, addresses_hot≤14天)。
 
