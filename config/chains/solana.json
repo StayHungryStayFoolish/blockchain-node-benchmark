@@ -27,23 +27,23 @@
     "mixed_weighted": [
       {
         "method": "getAccountInfo",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "getBalance",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "getTokenAccountBalance",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getLatestBlockhash",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "getBlockHeight",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

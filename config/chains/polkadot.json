@@ -23,23 +23,23 @@
     "mixed_weighted": [
       {
         "method": "GET /accounts/{addr}/balance-info",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "GET /blocks/{n}",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "account_nextIndex",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /pallets/staking/progress",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "chain_getHeader",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

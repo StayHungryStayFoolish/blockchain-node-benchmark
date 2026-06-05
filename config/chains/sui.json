@@ -25,23 +25,23 @@
     "mixed_weighted": [
       {
         "method": "sui_getObject",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "sui_getTotalTransactionBlocks",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "sui_getLatestCheckpointSequenceNumber",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "suix_getReferenceGasPrice",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "sui_getChainIdentifier",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

@@ -23,23 +23,23 @@
     "mixed_weighted": [
       {
         "method": "system_chain",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "chain_getHeader",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "state_getRuntimeVersion",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_chainId",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "eth_blockNumber",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

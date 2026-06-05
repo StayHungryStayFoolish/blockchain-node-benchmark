@@ -668,16 +668,37 @@ clear_config_cache() {
 get_current_rpc_methods() {
     local rpc_mode_lower
     rpc_mode_lower=$(echo "${RPC_MODE}" | tr '[:upper:]' '[:lower:]')
-    
-    # Get corresponding mode methods from CHAIN_CONFIG's rpc_methods field
-    local methods_string
-    methods_string=$(echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\"")
-    
-    # Use configuration directly, framework configuration is complete
-    
-    # Framework configuration is complete, use directly
-    
-    echo "$methods_string"
+
+    # single 模式: 直接读 rpc_methods.single(字符串)
+    if [[ "$rpc_mode_lower" != "mixed" ]]; then
+        echo "$CHAIN_CONFIG" | jq -r ".rpc_methods.\"$rpc_mode_lower\""
+        return
+    fi
+
+    # mixed 模式: 读 rpc_methods.mixed_weighted(权威源, 含百分比占比),
+    # 按 weight 展开成加权数组(weight=30 -> method 出现 30 次), 逗号拼接。
+    # 下游 target_generator 的 round-robin(account_index % count)落在加权数组上
+    # = 加权 round-robin, 可复现(非随机抽样, vegeta 需可复现)。SSOT 3 weight 语义。
+    local mw
+    mw=$(echo "$CHAIN_CONFIG" | jq -c '.rpc_methods.mixed_weighted // empty')
+    if [[ -z "$mw" || "$mw" == "null" ]]; then
+        # 无 mixed_weighted -> 回退 rpc_methods.mixed(逗号串, 均权), 向后兼容
+        echo "$CHAIN_CONFIG" | jq -r '.rpc_methods.mixed // empty'
+        return
+    fi
+
+    # 硬约束5(SSOT 3): sum(weight) 必须 == 100, 否则 fail-fast(禁静默归一化)
+    local wsum
+    wsum=$(echo "$mw" | jq '[.[].weight] | add')
+    if [[ "$wsum" != "100" ]]; then
+        echo "[config] mixed_weighted weight sum=$wsum (!=100): chain=$BLOCKCHAIN_NODE" >&2
+        echo "   SSOT 3: weight=percent share, sum of all method weights must be 100." >&2
+        echo "   Fix config/chains/${BLOCKCHAIN_NODE}.json rpc_methods.mixed_weighted." >&2
+        return 1
+    fi
+
+    # 展开: 每个 method 按 weight 重复 N 次, 逗号拼接(顺序保留, 可复现)
+    echo "$mw" | jq -r '[.[] | .method as $m | range(.weight) | $m] | join(",")'
 }
 
 get_param_format_from_json() {

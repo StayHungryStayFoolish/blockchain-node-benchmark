@@ -25,23 +25,23 @@
     "mixed_weighted": [
       {
         "method": "GET /api/v1/accounts/{addr}",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "GET /api/v1/balances?account.id={addr}",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "GET /api/v1/transactions/{addr}",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_getBalance",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "eth_call",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

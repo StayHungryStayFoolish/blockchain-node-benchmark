@@ -23,23 +23,23 @@
     "mixed_weighted": [
       {
         "method": "getblockcount",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "getbestblockhash",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "getblock",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getrawtransaction",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "getmempoolinfo",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

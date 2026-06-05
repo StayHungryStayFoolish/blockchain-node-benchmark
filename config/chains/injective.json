@@ -22,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "/status",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "/cosmos/bank/v1beta1/balances/{address}",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "/injective/exchange/v1beta1/spot/markets",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "/injective/exchange/v1beta1/derivative/markets",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "/injective/oracle/v1beta1/params",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

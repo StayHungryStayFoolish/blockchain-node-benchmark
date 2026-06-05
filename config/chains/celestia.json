@@ -22,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "/status",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "/cosmos/base/tendermint/v1beta1/blocks/latest",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "/cosmos/base/tendermint/v1beta1/node_info",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "/cosmos/bank/v1beta1/balances/{address}",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "/block",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

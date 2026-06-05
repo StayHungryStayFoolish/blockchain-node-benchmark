@@ -22,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "eth_chainId",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "eth_blockNumber",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "eth_getBalance",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_gasPrice",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "system_health",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

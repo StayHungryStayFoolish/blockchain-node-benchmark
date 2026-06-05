@@ -22,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "avm.getHeight",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "avm.getBlockByHeight",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "avm.getTx",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "avm.getAllBalances",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "avm.getUTXOs",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

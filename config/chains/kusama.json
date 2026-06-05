@@ -23,23 +23,23 @@
     "mixed_weighted": [
       {
         "method": "chain_getHeader",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "chain_getFinalizedHead",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "system_health",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "system_properties",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "chain_getBlockHash",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

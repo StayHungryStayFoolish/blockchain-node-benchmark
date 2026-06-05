@@ -22,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "eth_blockNumber",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "eth_getBalance",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "eth_getBlockByNumber",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_getTransactionReceipt",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "eth_call",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

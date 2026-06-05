@@ -20,19 +20,19 @@
     "mixed_weighted": [
       {
         "method": "starknet_getClassAt",
-        "weight": 1
+        "weight": 40
       },
       {
         "method": "starknet_getNonce",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "starknet_getStorageAt",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "starknet_blockNumber",
-        "weight": 1
+        "weight": 15
       }
     ]
   },

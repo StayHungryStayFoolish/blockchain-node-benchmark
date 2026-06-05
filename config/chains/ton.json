@@ -23,23 +23,23 @@
     "mixed_weighted": [
       {
         "method": "getAddressBalance",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "getAddressInformation",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "getTransactions",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "lookupBlock",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "runGetMethod",
-        "weight": 1
+        "weight": 10
       }
     ]
   },

@@ -24,31 +24,31 @@
     "mixed_weighted": [
       {
         "method": "GET_TIP",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "GET_BLOCKS",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "POST_ADDRESS_INFO",
-        "weight": 1
+        "weight": 17
       },
       {
         "method": "POST_TX_INFO",
-        "weight": 1
+        "weight": 14
       },
       {
         "method": "POST_BLOCK_TXS",
-        "weight": 1
+        "weight": 11
       },
       {
         "method": "GET_EPOCH_INFO",
-        "weight": 1
+        "weight": 8
       },
       {
         "method": "POST_ASSET_INFO",
-        "weight": 1
+        "weight": 5
       }
     ]
   },

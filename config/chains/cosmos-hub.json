@@ -22,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "GET /cosmos/bank/v1beta1/balances/{addr}",
-        "weight": 1
+        "weight": 30
       },
       {
         "method": "GET /cosmos/tx/v1beta1/txs/{hash}",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "GET /cosmos/base/tendermint/v1beta1/blocks/{height}",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /cosmos/staking/v1beta1/validators",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "GET /cosmos/base/tendermint/v1beta1/blocks/latest",
-        "weight": 1
+        "weight": 10
       }
     ]
   },
