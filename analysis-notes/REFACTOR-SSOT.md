@@ -227,3 +227,31 @@ S3 响应链 + 关联键 + 归因 + 块高归一 + 协议错配
 
 ### 5.6 per-method 归因机制(NS-2 核心, 来源 research 07)
 > proxy 采集 method 时序 + 分析层加权 group_by 归因资源(Q4-7)。proxy sink 9 列(timestamp_ns/method_name/protocol/request_id/batch_idx/status_code/latency_ms/upstream/client_addr)。**响应业务内容对资源归因零信息量**(压测主路径不解析响应 body, 见 184 文档头 + design §5.0)。权重=实测频次(count/total_count, design §5.7 已迭代, 非预设1/10/100)。详见 research 07 + ADR-0001。
+
+## 6. 链级 DSL 字段(从 36 链 chains 文档 §7/§9/§11 穷举, design §4 method级 DSL 没有的链级维度)
+
+> **来源**: docs/{zh,en}/chains/*.md 各链 DSL ASK/决策节(32 文档穷举)。**design §4 param_spec 是 method 级**(参数怎么构造), 这里是**链级**(整链怎么声明: endpoint/auth/finality/链类型/模块集)。两者分层互补。chains 文档保留(每链调研背景), 本节汇总链级字段供 S2 schema 设计参考。
+> **🔴 待决(§3 决策未锁, 影响 S2 schema 边界)**: 链级字段整合进 param_spec 顶层, 还是独立 chain-level schema 两层。moonbeam 汇总收敛为 "7必+1推+4缓"。
+
+| 链级字段 | 语义 | 适用链 | 类型 |
+|---|---|---|---|
+| `endpoints`(对象) | 从 rpc_url:string 升级为多 endpoint 对象(node/indexer/evm/mirror 分离) | algorand(node+indexer)/avax-x(/ext/bc/X+/ext/info)/hedera(mirror+relay)/sei/substrate sidecar/tezos(rpc+indexer)/optimism/osmosis/kusama/dogecoin 等 | L1必 |
+| `auth` | {header_name, header_value_env, required} 鉴权(env展开非明文) | algorand(X-Algo-API-Token)/bitcoin系(Basic Auth rpcuser/pass)/cardano(Blockfrost project_id)/bch | L1必 |
+| `protocol_kind` | rest/jsonrpc/grpc/hybrid per-chain 协议类型(决定 POST/GET 路由) | aptos/tezos/ton/cosmos系 | L1必 |
+| `rollup_type` | l1/optimistic/zk/validium/modular_da 链类型(决定 finality 等待策略) | zksync(zk三阶段commit/prove/execute)/linea/celestia(modular_da)/arbitrum/optimism | L1必 |
+| `finality` | 查询级 finality 开关(非 EVM block tag) | near(optimistic/near-final/final)/zksync(三阶段)/cardano(confirmations=36)/tezos(is_bootstrapped) | L1必 |
+| `response_path` | JSONPath-lite 响应提取路径(error_path 含 .error.cause.name) | aptos/near(.error.cause.name)/cosmos/tezos/ton/algorand | L1必 |
+| `module_set` | cosmos 各链启用 module 集(plugin 据此装配 rpc_methods 子集, 避免每链抄) | injective(+5)/osmosis(+CLP)/celestia(+blob)/sei | 推荐 |
+| `denom_format` | cosmos denom 形态枚举(bare/ibc/peggy/factory/erc20/cw20) | injective/osmosis/sei/acala | 推荐 |
+| `dual_address` | 双地址绑定(bech32⇄hex, {primary,secondary,binding_endpoint}) | sei(sei1⇄0x)/acala/astar(substrate+EVM) | L1推 |
+| `evm_layer` | {type:in_protocol/l2_separate, chain_id_evm, endpoint, parallelism, gas_token} | sei(occ)/acala(787)/astar/injective/moonbeam(priority) | 可缓 |
+| `3part_id` | hedera 0.0.X 三段账户ID占位(path直嵌) | hedera | L1必(hedera) |
+| `cashaddr` | bch 地址编码枚举(base58check/bech32/cashaddr) | bch | 链特定 |
+| `bare_string_response` | 响应是裸 JSON string 非 object(解析器需容错) | tezos(balance="283125643"/chainid)/ton | 链特定 |
+| `indexer_endpoint` | tx 查询需 indexer 反查(独立于 rpc) | tezos/aptos/algorand | L1必(部分链) |
+| `modular_da` | DA 层标识(celestia 等模块化) | celestia/sei/astar | 可缓 |
+| `precompiles_extra` | EVM 链独有 precompile 段 | moonbeam | 链特定 |
+| `xcm` | {enabled, version} 跨链消息(substrate parachain) | moonbeam/acala/astar | 链特定 |
+| `wasm_layer` | {enabled} WASM 双VM 标识(显式提示) | astar | 可缓 |
+
+**🔴 NS-3 零代码硬边界(chains 文档实证, design §4 没承认)**: polkadot `state_getStorage` 取余额需 client-side blake2_128 哈希 + SCALE 解码 → **纯声明式 DSL 无法表达, 只能 sidecar REST 或写 adapter 代码**(polkadot §11.7)。bitcoin UTXO method chaining(前 method response→后 method param)同理。**"零代码加任意 method" 对 substrate raw storage / UTXO 链有真实例外**, S2 设计须承认此边界(用 sidecar/adapter 兜底, 标 KNOWN_BROKEN 不阻塞)。
