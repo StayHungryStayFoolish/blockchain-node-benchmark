@@ -64,7 +64,12 @@ class TestReportGeneratorI18n(unittest.TestCase):
         )
 
     def test_report_generator_uses_external_i18n_files(self):
-        i18n_path = Path(__file__).resolve().parents[1] / "i18n" / "report.zh.json"
+        i18n_path = (
+            Path(__file__).resolve().parents[1]
+            / "visualization"
+            / "i18n"
+            / "report.zh.json"
+        )
         external_zh = json.loads(i18n_path.read_text(encoding="utf-8"))
         self.assertEqual(TRANSLATIONS["zh"], external_zh)
         self.assertEqual(TRANSLATIONS["zh"]["data_quality_summary"], "数据质量摘要")
