@@ -1,6 +1,6 @@
-// Package handlers — rest family handler (ADR-0005).
+// Package handlers — rest family handler.
 //
-// Covers 5/36 chains: cardano (ADR-0005 corrected from ogmios), algorand,
+// Covers 5/36 chains: cardano (corrected from ogmios), algorand,
 // aptos, tezos, ton.
 //
 // Behavior: byte-correct fixture passthrough on path-routed REST requests.
@@ -10,13 +10,13 @@
 // just emits the fixture bytes.
 //
 // What this handler validates at startup:
-//   - chain template has _meta.rest_paths (per ADR-0005 cardano + 4 existing chains)
+//   - chain template has _meta.rest_paths (per cardano + 4 existing chains)
 //   - rpc_methods.mixed is a comma-separated method-NAME list, each name keys into rest_paths.
 //
 // What this handler does NOT validate (intentionally):
 //   - body schema correctness — Koios/Aptos/etc. body shape lives in chain
 //     template rest_paths[*].body and is handled by chain_adapters/rest.py:87
-//     (ADR-0005 fix). fake-node just serves the recorded fixture.
+//     (fix). fake-node just serves the recorded fixture.
 
 package handlers
 
@@ -51,13 +51,9 @@ func (h *RestHandler) Validate(chainName string, tpl map[string]any) error {
 	}
 	restPaths, hasPaths := meta["rest_paths"].(map[string]any)
 	if !hasPaths || len(restPaths) == 0 {
-		// Some rest-family chains carry adapter_family=rest but never had
-		// _meta.rest_paths populated (S0 template normalization gap, tracked
-		// in OPEN-QUESTIONS as part of step-9 36-chain rollout). Warn — do not
-		// fatal — so fake-node startup parity is preserved across the 36-chain
-		// matrix and operators can inspect via /stats while the template gap
-		// is fixed in the dedicated wave.
-		fmt.Printf("WARN: chain %s: _meta.rest_paths missing (template gap — step-9 36-chain rollout will populate)\n", chainName)
+		// Warn instead of failing so fake-node startup parity is preserved
+		// across all configured chains while templates are being completed.
+		fmt.Printf("WARN: chain %s: _meta.rest_paths missing; inspect /stats and complete the chain template\n", chainName)
 		return nil
 	}
 	// Each method NAME in mixed should key into rest_paths. Missing entries are

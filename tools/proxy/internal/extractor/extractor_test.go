@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// happy path: 单条 json-rpc
+// happy path: single json-rpc
 func TestJSONRPC_Single(t *testing.T) {
 	e, err := NewJSONRPC("test", "^/$", "split")
 	if err != nil {
@@ -107,24 +107,24 @@ func TestREST_Match(t *testing.T) {
 	}
 }
 
-// REST: HTTP method 前缀过滤
+// REST: HTTP method prefix filtering
 func TestREST_HTTPMethodFilter(t *testing.T) {
 	e, _ := NewREST("test", []map[string]string{
 		{"pattern": "^/api$", "method_name": "POST /api"},
 	})
-	// GET 不应命中 POST 前缀的 pattern
+	// GET should not match a POST-prefixed pattern.
 	req, _ := http.NewRequest("GET", "http://localhost/api", nil)
 	if _, ok := e.Extract(req, nil); ok {
 		t.Errorf("GET should not match POST-prefixed pattern")
 	}
-	// POST 命中
+	// POST matches.
 	req2, _ := http.NewRequest("POST", "http://localhost/api", nil)
 	if _, ok := e.Extract(req2, nil); !ok {
 		t.Errorf("POST should match POST-prefixed pattern")
 	}
 }
 
-// REST: 无匹配
+// REST: no match
 func TestREST_NoMatch(t *testing.T) {
 	e, _ := NewREST("test", []map[string]string{
 		{"pattern": "^/v2/accounts/[^/]+$", "method_name": "x"},
@@ -135,7 +135,7 @@ func TestREST_NoMatch(t *testing.T) {
 	}
 }
 
-// REST: 非法 regex
+// REST: invalid regex
 func TestREST_InvalidRegex(t *testing.T) {
 	_, err := NewREST("test", []map[string]string{
 		{"pattern": "[invalid", "method_name": "x"},
@@ -145,7 +145,7 @@ func TestREST_InvalidRegex(t *testing.T) {
 	}
 }
 
-// REST: 空 url_patterns
+// REST: empty url_patterns
 func TestREST_EmptyPatterns(t *testing.T) {
 	_, err := NewREST("test", []map[string]string{})
 	if err == nil {
@@ -153,7 +153,7 @@ func TestREST_EmptyPatterns(t *testing.T) {
 	}
 }
 
-// Chain: 多 extractor 串接,REST 在前,JSON-RPC fallback
+// Chain: multiple extractors, REST first, JSON-RPC fallback
 func TestChain_HederaDual(t *testing.T) {
 	rest, _ := NewREST("rest", []map[string]string{
 		{"pattern": "^/api/v1/accounts/[^/]+$", "method_name": "GET_ACCOUNT"},
@@ -164,7 +164,7 @@ func TestChain_HederaDual(t *testing.T) {
 		t.Errorf("len=%d", c.Len())
 	}
 
-	// REST 命中
+	// REST matches first.
 	req1, _ := http.NewRequest("GET", "http://localhost/api/v1/accounts/0.0.1234", nil)
 	rs1, ok := c.Extract(req1, nil)
 	if !ok || rs1[0].MethodName != "GET_ACCOUNT" {
@@ -180,7 +180,7 @@ func TestChain_HederaDual(t *testing.T) {
 	}
 }
 
-// Chain: 全部 miss
+// Chain: all extractors miss
 func TestChain_AllMiss(t *testing.T) {
 	rest, _ := NewREST("rest", []map[string]string{{"pattern": "^/api$", "method_name": "x"}})
 	c := NewChain(rest)

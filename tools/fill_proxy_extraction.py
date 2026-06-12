@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""
-W1.1 — chain template 批量填 proxy_extraction 字段 (NS-3 + Q4-12)
+"""Backfill proxy_extraction in chain templates.
 
-按 _meta.adapter_family 选 extractor 模板:
-  - jsonrpc / substrate / tendermint   → 1 个 json_rpc extractor (默认 split)
-  - bitcoin_jsonrpc                    → 1 个 json_rpc extractor + auth.basic
-  - rest                               → 1 个 rest extractor + 各链 rest_paths 全量 url_patterns
-  - hedera_dual                        → 2 个 extractor (rest + json_rpc)
+The extractor template is selected from _meta.adapter_family:
+  - jsonrpc / substrate / tendermint   -> one json_rpc extractor, split batches
+  - bitcoin_jsonrpc                    -> one json_rpc extractor with basic auth
+  - rest                               -> one rest extractor with all rest_paths
+  - hedera_dual                        -> two extractors: rest, then json_rpc
 
-幂等:已有 proxy_extraction 字段的链跳过。
+Idempotent: chain templates that already define proxy_extraction are skipped.
 """
 import json
 import sys
@@ -41,15 +40,14 @@ def build_rest_extractor(rest_paths: dict) -> dict:
     import re
     patterns = []
     for key, spec in rest_paths.items():
-        # path 字段在 v1 schema 里都是统一的 {address} (见 rest.py:69)
-        # 但 url_pattern 要匹配真实请求,所以从 key 提取实际占位符做泛化
+        # The v1 schema stores a normalized {address} path. url_pattern must
+        # match real requests, so derive placeholders from the path template.
         path_template = spec.get("path", "")
-        # 把任意 {xxx} 替换成 '[^/]+' (单段 URL 不含斜杠的任意字符)
+        # Replace any {name} placeholder with one URL path segment.
         pattern_body = re.sub(r"\{[^}]+\}", "[^/]+", path_template)
-        # query string 处理: 把 '?...={address}' 后缀剥掉, query 不进 URL pattern
-        # (proxy 只看 path; query 的 method 区分通过 url_patterns list 区分)
+        # Strip query strings; the proxy matcher only sees the path.
         pattern_body = pattern_body.split("?")[0]
-        # 锚定
+        # Anchor the regex.
         pattern = f"^{pattern_body}$"
         patterns.append({
             "pattern": pattern,
@@ -104,7 +102,7 @@ def fill_chain(chain_file: Path) -> tuple[bool, str]:
     elif family == "hedera_dual":
         d["proxy_extraction"] = {"extractors": build_hedera_dual_extractors()}
     elif family == "ogmios":
-        return False, "ogmios family deprecated (Q4-12), should be migrated to rest"
+        return False, "ogmios family deprecated current schema, should be migrated to rest"
     else:
         return False, f"unknown family: {family}"
 

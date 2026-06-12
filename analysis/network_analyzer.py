@@ -1,7 +1,8 @@
-"""NetworkAnalyzer - Y+ 架构 NIC 数据单 reader
+"""NetworkAnalyzer - provider-aware NIC data reader
 
-零 platform 分支, 完全通过 NetworkFieldRegistry.get_semantic_type 分组分析.
-下游禁止 hardcode 'ena_*' / 'gvnic_*' / 'virtio_*' 字面量字符串匹配.
+No platform branches are needed here. The analyzer groups fields by
+NetworkFieldRegistry.get_semantic_type and downstream code should avoid
+hardcoded literal matching for 'ena_*', 'gvnic_*', or 'virtio_*' names.
 
 Usage:
     import pandas as pd
@@ -21,7 +22,7 @@ class NetworkAnalyzer:
 
     @classmethod
     def analyze(cls, df: pd.DataFrame) -> Dict[str, Any]:
-        """主入口 - 按 semantic_type 分组分析."""
+        """Analyze columns grouped by semantic_type."""
         validation = NetworkFieldRegistry.validate_csv_columns(list(df.columns))
 
         groups = NetworkFieldRegistry.group_by_semantic(df.columns)
@@ -32,19 +33,19 @@ class NetworkAnalyzer:
             'sample_count': len(df),
         }
 
-        # throughput 字段分析
+        # Throughput fields.
         if 'throughput' in groups:
             results['throughput'] = cls._analyze_throughput(df, groups['throughput'])
 
-        # packet_count 字段分析
+        # Packet-count fields.
         if 'packet_count' in groups:
             results['packet_count'] = cls._analyze_packet_count(df, groups['packet_count'])
 
-        # saturation_counter (AWS ENA 限速触发计数)
+        # saturation_counter (AWS ENA limit counters)
         if 'saturation_counter' in groups:
             results['saturation_counters'] = cls._analyze_saturation_counters(df, groups['saturation_counter'])
 
-        # drop_counter (GCP gVNIC/virtio 丢包计数)
+        # drop_counter (GCP gVNIC/virtio drop counters)
         if 'drop_counter' in groups:
             results['drop_counters'] = cls._analyze_drop_counters(df, groups['drop_counter'])
 
@@ -52,7 +53,7 @@ class NetworkAnalyzer:
         if 'error_counter' in groups:
             results['error_counters'] = cls._analyze_error_counters(df, groups['error_counter'])
 
-        # saturation_signal - 跨平台对齐的核心指标
+        # saturation_signal - cross-provider aligned core metric.
         if 'saturation_signal' in groups:
             results['saturation_ratio'] = cls._analyze_saturation_signal(df, groups['saturation_signal'])
 
@@ -60,11 +61,11 @@ class NetworkAnalyzer:
 
     @classmethod
     def _detect_platform_from_columns(cls, columns: List[str]) -> str:
-        """从字段前缀推断 platform variant (aws_ena / gcp_gvnic / gcp_virtio / other_none)."""
+        """Infer platform variant from field prefixes."""
         prefixes = {NetworkFieldRegistry.get_platform_prefix(c) for c in columns} - {'common'}
         if not prefixes:
             return 'other_none'
-        prefix = next(iter(prefixes))  # 应该只有 1 个
+        prefix = next(iter(prefixes))
         mapping = {'ena': 'aws_ena', 'gvnic': 'gcp_gvnic', 'virtio': 'gcp_virtio'}
         return mapping.get(prefix, 'unknown_{}'.format(prefix))
 
@@ -75,7 +76,7 @@ class NetworkAnalyzer:
             series = pd.to_numeric(df[f], errors='coerce').dropna()
             if len(series) < 2:
                 continue
-            # throughput 字段是累计 byte counter, 取差分得速率
+            # Throughput fields are cumulative byte counters; diff gives rate.
             rate = series.diff().dropna()
             out[f] = {
                 'total_bytes': int(series.iloc[-1] - series.iloc[0]),
@@ -103,7 +104,7 @@ class NetworkAnalyzer:
 
     @staticmethod
     def _analyze_saturation_counters(df: pd.DataFrame, fields: List[str]) -> Dict[str, Any]:
-        """AWS ENA saturation counter - 取增量, 非零次数即饱和发生次数."""
+        """AWS ENA saturation counters: count positive deltas as events."""
         out: Dict[str, Any] = {}
         for f in fields:
             series = pd.to_numeric(df[f], errors='coerce').dropna()
@@ -119,7 +120,7 @@ class NetworkAnalyzer:
 
     @staticmethod
     def _analyze_drop_counters(df: pd.DataFrame, fields: List[str]) -> Dict[str, Any]:
-        """GCP gVNIC/virtio drop counter - 同样取增量."""
+        """GCP gVNIC/virtio drop counters: count positive deltas as events."""
         out: Dict[str, Any] = {}
         for f in fields:
             series = pd.to_numeric(df[f], errors='coerce').dropna()
@@ -150,8 +151,8 @@ class NetworkAnalyzer:
 
     @staticmethod
     def _analyze_saturation_signal(df: pd.DataFrame, fields: List[str]) -> Dict[str, Any]:
-        """跨平台对齐核心: network_saturation_signal 列 (0/1), 直接 .mean() 得饱和占比."""
-        # fields 应该只有 1 个: network_saturation_signal
+        """Core cross-provider metric: mean of network_saturation_signal (0/1)."""
+        # fields should contain only network_saturation_signal.
         f = fields[0]
         series = pd.to_numeric(df[f], errors='coerce').dropna()
         return {

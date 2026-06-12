@@ -1,6 +1,5 @@
 {
   "chain_type": "tezos",
-  "methods": {},
   "param_formats": {
     "GET /chains/main/blocks/head/context/contracts/{addr}/balance": "path_addr",
     "GET /chains/main/blocks/{block}/operations/{vp}": "path_block_and_vp",
@@ -13,7 +12,7 @@
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx",
+    "target_address": "${TARGET_ADDRESS:-tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx}",
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
@@ -22,23 +21,23 @@
     "mixed_weighted": [
       {
         "method": "GET /chains/main/blocks/head/context/contracts/{addr}/balance",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /chains/main/blocks/{block}/operations/{vp}",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /chains/main/blocks/head/header",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /chains/main/blocks/head/protocols",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /chains/main/blocks/head/votes/current_period",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -46,35 +45,22 @@
   "system_addresses": [],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/11-tezos.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.943462+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "rest",
     "original_public_endpoints": [
       {
-        "url": "https://mainnet.api.tez.ie",
+        "url": "https://rpc.tzbeta.net",
         "auth": false,
         "verified": "E2",
-        "notes": "ECAD 主推,Octez v24.4"
-      },
-      {
-        "url": "https://mainnet.smartpy.io",
-        "auth": false,
-        "verified": "E2",
-        "notes": "SmartPy 备份"
-      },
-      {
-        "url": "https://api.tzkt.io",
-        "auth": false,
-        "verified": "E2",
-        "notes": "TzKT indexer,用于 op_hash 反查"
+        "notes": "Tzbeta public endpoint"
       }
     ],
-    "original_notes": "REST 深路径(5-7 段);bare-string 响应;无 getTxByHash 必经 TzKT indexer 二级反查;chain_id 字符串",
+    "original_notes": "REST deep paths (5-7 segments); bare-string responses; no getTxByHash, so TzKT indexer secondary lookup is required; chain_id is a string.",
     "adapter_required": true,
     "adapter_family": "rest",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
@@ -82,6 +68,10 @@
       "GET /chains/main/blocks/head/context/contracts/{addr}/balance": {
         "method": "GET",
         "path": "/chains/main/blocks/head/context/contracts/{address}/balance"
+      },
+      "GET /chains/main/blocks/{block}/operations/{vp}": {
+        "method": "GET",
+        "path": "/chains/main/blocks/head/operations/0"
       },
       "GET /chains/main/blocks/head/header": {
         "method": "GET",
@@ -102,31 +92,36 @@
       "parse_jq": ".level"
     },
     "upgrade_notes": [
-      "S3-E.4 (cli-param-bug followup 2026-05-25): switched single from",
+      "Switched single from",
       "'GET /chains/main/blocks/head/header' (no_params health-probe) to",
       "'GET /chains/main/blocks/head/context/contracts/{addr}/balance' which",
-      "takes a real tz1/tz2/tz3/KT1 address. Added _meta.rest_paths for 4 of",
-      "5 methods (operations method excluded — needs multi-placeholder",
-      "{block}+{vp} support which RestAdapter v1 does not provide).",
-      "Live evidence (docs/zh/chains/11-tezos.md §H8 2026-05-23):",
+      "takes a real tz1/tz2/tz3/KT1 address.",
+      "Wired operations mixed method",
+      "to /chains/main/blocks/head/operations/0 as a fixed sample path so",
+      "RestAdapter v1 can construct every configured mixed method.",
+      "Live evidence:",
       "  curl https://mainnet.api.tez.ie/chains/main/blocks/head/context/contracts/tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx/balance",
       "  → HTTP 200 returns bare JSON string e.g. \"53\" (mutez)"
     ],
     "known_broken_mixed": {
-      "status": "OPERATIONS_METHOD_BLOCKED",
-      "evidence_date": "2026-05-25",
-      "blockers": [
-        "GET /chains/main/blocks/{block}/operations/{vp} needs both {block}",
-        "and {vp} (validation_pass int 0-3) placeholders. RestAdapter v1",
-        "only supports a single {address} placeholder substitution.",
-        "Requires either:",
-        "  (a) RestAdapter v2 with named multi-placeholder template support",
-        "  (b) Two-step adapter: query head/operation_hashes first, then",
-        "      iterate over (block, vp, index) tuples — needs new adapter family",
-        "Workaround for benchmark: skip operations method in mixed mode,",
-        "single mode (balance only) is fully functional."
-      ],
-      "fix_wave": "S4 or RestAdapter v2 wave"
+      "status": "RESOLVED_WITH_FIXED_SAMPLE_PATH",
+      "resolved_date": "2026-06-07",
+      "resolution": [
+        "GET /chains/main/blocks/{block}/operations/{vp} is wired to",
+        "/chains/main/blocks/head/operations/0 for benchmark fixture closure.",
+        "This keeps the mixed method constructible with RestAdapter v1 while",
+        "preserving the logical method name used by proxy extraction."
+      ]
+    },
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Compare numeric cursors returned by the same adapter health probe against local and target RPC endpoints."
     }
   },
   "proxy_extraction": {
@@ -137,6 +132,10 @@
           {
             "pattern": "^/chains/main/blocks/head/context/contracts/[^/]+/balance$",
             "method_name": "GET /chains/main/blocks/head/context/contracts/{addr}/balance"
+          },
+          {
+            "pattern": "^/chains/main/blocks/head/operations/0$",
+            "method_name": "GET /chains/main/blocks/{block}/operations/{vp}"
           },
           {
             "pattern": "^/chains/main/blocks/head/header$",

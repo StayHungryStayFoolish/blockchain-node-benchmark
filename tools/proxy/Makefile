@@ -9,7 +9,7 @@ build:
 test:
 	go test -race -count=1 $(PKG)
 
-# perf 测试需要 -tags=perf (不带 -race, 因为 race detector 慢 5-10x 会让测试失真)
+# Perf tests require -tags=perf without -race because the race detector skews QPS.
 perf:
 	go test -tags=perf -count=1 -run=TestPerformanceGate ./internal/proxy/
 

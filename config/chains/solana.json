@@ -4,14 +4,12 @@
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
-    "target_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "target_address": "${TARGET_ADDRESS:-EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v}",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
-    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-  },
-  "methods": {
-    "get_signatures": "getSignaturesForAddress",
-    "get_transaction": "getTransaction"
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_token_account": "${TARGET_TOKEN_ACCOUNT:-5L5xN2DvWsLiWjcjfny4HnJnRd3nho9pEPP4RKGKkyMi}",
+    "target_token_mint": "${TARGET_TOKEN_MINT:-EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v}"
   },
   "system_addresses": [
     "11111111111111111111111111111111",
@@ -27,23 +25,23 @@
     "mixed_weighted": [
       {
         "method": "getAccountInfo",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getBalance",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getTokenAccountBalance",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getLatestBlockhash",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getBlockHeight",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -59,9 +57,43 @@
     "extracted_from": "config/config_loader.sh UNIFIED_BLOCKCHAIN_CONFIG (line 408-652)",
     "baseline_sha": "ffbeeee",
     "extract_date": "2026-05-23",
-    "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持",
+    "note": "Migrated from the original baseline config; keep behavior-compatible unless intentionally changed.",
     "adapter_family": "jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "original_public_endpoints": [
+      {
+        "url": "https://api.mainnet-beta.solana.com",
+        "auth": false,
+        "verified": "E2",
+        "notes": "Solana official RPC"
+      },
+      {
+        "url": "https://solana-api.projectserum.com",
+        "auth": false,
+        "verified": "E2",
+        "notes": "Serum public endpoint"
+      }
+    ],
+    "solana_token_account_source": "queried getTokenAccountsByOwner on 2026-06-08 for wallet D34ugCrALv7CEhaCHQdNkh3aCw9MWajeuTtgJKKo2N5S and USDC mint",
+    "health_probe": {
+      "method": "getHealth",
+      "params": [],
+      "parse_jq": ".error.data.numSlotsBehind // 0",
+      "reported_lag_fields": {
+        "lag_value": ".error.data.numSlotsBehind",
+        "healthy_value": ".result == \"ok\""
+      }
+    },
+    "sync_health": {
+      "mode": "reported_lag",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": null,
+      "comparison": "reported_lag",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "slot",
+      "notes": "Use Solana getHealth: ok maps to lag 0; unhealthy responses with error.data.numSlotsBehind map to slot lag and reuse BLOCK_HEIGHT_DIFF_THRESHOLD."
+    }
   },
   "proxy_extraction": {
     "extractors": [

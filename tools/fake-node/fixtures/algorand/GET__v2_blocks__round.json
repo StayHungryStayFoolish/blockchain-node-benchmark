@@ -1,0 +1,104 @@
+{
+  "block": {
+    "bi": 8600578,
+    "earn": 218288,
+    "fc": 4001,
+    "fees": "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA",
+    "frac": 6886250026,
+    "gen": "mainnet-v1.0",
+    "gh": "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=",
+    "pp": 8602578,
+    "prev": "blk-JEWVPVWYHBXYNIOTI5E7KAT6FBTJVEFJ7IEFPQKJNFT7FRLE5OGA",
+    "prev512": "6OKIqySyrq1LMgEEoaSe+CXOVqF1ht48FUj75ZEI/GkTMSw3zAAwYnYRRTBc65iEUmHlUfgSWVMEwIfJnhNBXw==",
+    "proto": "https://github.com/algorandfoundation/specs/tree/953304de35264fc3ef91bcd05c123242015eeaed",
+    "prp": "7IISQ474IZKGPO66HGBWUBHAJR4FLYLR52NNMPVN6NA2YQOGYDKJNK36RU",
+    "rnd": 61960848,
+    "rwcalr": 62000000,
+    "rwd": "737777777777777777777777777777777777777777777777777UFEJ2CI",
+    "seed": "iIfvKMge+p+kdIA9TAMLH/zZzf9XL9kyRQAcIEU05S8=",
+    "spt": {
+      "0": {
+        "n": 61960960
+      }
+    },
+    "tc": 3592376225,
+    "ts": 1780933726,
+    "txn": "aqx+8fZrS0IQYOKx4tKzGte+BbUp59xnfx2y+P3vxOI=",
+    "txn256": "TNAnsc1olD9/ti9n9qBUbSjXd6sek2/uD6EkK+8Mg+Y=",
+    "txn512": "2oaJEIumpaIG0BoKucaNiA5JEq2uldm9g7os4hr0oHYLFhHAH2Osfs4Q7j2SJqb+aNgE9NhPvUvuplUmY4HmrA==",
+    "txns": [
+      {
+        "hgi": true,
+        "sig": "shkIHCzXCTkj7nI/vBpLofv0nxN4vkbx96Td6ksVKAxYQ3JQaw1gXnbAL6CyvejeXnhF2kpwRVLahgzVzOSNBA==",
+        "txn": {
+          "amt": 70746500,
+          "close": "GRVVWNAIIUCQMNEUBCMGWZ6B7N3KLU7KMJ6EX2DPUNUOAHURBZ4IZE2MBM",
+          "fee": 1000,
+          "fv": 61960846,
+          "lv": 61961846,
+          "rcv": "GRVVWNAIIUCQMNEUBCMGWZ6B7N3KLU7KMJ6EX2DPUNUOAHURBZ4IZE2MBM",
+          "snd": "TS3RCW3AXFSG6X6RQTLFW2V3GEMVD5QSUOG4KTOVSGTPJL65SRLYFTIOQE",
+          "type": "pay"
+        }
+      },
+      {
+        "hgi": true,
+        "sig": "boslkov09Udup7Lr8VpoHiebSD8GBu2jsAgTrfNHjnMjzavni5eK8iCixJwW4DESfJPthYOXBvlwwWUf2Bx1Dg==",
+        "txn": {
+          "aamt": 59500,
+          "arcv": "ZW2OHU5KL7GCK4LQJMBJL64JJP2CY5FMMZYPPTU6SPVHXTBYUHF2H3QYUM",
+          "fee": 1000,
+          "fv": 61960844,
+          "lv": 61961844,
+          "note": "MDcxODA1OTAwMTc4MDkzMzcyMC0zMC0xNg==",
+          "snd": "S3YSAO4PMV3PQMLS6Q2P5M6CXTYBHPFQSVVZDO47VJSG56EY4VSXBPWLDU",
+          "type": "axfer",
+          "xaid": 849191641
+        }
+      },
+      {
+        "dt": {
+          "gd": {
+            "total_effort": {
+              "at": 2,
+              "ui": 3456025215873
+            },
+            "total_transactions": {
+              "at": 2,
+              "ui": 551384916
+            }
+          },
+          "ld": {
+            "0": {
+              "effort": {
+                "at": 2,
+                "ui": 6003
+              }
+            }
+          }
+        },
+        "hgi": true,
+        "sig": "PuKTgcY4hoFXcSQ1AlYf4cyPLBjFg2rHNAhz6uV//ELnpVnNlDvBKf4Ebc90eurEb1GpQpAeu06RNaUzmQ7VAA==",
+        "txn": {
+          "apaa": [
+            "qyNwzA==",
+            "kqjVewL2jXRIh0bmeIGhz34S/XkUAQOMWSbR2RMbIJQ="
+          ],
+          "apas": [
+            1284444444
+          ],
+          "apat": [
+            "G6B5L2B3GSLJQTC5THSGSJMTJ4EN3SBF3IW5PI7XEEKYH6WXN6UGY4XAXQ",
+            "SKUNK6YC62GXISEHI3THRANBZ57BF7LZCQAQHDCZE3I5SEY3ECKGKGFCB4"
+          ],
+          "apid": 1284326447,
+          "fee": 2001,
+          "fv": 61960846,
+          "lv": 61961846,
+          "snd": "SKUNK6YC62GXISEHI3THRANBZ57BF7LZCQAQHDCZE3I5SEY3ECKGKGFCB4",
+          "type": "appl"
+        }
+      }
+    ]
+  }
+}

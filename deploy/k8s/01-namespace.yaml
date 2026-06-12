@@ -1,7 +1,7 @@
 # Blockchain Node Benchmark — Kubernetes Namespace
 # ====================================================================
-# v1.3 plan §S4: dedicated namespace for the benchmark DaemonSet.
-# Isolated from application workloads so RBAC scope is minimal.
+# Dedicated namespace for the benchmark DaemonSet. Isolated from application
+# workloads so RBAC scope is minimal.
 # ====================================================================
 apiVersion: v1
 kind: Namespace

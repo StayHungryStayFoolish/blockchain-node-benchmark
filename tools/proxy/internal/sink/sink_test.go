@@ -37,7 +37,10 @@ func TestCSVSink_WriteAndRead(t *testing.T) {
 	if rows[0][0] != "timestamp_ns" || rows[0][1] != "method_name" {
 		t.Errorf("bad header: %v", rows[0])
 	}
-	if rows[1][1] != "eth_blockNumber" || rows[1][6] != "5" {
+	if rows[0][6] != "transport_success" || rows[0][7] != "rpc_success" {
+		t.Errorf("missing success fields in header: %v", rows[0])
+	}
+	if rows[1][1] != "eth_blockNumber" || rows[1][10] != "5" {
 		t.Errorf("bad row: %v", rows[1])
 	}
 }
@@ -48,7 +51,7 @@ func TestCSVSink_AppendKeepsHeader(t *testing.T) {
 	s1, _ := New("csv", path)
 	_ = s1.Write(Record{MethodName: "a"})
 	_ = s1.Close()
-	// 第二次 open 不应再写 header
+	// Reopening should not write the header again.
 	s2, _ := New("csv", path)
 	_ = s2.Write(Record{MethodName: "b"})
 	_ = s2.Close()

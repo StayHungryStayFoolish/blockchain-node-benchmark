@@ -1,12 +1,12 @@
 #!/bin/bash
 # =====================================================================
 # lib/proxy_lifecycle.sh
-# W2 RPC proxy lifecycle helpers used by blockchain_node_benchmark.sh.
+# RPC proxy lifecycle helpers used by blockchain_node_benchmark.sh.
 #
 # Public API:
 #   proxy_should_skip            — return 0 (true) if proxy phase should be skipped
-#   start_rpc_proxy              — Phase 2.5 implementation
-#   stop_rpc_proxy               — Phase 4.5 implementation
+#   start_rpc_proxy              — start proxy before target generation
+#   stop_rpc_proxy               — stop proxy during cleanup
 #
 # Required env (set by main entry):
 #   SCRIPT_DIR, LOGS_DIR, LOCAL_RPC_URL, BLOCKCHAIN_NODE
@@ -35,7 +35,7 @@ proxy_should_skip() {
 }
 
 _proxy_log_path() {
-    echo "${LOGS_DIR}/rpc_proxy.log"
+    echo "${RPC_PROXY_LOG:-${LOGS_DIR}/rpc_proxy.log}"
 }
 
 _proxy_binary_path() {
@@ -120,7 +120,7 @@ _proxy_port_in_use() {
 
 start_rpc_proxy() {
     if proxy_should_skip; then
-        echo "⏭️  RPC proxy disabled (NO_PROXY_LAYER/SKIP_RPC_PROXY set) — skipping Phase 2.5"
+        echo "⏭️  RPC proxy disabled (NO_PROXY_LAYER/SKIP_RPC_PROXY set) — skipping proxy startup"
         return 0
     fi
 
@@ -139,8 +139,8 @@ start_rpc_proxy() {
         return 0
     fi
 
-    local sink_csv="${LOGS_DIR}/proxy_method.csv"
-    local self_csv="${LOGS_DIR}/proxy_self.csv"
+    local sink_csv="${PROXY_METHOD_CSV:-${LOGS_DIR}/proxy_method.csv}"
+    local self_csv="${PROXY_SELF_CSV:-${LOGS_DIR}/proxy_self.csv}"
     local log_file
     log_file="$(_proxy_log_path)"
 
@@ -193,6 +193,7 @@ start_rpc_proxy() {
     export PROXY_ENABLED=1
     export PROXY_PID=$pid
     export PROXY_METHOD_CSV="$sink_csv"
+    export PROXY_SELF_CSV="$self_csv"
     export ORIGINAL_LOCAL_RPC_URL="$LOCAL_RPC_URL"
     export LOCAL_RPC_URL="http://localhost:${PROXY_LISTEN_PORT}"
     echo "✅ RPC proxy healthy (pid=$pid). Traffic redirected: LOCAL_RPC_URL=$LOCAL_RPC_URL"

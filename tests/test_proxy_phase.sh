@@ -1,15 +1,15 @@
 #!/bin/bash
 # =====================================================================
 # tests/test_proxy_phase.sh
-# Integration test for B-3 (W2 proxy lifecycle wiring).
+# Integration test for proxy lifecycle wiring.
 #
 # Coverage:
 #   1. Start fake-node v2 on :19101 to mock the real chain.
 #   2. Start proxy on :18545 upstream=http://localhost:19101 via the
 #      lib/proxy_lifecycle.sh start_rpc_proxy() helper.
-#   3. Send a JSON-RPC getSlot via curl to :18545.
+#   3. Send a JSON-RPC getBalance via curl to :18545.
 #   4. Stop proxy via stop_rpc_proxy() and assert proxy_method.csv exists,
-#      has >1 lines, and contains a getSlot row.
+#      has >1 lines, and contains a getBalance row.
 #
 # Run:
 #   ./tests/test_proxy_phase.sh
@@ -30,6 +30,8 @@ FAKE_PORT="19101"
 FAKE_BIN="/tmp/fake-node-v2"
 FAKE_LOG="$WORK_DIR/fake-node.log"
 FAKE_PID=""
+RPC_METHOD="getBalance"
+RPC_BODY='{"jsonrpc":"2.0","id":1,"method":"getBalance","params":["11111111111111111111111111111111"]}'
 
 cleanup() {
     set +e
@@ -68,9 +70,12 @@ if ! kill -0 "$FAKE_PID" 2>/dev/null; then
 fi
 
 # Verify fake-node responds
-fake_resp=$(curl -fsS -m 3 -X POST -H 'Content-Type: application/json' \
-    -d '{"jsonrpc":"2.0","id":1,"method":"getSlot","params":[]}' \
-    "http://localhost:${FAKE_PORT}/" 2>&1 || true)
+if ! fake_resp=$(curl -fsS -m 3 -X POST -H 'Content-Type: application/json' \
+    -d "$RPC_BODY" \
+    "http://localhost:${FAKE_PORT}/" 2>&1); then
+    cat "$FAKE_LOG"
+    fail "fake-node returned error for ${RPC_METHOD}: $fake_resp"
+fi
 if [[ -z "$fake_resp" ]]; then
     fail "fake-node not responding on :$FAKE_PORT"
 fi
@@ -93,11 +98,14 @@ if [[ -z "${PROXY_METHOD_CSV:-}" ]]; then
 fi
 echo "   PROXY_PID=$PROXY_PID PROXY_METHOD_CSV=$PROXY_METHOD_CSV"
 
-echo "=== Step 3: send getSlot via proxy at :$PROXY_LISTEN_PORT ==="
+echo "=== Step 3: send ${RPC_METHOD} via proxy at :$PROXY_LISTEN_PORT ==="
 for i in 1 2 3; do
-    proxy_resp=$(curl -fsS -m 3 -X POST -H 'Content-Type: application/json' \
-        -d '{"jsonrpc":"2.0","id":'"$i"',"method":"getSlot","params":[]}' \
-        "http://localhost:${PROXY_LISTEN_PORT}/" 2>&1)
+    body="${RPC_BODY/\"id\":1/\"id\":$i}"
+    if ! proxy_resp=$(curl -fsS -m 3 -X POST -H 'Content-Type: application/json' \
+        -d "$body" \
+        "http://localhost:${PROXY_LISTEN_PORT}/" 2>&1); then
+        fail "proxy returned error for ${RPC_METHOD} on call $i: $proxy_resp"
+    fi
     if [[ -z "$proxy_resp" ]]; then
         fail "proxy did not return response on call $i"
     fi
@@ -129,11 +137,11 @@ echo "   --- head -3 ---"
 head -3 "$CSV"
 echo "   --- end ---"
 
-if ! grep -q 'getSlot' "$CSV"; then
+if ! grep -q "$RPC_METHOD" "$CSV"; then
     cat "$CSV"
-    fail "proxy_method.csv does not contain 'getSlot'"
+    fail "proxy_method.csv does not contain '$RPC_METHOD'"
 fi
 
 echo ""
-echo "✅ PASS: test_proxy_phase.sh — proxy_method.csv produced, contains getSlot, lifecycle clean"
+echo "✅ PASS: test_proxy_phase.sh — proxy_method.csv produced, contains ${RPC_METHOD}, lifecycle clean"
 exit 0

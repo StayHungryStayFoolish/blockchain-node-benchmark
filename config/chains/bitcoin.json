@@ -1,45 +1,46 @@
 {
   "chain_type": "bitcoin",
-  "methods": {},
   "param_formats": {
     "getblockcount": "no_params",
     "getblock": "[blockhash,verbosity]",
     "getrawtransaction": "[txid,verbose]",
     "getrawmempool": "no_params",
     "estimatesmartfee": "[conf_target]",
-    "getreceivedbyaddress": "single_address"
+    "GET /address/{address}": "path_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+    "target_address": "${TARGET_ADDRESS:-1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa}",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "target_block_hash": "${TARGET_BLOCK_HASH:-000000000000000000002c67293fef41a3dbf443d3eb6ed106a4e2f37c09fc86}",
+    "target_txid": "${TARGET_TXID:-71963d6261a4b0e781d839a405cd57c2ae1101bb17a3c9d997517f6f136112fc}"
   },
   "rpc_methods": {
-    "single": "getreceivedbyaddress",
+    "single": "GET /address/{address}",
     "mixed": "getblockcount,getblock,getrawtransaction,getrawmempool,estimatesmartfee",
     "mixed_weighted": [
       {
         "method": "getblockcount",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getblock",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getrawtransaction",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getrawmempool",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "estimatesmartfee",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -47,32 +48,79 @@
   "system_addresses": [],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/03-bitcoin.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.936726+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "mixed",
     "original_public_endpoints": [
       {
         "url": "https://bitcoin-rpc.publicnode.com",
         "auth": false,
         "verified": "E2",
-        "notes": "allnodes 反代,wallet 类 method 被禁(-32701)"
-      },
-      {
-        "url": "https://blockstream.info/api",
-        "auth": false,
-        "verified": "E2",
-        "notes": "Esplora REST,address balance 补全"
+        "notes": "publicnode.com Bitcoin JSON-RPC"
       }
     ],
-    "original_notes": "JSON-RPC 1.0 + Esplora REST 双栈;UTXO 模型,无 address index,balance 必经 Esplora",
+    "original_notes": "JSON-RPC 1.0 + Esplora REST dual stack; UTXO model; no address index, so balance requires Esplora.",
     "adapter_required": true,
     "adapter_family": "bitcoin_jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "rest_paths": {
+      "getblockcount": {
+        "method": "GET",
+        "path": "/blocks/tip/height"
+      },
+      "getblock": {
+        "method": "GET",
+        "path": "/block/{blockhash}"
+      },
+      "getrawtransaction": {
+        "method": "GET",
+        "path": "/tx/{txid}"
+      },
+      "getrawmempool": {
+        "method": "GET",
+        "path": "/mempool"
+      },
+      "estimatesmartfee": {
+        "method": "GET",
+        "path": "/fee-estimates"
+      },
+      "GET /address/{address}": {
+        "method": "GET",
+        "base_url": "https://mempool.space/api",
+        "path": "/address/{address}"
+      }
+    },
+    "replaced_unavailable_methods": [
+      {
+        "from": "getreceivedbyaddress",
+        "to": "GET /address/{address}",
+        "reason": "public Bitcoin JSON-RPC endpoint rejects wallet method getreceivedbyaddress with 501; project docs state address balance requires Esplora REST"
+      }
+    ],
+    "health_probe": {
+      "method": "getblockchaininfo",
+      "params": [],
+      "parse_jq": ".result.blocks",
+      "local_sync_fields": {
+        "local_height": ".result.blocks",
+        "known_network_height": ".result.headers",
+        "initial_block_download": ".result.initialblockdownload"
+      }
+    },
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Use getblockchaininfo.blocks as the comparable height cursor; getblockchaininfo.headers and initialblockdownload remain available for future local-only sync enrichment."
+    }
   },
   "proxy_extraction": {
     "extractors": [

@@ -31,14 +31,14 @@ def _fail(msg: str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 1: Factory registration — 6 families (ADR-0005: ogmios removed)
+# Test 1: Factory registration — 6 families (ogmios removed)
 # ─────────────────────────────────────────────────────────────────────────────
 def test_factory_registers_seven_families():
     print("\n[1] Factory registration")
     fams = list_adapters()
     expected = {"jsonrpc", "rest", "tendermint", "bitcoin_jsonrpc", "substrate", "hedera_dual"}
     assert set(fams) == expected, f"expected {expected}, got {fams}"
-    _ok(f"6 families registered (ADR-0005: ogmios removed): {sorted(fams)}")
+    _ok(f"6 families registered (ogmios removed): {sorted(fams)}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -141,6 +141,26 @@ def test_parse_block_height_per_family():
     assert h == 337632288, f"jsonrpc decimal: got {h}"
     _ok("JsonRpcAdapter parses decimal int result")
 
+    h = a.parse_block_height(json.dumps({"result": "ok"}))
+    assert h == 0, f"jsonrpc Solana getHealth ok lag: got {h}"
+    _ok("JsonRpcAdapter parses Solana getHealth ok as lag 0")
+
+    h = a.parse_block_height(json.dumps({
+        "error": {
+            "code": -32005,
+            "message": "Node is behind by 75 slots",
+            "data": {"numSlotsBehind": 75},
+        }
+    }))
+    assert h == 75, f"jsonrpc Solana getHealth numSlotsBehind: got {h}"
+    _ok("JsonRpcAdapter parses Solana getHealth numSlotsBehind lag")
+
+    h = a.parse_block_height(json.dumps({
+        "result": {"currentBlock": "0x10", "highestBlock": "0x32"}
+    }))
+    assert h == 34, f"jsonrpc eth_syncing lag: got {h}"
+    _ok("JsonRpcAdapter parses eth_syncing current/highest lag")
+
     # Tendermint
     a = get_adapter("cosmos-hub")
     h = a.parse_block_height(json.dumps(
@@ -160,14 +180,14 @@ def test_parse_block_height_per_family():
     assert h == 0x1A2B3C, f"substrate: got {h}"
     _ok("SubstrateAdapter parses .result.number 0x-hex")
 
-    # Ogmios family was removed in ADR-0005 (2026-05-28) — cardano now uses
+    # Ogmios family was removed in (2026-05-28) — cardano now uses
     # rest family (Koios REST). The block height path is now exercised below
     # via RestAdapter on cardano with the Koios /tip response shape (block_no).
     os.environ["BLOCKCHAIN_NODE"] = "cardano"
     a = get_adapter("cardano")
     h = a.parse_block_height(json.dumps([{"block_no": 10500000, "abs_slot": 99}]))
     assert h == 10500000, f"cardano (rest via Koios /tip): got {h}"
-    _ok("RestAdapter parses Cardano Koios /tip .[0].block_no (ADR-0005)")
+    _ok("RestAdapter parses Cardano Koios /tip .[0].block_no")
 
     # Rest — Tezos with .header.level
     os.environ["BLOCKCHAIN_NODE"] = "tezos"
@@ -253,11 +273,11 @@ def test_rest_requires_env_and_path_map():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 8 (S3-A): JsonRpc new formats — block_number / block_number_int /
+# Test 8 (chain-specific): JsonRpc new formats — block_number / block_number_int /
 #                transaction_hash / eth_call_object_latest / object_single
 # ─────────────────────────────────────────────────────────────────────────────
 def test_jsonrpc_s3a_new_formats():
-    print("\n[8] JsonRpc S3-A new formats (5 EVM-compat chains)")
+    print("\n[8] JsonRpc chain-specific new formats (5 EVM-compat chains)")
     a = get_adapter("arbitrum")  # any jsonrpc chain works
     url = "http://x"
 
@@ -309,7 +329,7 @@ def test_jsonrpc_s3a_new_formats():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 9 (S3-A): 5 EVM-compat chains have only standard-enum param_formats
+# Test 9 (chain-specific): 5 EVM-compat chains have only standard-enum param_formats
 # ─────────────────────────────────────────────────────────────────────────────
 def test_evm_compat_5chains_standard_enum():
     print("\n[9] EVM-compat 5 chains: param_formats ⊂ adapter standard enum")
@@ -339,30 +359,17 @@ def test_evm_compat_5chains_standard_enum():
 #   (a) cli.py exits 0
 #   (b) decoded body contains the supplied address
 #
-# KNOWN_BROKEN: chains where the CURRENT state is broken at the CLI entrypoint
-# (commit 436e1d0 baseline, 2026-05-24 audit). Each entry MUST cite its
-# failure-mode bucket (F1/F2/F3/F4) so the responsible S3 wave knows what to fix.
-#
-# Invariant: KNOWN_BROKEN must shrink monotonically. New chains may not be added
-# without explicit user decision. Each S3-B/C/D/E/F wave is required to remove
-# at least the entries assigned to it (see "Fix wave" column below).
+# Historical regression guard: the CLI entrypoint should have no known-broken
+# chain templates. New entries should only be added with an explicit decision
+# and a documented reason.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# (chain, expected_failure_mode, fix_wave_owner, reason)
+# (chain, expected_failure_mode, owner, reason)
 KNOWN_BROKEN_CLI = {
-    # ─────────────────────────────────────────────────────────────────────
-    # Step 9 (ADR-0005 + 36-chain rollout, 2026-05-28):
-    # ALL 23 prior entries fixed by chain-template edits — rpc_methods.single
-    # changed from no-address health-probe methods to address-bearing methods
-    # (eth_getBalance / system_account / getreceivedbyaddress / etc).
-    # Each chain's new single is declared in param_formats OR _meta.rest_paths.
-    # See git log fix(adr-0005): step 9 — 23 chains CLI healthy
-    # ─────────────────────────────────────────────────────────────────────
 }
 
 assert len(KNOWN_BROKEN_CLI) == 0, (
-    f"KNOWN_BROKEN_CLI must have exactly 0 entries (step 9 cleared all 23 chain-template "
-    f"bugs by changing rpc_methods.single to address-bearing methods). "
+    f"KNOWN_BROKEN_CLI must have exactly 0 entries. "
     f"got {len(KNOWN_BROKEN_CLI)}"
 )
 
@@ -370,32 +377,22 @@ assert len(KNOWN_BROKEN_CLI) == 0, (
 # ─────────────────────────────────────────────────────────────────────────────
 # KNOWN_BROKEN_MIXED — chains whose `single` benchmark passes L1-CLI test_10
 # but whose `mixed` (multi-method) path is broken in production (live HTTP
-# would 4xx/5xx). Documented here for honesty; not auto-asserted because we
-# don't yet have a `mixed` equivalent of test_10. When a future wave adds a
-# mixed-path test, this dict graduates to enforced invariant.
+# would 4xx/5xx). Documented here for honesty; not auto-asserted because this
+# file does not currently include a `mixed` equivalent of the single-method CLI
+# test. When such a test exists, this dict can become an enforced invariant.
 #
-# Format: (chain, failure_layer, fix_wave, evidence)
+# Format: (chain, failure_layer, owner, evidence)
 #   failure_layer:
 #     PARAM     — cli.py reads tpl['params'] (fetcher config) when it should
 #                 read tpl['param_formats'] (method→shape). Affects all
-#                 JSON-RPC chains' eth_* calls (missing 'latest'). Fix wave: cli-param-bug
-#     ADDR_FMT  — fetch_active_accounts.py doesn't know chain-specific address
-#                 transformations (hedera 3-part 0.0.N → EVM 0x...0N).
-#                 Fix wave: S4 (per-chain account fetcher)
+#                 JSON-RPC chains' eth_* calls (missing 'latest').
+#     ADDR_FMT  — a chain adapter cannot build the required address format
+#                 from the template target seed.
 # ─────────────────────────────────────────────────────────────────────────────
 KNOWN_BROKEN_MIXED = {
-    "hedera": (
-        "PARAM+ADDR_FMT", "cli-param-bug + S4",
-        "S3-E.3 C1 实证:adapter routing 正确 (test_11 PASS),但 (1) cli.py L40 "
-        "读 tpl['params'] 应读 tpl['param_formats'] → eth_getBalance 缺 'latest'; "
-        "(2) fetch_active_accounts.py 不支持 hedera → 喂 3-part ID 0.0.N 给 Hashio "
-        "返 HTTP 400 'Expected 0x prefixed string representing the address (20 bytes)'. "
-        "需 fetcher 拿 mirror /accounts/{id} 的 evm_address 字段。"
-        " [PARAM resolved in cli-param-bug commit e3ae757; ADDR_FMT still blocking, S4]"
-    ),
     "tezos": (
-        "MULTI_PLACEHOLDER", "S4 (RestAdapter v2)",
-        "S3-E.4 2026-05-25: single (balance) works in single mode L1+L3 PASS, "
+        "MULTI_PLACEHOLDER", "RestAdapter v2",
+        "tezos adapter 2026-05-25: single (balance) works in single mode L1+L3 PASS, "
         "but mixed mode method 'GET /chains/main/blocks/{block}/operations/{vp}' "
         "needs both {block} and {vp} (validation_pass int 0-3) placeholders. "
         "RestAdapter v1 only supports single {address} placeholder. Fix requires "
@@ -419,12 +416,10 @@ def _sample_address_for(family: str) -> str:
         "bitcoin_jsonrpc": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
         "substrate":       "12bzRJfh7arnnfPPUZHeJUaE62QLEwhK48QnH9LXeK2m1iZU",
         "tendermint":      "cosmos1abc",
-        # ogmios removed in ADR-0005 (cardano migrated to rest family)
+        # ogmios removed in (cardano migrated to rest family)
         "rest":            "TESTADDR123",
-        # hedera_dual: native 3-part account ID; L1 only asserts the address
-        # string appears in url-or-body, not EVM semantics. Production
-        # fetch_active_accounts must convert 0.0.N → EVM 0x...0N for eth_*
-        # routes — out of scope for L1.
+        # hedera_dual: native 3-part account ID; the dual adapter performs
+        # method-specific formatting where needed.
         "hedera_dual":     "0.0.2",
     }.get(family, "TESTADDR123")
 
@@ -486,7 +481,7 @@ def test_cli_build_target_all_36_chains():
         # the address into a method that semantically takes no address
         # (e.g. cardano `GET /tip`, acala `system_chain`). The vegeta target
         # generates fine but the real node returns -32602 / 404 / empty.
-        # Discovered during cli-param-bug wave (2026-05-25): default
+        # Discovered during CLI parameter-format regression testing: default
         # fallback "single_address" was masking 11 F1/F2/F3 broken chains.
         param_formats = tpl.get("param_formats") or {}
         rest_paths = (tpl.get("_meta") or {}).get("rest_paths") or []
@@ -503,7 +498,7 @@ def test_cli_build_target_all_36_chains():
     # Invariant check: actually_broken must be a SUBSET of expected_broken
     # (broken set may only shrink, never grow). New chains added to the
     # framework must either pass cleanly or be explicitly added to
-    # KNOWN_BROKEN_CLI with a fix-wave owner.
+    # KNOWN_BROKEN_CLI with an owner.
     unexpected_new_broken = actually_broken - expected_broken
     unexpectedly_healthy = expected_broken - actually_broken
 
@@ -516,7 +511,7 @@ def test_cli_build_target_all_36_chains():
             f"REGRESSION — new chains broken at CLI entrypoint that were "
             f"NOT in KNOWN_BROKEN_CLI: {sorted(unexpected_new_broken)}. "
             f"Either fix them or add to KNOWN_BROKEN_CLI with explicit "
-            f"fix-wave assignment (F1/F2/F3/F4 + S3-B/C/D/E/F owner)."
+            f"owner assignment and failure mode."
         )
 
     if unexpectedly_healthy:

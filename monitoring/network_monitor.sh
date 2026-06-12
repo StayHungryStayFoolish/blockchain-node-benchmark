@@ -1,13 +1,12 @@
 #!/bin/bash
 # =====================================================================
-# Network Monitor - Y+ 架构 NIC 监控统一入口
+# Network Monitor - provider-aware NIC monitoring entrypoint
 # =====================================================================
-# Replaces AWS-only ena_network_monitor.sh with platform-aware Y+ architecture.
+# Replaces the retired AWS-only ENA monitor with provider-aware NIC monitoring.
 # Routes to aws_ena.sh | gcp_gvnic.sh | gcp_virtio.sh | other_none.sh
 # based on (CLOUD_PROVIDER, NIC_DRIVER) detected at runtime.
 #
 # This script is invoked by monitoring/monitoring_coordinator.sh task "network".
-# Old ena_network_monitor.sh continues to coexist for AWS legacy compatibility.
 # =====================================================================
 
 # Strict error handling - allow safe sourcing
@@ -20,7 +19,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Load config (failure-tolerant, same pattern as ena_network_monitor.sh)
+# Load config (failure-tolerant)
 if ! source "${PROJECT_ROOT}/config/config_loader.sh" 2>/dev/null; then
     echo "Warning: Configuration file loading failed, using defaults" >&2
     MONITOR_INTERVAL=${MONITOR_INTERVAL:-10}
@@ -38,7 +37,7 @@ else
     log_error() { echo "[ERROR] $*" >&2; }
 fi
 
-# Source Y+ unified entry — auto-detects platform/driver, sources right provider, exposes 4 interface funcs
+# Source provider-aware entrypoint; it detects platform/driver and exposes interface functions
 if ! source "${PROJECT_ROOT}/monitoring/network_unified_entry.sh"; then
     log_error "Failed to source network_unified_entry.sh"
     exit 1
@@ -46,7 +45,7 @@ fi
 
 # Output CSV path — uses "network_" prefix (not "ena_network_") to distinguish from legacy
 NETWORK_CSV="${NETWORK_CSV:-${LOGS_DIR}/network_${SESSION_TIMESTAMP}.csv}"
-NETWORK_PID_FILE="${TMP_DIR:-/tmp}/network_monitor.pid"
+NETWORK_PID_FILE="${NETWORK_PID_FILE:-${TMP_DIR:-/tmp}/network_monitor.pid}"
 
 mkdir -p "$(dirname "$NETWORK_CSV")" 2>/dev/null || true
 
@@ -140,7 +139,7 @@ PYEOF
 
 cmd_help() {
     cat <<EOF
-Network Monitor — Y+ architecture NIC monitor (replaces AWS-only ena_network_monitor.sh)
+Network Monitor - provider-aware NIC monitor
 
 Usage:
   $0 start [duration_seconds] [interval_seconds]

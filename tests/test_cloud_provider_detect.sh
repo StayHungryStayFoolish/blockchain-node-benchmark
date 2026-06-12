@@ -2,9 +2,9 @@
 # tests/test_cloud_provider_detect.sh
 # Mock-based unit test for config/cloud_provider.sh : detect_platform()
 #
-# 验证 GCP / AWS / other 三个分支都能正确命中,且对沙盒/代理返回 HTML 错误页有抵抗力。
-# 用法:   bash tests/test_cloud_provider_detect.sh
-# 退出码:  0 = 全过, 非 0 = 至少一个用例失败
+# Verifies GCP / AWS / other detection, including proxy or metadata poisoning.
+# Usage: bash tests/test_cloud_provider_detect.sh
+# Exit code: 0 when all cases pass, non-zero on failure.
 
 set -u
 set -o pipefail
@@ -23,86 +23,87 @@ FAIL=0
 declare -a FAILURES=()
 
 # ---------------------------------------------------------------------------
-# 每个用例 = 一个 subshell, 注入指定的 MOCK_MODE,curl 是统一 dispatcher
-# 这样避免 eval 多行函数体的引号地狱。
+# Each case runs in a subshell with a curl dispatcher selected by MOCK_MODE.
 # ---------------------------------------------------------------------------
+
+curl() {
+    local args="$*"
+    case "$MOCK_MODE" in
+      gcp_happy)
+          if [[ "$args" == *metadata.google.internal* ]]; then
+              echo "7583017767800978370"; return 0
+          fi
+          return 7
+          ;;
+      aws_happy)
+          if [[ "$args" == *metadata.google.internal* ]]; then return 7; fi
+          if [[ "$args" == *169.254.169.254/latest/api/token* ]]; then
+              echo "AQAEAFakeToken1234567890=="; return 0
+          fi
+          if [[ "$args" == *169.254.169.254/latest/meta-data/instance-id* ]]; then
+              echo "i-0abc123def4567890"; return 0
+          fi
+          return 7
+          ;;
+      aws_bare_metadata_rejected)
+          if [[ "$args" == *metadata.google.internal* ]]; then return 7; fi
+          if [[ "$args" == *169.254.169.254/latest/api/token* ]]; then return 7; fi
+          if [[ "$args" == *169.254.169.254/latest/meta-data/instance-id* ]]; then
+              echo "i-0abc123def4567890"; return 0
+          fi
+          return 7
+          ;;
+      other_none)
+          return 7
+          ;;
+      gcp_priority_over_poisoned_aws)
+          if [[ "$args" == *metadata.google.internal* ]]; then
+              echo "7583017767800978370"; return 0
+          fi
+          if [[ "$args" == *169.254.169.254* ]]; then
+              echo "<html><body>Proxy error</body></html>"; return 0
+          fi
+          return 7
+          ;;
+      other_html_poisoned_all)
+          if [[ "$args" == *metadata.google.internal* ]]; then
+              echo "<html>blocked</html>"; return 0
+          fi
+          if [[ "$args" == *169.254.169.254* ]]; then
+              echo "<html>blocked</html>"; return 0
+          fi
+          return 7
+          ;;
+      gcp_empty_body)
+          if [[ "$args" == *metadata.google.internal* ]]; then
+              echo -n ""; return 0
+          fi
+          return 7
+          ;;
+      *)
+          echo "MOCK_MODE not set" >&2
+          return 99
+          ;;
+    esac
+}
+
+ip() { echo "default via 10.0.0.1 dev eth0"; }
+ethtool() { echo "driver: virtio_net"; }
+export -f curl ip ethtool
 
 run_case() {
     local case_name="$1"
-    local mock_mode="$2"     # 见 dispatch_curl 里的 case
+    local mock_mode="$2"     # matches dispatch_curl case labels
     local expected="$3"
 
     local actual
     actual=$(
         export MOCK_MODE="$mock_mode"
 
-        # --- 统一 curl mock ---
-        # cloud_provider.sh 里 curl 的所有 invocation 都被它接住。
-        # 通过 $@ 匹配 URL/host 决定返回什么。
-        curl() {
-            local args="$*"
-            case "$MOCK_MODE" in
-              gcp_happy)
-                  if [[ "$args" == *metadata.google.internal* ]]; then
-                      echo "7583017767800978370"; return 0
-                  fi
-                  return 7
-                  ;;
-              aws_happy)
-                  if [[ "$args" == *metadata.google.internal* ]]; then return 7; fi
-                  if [[ "$args" == *169.254.169.254/latest/api/token* ]]; then
-                      echo "AQAEAFakeToken1234567890=="; return 0
-                  fi
-                  if [[ "$args" == *169.254.169.254/latest/meta-data/instance-id* ]]; then
-                      echo "i-0abc123def4567890"; return 0
-                  fi
-                  return 7
-                  ;;
-              other_none)
-                  return 7
-                  ;;
-              gcp_priority_over_poisoned_aws)
-                  if [[ "$args" == *metadata.google.internal* ]]; then
-                      echo "7583017767800978370"; return 0
-                  fi
-                  if [[ "$args" == *169.254.169.254* ]]; then
-                      # 169.254 任何路径都返回 HTML(模拟代理)
-                      echo "<html><body>Proxy error</body></html>"; return 0
-                  fi
-                  return 7
-                  ;;
-              other_html_poisoned_all)
-                  if [[ "$args" == *metadata.google.internal* ]]; then
-                      echo "<html>blocked</html>"; return 0
-                  fi
-                  if [[ "$args" == *169.254.169.254* ]]; then
-                      echo "<html>blocked</html>"; return 0
-                  fi
-                  return 7
-                  ;;
-              gcp_empty_body)
-                  if [[ "$args" == *metadata.google.internal* ]]; then
-                      echo -n ""; return 0
-                  fi
-                  return 7
-                  ;;
-              *)
-                  echo "MOCK_MODE not set" >&2
-                  return 99
-                  ;;
-            esac
-        }
-        export -f curl
-
-        # --- mock ip / ethtool 让 detect_cloud_provider source 时不踩真命令 ---
-        ip() { echo "default via 10.0.0.1 dev eth0"; }
-        ethtool() { echo "driver: virtio_net"; }
-        export -f ip ethtool
-
-        # --- clean env 防短路 ---
+        # --- Clean env to avoid short-circuiting detection. ---
         unset CLOUD_PROVIDER NIC_DRIVER CLOUD_PROVIDER_VARIANT NETWORK_INTERFACE
 
-        # source(detect_cloud_provider 会跑一次, 无副作用问题)
+        # Sourcing runs detect_cloud_provider once; detect_platform is called below.
         # shellcheck disable=SC1090
         source "$CP_SH" >/dev/null 2>&1
         detect_platform
@@ -124,6 +125,7 @@ echo "============================================================"
 
 run_case "GCP-happy-path"                       "gcp_happy"                       "gcp"
 run_case "AWS-IMDSv2-happy-path"                "aws_happy"                       "aws"
+run_case "AWS-bare-metadata-request-rejected"   "aws_bare_metadata_rejected"      "other"
 run_case "Other-no-metadata"                    "other_none"                      "other"
 run_case "GCP-priority-over-poisoned-AWS"       "gcp_priority_over_poisoned_aws"  "gcp"
 run_case "Other-rejects-HTML-poisoned-AWS-meta" "other_html_poisoned_all"         "other"

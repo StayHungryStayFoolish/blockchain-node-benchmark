@@ -1,0 +1,47 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://cardano-mainnet.gateway.tatum.io/network/status",
+    "headers": {
+      "accept": "application/json",
+      "content-type": "application/json",
+      "x-api-key": "t-6a26a7fa61f0d589c61bc638-f9c8809f02ec448e8972e908"
+    },
+    "body": "{\"network_identifier\":{\"blockchain\":\"cardano\",\"network\":\"mainnet\"}}"
+  },
+  "response": {
+    "status_code": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "current_block_identifier": {
+        "index": 13523967,
+        "hash": "2be4be7f9ad120f3b651aac1035f7ed32c13e2d81b758840076cc2cc91b82a10"
+      },
+      "current_block_timestamp": 1780931859000,
+      "genesis_block_identifier": {
+        "index": 0,
+        "hash": "5f20df933584822601f9e3f8c024eb5eb252fe8cefb24d1317dc3d432e940ebb"
+      },
+      "peers": [
+        {
+          "peer_id": "backbone.cardano.iog.io"
+        },
+        {
+          "peer_id": "backbone.mainnet.cardanofoundation.org"
+        },
+        {
+          "peer_id": "backbone.mainnet.emurgornd.com"
+        }
+      ]
+    }
+  },
+  "meta": {
+    "chain": "cardano",
+    "method": "network_status",
+    "endpoint": "https://cardano-mainnet.gateway.tatum.io/network/status",
+    "recorded_at": "2026-06-08T15:17:48.686410Z",
+    "notes": "\u624b\u52a8\u5f55\u5236 - cardano network_status"
+  }
+}

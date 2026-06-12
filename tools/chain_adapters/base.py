@@ -64,13 +64,17 @@ def _b64(s: str) -> str:
     return base64.b64encode(s.encode("utf-8")).decode("ascii")
 
 
-def _vegeta_post_json(rpc_url: str, body_obj: dict) -> dict:
+def _vegeta_post_json(rpc_url: str, body_obj: dict, extra_headers: dict = None) -> dict:
     """Standard JSON POST vegeta target."""
     body_str = json.dumps(body_obj, separators=(",", ":"))
+    headers = {"Content-Type": ["application/json"]}
+    if extra_headers:
+        for key, value in extra_headers.items():
+            headers[key] = [value]
     return {
         "method": "POST",
         "url": rpc_url,
-        "header": {"Content-Type": ["application/json"]},
+        "header": headers,
         "body": _b64(body_str),
     }
 

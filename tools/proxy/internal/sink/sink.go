@@ -1,14 +1,15 @@
-// Package sink 是 per-method 采集结果的持久化层。
+// Package sink persists per-method collection records.
 //
-// CSV schema (列顺序锁定):
+// CSV schema (column order is stable):
 //
 //	timestamp_ns, method_name, protocol, request_id, batch_idx,
-//	status_code, latency_ms, upstream, client_addr
+//	status_code, transport_success, rpc_success, rpc_error_code,
+//	rpc_error_message, latency_ms, upstream, client_addr
 //
-// 环境变量:
+// Environment variables:
 //
-//	PROXY_SINK_FORMAT  csv (默认) | jsonl | discard
-//	PROXY_SINK_PATH    输出路径;默认 ./proxy_per_method.csv 或 .jsonl
+//	PROXY_SINK_FORMAT  csv (default) | jsonl | discard
+//	PROXY_SINK_PATH    output path; defaults to ./proxy_per_method.csv or .jsonl
 package sink
 
 import (
@@ -21,15 +22,19 @@ import (
 )
 
 type Record struct {
-	TimestampNS int64  `json:"timestamp_ns"`
-	MethodName  string `json:"method_name"`
-	Protocol    string `json:"protocol"`
-	RequestID   string `json:"request_id"`
-	BatchIdx    int    `json:"batch_idx"`
-	StatusCode  int    `json:"status_code"`
-	LatencyMS   int64  `json:"latency_ms"`
-	Upstream    string `json:"upstream"`
-	ClientAddr  string `json:"client_addr"`
+	TimestampNS      int64  `json:"timestamp_ns"`
+	MethodName       string `json:"method_name"`
+	Protocol         string `json:"protocol"`
+	RequestID        string `json:"request_id"`
+	BatchIdx         int    `json:"batch_idx"`
+	StatusCode       int    `json:"status_code"`
+	TransportSuccess bool   `json:"transport_success"`
+	RPCSuccess       bool   `json:"rpc_success"`
+	RPCErrorCode     string `json:"rpc_error_code"`
+	RPCErrorMessage  string `json:"rpc_error_message"`
+	LatencyMS        int64  `json:"latency_ms"`
+	Upstream         string `json:"upstream"`
+	ClientAddr       string `json:"client_addr"`
 }
 
 type Sink interface {
@@ -39,7 +44,8 @@ type Sink interface {
 
 var csvHeader = []string{
 	"timestamp_ns", "method_name", "protocol", "request_id", "batch_idx",
-	"status_code", "latency_ms", "upstream", "client_addr",
+	"status_code", "transport_success", "rpc_success", "rpc_error_code",
+	"rpc_error_message", "latency_ms", "upstream", "client_addr",
 }
 
 func New(format, path string) (Sink, error) {
@@ -100,6 +106,8 @@ func (s *fileSink) Write(r Record) error {
 		err := s.w.Write([]string{
 			strconv.FormatInt(r.TimestampNS, 10), r.MethodName, r.Protocol,
 			r.RequestID, strconv.Itoa(r.BatchIdx), strconv.Itoa(r.StatusCode),
+			strconv.FormatBool(r.TransportSuccess), strconv.FormatBool(r.RPCSuccess),
+			r.RPCErrorCode, r.RPCErrorMessage,
 			strconv.FormatInt(r.LatencyMS, 10), r.Upstream, r.ClientAddr,
 		})
 		if err != nil {

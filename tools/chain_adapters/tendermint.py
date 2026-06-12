@@ -17,13 +17,69 @@ Health probe = `status` method → .result.sync_info.latest_block_height (string
 from __future__ import annotations
 import json
 import os
+from pathlib import Path
 from typing import Optional
 
-from .base import ChainAdapter, register, _vegeta_post_json, _try_int
+from .base import ChainAdapter, register, _vegeta_get, _vegeta_post_json, _try_int
+from .jsonrpc import JsonRpcAdapter
+from .rest import _is_fake_node_url
+from .url_overrides import first_url, resolve_param
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_CHAINS_DIR = _REPO_ROOT / "config" / "chains"
 
 
 @register("tendermint")
 class TendermintAdapter(ChainAdapter):
+
+    def __init__(self):
+        self._chain_cache: dict[str, dict] = {}
+        self._jsonrpc = JsonRpcAdapter()
+
+    def _load_chain(self, chain_name: str) -> dict:
+        if chain_name not in self._chain_cache:
+            with open(_CHAINS_DIR / f"{chain_name}.json") as f:
+                self._chain_cache[chain_name] = json.load(f)
+        return self._chain_cache[chain_name]
+
+    @staticmethod
+    def _pick_url(tpl: dict, kind: str, fallback: str) -> str:
+        meta = tpl.get("_meta", {})
+        if kind == "rest":
+            override = first_url("CHAIN_REST_URL")
+            if override:
+                return override
+        if kind == "evm":
+            override = first_url("CHAIN_EVM_RPC_URL")
+            if override:
+                return override
+        if kind == "rest" and meta.get("rest_url"):
+            return meta["rest_url"]
+        if kind == "evm" and meta.get("evm_rpc_url"):
+            return meta["evm_rpc_url"]
+        endpoints = meta.get("original_public_endpoints", [])
+        for endpoint in endpoints:
+            url = endpoint.get("url", "")
+            notes = endpoint.get("notes", "").lower()
+            if kind == "rest" and ("rest" in url or "lcd" in url or "rest" in notes or "lcd" in notes):
+                return url
+            if kind == "evm" and ("evm" in url or "evm" in notes or "drpc" in url):
+                return url
+        return fallback
+
+    @staticmethod
+    def _replace_path_samples(path: str, address: str, tpl: dict) -> str:
+        params = tpl.get("params", {}) if isinstance(tpl.get("params"), dict) else {}
+        samples = {
+            "address": address,
+            "addr": address,
+            "height": str(resolve_param(params, "target_height", resolve_param(params, "height", "1"))),
+            "hash": resolve_param(params, "target_tx_hash", resolve_param(params, "tx_hash", "")),
+            "pool_id": str(resolve_param(params, "target_pool_id", resolve_param(params, "pool_id", "1"))),
+        }
+        for key, value in samples.items():
+            path = path.replace("{" + key + "}", str(value))
+        return path
 
     def build_vegeta_target(
         self, method: str, address: str, rpc_url: str, param_format: str = "",
@@ -35,6 +91,27 @@ class TendermintAdapter(ChainAdapter):
             single_address     → params: {"address": "<addr>"} (caller-chain-specific)
             height_param       → params: {"height": "<addr>"} (block-height query, address holds height)
         """
+        chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
+        tpl = self._load_chain(chain_name) if chain_name else {}
+        if method.startswith("eth_") and _is_fake_node_url(rpc_url):
+            return self._jsonrpc.build_vegeta_target(method, address, rpc_url, param_format)
+        if method.startswith("eth_"):
+            evm_url = rpc_url if _is_fake_node_url(rpc_url) else self._pick_url(tpl, "evm", rpc_url)
+            jsonrpc_format = "eth_call_object_latest" if method == "eth_call" else param_format
+            return self._jsonrpc.build_vegeta_target(method, address, evm_url, jsonrpc_format)
+        if method.startswith("/") or method.startswith("GET "):
+            rest_paths = tpl.get("_meta", {}).get("rest_paths", {}) if isinstance(tpl, dict) else {}
+            spec = rest_paths.get(method, {})
+            path = spec.get("path", method)
+            if path.startswith("GET "):
+                path = path[4:]
+            if method.startswith("GET ") and not spec:
+                path = method[4:]
+            base_url = rpc_url if _is_fake_node_url(rpc_url) else (
+                spec.get("base_url") or (rpc_url if path in ("/status", "/block") else self._pick_url(tpl, "rest", rpc_url))
+            )
+            path = self._replace_path_samples(path, address, tpl)
+            return _vegeta_get(base_url.rstrip("/") + path)
         params = self._build_params(param_format, address)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
@@ -58,7 +135,30 @@ class TendermintAdapter(ChainAdapter):
         return {"address": address}
 
     def health_check_request(self, rpc_url: str) -> dict:
-        """Tendermint health = `status` method."""
+        """Build a per-chain Tendermint/Cosmos height probe."""
+        chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
+        tpl = self._load_chain(chain_name) if chain_name else {}
+        rpc_methods = tpl.get("rpc_methods", {}) if isinstance(tpl, dict) else {}
+        mixed = str(rpc_methods.get("mixed", ""))
+        if "eth_blockNumber" in mixed:
+            return self._jsonrpc.health_check_request(rpc_url)
+        if "/cosmos/base/tendermint/v1beta1/blocks/latest" in mixed:
+            return {
+                "method": "GET",
+                "url": rpc_url.rstrip("/") + "/cosmos/base/tendermint/v1beta1/blocks/latest",
+                "headers": {},
+                "body": "",
+                "parse_jq": ".block.header.height",
+            }
+        if "/status" in mixed:
+            return {
+                "method": "GET",
+                "url": rpc_url.rstrip("/") + "/status",
+                "headers": {},
+                "body": "",
+                "parse_jq": ".result.sync_info.latest_block_height // .sync_info.latest_block_height",
+            }
+
         body = {"jsonrpc": "2.0", "id": 1, "method": "status", "params": {}}
         return {
             "method": "POST",
@@ -78,4 +178,13 @@ class TendermintAdapter(ChainAdapter):
         try:
             return _try_int(obj["result"]["sync_info"]["latest_block_height"])
         except (KeyError, TypeError):
-            return None
+            pass
+        try:
+            return _try_int(obj["sync_info"]["latest_block_height"])
+        except (KeyError, TypeError):
+            pass
+        try:
+            return _try_int(obj["block"]["header"]["height"])
+        except (KeyError, TypeError):
+            pass
+        return self._jsonrpc.parse_block_height(response_text)

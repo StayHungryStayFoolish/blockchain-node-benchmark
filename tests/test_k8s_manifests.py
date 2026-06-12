@@ -76,7 +76,7 @@ class TestYAMLParses(unittest.TestCase):
 
 
 class TestKindCoverage(unittest.TestCase):
-    """Every kind we promised in plan §S4 must be present."""
+    """Every required Kubernetes manifest kind must be present."""
 
     REQUIRED_KINDS = {"Namespace", "ServiceAccount", "ClusterRole",
                       "ClusterRoleBinding", "ConfigMap", "DaemonSet"}
@@ -175,7 +175,7 @@ class TestProbes(unittest.TestCase):
 
 
 class TestRBACMinimum(unittest.TestCase):
-    """ClusterRole must grant the read-only verbs S5 will need."""
+    """ClusterRole must grant the read-only verbs required by the collector."""
 
     def test_cluster_role_has_required_resources(self):
         docs = load_all_docs()
@@ -185,7 +185,7 @@ class TestRBACMinimum(unittest.TestCase):
         for rule in cr["rules"]:
             all_resources.update(rule.get("resources", []))
             all_verbs.update(rule.get("verbs", []))
-        # Resources S5 explicitly needs
+        # Resources required by the collector
         for required in ("pods", "persistentvolumeclaims",
                           "persistentvolumes", "nodes", "nodes/proxy"):
             self.assertIn(required, all_resources,
@@ -201,7 +201,7 @@ class TestRBACMinimum(unittest.TestCase):
 
 
 class TestDaemonSetSecurity(unittest.TestCase):
-    """Critical security/runtime settings per plan §S4."""
+    """Critical security and runtime settings."""
 
     def setUp(self):
         self.docs = load_all_docs()
@@ -253,7 +253,7 @@ class TestDaemonSetSecurity(unittest.TestCase):
 
 
 class TestConfigMapKeys(unittest.TestCase):
-    """ConfigMap must export the env vars S2/S3 expect."""
+    """ConfigMap must export the env vars required by the collector."""
 
     REQUIRED_KEYS = {"HOST_PROC", "HOST_SYS", "DEPLOYMENT_MODE",
                      "TARGET_CGROUP", "COLLECTION_INTERVAL_SEC"}

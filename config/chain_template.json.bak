@@ -1,0 +1,96 @@
+{
+  "_template_notes": [
+    "Copy this file to config/chains/<chain>.json when adding a new blockchain.",
+    "Remove or keep _template_notes/_field_notes as you prefer; runtime code ignores unknown top-level metadata only when it does not depend on strict schema checks.",
+    "The rpc_url value should normally remain LOCAL_RPC_URL so the framework can point traffic at the local node, proxy, or fake-node.",
+    "Runtime endpoint overrides should be configured in config/user_config.sh: MAINNET_RPC_URL, CHAIN_REST_URL, CHAIN_INDEXER_URL, CHAIN_SIDECAR_URL, CHAIN_EVM_RPC_URL, CHAIN_JSON_RPC_URL, CHAIN_MIRROR_URL, and RPC_API_KEY.",
+    "Runtime sample values should also be configured in config/user_config.sh when needed. Use ${TARGET_ADDRESS:-measured-default} style values in params so templates keep working without user overrides.",
+    "Every JSON-RPC-style method listed in rpc_methods.single, rpc_methods.mixed, or rpc_methods.mixed_weighted must have a matching entry in param_formats. REST/path-style methods must have matching _meta.rest_paths entries. Do not add a top-level methods field or _meta.account_discovery aliases; target seed generation uses params.target_address.",
+    "mixed_weighted weights are relative weights. They do not need to sum to 100, but using a clear total such as 100 is easier for humans to audit.",
+    "adapter_family controls request construction, response parsing, fake-node dispatch, and sync-health parsing. Use one of: jsonrpc, rest, bitcoin_jsonrpc, substrate, tendermint, hedera_dual."
+  ],
+  "_field_notes": {
+    "chain_type": "Human-readable chain identifier. Keep it aligned with the file name.",
+    "rpc_url": "Environment variable placeholder for the local node RPC endpoint. Keep LOCAL_RPC_URL for normal framework usage.",
+    "params": "Environment variable placeholders used by target generation and method parameter builders. Runtime sample fields should use ${TARGET_*:-measured-default} so user_config.sh can override them while preserving closed-loop defaults.",
+    "system_addresses": "Optional built-in addresses used when a chain needs stable system or native-token addresses.",
+    "rpc_methods.single": "Default single-mode method.",
+    "rpc_methods.mixed": "Human-readable mixed-mode method list.",
+    "rpc_methods.mixed_weighted": "Mixed-mode weighted method list used by tools/target_generator.sh.",
+    "param_formats": "Maps each method to the parameter builder used by tools/chain_adapters.",
+    "_meta.adapter_family": "Protocol family used by chain adapters and fake-node.",
+    "_meta.sync_health": "Node sync-health probe definition used by block-height and health monitoring.",
+    "_meta.original_public_endpoints": "Default public endpoints used as fallbacks only. Production users should prefer user_config.sh endpoint overrides.",
+    "proxy_extraction": "RPC method extraction rules used by the proxy for per-method attribution."
+  },
+  "chain_type": "example-chain",
+  "rpc_url": "LOCAL_RPC_URL",
+  "params": {
+    "account_count": "ACCOUNT_COUNT",
+    "max_signatures": "ACCOUNT_MAX_SIGNATURES",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
+    "target_address": "${TARGET_ADDRESS:-0x0000000000000000000000000000000000000000}",
+    "target_tx_hash": "${TARGET_TX_HASH:-0x0000000000000000000000000000000000000000000000000000000000000000}",
+    "target_txid": "${TARGET_TXID:-0000000000000000000000000000000000000000000000000000000000000000}",
+    "target_block_hash": "${TARGET_BLOCK_HASH:-0000000000000000000000000000000000000000000000000000000000000000}",
+    "target_height": "${TARGET_HEIGHT:-1}",
+    "target_asset": "${TARGET_ASSET:-[\"policy_id\",\"asset_name_hex\"]}"
+  },
+  "system_addresses": {
+    "native_token": "OPTIONAL_ADDRESS_OR_EMPTY"
+  },
+  "rpc_methods": {
+    "single": "example_getBalance",
+    "mixed": [
+      "example_getBalance",
+      "example_getTransaction"
+    ],
+    "mixed_weighted": [
+      {
+        "method": "example_getBalance",
+        "weight": 70
+      },
+      {
+        "method": "example_getTransaction",
+        "weight": 30
+      }
+    ]
+  },
+  "param_formats": {
+    "example_getBalance": "single_address",
+    "example_getTransaction": "tx_hash"
+  },
+  "_meta": {
+    "adapter_family": "jsonrpc",
+    "original_public_endpoints": [
+      "https://example-public-rpc.invalid"
+    ],
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local": {
+        "protocol": "jsonrpc",
+        "http_method": "POST",
+        "rpc_method": "example_blockNumber",
+        "params": [],
+        "result_path": "result",
+        "value_format": "hex"
+      },
+      "target": {
+        "protocol": "jsonrpc",
+        "http_method": "POST",
+        "rpc_method": "example_syncing",
+        "params": [],
+        "result_path": "result.highestBlock",
+        "value_format": "hex",
+        "false_means_synced": true
+      },
+      "threshold_unit": "block"
+    }
+  },
+  "proxy_extraction": {
+    "protocol": "jsonrpc",
+    "method_path": "method",
+    "fallback_method": "unknown"
+  }
+}

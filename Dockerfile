@@ -1,7 +1,7 @@
 # =====================================================================
 # blockchain-node-benchmark/collector  —  K8s DaemonSet image
 # =====================================================================
-# v1.4.6 Step B-2: production-grade image for `deploy/k8s/04-daemonset.yaml`.
+# Production-grade image for `deploy/k8s/04-daemonset.yaml`.
 #
 # Design:
 #   - Pure-stdlib monitoring stack (verified by ast.walk of cgroup_collector.py,
@@ -12,15 +12,15 @@
 #   - Read-only root filesystem compatible. /opt/blockchain-bench is mounted
 #     ro by the DaemonSet (config in 04-daemonset.yaml securityContext).
 #   - No CMD baked — the DaemonSet sets the command per pod (cgroup_collector
-#     vs monitoring_coordinator s5_diag etc.). Image is a "binary host", not
+#     vs monitoring_coordinator diagnostics). Image is a "binary host", not
 #     a "service entry point".
 #
 # Build (local kind):
-#   docker build -t blockchain-node-benchmark/collector:v1.3 .
-#   kind load docker-image blockchain-node-benchmark/collector:v1.3
+#   docker build -t blockchain-node-benchmark/collector:latest .
+#   kind load docker-image blockchain-node-benchmark/collector:latest
 #
 # Build (GAR push):
-#   IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/collector:v1.3
+#   IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/collector:latest
 #   docker build -t "$IMAGE" .
 #   docker push "$IMAGE"
 # =====================================================================

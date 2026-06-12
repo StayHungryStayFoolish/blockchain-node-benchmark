@@ -1,14 +1,15 @@
-"""单测: per-method 归因算法 (S4.2 W3.2).
+"""Unit tests for per-method attribution.
 
-测试覆盖:
-- read_proxy_csv: 跳过 __unmatched__, ns 时间解析
-- read_monitor_csv: 时间戳格式自适应 (s/ms/ns)
-- _percentile: 边界 (空/单元素/p50/p99)
-- compute_per_method_qps: 秒级 bucket + error 计数 + p50/p99
-- compute_per_method_resource: weight = count/total + 缺监控秒跳过
-- write_qps_csv / write_resource_csv: 列名 + 排序 + 浮点格式
+Coverage:
+- read_proxy_csv: skips __unmatched__ and parses ns timestamps
+- read_monitor_csv: adapts timestamp formats (s/ms/ns)
+- _percentile: empty/single/p50/p99 boundaries
+- compute_per_method_qps: second buckets, error counts, p50/p99
+- compute_per_method_resource: weight=count/total and skips missing monitor seconds
+- filter_proxy_records_by_methods: excludes block-height/health probe methods
+- write_qps_csv / write_resource_csv: headers, ordering, and float formatting
 
-跑法: python3 tests/test_per_method_attribution.py
+Run: python3 tests/test_per_method_attribution.py
 """
 
 import csv
@@ -17,8 +18,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional
 
-# 项目根
+# Repository root.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from analysis.per_method_attribution import (  # noqa: E402
@@ -26,9 +28,11 @@ from analysis.per_method_attribution import (  # noqa: E402
     PerMethodQpsRow,
     PerMethodResourceRow,
     ProxyRecord,
+    _parse_bool,
     _percentile,
     compute_per_method_qps,
     compute_per_method_resource,
+    filter_proxy_records_by_methods,
     read_monitor_csv,
     read_proxy_csv,
     write_qps_csv,
@@ -98,6 +102,28 @@ class TestReadProxyCsv(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_reads_rpc_success_fields(self):
+        path = self._write_csv([
+            {"timestamp_ns": _ns(100), "method_name": "eth_getBalance", "protocol": "json_rpc",
+             "request_id": "1", "batch_idx": "0", "status_code": "200",
+             "transport_success": "true", "rpc_success": "false",
+             "rpc_error_code": "-32602", "rpc_error_message": "Invalid params",
+             "latency_ms": "5", "upstream": "", "client_addr": ""},
+        ])
+        try:
+            rec = list(read_proxy_csv(path))[0]
+            self.assertTrue(rec.transport_success)
+            self.assertFalse(rec.rpc_success)
+            self.assertEqual(rec.rpc_error_code, "-32602")
+        finally:
+            os.unlink(path)
+
+    def test_parse_bool_defaults(self):
+        self.assertTrue(_parse_bool("", default=True))
+        self.assertFalse(_parse_bool("", default=False))
+        self.assertTrue(_parse_bool("true", default=False))
+        self.assertFalse(_parse_bool("false", default=True))
+
 
 class TestReadMonitorCsv(unittest.TestCase):
     def _write(self, rows: list[dict]) -> str:
@@ -143,7 +169,10 @@ class TestReadMonitorCsv(unittest.TestCase):
 
 
 def _make_proxy(ts_s: int, method: str, latency_ms: int = 5,
-                status: int = 200) -> ProxyRecord:
+                status: int = 200, rpc_success: Optional[bool] = None) -> ProxyRecord:
+    transport_success = 200 <= status < 400
+    if rpc_success is None:
+        rpc_success = transport_success
     return ProxyRecord(
         timestamp_ns=_ns(ts_s),
         method_name=method,
@@ -154,6 +183,8 @@ def _make_proxy(ts_s: int, method: str, latency_ms: int = 5,
         latency_ms=latency_ms,
         upstream="u",
         client_addr="c",
+        transport_success=transport_success,
+        rpc_success=rpc_success,
     )
 
 
@@ -166,7 +197,7 @@ class TestComputePerMethodQps(unittest.TestCase):
             _make_proxy(101, "getSlot", latency_ms=3),
         ]
         rows = compute_per_method_qps(recs)
-        # 排序后: (100,getBlock), (100,getSlot), (101,getSlot)
+        # Sorted as: (100,getBlock), (100,getSlot), (101,getSlot).
         self.assertEqual(len(rows), 3)
         self.assertEqual(rows[0].timestamp_s, 100)
         self.assertEqual(rows[0].method_name, "getBlock")
@@ -181,16 +212,33 @@ class TestComputePerMethodQps(unittest.TestCase):
             _make_proxy(100, "getSlot", status=200),
             _make_proxy(100, "getSlot", status=500),
             _make_proxy(100, "getSlot", status=429),
-            _make_proxy(100, "getSlot", status=399),  # 不算 error
+            _make_proxy(100, "getSlot", status=399),  # not an error
+            _make_proxy(100, "getSlot", status=200, rpc_success=False),
         ]
         rows = compute_per_method_qps(recs)
-        self.assertEqual(rows[0].error_count, 2)
-        self.assertEqual(rows[0].qps, 4)
+        self.assertEqual(rows[0].error_count, 3)
+        self.assertEqual(rows[0].qps, 5)
+
+
+class TestFilterProxyRecords(unittest.TestCase):
+    def test_filters_health_probe_when_allowed_methods_known(self):
+        recs = [
+            _make_proxy(100, "getHealth"),
+            _make_proxy(100, "getAccountInfo"),
+            _make_proxy(100, "getBalance"),
+        ]
+        filtered = filter_proxy_records_by_methods(recs, {"getAccountInfo", "getBalance"})
+        self.assertEqual([r.method_name for r in filtered], ["getAccountInfo", "getBalance"])
+
+    def test_empty_allowed_methods_preserves_legacy_behavior(self):
+        recs = [_make_proxy(100, "getHealth"), _make_proxy(100, "getSlot")]
+        self.assertEqual(filter_proxy_records_by_methods(recs, None), recs)
+        self.assertEqual(filter_proxy_records_by_methods(recs, set()), recs)
 
 
 class TestComputePerMethodResource(unittest.TestCase):
     def test_weight_attribution(self):
-        # 100 秒: getSlot×3, getBlock×1 → getSlot weight 0.75 / getBlock 0.25
+        # second 100: getSlot x3, getBlock x1 -> weights 0.75 and 0.25.
         # monitor: cpu=80% mem=1000MB
         proxy = [
             _make_proxy(100, "getSlot"),
@@ -201,7 +249,7 @@ class TestComputePerMethodResource(unittest.TestCase):
         monitor = [MonitorRecord(timestamp_s=100, cpu_pct=80.0, mem_mb=1000.0)]
         rows = compute_per_method_resource(proxy, monitor)
         self.assertEqual(len(rows), 2)
-        # 排序: getBlock 在前
+        # Sorted by method name: getBlock first.
         self.assertEqual(rows[0].method_name, "getBlock")
         self.assertAlmostEqual(rows[0].weight, 0.25)
         self.assertAlmostEqual(rows[0].cpu_pct, 20.0)
@@ -212,7 +260,7 @@ class TestComputePerMethodResource(unittest.TestCase):
         self.assertAlmostEqual(rows[1].mem_mb, 750.0)
 
     def test_skip_missing_monitor_second(self):
-        # proxy 在 100/101 都有, monitor 只有 100
+        # proxy has seconds 100/101; monitor only has second 100.
         proxy = [_make_proxy(100, "m"), _make_proxy(101, "m")]
         monitor = [MonitorRecord(timestamp_s=100, cpu_pct=50, mem_mb=500)]
         rows = compute_per_method_resource(proxy, monitor)
@@ -258,10 +306,10 @@ class TestWriteCsv(unittest.TestCase):
 
 
 class TestE2eFixture(unittest.TestCase):
-    """W3.6 验收: 从 fixture CSV 完整跑通归因 → 输出 2 个 CSV."""
+    """End-to-end fixture check: attribution writes both output CSVs."""
 
     def test_e2e_pipeline(self):
-        # 1. 写 proxy fixture (3 秒, 3 method 混合)
+        # 1. Write proxy fixture data (3 seconds, mixed 3-method workload).
         tmpdir = tempfile.mkdtemp()
         try:
             proxy_path = Path(tmpdir) / "proxy.csv"
@@ -270,17 +318,17 @@ class TestE2eFixture(unittest.TestCase):
                 w = csv.writer(f)
                 w.writerow(["timestamp_ns", "method_name", "protocol", "request_id",
                            "batch_idx", "status_code", "latency_ms", "upstream", "client_addr"])
-                # T=100: getSlot×5, getBlock×3
+                # T=100: getSlot x5, getBlock x3.
                 for i in range(5):
                     w.writerow([_ns(100, i * 100), "getSlot", "json_rpc", str(i), "0",
                                "200", str(5 + i), "u", "c"])
                 for i in range(3):
                     w.writerow([_ns(100, 500 + i * 100), "getBlock", "json_rpc",
                                str(100 + i), "0", "200", str(20 + i), "u", "c"])
-                # T=101: getSlot×2, 1 error
+                # T=101: getSlot x2, one error.
                 w.writerow([_ns(101, 0), "getSlot", "json_rpc", "200", "0", "200", "7", "u", "c"])
                 w.writerow([_ns(101, 200), "getSlot", "json_rpc", "201", "0", "500", "100", "u", "c"])
-                # T=102: 全 __unmatched__ (应被丢)
+                # T=102: all __unmatched__ rows should be dropped.
                 w.writerow([_ns(102, 0), "__unmatched__", "json_rpc", "300", "0", "200", "3", "u", "c"])
 
             with open(monitor_path, "w", newline="") as f:
@@ -288,11 +336,11 @@ class TestE2eFixture(unittest.TestCase):
                 w.writerow(["timestamp", "cpu_usage", "mem_used_mb"])
                 w.writerow(["100", "40.0", "2000"])
                 w.writerow(["101", "60.0", "2200"])
-                # T=102 故意不写, 验"缺监控秒跳过"
+                # T=102 intentionally omitted to verify missing monitor seconds are skipped.
 
-            # 2. 跑归因
+            # 2. Run attribution.
             proxy_recs = list(read_proxy_csv(proxy_path))
-            self.assertEqual(len(proxy_recs), 10)  # __unmatched__ 已跳
+            self.assertEqual(len(proxy_recs), 10)  # __unmatched__ skipped
 
             qps_rows = compute_per_method_qps(proxy_recs)
             # T=100: getBlock(3), getSlot(5);  T=101: getSlot(2)
@@ -315,7 +363,7 @@ class TestE2eFixture(unittest.TestCase):
             self.assertAlmostEqual(t101_slot.weight, 1.0)
             self.assertAlmostEqual(t101_slot.cpu_pct, 60.0)
 
-            # 3. 写入 CSV 也成
+            # 3. CSV writers should also succeed.
             out_qps = Path(tmpdir) / "out_qps.csv"
             out_res = Path(tmpdir) / "out_res.csv"
             write_qps_csv(qps_rows, out_qps)

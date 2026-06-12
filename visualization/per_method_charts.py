@@ -1,19 +1,19 @@
-"""Per-method 图表生成器 (S4.2 W3.3).
+"""Per-method chart generator.
 
-生成 4 类 SVG 图 (纯 stdlib, 无 matplotlib 依赖):
-1. per_method_qps_<chain>.svg         — 每秒每 method QPS 线图
-2. per_method_latency_<chain>.svg     — 每秒每 method p99 延迟线图
-3. per_method_error_rate_<chain>.svg  — 每秒每 method 错误率线图
-4. per_method_resource_<chain>.svg    — 每秒资源归因堆叠面积图 (CPU%)
+Generates 4 SVG chart types using only Python stdlib:
+1. per_method_qps_<chain>.svg         - per-second per-method QPS line chart
+2. per_method_latency_<chain>.svg     - per-second per-method p99 latency line chart
+3. per_method_error_rate_<chain>.svg  - per-second per-method error-rate line chart
+4. per_method_resource_<chain>.svg    - per-second attributed-resource stacked area chart
+5. per_method_success_failure_<chain>.svg - per-method success/failure totals
 
-设计原则:
-- 纯 Python stdlib (无 matplotlib/numpy/pandas), 项目 production env 才装 matplotlib;
-  SVG 手写 50 行内可读, 测试也不需要外部依赖
-- SVG 浏览器原生渲染, 可内嵌 HTML, 也可独立打开
-- top_n_methods=10 (避免 method 太多图崩)
-- 输入即 W3.1 输出的 PerMethodQpsRow / PerMethodResourceRow 列表
+Design principles:
+- no matplotlib/numpy/pandas dependency for this path
+- SVG can be embedded in HTML or opened standalone
+- top_n_methods=10 keeps dense mixed workloads readable
+- Input rows come from per-method attribution output
 
-布局: 800×400 px viewBox, 60px 左留白 (y 轴 label), 30px 下留白 (x 轴 label)
+Layout: 900x420 px viewBox with fixed padding for axis labels and legend.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from typing import Sequence
 from analysis.per_method_attribution import PerMethodQpsRow, PerMethodResourceRow
 
 
-# tab20 风格调色板 (20 个区分良好色)
+# tab20-style palette with 20 distinguishable colors.
 _PALETTE = [
     "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
     "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
@@ -35,9 +35,9 @@ _PALETTE = [
     "#c49c94", "#f7b6d2", "#c7c7c7", "#dbdb8d", "#9edae5",
 ]
 
-# 画布尺寸
+# Canvas dimensions.
 _W, _H = 900, 420
-_PAD_L, _PAD_R, _PAD_T, _PAD_B = 70, 200, 40, 50  # 右侧留 legend
+_PAD_L, _PAD_R, _PAD_T, _PAD_B = 70, 200, 40, 50  # right padding reserves legend space
 _PLOT_W = _W - _PAD_L - _PAD_R
 _PLOT_H = _H - _PAD_T - _PAD_B
 
@@ -78,19 +78,19 @@ def _svg_header(title: str) -> str:
 def _svg_axes(x_min: float, x_max: float, y_min: float, y_max: float,
               x_label: str, y_label: str) -> str:
     out = []
-    # X 轴标尺 (5 段)
+    # X-axis ticks.
     for i in range(6):
         x_px = _PAD_L + i * _PLOT_W / 5
         x_val = x_min + i * (x_max - x_min) / 5
         out.append(f'<line class="gridline" x1="{x_px}" y1="{_PAD_T}" x2="{x_px}" y2="{_PAD_T + _PLOT_H}"/>')
         out.append(f'<text class="label" x="{x_px}" y="{_PAD_T + _PLOT_H + 14}" text-anchor="middle">{int(x_val)}</text>')
-    # Y 轴标尺 (5 段)
+    # Y-axis ticks.
     for i in range(6):
         y_px = _PAD_T + _PLOT_H - i * _PLOT_H / 5
         y_val = y_min + i * (y_max - y_min) / 5
         out.append(f'<line class="gridline" x1="{_PAD_L}" y1="{y_px}" x2="{_PAD_L + _PLOT_W}" y2="{y_px}"/>')
         out.append(f'<text class="label" x="{_PAD_L - 5}" y="{y_px + 3}" text-anchor="end">{y_val:.1f}</text>')
-    # 标题
+    # Axis labels.
     out.append(f'<text class="label" x="{_PAD_L + _PLOT_W/2}" y="{_H - 10}" text-anchor="middle">{html.escape(x_label)}</text>')
     out.append(f'<text class="label" x="15" y="{_PAD_T + _PLOT_H/2}" text-anchor="middle" transform="rotate(-90 15 {_PAD_T + _PLOT_H/2})">{html.escape(y_label)}</text>')
     return "\n".join(out) + "\n"
@@ -110,7 +110,7 @@ def _svg_legend(methods: list[str], colors: dict[str, str]) -> str:
 def _svg_line(points: list[tuple[float, float]], color: str, width: float = 1.5) -> str:
     if not points:
         return ""
-    # 跳过 NaN (用 polyline 分段)
+    # Skip NaN by splitting polyline segments.
     segments: list[list[tuple[float, float]]] = [[]]
     for x, y in points:
         if math.isnan(y):
@@ -131,7 +131,7 @@ def _svg_stacked_area(
     x_values: list[float], series_by_method: list[tuple[str, list[float]]],
     colors: dict[str, str], x_min: float, x_max: float, y_max: float,
 ) -> str:
-    """堆叠面积图. series_by_method = [(method, values), ...] 顺序决定堆叠顺序."""
+    """Stacked area chart. series_by_method order determines stack order."""
     n = len(x_values)
     if n == 0:
         return ""
@@ -139,7 +139,7 @@ def _svg_stacked_area(
     out = []
     for method, values in series_by_method:
         new_cum = [c + v for c, v in zip(cum, values)]
-        # polygon: 下边沿 (cum) 反向 + 上边沿 (new_cum)
+        # Polygon points: top edge plus reversed bottom edge.
         pts_top = [(
             _scale(x_values[i], x_min, x_max, _PAD_L, _PAD_L + _PLOT_W),
             _scale(new_cum[i], 0, y_max, _PAD_T + _PLOT_H, _PAD_T),
@@ -162,11 +162,11 @@ def _write_svg(content: str, path: str | Path) -> Path:
     return out
 
 
-# ---------- 4 类图入口 ----------
+# ---------- chart entry points ----------
 
 def _build_qps_chart(rows: Sequence[PerMethodQpsRow], top_n: int, title: str,
                      y_label: str, value_picker) -> str:
-    """通用 line chart (QPS/p99/error_rate 复用), value_picker(row) -> float."""
+    """Generic line chart for QPS/p99/error_rate, value_picker(row) -> float."""
     if not rows:
         return _svg_header(title) + _svg_axes(0, 1, 0, 1, "time", y_label) + ""
     methods = _top_n_methods_by_qps(rows, top_n)
@@ -217,6 +217,64 @@ def plot_error_rate(rows: Sequence[PerMethodQpsRow], output: str | Path,
     svg = _build_qps_chart(rows, top_n, title, "error rate (%)",
                            lambda r: (r.error_count / r.qps * 100) if r.qps > 0 else 0.0)
     return _write_svg(svg, output)
+
+
+def plot_success_failure_totals(
+    rows: Sequence[PerMethodQpsRow],
+    output: str | Path,
+    top_n: int = 10,
+    title: str = "Per-Method Success vs Failure",
+) -> Path:
+    methods = _top_n_methods_by_qps(rows, top_n)
+    totals: dict[str, int] = defaultdict(int)
+    failures: dict[str, int] = defaultdict(int)
+    for r in rows:
+        if r.method_name in methods:
+            totals[r.method_name] += r.qps
+            failures[r.method_name] += r.error_count
+
+    if not methods:
+        svg = _svg_header(title) + _svg_axes(0, 1, 0, 1, "requests", "method")
+        return _write_svg(svg, output)
+
+    max_total = max(totals.values()) if totals else 1
+    if max_total <= 0:
+        max_total = 1
+
+    chart_w = _PLOT_W
+    row_h = min(28, max(16, int(_PLOT_H / max(len(methods), 1)) - 4))
+    y0 = _PAD_T + 12
+    success_color = "#2ca02c"
+    failure_color = "#d62728"
+    parts = [
+        _svg_header(title),
+        f'<text class="label" x="{_PAD_L}" y="{_H - 12}">requests</text>',
+    ]
+
+    for i in range(6):
+        x = _PAD_L + i * chart_w / 5
+        val = max_total * i / 5
+        parts.append(f'<line class="gridline" x1="{x}" y1="{_PAD_T}" x2="{x}" y2="{_PAD_T + _PLOT_H}"/>')
+        parts.append(f'<text class="label" x="{x}" y="{_PAD_T + _PLOT_H + 14}" text-anchor="middle">{int(val)}</text>')
+
+    for idx, method in enumerate(methods):
+        y = y0 + idx * (row_h + 7)
+        total = totals[method]
+        fail = failures[method]
+        success = max(total - fail, 0)
+        success_w = chart_w * success / max_total
+        fail_w = chart_w * fail / max_total
+        parts.append(f'<text class="label" x="{_PAD_L - 8}" y="{y + row_h * 0.68}" text-anchor="end">{html.escape(method)}</text>')
+        parts.append(f'<rect x="{_PAD_L}" y="{y}" width="{success_w:.2f}" height="{row_h}" fill="{success_color}" opacity="0.9"/>')
+        parts.append(f'<rect x="{_PAD_L + success_w:.2f}" y="{y}" width="{fail_w:.2f}" height="{row_h}" fill="{failure_color}" opacity="0.9"/>')
+        parts.append(f'<text class="label" x="{_PAD_L + chart_w + 8}" y="{y + row_h * 0.68}">{success}/{fail}</text>')
+
+    legend_x = _PAD_L + _PLOT_W + 70
+    parts.append(f'<rect x="{legend_x}" y="{_PAD_T}" width="12" height="12" fill="{success_color}"/>')
+    parts.append(f'<text class="label" x="{legend_x + 16}" y="{_PAD_T + 10}">success</text>')
+    parts.append(f'<rect x="{legend_x}" y="{_PAD_T + 20}" width="12" height="12" fill="{failure_color}"/>')
+    parts.append(f'<text class="label" x="{legend_x + 16}" y="{_PAD_T + 30}">failure</text>')
+    return _write_svg("\n".join(parts), output)
 
 
 def plot_resource_stacked(
@@ -276,6 +334,10 @@ def generate_all_charts(
         "error_rate": plot_error_rate(qps_rows, out_dir / f"per_method_error_rate_{chain_name}.svg",
                                       top_n=top_n,
                                       title=titles.get("error_rate", f"Per-Method Error Rate — {chain_name}")),
+        "success_failure": plot_success_failure_totals(
+            qps_rows, out_dir / f"per_method_success_failure_{chain_name}.svg",
+            top_n=top_n,
+            title=titles.get("success_failure", f"Per-Method Success vs Failure — {chain_name}")),
         "resource": plot_resource_stacked(
             qps_rows, resource_rows, out_dir / f"per_method_resource_{chain_name}.svg",
             top_n=top_n,

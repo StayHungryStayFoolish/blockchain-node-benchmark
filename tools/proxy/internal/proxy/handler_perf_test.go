@@ -1,8 +1,8 @@
 //go:build perf
 
-// Package proxyhandler perf 测试需要 build tag: go test -tags=perf
-// 原因: -race 会让 QPS 测试结果失真 (race detector 慢 5-10x),
-// 把性能 gate 隔离避免 make test (默认 -race) 误判。
+// Package proxyhandler perf tests require the build tag: go test -tags=perf.
+// The race detector skews QPS results, so the performance gate is isolated
+// from the default make test path.
 package proxyhandler
 
 import (
@@ -27,7 +27,7 @@ func BenchmarkHandler_JSONRPC_Throughput(b *testing.B) {
 
 	body := []byte(`{"jsonrpc":"2.0","method":"eth_blockNumber","id":1}`)
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:   5 * time.Second,
 		Transport: &http.Transport{MaxIdleConnsPerHost: 256, MaxConnsPerHost: 256},
 	}
 	b.ResetTimer()
@@ -43,9 +43,9 @@ func BenchmarkHandler_JSONRPC_Throughput(b *testing.B) {
 	})
 }
 
-// TestPerformanceGate 验收 Q4-8 撤销条件: >= 5k QPS @ p99 < 10ms
-// 跑法: go test -tags=perf -run=TestPerformanceGate ./internal/proxy/
-// 不达标 → 触发 envoy 兜底评估 (ADR-0007)。
+// TestPerformanceGate rollback threshold: >= 5k QPS @ p99 < 10ms
+// Run: go test -tags=perf -run=TestPerformanceGate ./internal/proxy/
+// Failures should trigger fallback proxy/extractor review.
 func TestPerformanceGate(t *testing.T) {
 	up := fakeUpstream()
 	defer up.Close()
@@ -106,9 +106,9 @@ func TestPerformanceGate(t *testing.T) {
 		total, qps, p99, qpsTarget, p99Target)
 
 	if qps < qpsTarget {
-		t.Errorf("QPS gate FAIL: %.0f < %.0f → trigger Q4-8 envoy fallback (see ADR-0007)", qps, qpsTarget)
+		t.Errorf("QPS gate FAIL: %.0f < %.0f → trigger envoy fallback (see proxy extractor fallback)", qps, qpsTarget)
 	}
 	if p99 > p99Target {
-		t.Errorf("p99 gate FAIL: %s > %s → trigger Q4-8 envoy fallback (see ADR-0007)", p99, p99Target)
+		t.Errorf("p99 gate FAIL: %s > %s → trigger envoy fallback (see proxy extractor fallback)", p99, p99Target)
 	}
 }

@@ -6,45 +6,6 @@
 # =====================================================================
 
 # =====================================================================
-# User Configuration Variables - Users only need to configure these variables
-# =====================================================================
-
-# ----- Basic Configuration -----
-# Blockchain Node Local RPC Endpoint
-LOCAL_RPC_URL="${LOCAL_RPC_URL:-http://localhost:8899}"
-
-# ----- Blockchain Node Configuration -----
-BLOCKCHAIN_NODE="${BLOCKCHAIN_NODE:-solana}"
-
-# Force ensure BLOCKCHAIN_NODE is lowercase
-BLOCKCHAIN_NODE=$(echo "$BLOCKCHAIN_NODE" | tr '[:upper:]' '[:lower:]')
-
-# Blockchain node running process names
-BLOCKCHAIN_PROCESS_NAMES=(
-    "blockchain"
-    "validator"
-    "agave-validator"
-    "node.service"
-)
-
-# Account and target file configuration
-ACCOUNT_COUNT=1000                                                    # Default account count
-
-# ----- Account Fetching Tool Configuration -----
-# Detailed configuration parameters for account fetching tool
-ACCOUNT_MAX_SIGNATURES=50000                                          # Maximum signature count
-ACCOUNT_TX_BATCH_SIZE=100                                             # Transaction batch size
-ACCOUNT_SEMAPHORE_LIMIT=10                                            # Concurrency limit
-
-# ----- RPC Mode Configuration -----
-RPC_MODE="${RPC_MODE:-single}"      # RPC mode: single/mixed (default single)
-
-# =====================================================================
-# User Configuration Variables - Users only need to configure the above variables
-# =====================================================================
-
-
-# =====================================================================
 # High-Performance Configuration Caching Mechanism - Prevent repeated loading and JSON parsing
 # =====================================================================
 # Load configuration directly
@@ -70,6 +31,24 @@ else
     exit 1
 fi
 
+# User config should remain declarative. Provider-specific normalization that
+# mutates derived disk baselines lives in a separate post-processing layer.
+if [[ -f "${CONFIG_DIR}/provider_disk_config.sh" ]]; then
+    source "${CONFIG_DIR}/provider_disk_config.sh"
+    echo "✅ Provider disk configuration post-processing loaded" >&2
+fi
+
+# Canonical chain names match config/chains/<name>.json file names.
+LOCAL_RPC_URL="${LOCAL_RPC_URL:-http://localhost:8899}"
+MAINNET_RPC_URL="${MAINNET_RPC_URL:-}"
+BLOCKCHAIN_NODE="${BLOCKCHAIN_NODE:-solana}"
+BLOCKCHAIN_NODE=$(printf '%s' "$BLOCKCHAIN_NODE" | tr '[:upper:]' '[:lower:]')
+RPC_MODE="${RPC_MODE:-single}"
+ACCOUNT_COUNT="${ACCOUNT_COUNT:-1000}"
+ACCOUNT_MAX_SIGNATURES="${ACCOUNT_MAX_SIGNATURES:-50000}"
+ACCOUNT_TX_BATCH_SIZE="${ACCOUNT_TX_BATCH_SIZE:-100}"
+ACCOUNT_SEMAPHORE_LIMIT="${ACCOUNT_SEMAPHORE_LIMIT:-10}"
+
 # 2. Load system configuration layer
 if [[ -f "${CONFIG_DIR}/system_config.sh" ]]; then
     source "${CONFIG_DIR}/system_config.sh"
@@ -88,10 +67,10 @@ else
     exit 1
 fi
 
-# 4. Load deployment-mode detector (v1.3 plan §S2)
+# 4. Load deployment-mode detector
 # Detects runtime environment (VM / Docker / K8s), orthogonal to
 # DEPLOYMENT_PLATFORM (cloud provider). Together they form (platform, mode)
-# matrix used by cloud_variants/ and k8s_paths.sh.
+# matrix used by cloud variants and runtime_paths.sh.
 if [[ -f "${CONFIG_DIR}/deployment_mode_detector.sh" ]]; then
     source "${CONFIG_DIR}/deployment_mode_detector.sh"
     echo "✅ Deployment mode detector loaded" >&2
@@ -103,13 +82,13 @@ else
     export DEPLOYMENT_MODE DEPLOYMENT_MODE_DETECTED DEPLOYMENT_MODE_SOURCE
 fi
 
-# 5. Load K8s/container path templates (HOST_PROC / HOST_SYS / cgroup paths)
+# 5. Load runtime host path resolver (HOST_PROC / HOST_SYS / cgroup paths)
 # Depends on DEPLOYMENT_MODE being set (above).
-if [[ -f "${CONFIG_DIR}/k8s_paths.sh" ]]; then
-    source "${CONFIG_DIR}/k8s_paths.sh"
-    echo "✅ K8s paths template loaded" >&2
+if [[ -f "${CONFIG_DIR}/runtime_paths.sh" ]]; then
+    source "${CONFIG_DIR}/runtime_paths.sh"
+    echo "✅ Runtime path resolver loaded" >&2
 else
-    echo "⚠️  K8s paths template not found: ${CONFIG_DIR}/k8s_paths.sh — using local /proc /sys" >&2
+    echo "⚠️  Runtime path resolver not found: ${CONFIG_DIR}/runtime_paths.sh — using local /proc /sys" >&2
     HOST_PROC="${HOST_PROC:-/proc}"
     HOST_SYS="${HOST_SYS:-/sys}"
     HOST_ROOT="${HOST_ROOT:-/}"
@@ -130,20 +109,18 @@ detect_deployment_platform() {
     if [[ "$DEPLOYMENT_PLATFORM" == "auto" ]]; then
         echo "🔍 Auto-detecting deployment platform..." >&2
 
-        # Delegate to config/cloud_provider.sh (single source of truth for aws/gcp/other).
-        # 关键 bug 修复: 之前这里只用裸 IMDSv1 探测,无 GCP 分支,且 169.254 在
-        # GCP/cloudtop 沙盒下被代理拦截返回 HTML → curl exit 0 → 误判 AWS。
-        # 现在统一走 cloud_provider.sh 的 detect_platform(),它做内容校验且 GCP 优先。
+        # Delegate to config/cloud_provider.sh for aws/gcp/other detection.
+        # Detection validates metadata response bodies, checks GCP first, and uses
+        # AWS IMDSv2 only. This avoids classifying HTML proxy responses as AWS.
         local _cp_sh="${CONFIG_DIR}/cloud_provider.sh"
         if [[ -f "$_cp_sh" ]]; then
-            # 强制重探测: 清空 CLOUD_PROVIDER 避免 cloud_provider.sh 里 :- 短路
+            # Force re-detection by clearing variables that cloud_provider.sh may reuse.
             unset CLOUD_PROVIDER NIC_DRIVER CLOUD_PROVIDER_VARIANT
             # shellcheck source=/dev/null
             source "$_cp_sh"
             DEPLOYMENT_PLATFORM="${CLOUD_PROVIDER:-other}"
         else
-            echo "⚠️  cloud_provider.sh not found at $_cp_sh, falling back to legacy IMDSv1 probe" >&2
-            # Legacy fallback: 不要再误打 AWS,无法判定即 other。
+            echo "⚠️  cloud_provider.sh not found at $_cp_sh, falling back to deployment platform 'other'" >&2
             DEPLOYMENT_PLATFORM="other"
         fi
 
@@ -193,38 +170,47 @@ detect_deployment_platform() {
     DEPLOYMENT_PLATFORM_DETECTED=true
 }
 
-# ----- Network Interface Detection Function -----
-# Automatically detect ENA network interface
-detect_network_interface() {
-    # Prioritize detecting ENA interfaces
-    local ena_interfaces
-    if command -v ip >/dev/null 2>&1; then
-        ena_interfaces=($(ip link show 2>/dev/null | grep -E "^[0-9]+: (eth|ens|enp)" | grep "state UP" | cut -d: -f2 | tr -d ' '))
-    else
-        ena_interfaces=()
-    fi
-    
-    # If ENA interface found, prioritize using the first one
-    if [[ ${#ena_interfaces[@]} -gt 0 ]]; then
-        NETWORK_INTERFACE="${ena_interfaces[0]}"
+load_provider_contract_for_platform() {
+    local _cp_sh="${CONFIG_DIR}/cloud_provider.sh"
+    if [[ ! -f "$_cp_sh" ]]; then
         return 0
     fi
-    
-    # If no ENA interface found, use traditional detection method
+
+    case "${DEPLOYMENT_PLATFORM:-other}" in
+        aws|gcp) CLOUD_PROVIDER="$DEPLOYMENT_PLATFORM" ;;
+        *) CLOUD_PROVIDER="other" ;;
+    esac
+    export CLOUD_PROVIDER
+
+    # shellcheck source=/dev/null
+    source "$_cp_sh"
+}
+
+# ----- Network Interface Detection Function -----
+# Detect the primary network interface in a provider-neutral way.
+detect_network_interface() {
+    if [[ -n "${NETWORK_INTERFACE:-}" ]]; then
+        return 0
+    fi
+
     local interface=""
     if command -v ip >/dev/null 2>&1; then
-        interface=$(ip route 2>/dev/null | grep default | awk '{print $5}' | head -1)
+        interface=$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')
+        if [[ -z "$interface" ]]; then
+            interface=$(ip -o link show up 2>/dev/null \
+                | awk -F': ' '$2 != "lo" {print $2; exit}' \
+                | cut -d@ -f1)
+        fi
     elif command -v route >/dev/null 2>&1; then
-        interface=$(route get default 2>/dev/null | grep interface | awk '{print $2}')
+        interface=$(route get default 2>/dev/null | awk '/interface:/ {print $2; exit}')
     elif command -v netstat >/dev/null 2>&1; then
-        interface=$(netstat -rn 2>/dev/null | grep default | awk '{print $6}' | head -1)
+        interface=$(netstat -rn 2>/dev/null | awk '/^default/ {print $6; exit}')
     fi
-    
-    # If still not found, use system default
+
     if [[ -z "$interface" ]]; then
-        interface="eth0"  # Linux default
+        interface="eth0"
     fi
-    
+
     NETWORK_INTERFACE="$interface"
 }
 
@@ -240,9 +226,10 @@ detect_deployment_paths() {
     echo "   Framework directory: $framework_dir" >&2
     echo "   Deployment directory: $deployment_dir" >&2
     
-    # Set memory sharing directory (independent of data directory, maintain system-level path)
-    # Linux production environment - use system tmpfs
-    BASE_MEMORY_DIR="/dev/shm/blockchain-node-benchmark"
+    # Set memory sharing directory (independent of data directory by default).
+    # Linux production default uses system tmpfs. Optional observability
+    # sidecars may override MEMORY_SHARE_DIR to a shared mounted directory.
+    MEMORY_SHARE_DIR="${MEMORY_SHARE_DIR:-/dev/shm/blockchain-node-benchmark}"
     echo "🐧 Linux production environment" >&2
     
     # Standardized path configuration
@@ -281,9 +268,6 @@ detect_deployment_paths() {
     ERROR_LOG_DIR="${CURRENT_TEST_DIR}/${ERROR_LOG_SUBDIR}"
     PYTHON_ERROR_LOG_DIR="${CURRENT_TEST_DIR}/${PYTHON_ERROR_LOG_SUBDIR}"
     
-    # Memory sharing directory (independent of data directory, use system-level path)
-    MEMORY_SHARE_DIR="${BASE_MEMORY_DIR}"
-    
     # Generate unified session timestamp (ensure all processes use the same timestamp)
     if [[ -z "${SESSION_TIMESTAMP:-}" ]]; then
         SESSION_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -291,13 +275,29 @@ detect_deployment_paths() {
     fi
     
     # Set dynamic path variables (using unified session timestamp)
-    BLOCK_HEIGHT_CACHE_FILE="${MEMORY_SHARE_DIR}/block_height_monitor_cache.json"
-    BLOCK_HEIGHT_DATA_FILE="${LOGS_DIR}/block_height_monitor_${SESSION_TIMESTAMP}.csv"
-    ACCOUNTS_OUTPUT_FILE="${TMP_DIR}/${ACCOUNT_OUTPUT_FILE}"
-    SINGLE_METHOD_TARGETS_FILE="${TMP_DIR}/targets_single.json"
-    MIXED_METHOD_TARGETS_FILE="${TMP_DIR}/targets_mixed.json"
-    QPS_STATUS_FILE="${MEMORY_SHARE_DIR}/qps_status.json"
-    TEST_SESSION_DIR="${TMP_DIR}/session_${SESSION_TIMESTAMP}"
+    BLOCK_HEIGHT_CACHE_FILE="${BLOCK_HEIGHT_CACHE_FILE:-${MEMORY_SHARE_DIR}/block_height_monitor_cache.json}"
+    BLOCK_HEIGHT_DATA_FILE="${BLOCK_HEIGHT_DATA_FILE:-${LOGS_DIR}/block_height_monitor_${SESSION_TIMESTAMP}.csv}"
+    ACCOUNTS_OUTPUT_FILE="${ACCOUNTS_OUTPUT_FILE:-${TMP_DIR}/${ACCOUNT_OUTPUT_FILE}}"
+    SINGLE_METHOD_TARGETS_FILE="${SINGLE_METHOD_TARGETS_FILE:-${TMP_DIR}/targets_single.json}"
+    MIXED_METHOD_TARGETS_FILE="${MIXED_METHOD_TARGETS_FILE:-${TMP_DIR}/targets_mixed.json}"
+    QPS_STATUS_FILE="${QPS_STATUS_FILE:-${MEMORY_SHARE_DIR}/qps_status.json}"
+    BOTTLENECK_STATUS_FILE="${BOTTLENECK_STATUS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_status.json}"
+    BOTTLENECK_COUNTERS_FILE="${BOTTLENECK_COUNTERS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_counters.json}"
+    NODE_HEALTH_CACHE_DIR="${NODE_HEALTH_CACHE_DIR:-${MEMORY_SHARE_DIR}/node_health_cache}"
+    LATEST_METRICS_FILE="${LATEST_METRICS_FILE:-${MEMORY_SHARE_DIR}/latest_metrics.json}"
+    UNIFIED_METRICS_FILE="${UNIFIED_METRICS_FILE:-${MEMORY_SHARE_DIR}/unified_metrics.json}"
+    UNIFIED_EVENTS_FILE="${UNIFIED_EVENTS_FILE:-${MEMORY_SHARE_DIR}/unified_events.json}"
+    EVENT_MANAGER_LOCK_FILE="${EVENT_MANAGER_LOCK_FILE:-${MEMORY_SHARE_DIR}/event_manager.lock}"
+    EVENT_NOTIFICATION_FILE="${EVENT_NOTIFICATION_FILE:-${MEMORY_SHARE_DIR}/event_notification.json}"
+    TEST_SESSION_DIR="${TEST_SESSION_DIR:-${TMP_DIR}/session_${SESSION_TIMESTAMP}}"
+
+    UNIFIED_LOG="${UNIFIED_LOG:-${LOGS_DIR}/performance_${SESSION_TIMESTAMP}.csv}"
+    PERFORMANCE_LATEST_CSV="${PERFORMANCE_LATEST_CSV:-${LOGS_DIR}/performance_latest.csv}"
+    PROXY_METHOD_CSV="${PROXY_METHOD_CSV:-${LOGS_DIR}/proxy_method.csv}"
+    PROXY_SELF_CSV="${PROXY_SELF_CSV:-${LOGS_DIR}/proxy_self.csv}"
+    RPC_PROXY_LOG="${RPC_PROXY_LOG:-${LOGS_DIR}/rpc_proxy.log}"
+    NETWORK_CSV="${NETWORK_CSV:-${LOGS_DIR}/network_${SESSION_TIMESTAMP}.csv}"
+    NETWORK_PID_FILE="${NETWORK_PID_FILE:-${TMP_DIR}/network_monitor.pid}"
     
     # Set monitoring overhead optimization related log file paths (using unified timestamp)
     MONITORING_OVERHEAD_LOG="${LOGS_DIR}/monitoring_overhead_${SESSION_TIMESTAMP}.csv"
@@ -360,19 +360,30 @@ create_directories_safely() {
 # Execute Dynamic Configuration Detection
 # =====================================================================
 
-# Execute deployment platform detection (cloud provider: aws / gcp / other)
+# Execute deployment platform detection (cloud provider: gcp / aws / other)
 detect_deployment_platform
 
-# Execute deployment mode detection (runtime: VM / Docker / K8s) — v1.3 §S2
+load_provider_contract_for_platform
+
+# Provider-owned NIC allowance fields. AWS returns ENA counters; GCP/other
+# return empty strings because their network collectors use different signals.
+if declare -F get_nic_allowance_fields >/dev/null 2>&1; then
+    ENA_ALLOWANCE_FIELDS_STR="$(get_nic_allowance_fields)"
+else
+    ENA_ALLOWANCE_FIELDS_STR=""
+fi
+export ENA_ALLOWANCE_FIELDS_STR
+
+# Execute deployment mode detection (runtime: VM / Docker / K8s)
 # Orthogonal axis to deployment_platform; together → (platform, mode) matrix.
 if declare -F detect_deployment_mode >/dev/null 2>&1; then
     detect_deployment_mode
 fi
 
-# Resolve K8s/container paths (HOST_PROC / HOST_SYS / cgroup paths) — v1.3 §S2
+# Resolve runtime host paths (HOST_PROC / HOST_SYS / cgroup paths)
 # Must run after detect_deployment_mode (depends on DEPLOYMENT_MODE).
-if declare -F resolve_k8s_paths >/dev/null 2>&1; then
-    resolve_k8s_paths
+if declare -F resolve_runtime_paths >/dev/null 2>&1; then
+    resolve_runtime_paths
 fi
 
 # Execute network interface detection
@@ -382,7 +393,7 @@ detect_network_interface
 detect_deployment_paths
 
 # Create necessary directories
-create_directories_safely "$DATA_DIR" "$CURRENT_TEST_DIR" "$LOGS_DIR" "$REPORTS_DIR" "$VEGETA_RESULTS_DIR" "$TMP_DIR" "$ARCHIVES_DIR" "$ERROR_LOG_DIR" "$PYTHON_ERROR_LOG_DIR" "$MEMORY_SHARE_DIR"
+create_directories_safely "$DATA_DIR" "$CURRENT_TEST_DIR" "$LOGS_DIR" "$REPORTS_DIR" "$VEGETA_RESULTS_DIR" "$TMP_DIR" "$ARCHIVES_DIR" "$ERROR_LOG_DIR" "$PYTHON_ERROR_LOG_DIR" "$MEMORY_SHARE_DIR" "$NODE_HEALTH_CACHE_DIR"
 
 # =====================================================================
 # Configure Blockchain Node & On-chain Active Addresses
@@ -390,45 +401,55 @@ create_directories_safely "$DATA_DIR" "$CURRENT_TEST_DIR" "$LOGS_DIR" "$REPORTS_
 # User configuration variables have been moved to the beginning of the file
 
 # =====================================================================
-# Unified Blockchain Configuration - Integrate complete configuration for all 8 blockchains
+# Unified Blockchain Configuration - Integrate complete configuration for all 36 blockchains
 # =====================================================================
 # ----- Multi-chain Mainnet Endpoint Dynamic Configuration -----
-# Dynamically set MAINNET_RPC_URL based on BLOCKCHAIN_NODE
-case "${BLOCKCHAIN_NODE,,}" in
-    solana)
-        MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
-        ;;
-    ethereum)
-        MAINNET_RPC_URL="https://eth.llamarpc.com"
-        ;;
-    bsc)
-        MAINNET_RPC_URL="https://bsc-dataseed.bnbchain.org"
-        ;;
-    base)
-        MAINNET_RPC_URL="https://mainnet.base.org"
-        ;;
-    polygon)
-        # 2026-05-23: 原 https://polygon-rpc.com 已停服(返 "API key disabled, tenant disabled" HTTP 401)
-        # 改用 publicnode 公开 endpoint(与 ethereum 同 provider,实测 eth_blockNumber+eth_getBalance PASS)
-        MAINNET_RPC_URL="https://polygon-bor-rpc.publicnode.com"
-        ;;
-    scroll)
-        MAINNET_RPC_URL="https://rpc.scroll.io"
-        ;;
-    starknet)
-        # 2026-05-23: 原 https://starknet-mainnet.public.blastapi.io 已停服
-        # (返 "Blast API is no longer available. Please update your integration to use Alchemy's API instead" HTTP 403)
-        # 改用 Lava Network 公开 endpoint(实测 blockNumber/getClassAt/getNonce/getStorageAt/getEvents 全 PASS,spec 0.8.1)
-        MAINNET_RPC_URL="https://rpc.starknet.lava.build"
-        ;;
-    sui)
-        MAINNET_RPC_URL="https://fullnode.mainnet.sui.io:443"
-        ;;
-    *)
-        echo "⚠️ Warning: Unknown blockchain type '${BLOCKCHAIN_NODE}', using default Solana endpoint" >&2
-        MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
-        ;;
-esac
+resolve_mainnet_rpc_url_from_template() {
+    local chain_name="$1"
+    local chain_file="${CONFIG_DIR}/chains/${chain_name}.json"
+    local family mixed url=""
+
+    if [[ ! -f "$chain_file" ]] || ! command -v jq >/dev/null 2>&1; then
+        return 1
+    fi
+
+    family=$(jq -r '._meta.adapter_family // ""' "$chain_file" 2>/dev/null)
+    mixed=$(jq -r '.rpc_methods.mixed // ""' "$chain_file" 2>/dev/null)
+
+    case "$family" in
+        tendermint)
+            if [[ "$mixed" == *"eth_blockNumber"* ]]; then
+                url=$(jq -r '._meta.evm_rpc_url // empty' "$chain_file" 2>/dev/null)
+            fi
+            if [[ -z "$url" && "$mixed" == *"/cosmos/base/tendermint/v1beta1/blocks/latest"* ]]; then
+                url=$(jq -r '._meta.rest_url // empty' "$chain_file" 2>/dev/null)
+            fi
+            ;;
+        hedera_dual)
+            url=$(jq -r '._meta.mirror_url // empty' "$chain_file" 2>/dev/null)
+            ;;
+        rest)
+            if [[ "$chain_name" == "ton" ]]; then
+                url=$(jq -r '._meta.rest_paths.lookupBlock.base_url // empty' "$chain_file" 2>/dev/null)
+            fi
+            ;;
+    esac
+
+    if [[ -z "$url" ]]; then
+        url=$(jq -r '._meta.original_public_endpoints[0].url // empty' "$chain_file" 2>/dev/null)
+    fi
+    if [[ -z "$url" ]]; then
+        url=$(jq -r '._meta.rest_url // ._meta.json_rpc_url // ._meta.evm_rpc_url // empty' "$chain_file" 2>/dev/null)
+    fi
+
+    [[ -n "$url" ]] && echo "$url"
+}
+
+MAINNET_RPC_URL="${MAINNET_RPC_URL:-$(resolve_mainnet_rpc_url_from_template "$BLOCKCHAIN_NODE" || true)}"
+if [[ -z "$MAINNET_RPC_URL" ]]; then
+    echo "⚠️ Warning: Unknown blockchain type '${BLOCKCHAIN_NODE}', using default Solana endpoint" >&2
+    MAINNET_RPC_URL="https://api.mainnet-beta.solana.com"
+fi
 
 
 # =====================================================================
@@ -441,9 +462,8 @@ validate_blockchain_node() {
     local blockchain_node_lower
     blockchain_node_lower=$(echo "$blockchain_node" | tr '[:upper:]' '[:lower:]')
 
-    # S1.1 (5bd01a6+): supported chains discovered from config/chains/*.json
-    # instead of hardcoded list. Source of truth = one chain template JSON per
-    # chain. No parallel-entry-trap: there is no second authority list.
+    # Supported chains are discovered from config/chains/*.json instead of a
+    # hardcoded list. Each chain template JSON is an authoritative registration.
     local chains_dir="${CONFIG_LOADER_DIR:-$(dirname "${BASH_SOURCE[0]}")}/chains"
     if [[ ! -d "$chains_dir" ]]; then
         echo "❌ Error: chain template directory not found: $chains_dir" >&2
@@ -516,7 +536,7 @@ generate_auto_config() {
     echo "   Target blockchain: $blockchain_node_lower" >&2
     
     # Performance optimization: Use cached JSON parsing results
-    # NOTE (S0.7-norm): bash variable names disallow '-', so chain names like
+    # NOTE: bash variable names disallow '-', so chain names like
     # avalanche-c / cosmos-hub / zksync-era must have '-' normalized to '_'
     # for the cache var name only. The on-disk file name stays as-is.
     local blockchain_node_var_safe="${blockchain_node_lower//-/_}"
@@ -528,9 +548,9 @@ generate_auto_config() {
         CHAIN_CONFIG="$cached_config"
 
     else
-        # S1.1 (5bd01a6+): read chain template from config/chains/<name>.json
+        # Read chain template from config/chains/<name>.json
         # instead of the legacy UNIFIED_BLOCKCHAIN_CONFIG heredoc. The .json
-        # file is the single source of truth; _meta field is stripped by jq
+        # file is the authoritative chain template; _meta field is stripped by jq
         # so downstream consumers see the same shape as before.
         local chains_dir="${CONFIG_LOADER_DIR:-$(dirname "${BASH_SOURCE[0]}")}/chains"
         local chain_file="$chains_dir/${blockchain_node_lower}.json"
@@ -664,7 +684,7 @@ export ACCOUNTS_OUTPUT_FILE SINGLE_METHOD_TARGETS_FILE MIXED_METHOD_TARGETS_FILE
 export LOCAL_RPC_URL MAINNET_RPC_URL BLOCKCHAIN_NODE BLOCKCHAIN_PROCESS_NAMES RPC_MODE
 export ACCOUNT_COUNT ACCOUNT_OUTPUT_FILE ACCOUNT_MAX_SIGNATURES ACCOUNT_TX_BATCH_SIZE ACCOUNT_SEMAPHORE_LIMIT
 export CHAIN_CONFIG DEPLOYMENT_PLATFORM_DETECTED
-# v1.3 §S2: deployment mode + K8s/container paths (export for child monitor processes)
+# Deployment mode + K8s/container paths (export for child monitor processes)
 export DEPLOYMENT_MODE DEPLOYMENT_MODE_DETECTED DEPLOYMENT_MODE_SOURCE
 export HOST_PROC HOST_SYS HOST_ROOT CGROUP_VERSION CGROUP_ROOT
 # CGROUP_V1_* only set when cgroup v1, but export unconditionally — harmless if empty
@@ -673,16 +693,15 @@ export CURRENT_RPC_METHODS_STRING
 
 export DATA_DIR CURRENT_TEST_DIR LOGS_DIR REPORTS_DIR VEGETA_RESULTS_DIR TMP_DIR ARCHIVES_DIR
 export ERROR_LOG_DIR PYTHON_ERROR_LOG_DIR MEMORY_SHARE_DIR
-export BLOCK_HEIGHT_CACHE_FILE BLOCK_HEIGHT_DATA_FILE QPS_STATUS_FILE TEST_SESSION_DIR
+export BLOCK_HEIGHT_CACHE_FILE BLOCK_HEIGHT_DATA_FILE QPS_STATUS_FILE BOTTLENECK_STATUS_FILE BOTTLENECK_COUNTERS_FILE NODE_HEALTH_CACHE_DIR
+export LATEST_METRICS_FILE UNIFIED_METRICS_FILE UNIFIED_EVENTS_FILE EVENT_MANAGER_LOCK_FILE EVENT_NOTIFICATION_FILE TEST_SESSION_DIR
+export UNIFIED_LOG PERFORMANCE_LATEST_CSV PROXY_METHOD_CSV PROXY_SELF_CSV RPC_PROXY_LOG NETWORK_CSV NETWORK_PID_FILE
 export MONITORING_OVERHEAD_LOG PERFORMANCE_LOG ERROR_LOG TEMP_FILE_PATTERN SESSION_TIMESTAMP
 
 export NETWORK_MAX_BANDWIDTH_MBPS DEPLOYMENT_PLATFORM ENA_MONITOR_ENABLED
-export NETWORK_INTERFACE BASE_MEMORY_DIR
+export NETWORK_INTERFACE ENA_ALLOWANCE_FIELDS_STR
 export BASE_FRAMEWORK_DIR BASE_DATA_DIR
 export BLOCKCHAIN_PROCESS_NAMES_STR="${BLOCKCHAIN_PROCESS_NAMES[*]}"
-
-# ENA field configuration - Support development environment testing
-export ENA_ALLOWANCE_FIELDS=${ENA_ALLOWANCE_FIELDS:-"bw_in_allowance_exceeded,bw_out_allowance_exceeded,pps_allowance_exceeded,conntrack_allowance_exceeded,linklocal_allowance_exceeded,conntrack_allowance_available"}
 
 export CONFIG_ALREADY_LOADED="true"
 

@@ -7,9 +7,9 @@ import (
 	"strconv"
 )
 
-// JSONRPC 实现 spec §1.7 json_rpc 模式 (method_source=body.method,
-// id_source=body.id 固定不变)。url_pattern 决定路由命中,
-// batch_handling ∈ {reject, split, tag_batch} 控制 batch 行为。
+// JSONRPC implements spec §1.7 json_rpc mode. method_source=body.method and
+// id_source=body.id are fixed. url_pattern controls routing matches, and
+// batch_handling controls batch behavior.
 type JSONRPC struct {
 	name          string
 	urlRegex      *regexp.Regexp
@@ -44,7 +44,7 @@ func NewJSONRPC(name, urlPattern, batchHandling string) (*JSONRPC, error) {
 
 func (j *JSONRPC) Name() string { return j.name }
 
-// jsonRPCRequest 用 json.Number 保留原始 id 表示(避免 int/float 丢精)。
+// jsonRPCRequest keeps ID as interface{} so stringifyID can preserve caller IDs.
 type jsonRPCRequest struct {
 	Method string      `json:"method"`
 	ID     interface{} `json:"id"`
@@ -61,7 +61,7 @@ func (j *JSONRPC) Extract(req *http.Request, body []byte) ([]Result, bool) {
 		return nil, false
 	}
 
-	// 嗅探单条 vs batch:第一个非空白字符 [ 即 batch
+	// Sniff single vs batch: the first non-space '[' means batch.
 	for _, b := range body {
 		if b == ' ' || b == '\t' || b == '\n' || b == '\r' {
 			continue
@@ -95,7 +95,7 @@ func (j *JSONRPC) extractBatch(body []byte) ([]Result, bool) {
 	case BatchReject:
 		return nil, false
 	case BatchTag:
-		// 把整批当作 1 条 method="__batch__" 处理
+		// Treat the whole batch as one method="__batch__" record.
 		return []Result{{
 			Protocol:   "json_rpc",
 			MethodName: "__batch__",
@@ -103,7 +103,7 @@ func (j *JSONRPC) extractBatch(body []byte) ([]Result, bool) {
 			BatchIdx:   0,
 		}}, true
 	}
-	// BatchSplit (默认)
+	// BatchSplit is the default.
 	var batch []jsonRPCRequest
 	if err := json.Unmarshal(body, &batch); err != nil {
 		return nil, false
@@ -136,7 +136,7 @@ func stringifyID(id interface{}) string {
 	case string:
 		return v
 	case float64:
-		// 整数 id 用 int 表示
+		// Render integer IDs without a decimal suffix.
 		if v == float64(int64(v)) {
 			return strconv.FormatInt(int64(v), 10)
 		}
@@ -144,7 +144,7 @@ func stringifyID(id interface{}) string {
 	case bool:
 		return strconv.FormatBool(v)
 	}
-	// 兜底:JSON 序列化
+	// Fallback: JSON serialization.
 	b, _ := json.Marshal(id)
 	return string(b)
 }

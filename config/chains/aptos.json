@@ -1,6 +1,5 @@
 {
   "chain_type": "aptos",
-  "methods": {},
   "param_formats": {
     "POST /v1/view": "move_view_call",
     "GET /v1": "no_params",
@@ -13,8 +12,9 @@
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "0xd503b95164384a5ebbccbb5c4bdc8b4a5893d9651e9953abda8e1c22fcc1181d",
-    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+    "target_address": "${TARGET_ADDRESS:-0xd503b95164384a5ebbccbb5c4bdc8b4a5893d9651e9953abda8e1c22fcc1181d}",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "target_tx_hash": "${TARGET_TX_HASH:-0xe2284d396c495949580ee116c8c8d3196cda2f73d0e98fd8f0985ac477f227aa}"
   },
   "rpc_methods": {
     "single": "GET /v1/accounts/{addr}",
@@ -22,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "POST /v1/view",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /v1",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /v1/accounts/{addr}",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /v1/accounts/{addr}/resources",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /v1/transactions/by_hash/{hash}",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -55,36 +55,38 @@
   ],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/04-aptos.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.933707+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "rest",
     "original_public_endpoints": [
       {
-        "url": "https://fullnode.mainnet.aptoslabs.com/v1",
+        "url": "https://fullnode.mainnet.aptoslabs.com",
         "auth": false,
-        "verified": "E2",
-        "notes": "主推 endpoint,HTTP 200 0.24s"
-      },
-      {
-        "url": "https://api.mainnet.aptoslabs.com/v1",
-        "auth": false,
-        "verified": "E2",
-        "notes": "别名,/-/healthy=aptos-node:ok"
+        "verified": "live-2026-06-08",
+        "notes": "Aptos Labs public mainnet fullnode; REST paths include /v1"
       }
     ],
-    "original_notes": "REST 而非 JSON-RPC,POST JSON-RPC 返 405;响应自带 x-aptos-* header 免去 ledger 调用",
+    "original_notes": "REST rather than JSON-RPC; JSON-RPC POST returns 405; responses include x-aptos-* headers, avoiding a separate ledger call.",
     "adapter_required": true,
     "adapter_family": "rest",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
     "rest_paths": {
       "POST /v1/view": {
         "method": "POST",
-        "path": "/v1/view"
+        "path": "/v1/view",
+        "body": {
+          "function": "0x1::coin::balance",
+          "type_arguments": [
+            "0x1::aptos_coin::AptosCoin"
+          ],
+          "arguments": [
+            "{address}"
+          ]
+        }
       },
       "GET /v1": {
         "method": "GET",
@@ -100,13 +102,23 @@
       },
       "GET /v1/transactions/by_hash/{hash}": {
         "method": "GET",
-        "path": "/v1/transactions/by_hash/{address}"
+        "path": "/v1/transactions/by_hash/{tx_hash}"
       }
     },
     "health_probe": {
       "method": "GET",
       "path": "/v1",
       "parse_jq": ".block_height"
+    },
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Compare numeric cursors returned by the same adapter health probe against local and target RPC endpoints."
     }
   },
   "proxy_extraction": {

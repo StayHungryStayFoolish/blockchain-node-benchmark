@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 # ci/check_parallel_entry.sh
 # ===========================================================================
-# v1.4.5 Step 6: CI guard against parallel-entry trap (see skill
-# parallel-entry-trap).
-#
-# Hard rule: every "replacement / addition" file landed by v1.4.5 must
-# appear at least once as a source/import on the main pipeline. Otherwise
-# the new code is dead weight and the old code keeps running.
+# CI guard against monitoring helper modules becoming disconnected from the
+# main pipeline. Every registered helper must appear at least once as a
+# source/import on the expected caller path.
 #
 # This script is dispatcher-table-driven: add a row to PARALLEL_ENTRY_RULES
 # whenever you land a new replacement file. CI runs this on every push.
@@ -22,11 +19,11 @@ cd "$REPO_ROOT"
 # Use '@@' as multi-caller separator. CI checks at least one match in EVERY
 # caller-glob (so we don't accidentally allow drift in any single direction).
 PARALLEL_ENTRY_RULES=(
-    "monitoring/cgroup_collector.py|monitoring/unified_monitor.sh|v1.4.5 BUG #3: cgroup_collector must be sourced by unified_monitor main pipeline"
-    "monitoring/cgroup_collector.py|monitoring/monitoring_coordinator.sh|v1.4.5 Step 4: cgroup_collector must be invoked from monitoring_coordinator (s5_diag)"
-    "monitoring/kubelet_stats_client.py|monitoring/cgroup_collector.py@@monitoring/monitoring_coordinator.sh|v1.4.5 Step 4 Mode E + s5_diag: kubelet_stats_client must have a live caller"
-    "monitoring/pod_device_mapper.py|monitoring/monitoring_coordinator.sh|v1.4.5 Step 4 s5_diag: pod_device_mapper must be invoked from monitoring_coordinator"
-    "tools/single_disk_workload_profile.sh|tools/e2e_smoke.sh|v1.4.5 Step 2: single_disk_workload_profile must be invoked by e2e_smoke harness"
+    "monitoring/lib/cgroup_collector_wrapper.sh|monitoring/unified_monitor.sh|cgroup_collector wrapper must be sourced by unified_monitor main pipeline"
+    "monitoring/cgroup_collector.py|monitoring/lib/cgroup_collector_wrapper.sh@@monitoring/monitoring_coordinator.sh|cgroup_collector must be invoked by the wrapper and diagnostics"
+    "monitoring/kubelet_stats_client.py|monitoring/cgroup_collector.py@@monitoring/monitoring_coordinator.sh|kubelet_stats_client must have a live caller"
+    "monitoring/pod_device_mapper.py|monitoring/monitoring_coordinator.sh|pod_device_mapper must be invoked from monitoring_coordinator diagnostics"
+    "tools/single_disk_workload_profile.sh|tools/legacy_mock_rpc_e2e_smoke.sh|single_disk_workload_profile must be invoked by legacy mock RPC smoke harness"
 )
 
 # Optional: files whose mere presence (with NO live caller) should fail CI.
@@ -117,7 +114,7 @@ check_legacy_not_sourced() {
 
 # ---------------------------------------------------------------------------
 echo "═══════════════════════════════════════════════════════════════════════"
-echo "  v1.4.5 Parallel-Entry Trap Guard — ci/check_parallel_entry.sh"
+echo "  Monitoring Entry Guard — ci/check_parallel_entry.sh"
 echo "═══════════════════════════════════════════════════════════════════════"
 echo ""
 
@@ -128,9 +125,11 @@ for rule in "${PARALLEL_ENTRY_RULES[@]}"; do
 done
 
 echo "[2/2] Checking legacy files are not actively sourced..."
-for legacy in "${LEGACY_FILES_THAT_MUST_NOT_BE_SOURCED[@]}"; do
-    check_legacy_not_sourced "$legacy"
-done
+if [[ ${#LEGACY_FILES_THAT_MUST_NOT_BE_SOURCED[@]} -gt 0 ]]; then
+    for legacy in "${LEGACY_FILES_THAT_MUST_NOT_BE_SOURCED[@]}"; do
+        check_legacy_not_sourced "$legacy"
+    done
+fi
 
 echo ""
 echo "───────────────────────────────────────────────────────────────────────"

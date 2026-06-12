@@ -1,0 +1,25 @@
+# Repository ownership and PR review routing.
+#
+# GitHub uses this file only after branch protection enables
+# "Require review from Code Owners".
+#
+# The repository owner inferred from the current origin URL is
+# StayHungryStayFoolish. Replace these entries with a GitHub team such as
+# @StayHungryStayFoolish/blockchain-node-benchmark-maintainers when the project
+# moves under an organization.
+
+* @StayHungryStayFoolish
+
+/.github/ @StayHungryStayFoolish
+/blockchain_node_benchmark.sh @StayHungryStayFoolish
+/config/ @StayHungryStayFoolish
+/core/ @StayHungryStayFoolish
+/lib/ @StayHungryStayFoolish
+/monitoring/ @StayHungryStayFoolish
+/analysis/ @StayHungryStayFoolish
+/visualization/ @StayHungryStayFoolish
+/tools/proxy/ @StayHungryStayFoolish
+/tools/fake-node/ @StayHungryStayFoolish
+/tools/chain_adapters/ @StayHungryStayFoolish
+/deploy/ @StayHungryStayFoolish
+/tests/ @StayHungryStayFoolish

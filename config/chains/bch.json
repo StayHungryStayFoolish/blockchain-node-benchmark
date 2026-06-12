@@ -1,45 +1,46 @@
 {
   "chain_type": "bch",
-  "methods": {},
   "param_formats": {
     "getblockcount": "no_params",
     "getnetworkinfo": "no_params",
     "getmempoolinfo": "no_params",
     "getblock": "[blockhash]",
     "getrawtransaction": "[txhash,verbose]",
-    "getreceivedbyaddress": "single_address"
+    "GET /transaction/address/{address}": "path_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx0qaa",
-    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+    "target_address": "${TARGET_ADDRESS:-bitcoincash:qrd4ggm089akdszahury2s6nzmclz26q0ypr445mmu}",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "target_block_hash": "${TARGET_BLOCK_HASH:-00000000000000000101e8cdd6b5854cdb8283fa8a81bd18591f1488afd912e8}",
+    "target_txid": "${TARGET_TXID:-72cb0fab0559e227ea9af5bdb6e1710c000b076428e7c6be7d9e965988b9a1f0}"
   },
   "rpc_methods": {
-    "single": "getreceivedbyaddress",
+    "single": "GET /transaction/address/{address}",
     "mixed": "getblockcount,getnetworkinfo,getmempoolinfo,getblock,getrawtransaction",
     "mixed_weighted": [
       {
         "method": "getblockcount",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getnetworkinfo",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getmempoolinfo",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getblock",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getrawtransaction",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -47,32 +48,61 @@
   "system_addresses": [],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/21-bch.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.936178+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "rest",
     "original_public_endpoints": [
       {
-        "url": "https://rest1.biggestfan.net/v2/",
-        "auth": false,
+        "url": "${BCH_PUBLIC_GATEWAY_URL:-}",
+        "auth": true,
+        "auth_type": "x-api-key",
+        "api_key": "${RPC_API_KEY}",
         "verified": "E2",
-        "notes": "BCHN 29 REST代理,blocks=952310"
-      },
-      {
-        "url": "https://api.blockchair.com/bitcoin-cash/",
-        "auth": false,
-        "verified": "E2",
-        "notes": "Blockchair REST,30 req/min"
+        "notes": "API endpoint with x-api-key header"
       }
     ],
-    "original_notes": "BCH 公链仅 REST 代理可用,JSON-RPC 需 self-hosted;CashAddr 地址格式独有",
+    "original_notes": "BCH public access is generally available only through REST proxies; JSON-RPC should be self-hosted; CashAddr is chain-specific.",
     "adapter_required": true,
     "adapter_family": "bitcoin_jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "rest_paths": {
+      "GET /transaction/address/{address}": {
+        "method": "GET",
+        "base_url": "${BCH_REST_BASE_URL:-}",
+        "path": "/transaction/address/{address}?pageSize=1"
+      }
+    },
+    "replaced_unavailable_methods": [
+      {
+        "from": "getreceivedbyaddress",
+        "to": "GET /transaction/address/{address}",
+        "reason": "Some public gateway JSON-RPC endpoints do not expose wallet RPC getreceivedbyaddress; use a configured REST address-transaction endpoint when JSON-RPC wallet methods are unavailable."
+      }
+    ],
+    "health_probe": {
+      "method": "getblockchaininfo",
+      "params": [],
+      "parse_jq": ".result.blocks",
+      "local_sync_fields": {
+        "local_height": ".result.blocks",
+        "known_network_height": ".result.headers",
+        "initial_block_download": ".result.initialblockdownload"
+      }
+    },
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Use getblockchaininfo.blocks as the comparable height cursor; getblockchaininfo.headers and initialblockdownload remain available for future local-only sync enrichment."
+    }
   },
   "proxy_extraction": {
     "extractors": [

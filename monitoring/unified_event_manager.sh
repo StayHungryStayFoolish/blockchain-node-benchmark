@@ -15,10 +15,10 @@ fi
 
 # Avoid redefining readonly variables
 if [[ -z "${EVENT_LOG:-}" ]]; then
-    readonly EVENT_LOG="${MEMORY_SHARE_DIR}/unified_events.json"
+    readonly EVENT_LOG="${UNIFIED_EVENTS_FILE:-${MEMORY_SHARE_DIR}/unified_events.json}"
 fi
 if [[ -z "${EVENT_LOCK:-}" ]]; then
-    readonly EVENT_LOCK="${MEMORY_SHARE_DIR}/event_manager.lock"
+    readonly EVENT_LOCK="${EVENT_MANAGER_LOCK_FILE:-${MEMORY_SHARE_DIR}/event_manager.lock}"
 fi
 
 # Initialize event manager
@@ -142,7 +142,7 @@ notify_components_event_start() {
         \"timestamp\": \"$(get_unified_timestamp)\"
     }"
     
-    echo "$notification" > "${MEMORY_SHARE_DIR}/event_notification.json"
+    echo "$notification" > "${EVENT_NOTIFICATION_FILE:-${MEMORY_SHARE_DIR}/event_notification.json}"
     
     # Can add more notification mechanisms here, such as signals or message queues
 }
@@ -164,7 +164,7 @@ notify_components_event_end() {
         \"timestamp\": \"$(get_unified_timestamp)\"
     }"
     
-    echo "$notification" > "${MEMORY_SHARE_DIR}/event_notification.json"
+    echo "$notification" > "${EVENT_NOTIFICATION_FILE:-${MEMORY_SHARE_DIR}/event_notification.json}"
     
     echo "🔗 Notified all components for time range correlation analysis"
     echo "  Event type: $event_type"

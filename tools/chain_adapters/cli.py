@@ -33,8 +33,8 @@ def _get_param_format(chain: str, method: str) -> str:
         (which holds fetcher config like account_count/output_file).
       - default fallback is "single_address" (matches bash line 105 case).
 
-    Pre-2026-05-24 bug history (cli-param-bug wave):
-      commit 6866cba (S2 skeleton) accidentally read tpl["params"] (fetcher
+    Historical bug note:
+      An earlier implementation accidentally read tpl["params"] (fetcher
       config dict whose values are bash env var names like "ACCOUNT_COUNT")
       and fell back to "". The JsonRpcAdapter's own default fallback is also
       `[address]`, so byte-equality test_3 happened to pass via symmetric
@@ -62,7 +62,7 @@ def cmd_build_target(args):
     # --chain is the explicit user intent; ALWAYS override any inherited
     # BLOCKCHAIN_NODE env var (setdefault is wrong here: it lets a stale
     # parent-process value silently hijack the call and route RestAdapter
-    # to the wrong chain template — caught in S3-E.2 when test_7 leaked
+    # to the wrong chain template — caught in when test_7 leaked
     # BLOCKCHAIN_NODE=aptos into the test_10 subprocess and all algorand
     # CLI calls then queried aptos's rest_paths).
     os.environ["BLOCKCHAIN_NODE"] = args.chain

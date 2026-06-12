@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""L1: k8s_api_client._do_get catches bare socket.timeout (round-05 P1 re-opened).
+"""k8s_api_client._do_get catches bare socket.timeout.
 
 On Python 3.8/3.9 SSL handshake timeouts can bubble as bare socket.timeout
 (NOT wrapped in URLError). We must catch it explicitly so retry logic in _get()

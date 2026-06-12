@@ -1,11 +1,12 @@
-"""Per-method HTML 报告章节生成器 (S4.2 W3.4 + W3.5).
+"""Per-method HTML report-section generator.
 
-输出: 一段 HTML <div class="section"> 片段, 可直接 concat 进 report_generator 的 main HTML.
+Output: an HTML <div class="section"> fragment that can be concatenated into
+report_generator's main HTML.
 
-双语 (W3.5): 通过 language='en'/'zh' 切换. 与 report_generator.TRANSLATIONS 模式对齐 ——
-独立 PER_METHOD_TRANSLATIONS dict, 不污染全局 TRANSLATIONS.
+Bilingual output: switch with language='en'/'zh', aligned with report_generator.TRANSLATIONS.
+PER_METHOD_TRANSLATIONS stays local to avoid mutating global TRANSLATIONS.
 
-集成 (W3.4): 老 report_generator.py 在生成主 HTML 时, 调:
+Integration: report_generator.py calls this while building the main HTML:
     from visualization.per_method_report import render_per_method_section
     html += render_per_method_section(language, chain_name, chart_paths, summary)
 """
@@ -35,6 +36,7 @@ PER_METHOD_TRANSLATIONS = {
         "avg_p99_col": "Avg p99 (ms)",
         "max_p99_col": "Max p99 (ms)",
         "error_count_col": "Errors",
+        "success_count_col": "Successes",
         "error_rate_col": "Error Rate",
         "cpu_share_col": "CPU% Share (peak)",
         "chart_qps_title": "Per-Method QPS",
@@ -49,8 +51,15 @@ PER_METHOD_TRANSLATIONS = {
         ),
         "chart_error_title": "Per-Method Error Rate",
         "chart_error_desc": (
-            "Per-second error rate (status >= 400) per method. Localizes failures to "
+            "Per-second RPC failure rate per method. Localizes transport failures and "
+            "JSON-RPC error responses to "
             "specific RPC calls during the run."
+        ),
+        "chart_success_failure_title": "Per-Method Success vs Failure",
+        "chart_success_failure_desc": (
+            "Total successful and failed requests per method across the benchmark "
+            "window. This verifies whether configured single/mixed workload methods "
+            "were actually accepted by the node."
         ),
         "chart_resource_title": "Per-Method CPU Attribution",
         "chart_resource_desc": (
@@ -71,6 +80,7 @@ PER_METHOD_TRANSLATIONS = {
         "avg_p99_col": "平均 p99 (ms)",
         "max_p99_col": "最大 p99 (ms)",
         "error_count_col": "错误数",
+        "success_count_col": "成功数",
         "error_rate_col": "错误率",
         "cpu_share_col": "CPU% 占比 (峰值)",
         "chart_qps_title": "每方法 QPS",
@@ -83,7 +93,12 @@ PER_METHOD_TRANSLATIONS = {
         ),
         "chart_error_title": "每方法错误率",
         "chart_error_desc": (
-            "每秒每 method 的错误率 (status >= 400)。将失败定位到具体的 RPC 调用。"
+            "每秒每 method 的 RPC 失败率。将传输失败和 JSON-RPC error 响应定位到具体 RPC 调用。"
+        ),
+        "chart_success_failure_title": "每方法成功/失败请求数",
+        "chart_success_failure_desc": (
+            "压测窗口内每个 method 的成功与失败请求总量。用于确认 single/mixed workload "
+            "中配置的 RPC method 是否真的被节点接受。"
         ),
         "chart_resource_title": "每方法 CPU 归因",
         "chart_resource_desc": (
@@ -96,7 +111,7 @@ PER_METHOD_TRANSLATIONS = {
 
 
 def _t(language: str, key: str) -> str:
-    """i18n 查表, 缺失 fall back 到 en, 再缺失返回 [key]."""
+    """Look up i18n text, falling back to en and then [key]."""
     lang_dict = PER_METHOD_TRANSLATIONS.get(language, PER_METHOD_TRANSLATIONS["en"])
     if key in lang_dict:
         return lang_dict[key]
@@ -110,9 +125,10 @@ def compute_summary(
     resource_rows: Sequence[PerMethodResourceRow],
     top_n: int = 10,
 ) -> list[dict]:
-    """聚合 method 级摘要 (用于表格).
+    """Aggregate method-level summary rows for the table.
 
-    每 method 一行: total_requests, avg_p99, max_p99, errors, error_rate, peak_cpu_share.
+    One row per method: total_requests, avg_p99, max_p99, errors,
+    error_rate, peak_cpu_share.
     """
     by_method_qps: dict[str, list[PerMethodQpsRow]] = {}
     for r in qps_rows:
@@ -125,6 +141,7 @@ def compute_summary(
     for method, qrs in by_method_qps.items():
         total = sum(r.qps for r in qrs)
         errors = sum(r.error_count for r in qrs)
+        successes = max(total - errors, 0)
         avg_p99 = sum(r.p99_ms for r in qrs) / len(qrs) if qrs else 0
         max_p99 = max((r.p99_ms for r in qrs), default=0)
         rrs = by_method_res.get(method, [])
@@ -132,6 +149,7 @@ def compute_summary(
         summary.append({
             "method": method,
             "total_requests": total,
+            "success_count": successes,
             "avg_p99_ms": avg_p99,
             "max_p99_ms": max_p99,
             "error_count": errors,
@@ -153,10 +171,11 @@ def _render_summary_table(summary: list[dict], language: str) -> str:
     cols = [
         ("method_col", "method", str),
         ("total_qps_col", "total_requests", lambda v: f"{v:,}"),
-        ("avg_p99_col", "avg_p99_ms", lambda v: f"{v:.2f}"),
-        ("max_p99_col", "max_p99_ms", lambda v: f"{v:.2f}"),
+        ("success_count_col", "success_count", lambda v: f"{v:,}"),
         ("error_count_col", "error_count", lambda v: f"{v:,}"),
         ("error_rate_col", "error_rate", lambda v: f"{v*100:.2f}%"),
+        ("avg_p99_col", "avg_p99_ms", lambda v: f"{v:.2f}"),
+        ("max_p99_col", "max_p99_ms", lambda v: f"{v:.2f}"),
         ("cpu_share_col", "peak_cpu_share_pct", lambda v: f"{v:.1f}%"),
     ]
     head = "".join(
@@ -203,15 +222,14 @@ def render_per_method_section(
     summary: list[dict],
     top_n: int = 10,
 ) -> str:
-    """生成完整的 per-method 章节 HTML.
+    """Render the complete per-method HTML section.
 
     Args:
         language: 'en' | 'zh'
-        chain_name: 链名 (展示用)
-        chart_paths: {'qps', 'latency', 'error_rate', 'resource'} → 图路径
-                     路径会被原样写入 <img src>, 调用方负责传相对路径或绝对路径.
-        summary: compute_summary() 输出
-        top_n: 展示前 N 个 method
+        chain_name: display chain name
+        chart_paths: {'qps', 'latency', 'error_rate', 'resource'} -> chart paths
+        summary: output from compute_summary()
+        top_n: number of top methods displayed
     """
     title = _t(language, "section_title")
     intro = _t(language, "section_intro").format(top_n=top_n)
@@ -230,6 +248,8 @@ def render_per_method_section(
                             str(chart_paths.get("latency", "")), language),
         _render_chart_block("chart_error_title", "chart_error_desc",
                             str(chart_paths.get("error_rate", "")), language),
+        _render_chart_block("chart_success_failure_title", "chart_success_failure_desc",
+                            str(chart_paths.get("success_failure", "")), language),
         _render_chart_block("chart_resource_title", "chart_resource_desc",
                             str(chart_paths.get("resource", "")), language),
         '</div>',
@@ -238,10 +258,11 @@ def render_per_method_section(
 
 
 def get_chart_titles_for_language(language: str) -> dict[str, str]:
-    """便利方法: 提供给 per_method_charts.generate_all_charts(titles=...) 用."""
+    """Return chart titles for per_method_charts.generate_all_charts(titles=...)."""
     return {
         "qps": _t(language, "chart_qps_title"),
         "latency": _t(language, "chart_latency_title"),
         "error_rate": _t(language, "chart_error_title"),
+        "success_failure": _t(language, "chart_success_failure_title"),
         "resource": _t(language, "chart_resource_title"),
     }

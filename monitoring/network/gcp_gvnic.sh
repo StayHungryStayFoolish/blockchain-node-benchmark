@@ -1,12 +1,11 @@
 #!/bin/bash
 # monitoring/network/gcp_gvnic.sh
-# GCP gVNIC 实现 (driver=gve, n2/c2/n4 等现代 GCP 实例)
-# 实现 Y+ 接口契约 4 函数
+# GCP gVNIC implementation (driver=gve, modern GCP instances such as n2/c2/n4).
+# Implements the provider network interface functions
 
 source "$(dirname "${BASH_SOURCE[0]}")/interface.sh"
 
-# gVNIC 字段集 (3 个, 从 ethtool -S)
-# 注意: gVNIC 不报 *_allowance_exceeded, 因为根本没这种 counter
+# gVNIC fields from ethtool -S. gVNIC does not expose *_allowance_exceeded counters.
 readonly GCP_GVNIC_FIELDS=(
     "tx_drops"
     "rx_no_buffer"
@@ -49,7 +48,7 @@ collect_network_metrics() {
         v=$(echo "$ethtool_out" | awk -v f="$field" '$1 == f":" {print $2}')
         v=${v:-0}
         gvnic_values="${gvnic_values},${v}"
-        # tx_drops > 0 OR rx_no_buffer > 0 触发饱和 (tx_timeout 是 error 不算饱和)
+        # tx_drops > 0 or rx_no_buffer > 0 indicates saturation; tx_timeout is an error counter.
         if [[ "$field" == "tx_drops" || "$field" == "rx_no_buffer" ]] && [[ "$v" -gt 0 ]]; then
             saturation=1
         fi

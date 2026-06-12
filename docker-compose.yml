@@ -1,0 +1,56 @@
+# Local Linux test environment for framework/fake-node/proxy/report smoke tests.
+#
+# Default base image is the official latest stable Ubuntu tag. Pin it if needed:
+#   UBUNTU_IMAGE=ubuntu:26.04 docker compose build bench
+#
+# Common usage:
+#   docker compose build bench
+#   docker compose up -d bench
+#   docker compose exec bench bash
+#
+# Optional fake-node service:
+#   FAKE_NODE_CHAIN=solana docker compose --profile fake-node up -d fake-node
+
+services:
+  bench:
+    image: blockchain-node-benchmark:test-ubuntu
+    build:
+      context: .
+      dockerfile: deploy/docker-test/Dockerfile
+      args:
+        UBUNTU_IMAGE: ${UBUNTU_IMAGE:-ubuntu:latest}
+        GO_VERSION: ${GO_VERSION:-1.26.4}
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      BLOCKCHAIN_NODE: ${BLOCKCHAIN_NODE:-solana}
+      LOCAL_RPC_URL: ${LOCAL_RPC_URL:-http://fake-node:19000}
+      RPC_API_KEY: ${RPC_API_KEY:-}
+    ports:
+      - "19100:19100" # spare local test port
+      - "8080:8080"   # report/proxy debugging
+      - "9090:9090"   # proxy/metrics debugging
+    stdin_open: true
+    tty: true
+    init: true
+    command: ["bash", "-lc", "echo 'bench container ready: cd /workspace'; sleep infinity"]
+
+  fake-node:
+    image: blockchain-node-benchmark:test-ubuntu
+    profiles: ["fake-node"]
+    build:
+      context: .
+      dockerfile: deploy/docker-test/Dockerfile
+      args:
+        UBUNTU_IMAGE: ${UBUNTU_IMAGE:-ubuntu:latest}
+        GO_VERSION: ${GO_VERSION:-1.26.4}
+    working_dir: /workspace/tools/fake-node
+    volumes:
+      - .:/workspace
+    environment:
+      BLOCKCHAIN_NODE: ${FAKE_NODE_CHAIN:-solana}
+    ports:
+      - "19000:19000"
+    init: true
+    command: ["bash", "-lc", "go test ./... && go run . -chain \"${FAKE_NODE_CHAIN:-solana}\" -port 19000"]

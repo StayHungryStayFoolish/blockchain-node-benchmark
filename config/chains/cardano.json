@@ -1,21 +1,25 @@
 {
   "chain_type": "cardano",
-  "methods": {},
   "param_formats": {
     "GET_TIP": "no_params",
     "GET_BLOCKS": "no_params",
     "POST_ADDRESS_INFO": "body_addresses_array",
     "POST_TX_INFO": "body_tx_hashes_array",
     "POST_BLOCK_TXS": "body_block_hashes_array",
-    "GET_EPOCH_INFO": "query_epoch_int"
+    "GET_EPOCH_INFO": "query_epoch_int",
+    "POST_ASSET_INFO": "body_asset_list"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "addr1q9hqwyelcx6l4kulh8lz3ztle90md90m96yjnu8ac8hvm8w7m3cdnhmznqdtwxs3pl7runf7g9yu86s900kh3ddpd8fquhawve",
-    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+    "target_address": "${TARGET_ADDRESS:-addr1q9hqwyelcx6l4kulh8lz3ztle90md90m96yjnu8ac8hvm8w7m3cdnhmznqdtwxs3pl7runf7g9yu86s900kh3ddpd8fquhawve}",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "target_tx_hash": "${TARGET_TX_HASH:-41b4bb03eaa713c0d0eda3a3ad8ec51c87f4729b91488ea1bda0c97cdef4abc7}",
+    "target_block_hash": "${TARGET_BLOCK_HASH:-cae6ca91e02ab1fbdf9d5e2b2c70b1c7d3eb0c1ea4b8df01d39b88e9bd6dc6b9}",
+    "target_epoch": "${TARGET_EPOCH:-520}",
+    "target_asset": "${TARGET_ASSET:-[\"8db269c3ec630e06ae29f74bc39edd1f87c819f1056206e879a1cd61\",\"444a4544\"]}"
   },
   "rpc_methods": {
     "single": "POST_ADDRESS_INFO",
@@ -23,31 +27,31 @@
     "mixed_weighted": [
       {
         "method": "GET_TIP",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "GET_BLOCKS",
-        "weight": 1
+        "weight": 15
       },
       {
         "method": "POST_ADDRESS_INFO",
-        "weight": 1
+        "weight": 14
       },
       {
         "method": "POST_TX_INFO",
-        "weight": 1
+        "weight": 14
       },
       {
         "method": "POST_BLOCK_TXS",
-        "weight": 1
+        "weight": 14
       },
       {
         "method": "GET_EPOCH_INFO",
-        "weight": 1
+        "weight": 14
       },
       {
         "method": "POST_ASSET_INFO",
-        "weight": 1
+        "weight": 14
       }
     ]
   },
@@ -55,34 +59,27 @@
   "system_addresses": [],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/06-cardano.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.937152+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "rest",
     "original_public_endpoints": [
       {
         "url": "https://api.koios.rest/api/v1",
         "auth": false,
-        "verified": "E2",
-        "notes": "Koios REST 免 key 推荐"
-      },
-      {
-        "url": "https://cardano-mainnet.blockfrost.io/api/v0",
-        "auth": false,
-        "verified": "E2",
-        "notes": "需 project_id,无 key=403"
+        "verified": "live-2026-06-08",
+        "notes": "Koios public Cardano REST endpoint"
       }
     ],
-    "original_notes": "EUTXO 模型;cardano-node 无原生 HTTP,必经 middleware(Koios);多数 method 是 POST + JSON array body",
+    "original_notes": "EUTXO model; cardano-node has no native HTTP API, so middleware such as Koios is required; most methods are POST with JSON array bodies.",
     "adapter_required": true,
     "adapter_family": "rest",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
     "adapter_family_corrected_at": "2026-05-28T00:00:00Z",
-    "adapter_family_correction_note": "ADR-0005: was 'ogmios' (mismatched, Ogmios = WebSocket, Dandelion public endpoint dead). Corrected to 'rest' per docs/zh/chains/06-cardano.md §11.8 推荐;EUTXO is a data-model concept (reader layer), not transport — Koios REST is just HTTP + JSON, same family as algorand/aptos/tezos/ton.",
+    "adapter_family_correction_note": "Cardano uses the REST family through Koios. EUTXO is a data-model concept, not a transport family; Koios REST is HTTP + JSON, same transport family as algorand/aptos/tezos/ton.",
     "rest_paths": {
       "GET_TIP": {
         "method": "GET",
@@ -106,7 +103,7 @@
         "path": "/tx_info",
         "body": {
           "_tx_hashes": [
-            "{address}"
+            "{tx_hash}"
           ]
         }
       },
@@ -115,19 +112,38 @@
         "path": "/block_txs",
         "body": {
           "_block_hashes": [
-            "{address}"
+            "{block_hash}"
           ]
         }
       },
       "GET_EPOCH_INFO": {
         "method": "GET",
-        "path": "/epoch_info"
+        "path": "/epoch_info?_epoch_no={epoch}"
+      },
+      "POST_ASSET_INFO": {
+        "method": "POST",
+        "path": "/asset_info",
+        "body": {
+          "_asset_list": [
+            "{asset}"
+          ]
+        }
       }
     },
     "health_probe": {
       "method": "GET",
       "path": "/tip",
       "parse_jq": ".[0].block_height"
+    },
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Compare numeric cursors returned by the same adapter health probe against local and target RPC endpoints."
     }
   },
   "proxy_extraction": {
@@ -158,6 +174,10 @@
           {
             "pattern": "^/epoch_info$",
             "method_name": "GET_EPOCH_INFO"
+          },
+          {
+            "pattern": "^/asset_info$",
+            "method_name": "POST_ASSET_INFO"
           }
         ]
       }

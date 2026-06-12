@@ -10,7 +10,8 @@ Design:
 
 Why Python (not bash):
     bash cannot do polymorphism without case-dispatch — which is exactly what
-    adapter pattern is meant to replace. Python is already used by mock_rpc_server.py
+    adapter pattern is meant to replace. Python is already used by the legacy
+    mock RPC server and account-fetching tools.
     and normalize_chain_templates.py in this repo.
 
 Why HTTP/REST clients construct vegeta targets (not actually call HTTP):

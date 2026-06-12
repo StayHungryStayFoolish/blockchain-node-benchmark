@@ -106,18 +106,18 @@ class DiskChartGenerator:
         self.device_manager = DeviceManager(self.df)
         self.field_mapping = self.device_manager.build_field_mapping()
 
-        # 铁律: provider 从 CSV cloud_provider 列取, 不做运行时探测.
-        # 用于经 CSVSchemaRegistry 解析 provider_aware 物理字段名 (standard_iops / standard_throughput_mibs).
+        # Provider comes from the CSV cloud_provider column; do not re-detect at analysis time.
+        # Used by CSVSchemaRegistry to resolve provider-aware physical fields.
         self.cloud_provider = self._read_cloud_provider_from_csv()
 
         # 🔧 Fix: Dynamically recalculate provider-adjusted IOPS (correct old data)
         self._recalculate_disk_standard_metrics()
 
     def _read_cloud_provider_from_csv(self):
-        """从 CSV cloud_provider 列读取 provider (aws|gcp|other).
+        """Read provider (aws|gcp|other) from the CSV cloud_provider column.
 
-        铁律: provider 来源是 CSV 数据本身, 不运行时探测、不读环境变量.
-        缺列或空值时回退 'other' (中立兜底, registry 三云同名, 不影响物理列名).
+        Provider comes from CSV data itself; do not re-detect or read environment variables.
+        Missing or empty values fall back to "other".
         """
         if 'cloud_provider' in self.df.columns:
             series = self.df['cloud_provider'].dropna()
@@ -128,20 +128,19 @@ class DiskChartGenerator:
         return 'other'
 
     def _resolve_disk_field(self, logical_name, device_prefix):
-        """经 CSV Schema Registry 解析 provider_aware disk 字段 -> 实际 CSV 列名.
+        """Resolve a provider-aware disk field to an actual CSV column name.
 
-        logical_name: 'disk_iops_provider_adjusted' 或 'disk_throughput_provider_adjusted'.
-        device_prefix: 逻辑设备前缀 'data' 或 'accounts'.
+        logical_name: 'disk_iops_provider_adjusted' or 'disk_throughput_provider_adjusted'.
+        device_prefix: logical device prefix, either 'data' or 'accounts'.
 
-        registry 返回物理模板列名 (如 'data_standard_iops'), 但真实列名含运行时设备名
-        (如 'data_nvme1n1_standard_iops'), 故取 registry 解析出的物理 suffix 后, 在
-        self.df.columns 内按 '{device_prefix}_.*_{suffix}' 正则匹配真实列名.
-        返回匹配列名; 无匹配返回 None.
+        The registry returns a physical template column such as
+        'data_standard_iops', while real CSV columns include runtime device
+        names. This function matches by the resolved suffix.
         """
         physical = CSVSchemaRegistry.resolve(logical_name, self.cloud_provider, device_prefix)
-        # physical 形如 'data_standard_iops' -> suffix='standard_iops'
+        # Example: physical 'data_standard_iops' -> suffix 'standard_iops'.
         suffix = physical[len(device_prefix) + 1:]
-        # 优先直接命中 (无运行时设备名拆分的场景)
+        # Prefer a direct match when no runtime device segment exists.
         if physical in self.df.columns:
             return physical
         pattern = re.compile(rf'^{re.escape(device_prefix)}_.*_{re.escape(suffix)}$')
@@ -210,7 +209,7 @@ class DiskChartGenerator:
     
     def validate_data_completeness(self):
         """Disk data integrity validation"""
-        # provider_aware 字段经 registry 解析物理列名 (不裸写 aws_standard_*)
+        # Provider-aware fields are resolved through the registry.
         required_resolved = [
             self._resolve_disk_field('disk_iops_provider_adjusted', 'data'),
             self._resolve_disk_field('disk_throughput_provider_adjusted', 'data'),

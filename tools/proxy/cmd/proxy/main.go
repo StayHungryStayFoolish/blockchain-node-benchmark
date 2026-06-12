@@ -1,14 +1,14 @@
-// Command proxy 启动 per-method HTTP 反向代理。
+// Command proxy starts the per-method HTTP reverse proxy.
 //
-// 用法:
+// Usage:
 //
 //	proxy -chain=config/chains/ethereum.json -upstream=http://localhost:8545 -listen=:18545
 //
-// 环境变量:
+// Environment variables:
 //
-//	PROXY_SINK_FORMAT  csv (默认) | jsonl | discard
-//	PROXY_SINK_PATH    per-method sink 输出路径 (默认 ./proxy_per_method.csv)
-//	PROXY_SELF_PATH    proxy 自报输出路径 (默认 ./proxy_self.csv)
+//	PROXY_SINK_FORMAT  csv (default) | jsonl | discard
+//	PROXY_SINK_PATH    per-method sink output path (default ./proxy_per_method.csv)
+//	PROXY_SELF_PATH    proxy self-report output path (default ./proxy_self.csv)
 package main
 
 import (

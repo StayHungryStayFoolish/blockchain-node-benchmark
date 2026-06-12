@@ -9,8 +9,23 @@
 family: bitcoin_jsonrpc
 
 methods:
+  GET /address/{address}:
+    fixture: GET__address__address.json
+    tier: mid
+  GET /address/{address}/balance:
+    fixture: GET__address__address_balance.json
+    tier: mid
+  GET /transaction/address/{address}:
+    fixture: GET__transaction_address__address.json
+    tier: mid
+  estimatesmartfee:
+    fixture: estimatesmartfee.json
+    tier: cheap
   getblockcount:
     fixture: getblockcount.json
+    tier: cheap
+  getblockchaininfo:
+    fixture: getblockchaininfo.json
     tier: cheap
   getbestblockhash:
     fixture: getbestblockhash.json
@@ -18,9 +33,18 @@ methods:
   getblock:
     fixture: getblock.json
     tier: expensive
+  getmempoolinfo:
+    fixture: getmempoolinfo.json
+    tier: mid
+  getnetworkinfo:
+    fixture: getnetworkinfo.json
+    tier: mid
   getrawtransaction:
     fixture: getrawtransaction.json
     tier: expensive
+  getreceivedbyaddress:
+    fixture: getreceivedbyaddress.json
+    tier: mid
 
 tiers:
   cheap: 1ms

@@ -14,18 +14,17 @@ Why
 ---
 Bare iostat / sar provides host-level metrics, but in K8s / Docker the host
 is shared. To attribute IO to the blockchain process, we read cgroup
-counters from the process's own slice. Per v1.3 plan §S3, this collector
-covers 4 modes:
+counters from the process's own slice. This collector covers 4 primary modes:
   Mode A: cgroup v2 unified hierarchy            (modern Linux, K8s, cloudtop)
   Mode B: cgroup v1 split-controller hierarchy   (older RHEL, EKS 1.21-)
   Mode C: cgroup not mounted / unreadable        (fail-soft → NA fields)
   Mode D: target cgroup path not found           (PID unresolvable → NA)
 
-Inputs (env vars from config_loader.sh § S2):
+Inputs (env vars from config_loader.sh):
   HOST_PROC        base /proc path           default /proc
   HOST_SYS         base /sys path            default /sys
-  CGROUP_VERSION   "v1" | "v2" | "unknown"   set by k8s_paths.sh
-  CGROUP_ROOT      base cgroup mount         set by k8s_paths.sh
+  CGROUP_VERSION   "v1" | "v2" | "unknown"   set by runtime_paths.sh
+  CGROUP_ROOT      base cgroup mount         set by runtime_paths.sh
   CGROUP_V1_BLKIO_PATH    only set for v1
   CGROUP_V1_MEMORY_PATH   only set for v1
   CGROUP_V1_CPU_PATH      only set for v1
@@ -118,7 +117,7 @@ def _env(name: str, default: str) -> str:
 
 
 def get_host_paths() -> Dict[str, str]:
-    """Resolve HOST_PROC / HOST_SYS / cgroup paths from env (set by k8s_paths.sh)."""
+    """Resolve HOST_PROC / HOST_SYS / cgroup paths from env (set by runtime_paths.sh)."""
     return {
         "HOST_PROC": _env("HOST_PROC", "/proc"),
         "HOST_SYS": _env("HOST_SYS", "/sys"),
@@ -132,7 +131,7 @@ def get_host_paths() -> Dict[str, str]:
 
 def _detect_cgroup_version_fallback(host_sys: str) -> Tuple[str, str]:
     """Fall-back cgroup version detection when env wasn't set.
-    Mirrors logic in k8s_paths.sh._detect_cgroup_version.
+    Mirrors logic in runtime_paths.sh._detect_cgroup_version.
     """
     base = f"{host_sys}/fs/cgroup"
     if Path(f"{base}/cgroup.controllers").is_file():
@@ -369,7 +368,7 @@ def collect_v1(host_paths: Dict[str, str], target_path: str) -> Dict[str, int]:
 # ---------------------------------------------------------------------------
 
 def _try_k8s_kubelet_fallback(reason: str) -> Optional[Dict[str, object]]:
-    """v1.4.5 Step 4: Mode E — K8s kubelet /stats/summary fallback.
+    """Mode E: K8s kubelet /stats/summary fallback.
 
     Only activates when:
       DEPLOYMENT_MODE=k8s              (env, set by deployment_mode_detector.sh)

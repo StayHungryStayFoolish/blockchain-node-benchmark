@@ -107,7 +107,7 @@ func TestLoadChain_JSONRPCMissingURLPattern(t *testing.T) {
 	}
 }
 
-// 真实 36 链 chain template loadability smoke
+// Real 36-chain template loadability smoke test.
 func TestLoadChain_All36Chains(t *testing.T) {
 	matches, err := filepath.Glob("../../../../config/chains/*.json")
 	if err != nil || len(matches) == 0 {

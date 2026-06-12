@@ -27,26 +27,109 @@ with empty params, expecting either decimal int or 0x-hex result.
 from __future__ import annotations
 import json
 import re
+import os
+from pathlib import Path
 from typing import Optional
 
 from .base import ChainAdapter, register, _vegeta_post_json, _try_int
+from .url_overrides import resolve_param
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_CHAINS_DIR = _REPO_ROOT / "config" / "chains"
 
 
 @register("jsonrpc")
 class JsonRpcAdapter(ChainAdapter):
 
+    def __init__(self):
+        self._chain_cache: dict[str, dict] = {}
+
+    def _load_chain(self, chain_name: str) -> dict:
+        if chain_name not in self._chain_cache:
+            with open(_CHAINS_DIR / f"{chain_name}.json") as f:
+                self._chain_cache[chain_name] = json.load(f)
+        return self._chain_cache[chain_name]
+
     def build_vegeta_target(
         self, method: str, address: str, rpc_url: str, param_format: str = "",
     ) -> dict:
-        params = self._build_params(param_format, address)
+        chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
+        tpl = self._load_chain(chain_name) if chain_name else {}
+        if method.startswith("/"):
+            body = self._build_path_body(method, param_format, address)
+            return _vegeta_post_json(rpc_url.rstrip("/") + method, body)
+        if method.startswith("eth_") and rpc_url.rstrip("/") == "https://api.trongrid.io":
+            rpc_url = rpc_url.rstrip("/") + "/jsonrpc"
+        if tpl.get("chain_type") == "near":
+            params = self._build_near_params(method, address, tpl)
+            body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+            return _vegeta_post_json(rpc_url, body)
+        if (
+            tpl.get("chain_type") == "solana"
+            and method == "getTokenAccountBalance"
+            and "localhost" not in rpc_url
+            and "127.0.0.1" not in rpc_url
+        ):
+            cfg_params = tpl.get("params", {}) if isinstance(tpl.get("params"), dict) else {}
+            params = [resolve_param(cfg_params, "target_token_account", address)]
+            body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+            return _vegeta_post_json(rpc_url, body)
+        params = self._build_params(param_format, address, tpl)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
 
     @staticmethod
-    def _build_params(param_format: str, address: str) -> list:
-        # Baseline 7 formats (S2)
+    def _build_near_params(method: str, address: str, tpl: dict):
+        cfg_params = tpl.get("params", {}) if isinstance(tpl, dict) else {}
+        if method == "query":
+            return {"request_type": "view_account", "finality": "final", "account_id": address}
+        if method == "block":
+            return {"finality": "final"}
+        if method == "gas_price":
+            return [None]
+        if method == "validators":
+            return [None]
+        if method == "tx":
+            return [
+                resolve_param(cfg_params, "target_tx_hash", address),
+                resolve_param(cfg_params, "target_signer_id", address),
+            ]
+        return []
+
+    def _build_path_body(self, method: str, param_format: str, address: str) -> dict:
+        chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
+        tpl = self._load_chain(chain_name) if chain_name else {}
+        params = tpl.get("params", {}) if isinstance(tpl.get("params"), dict) else {}
+        txid = resolve_param(params, "target_txid", resolve_param(params, "txid", address))
+        contract = resolve_param(params, "target_contract_address", address)
+        if param_format == "no_params" or method == "/wallet/getnowblock":
+            return {}
+        if param_format == "body_value_txid_nopfx" or method == "/wallet/gettransactionbyid":
+            return {"value": txid}
+        if param_format == "body_owner_contract_selector_parameter" or method == "/wallet/triggerconstantcontract":
+            return {
+                "owner_address": address,
+                "contract_address": contract,
+                "function_selector": "balanceOf(address)",
+                "parameter": "0000000000000000000000000000000000000000000000000000000000000000",
+                "visible": True,
+            }
+        return {"address": address, "visible": True}
+
+    @staticmethod
+    def _build_params(param_format: str, address: str, tpl: dict | None = None):
+        cfg_params = tpl.get("params", {}) if isinstance(tpl, dict) else {}
+        # Baseline parameter formats
         if param_format == "no_params":
             return []
+        if param_format == "height_encoding":
+            return {"height": int(resolve_param(cfg_params, "target_height", 1)), "encoding": "json"}
+        if param_format == "txid_encoding":
+            return {"txID": resolve_param(cfg_params, "target_txid", address), "encoding": "json"}
+        if param_format == "addresses_limit_encoding":
+            return {"addresses": [address], "limit": 1, "encoding": "hex"}
+        if param_format == "single_address" and tpl and tpl.get("chain_type") == "avalanche-x":
+            return {"address": address}
         if param_format == "single_address":
             return [address]
         if param_format == "address_latest":
@@ -63,7 +146,7 @@ class JsonRpcAdapter(ChainAdapter):
                 address,
                 {"showType": True, "showContent": True, "showDisplay": False},
             ]
-        # S3-A: EVM standard formats (arbitrum/optimism/zksync-era/linea/avalanche-c)
+        # chain-specific: EVM standard formats (arbitrum/optimism/zksync-era/linea/avalanche-c)
         if param_format == "block_number":
             # eth_getBlockByNumber → ["latest", false]   (don't return full txs)
             return ["latest", False]
@@ -97,26 +180,93 @@ class JsonRpcAdapter(ChainAdapter):
         return [address]
 
     def health_check_request(self, rpc_url: str) -> dict:
-        """Default health probe = eth_blockNumber. Caller can override per-chain
-        by passing a different method via env var BLOCKCHAIN_HEALTH_METHOD."""
-        # Subclasses or callers pass via env, but for a generic adapter we
-        # need a default that works for the most common case (EVM).
-        body = {"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []}
+        """Build the per-chain block-height probe.
+
+        The jsonrpc family covers several protocols whose height method is not
+        always `eth_blockNumber`; keep this mapping close to the adapter that
+        already knows each chain's request shape.
+        """
+        chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
+        tpl = self._load_chain(chain_name) if chain_name else {}
+        chain_type = tpl.get("chain_type", chain_name)
+        probe = tpl.get("_meta", {}).get("health_probe", {}) if isinstance(tpl, dict) else {}
+
+        if chain_type == "tron" and rpc_url.rstrip("/") == "https://api.trongrid.io":
+            rpc_url = rpc_url.rstrip("/") + "/jsonrpc"
+
+        if probe:
+            rpc_method = probe.get("rpc_method") or probe.get("method")
+            params = probe.get("params", [])
+            if not isinstance(params, list):
+                params = []
+            body = {"jsonrpc": "2.0", "id": 1, "method": rpc_method, "params": params}
+            parse_jq = probe.get("parse_jq", ".result")
+        elif chain_type == "solana":
+            body = {"jsonrpc": "2.0", "id": 1, "method": "getBlockHeight", "params": []}
+            parse_jq = ".result"
+        elif chain_type == "starknet":
+            body = {"jsonrpc": "2.0", "id": 1, "method": "starknet_blockNumber", "params": []}
+            parse_jq = ".result"
+        elif chain_type == "sui":
+            body = {"jsonrpc": "2.0", "id": 1, "method": "sui_getTotalTransactionBlocks", "params": []}
+            parse_jq = ".result"
+        elif chain_type == "near":
+            body = {"jsonrpc": "2.0", "id": 1, "method": "block", "params": {"finality": "final"}}
+            parse_jq = ".result.header.height"
+        elif chain_type == "avalanche-x":
+            body = {"jsonrpc": "2.0", "id": 1, "method": "avm.getHeight", "params": {}}
+            parse_jq = ".result.height"
+        else:
+            body = {"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []}
+            parse_jq = ".result"
         return {
             "method": "POST",
             "url": rpc_url,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps(body, separators=(",", ":")),
-            "parse_jq": ".result",
+            "parse_jq": parse_jq,
         }
 
     def parse_block_height(self, response_text: str) -> Optional[int]:
-        """Try .result as decimal int or 0x-hex string."""
+        """Try .result as a height cursor or reported-lag signal."""
         if not response_text:
             return None
         try:
             obj = json.loads(response_text)
         except json.JSONDecodeError:
             return None
+        error = obj.get("error")
+        if isinstance(error, dict):
+            data = error.get("data")
+            if isinstance(data, dict):
+                parsed = _try_int(data.get("numSlotsBehind"))
+                if parsed is not None:
+                    return parsed
         result = obj.get("result")
-        return _try_int(result)
+        if result is False:
+            return 0
+        if isinstance(result, str) and result.lower() == "ok":
+            return 0
+        parsed = _try_int(result)
+        if parsed is not None:
+            return parsed
+        if isinstance(result, dict):
+            current_block = _try_int(result.get("currentBlock"))
+            highest_block = _try_int(result.get("highestBlock"))
+            if current_block is not None and highest_block is not None:
+                return max(highest_block - current_block, 0)
+            for path in (
+                ("header", "height"),        # NEAR block
+                ("height",),                 # Avalanche-X avm.getHeight
+                ("block_id", "seqno"),       # TON-style fallback if routed here
+            ):
+                cur = result
+                for key in path:
+                    if not isinstance(cur, dict):
+                        cur = None
+                        break
+                    cur = cur.get(key)
+                parsed = _try_int(cur)
+                if parsed is not None:
+                    return parsed
+        return None

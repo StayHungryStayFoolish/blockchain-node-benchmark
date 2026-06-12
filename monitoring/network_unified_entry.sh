@@ -1,8 +1,9 @@
 #!/bin/bash
 # monitoring/network_unified_entry.sh
-# Y+ 架构: NIC 监控统一入口 (业务代码不直接 source provider 文件, 通过此入口)
+# Provider-aware NIC monitoring entrypoint
 #
-# Source 后 4 个接口函数立即可用 (来自 ${CLOUD_PROVIDER_VARIANT}.sh):
+# After sourcing, these provider functions are available from
+# ${CLOUD_PROVIDER_VARIANT}.sh:
 #   init_network_monitoring
 #   generate_network_csv_header
 #   collect_network_metrics
@@ -18,11 +19,11 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# 1. 探测 platform + driver (导出 CLOUD_PROVIDER_VARIANT)
+# 1. Detect platform and NIC driver, exporting CLOUD_PROVIDER_VARIANT.
 # shellcheck disable=SC1091
 source "${PROJECT_ROOT}/config/cloud_provider.sh"
 
-# 2. 根据 variant source 对应 provider 实现
+# 2. Source the provider implementation for the detected variant.
 PROVIDER_FILE="${SCRIPT_DIR}/network/${CLOUD_PROVIDER_VARIANT}.sh"
 if [[ ! -f "$PROVIDER_FILE" ]]; then
     echo "WARN: provider file not found: $PROVIDER_FILE, falling back to other_none" >&2
@@ -37,7 +38,7 @@ fi
 # shellcheck disable=SC1090
 source "$PROVIDER_FILE"
 
-# 3. 验证 4 接口都已定义
+# 3. Verify the required provider functions are defined.
 for fn in init_network_monitoring generate_network_csv_header collect_network_metrics get_network_field_metadata; do
     if ! declare -F "$fn" > /dev/null; then
         echo "ERROR: provider $PROVIDER_FILE missing function: $fn" >&2
@@ -45,6 +46,6 @@ for fn in init_network_monitoring generate_network_csv_header collect_network_me
     fi
 done
 
-# 暴露元数据
+# Expose selected provider metadata.
 export NETWORK_PROVIDER_FILE="$PROVIDER_FILE"
 export NETWORK_PROVIDER_VARIANT="$CLOUD_PROVIDER_VARIANT"

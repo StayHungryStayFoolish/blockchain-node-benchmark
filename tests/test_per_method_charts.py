@@ -1,12 +1,12 @@
-"""单测: per-method 图表生成器 (S4.2 W3.3 配套).
+"""Unit tests for per-method chart generation.
 
-不验图像内容 (脆弱), 只验:
-- 生成的 SVG 文件存在且非空
-- SVG 头/尾合法
-- 包含期望的 method 名(legend)和 polyline/polygon 标签
-- 缺数据/边界情况不崩
+These tests avoid pixel-level assertions. They verify:
+- generated SVG files exist and are non-empty
+- SVG start/end tags are valid
+- expected method names and polyline/polygon tags are present
+- empty and boundary inputs do not crash
 
-跑法: python3 tests/test_per_method_charts.py
+Run: python3 tests/test_per_method_charts.py
 """
 
 import os
@@ -25,6 +25,7 @@ from visualization.per_method_charts import (  # noqa: E402
     _assign_colors,
     _scale,
     generate_all_charts,
+    plot_success_failure_totals,
     plot_error_rate,
     plot_latency_p99,
     plot_qps,
@@ -52,7 +53,7 @@ class TestHelpers(unittest.TestCase):
     def test_scale(self):
         self.assertAlmostEqual(_scale(50, 0, 100, 0, 1000), 500)
         self.assertAlmostEqual(_scale(0, 0, 100, 100, 200), 100)
-        # 退化: vmax==vmin
+        # Degenerate range: vmax == vmin.
         self.assertAlmostEqual(_scale(5, 5, 5, 0, 100), 50)
 
 
@@ -89,7 +90,7 @@ class TestPlots(unittest.TestCase):
         self.assertGreater(len(content), 200, "SVG too small")
         self.assertTrue(content.startswith("<svg"), "missing <svg")
         self.assertTrue(content.rstrip().endswith("</svg>"), "missing </svg>")
-        # legend 包含 method 名
+        # Legend includes method names.
         for m in expect_methods:
             self.assertIn(m, content, f"method {m} missing from {path.name}")
 
@@ -105,8 +106,14 @@ class TestPlots(unittest.TestCase):
     def test_plot_error_rate(self):
         out = plot_error_rate(self.qps_rows, Path(self.tmp) / "err.svg")
         self._assert_valid_svg(out, ["getSlot", "getBlock"])
-        # error rate 单位 %, getSlot @ t=100 = 1/5 = 20%
-        # 只是确保不崩, 不验值
+        # Error rate is a percentage; this only verifies the plot does not crash.
+
+    def test_plot_success_failure_totals(self):
+        out = plot_success_failure_totals(self.qps_rows, Path(self.tmp) / "sf.svg")
+        self._assert_valid_svg(out, ["getSlot", "getBlock"])
+        content = out.read_text()
+        self.assertIn("success", content)
+        self.assertIn("failure", content)
 
     def test_plot_resource_stacked(self):
         out = plot_resource_stacked(
@@ -119,7 +126,7 @@ class TestPlots(unittest.TestCase):
         paths = generate_all_charts(
             self.qps_rows, self.res_rows, self.tmp, chain_name="solana",
         )
-        self.assertEqual(set(paths.keys()), {"qps", "latency", "error_rate", "resource"})
+        self.assertEqual(set(paths.keys()), {"qps", "latency", "error_rate", "success_failure", "resource"})
         for kind, p in paths.items():
             self.assertTrue(p.exists(), f"{kind} → {p} missing")
             self.assertIn(f"_solana.svg", p.name)
@@ -129,15 +136,15 @@ class TestPlots(unittest.TestCase):
         paths = generate_all_charts(
             self.qps_rows, self.res_rows, self.tmp, chain_name="solana",
             titles={
-                "qps": "每方法 QPS",
-                "latency": "每方法 p99 延迟",
-                "error_rate": "每方法错误率",
-                "resource": "每方法 CPU 归因",
+                "qps": "\u6bcf\u65b9\u6cd5 QPS",
+                "latency": "\u6bcf\u65b9\u6cd5 p99 \u5ef6\u8fdf",
+                "error_rate": "\u6bcf\u65b9\u6cd5\u9519\u8bef\u7387",
+                "resource": "\u6bcf\u65b9\u6cd5 CPU \u5f52\u56e0",
             },
         )
-        self.assertIn("每方法 QPS", paths["qps"].read_text())
-        self.assertIn("每方法 p99 延迟", paths["latency"].read_text())
-        self.assertIn("每方法 CPU 归因", paths["resource"].read_text())
+        self.assertIn("\u6bcf\u65b9\u6cd5 QPS", paths["qps"].read_text())
+        self.assertIn("\u6bcf\u65b9\u6cd5 p99 \u5ef6\u8fdf", paths["latency"].read_text())
+        self.assertIn("\u6bcf\u65b9\u6cd5 CPU \u5f52\u56e0", paths["resource"].read_text())
 
 
 class TestEdgeCases(unittest.TestCase):
@@ -162,21 +169,21 @@ class TestEdgeCases(unittest.TestCase):
         self.assertTrue(out.exists())
 
     def test_top_n_limits(self):
-        # 25 method → 只取 top 10
+        # 25 methods -> only top 10 are included.
         rows = [PerMethodQpsRow(100, f"m{i}", 100 - i, 0, 1.0, 1.0) for i in range(25)]
         out = plot_qps(rows, Path(self.tmp) / "top.svg", top_n=10)
         content = out.read_text()
-        # m0~m9 in legend, m10+ 不在
+        # m0..m9 appear in the legend; m10+ do not.
         for i in range(10):
             self.assertIn(f"m{i}", content)
         self.assertNotIn("m20", content)
 
     def test_html_escape_method_name(self):
-        # method 名含 < > & 不能破坏 SVG
+        # Method names containing < > & must not break SVG markup.
         rows = [PerMethodQpsRow(100, "m<x>&y", 1, 0, 1.0, 1.0)]
         out = plot_qps(rows, Path(self.tmp) / "esc.svg")
         content = out.read_text()
-        # 应被 escape, 不是裸 <x>
+        # The string should be escaped, not rendered as a raw <x> tag.
         self.assertNotIn("<x>", content)
         self.assertIn("m&lt;x&gt;", content)
 

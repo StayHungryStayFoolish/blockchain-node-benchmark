@@ -32,8 +32,7 @@ fi
 declare -A MONITOR_TASKS=(
     ["unified"]="unified_monitor.sh"
     ["block_height"]="block_height_monitor.sh"
-    ["ena_network"]="ena_network_monitor.sh"
-    ["network"]="network_monitor.sh"             # Y+ architecture (replaces ena_network for non-AWS)
+    ["network"]="network_monitor.sh"             # Provider-aware NIC monitor: aws_ena/gcp_gvnic/gcp_virtio/other_none
     ["disk_bottleneck"]="disk_bottleneck_detector.sh"
     ["iostat"]="iostat_collector.sh"  # Managed by unified_monitor.sh
 )
@@ -62,6 +61,29 @@ EOF
 }
 
 # Check if monitoring task is already running
+find_monitor_pids() {
+    local script_name="$1"
+
+    pgrep -af "$script_name" 2>/dev/null | while read -r pid cmdline; do
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        [[ "$pid" == "$$" || "$pid" == "${PPID:-}" ]] && continue
+
+        # Avoid false positives from test/launcher commands that merely mention
+        # the script path, for example: bash -lc 'bash -n monitoring/unified_monitor.sh ...'
+        case "$cmdline" in
+            *"bash -lc "*|*"bash -n "*|*"grep "*|*"pgrep "*)
+                continue
+                ;;
+        esac
+
+        case "$cmdline" in
+            *"/${script_name}"*|*"./${script_name}"*|*" ${script_name}"*)
+                echo "$pid"
+                ;;
+        esac
+    done
+}
+
 is_monitor_running() {
     local monitor_name="$1"
     local script_name="${MONITOR_TASKS[$monitor_name]:-}"
@@ -71,8 +93,9 @@ is_monitor_running() {
         return 1
     fi
     
-    # Check if process exists
-    if pgrep -f "$script_name" >/dev/null; then
+    # Check if process exists. Use filtered process discovery to avoid matching
+    # command lines that only contain the script name as text.
+    if [[ -n "$(find_monitor_pids "$script_name")" ]]; then
         return 0
     else
         return 1
@@ -136,27 +159,9 @@ start_monitor() {
                 return $?
             fi
             ;;
-        "ena_network")
-            # ENA network monitor
-            if [[ "$ENA_MONITOR_ENABLED" == "true" ]]; then
-                # Use correct parameter format: start [duration] [interval]
-                # duration=0 means continuous running
-                (
-                    unset LOGGER_COMPONENT
-                    cd "${script_dir}" && ./"${script_name}" start 0 "$MONITOR_INTERVAL"
-                ) &
-            else
-                echo "⚠️  ENA monitoring is disabled, skipping ena_network task"
-                return 0
-            fi
-            ;;
         "network")
-            # Y+ architecture network monitor (replaces ena_network for non-AWS)
-            # Skip if legacy ena_network is enabled — avoids duplicate NIC sampling
-            if [[ "${ENA_MONITOR_ENABLED:-false}" == "true" ]]; then
-                echo "⚠️  Legacy ENA monitor is enabled, skipping Y+ network task to avoid duplicate NIC sampling"
-                return 0
-            fi
+            # Provider-aware NIC monitor. AWS ENA still emits ENA-specific fields through
+            # monitoring/network/aws_ena.sh; GCP/other use their own provider modules.
             (
                 unset LOGGER_COMPONENT
                 cd "${script_dir}" && ./"${script_name}" start 0 "$MONITOR_INTERVAL"
@@ -228,7 +233,7 @@ start_all_monitors() {
     echo "🚀 Starting all monitoring tasks (monitoring interval: ${MONITOR_INTERVAL} seconds)"
     
     # Start monitoring tasks by priority - start all necessary monitoring scripts
-    local monitors_to_start=("unified" "ena_network" "network" "block_height" "disk_bottleneck")
+    local monitors_to_start=("unified" "network" "block_height" "disk_bottleneck")
     
     for monitor in "${monitors_to_start[@]}"; do
         start_monitor "$monitor"
@@ -252,7 +257,7 @@ stop_all_monitors() {
     # Check if there are processes that need cleanup
     local processes_to_clean=""
     for script in "${MONITOR_TASKS[@]}"; do
-        local pids=$(pgrep -f "$script" 2>/dev/null || true)
+        local pids=$(find_monitor_pids "$script" || true)
         if [[ -n "$pids" ]]; then
             processes_to_clean="$processes_to_clean $script"
         fi
@@ -275,7 +280,7 @@ stop_all_monitors() {
         echo "🧹 Cleaning up iostat processes..."
         pkill -f "iostat -dx [0-9]+" 2>/dev/null || true
         # Clean up iostat related temporary files
-        rm -f /tmp/iostat_*.pid /tmp/iostat_*.data 2>/dev/null || true
+        rm -f "${TMP_DIR:-/tmp}"/iostat_*.pid "${TMP_DIR:-/tmp}"/iostat_*.data 2>/dev/null || true
         echo "✅ iostat processes cleaned up"
     else
         echo "ℹ️  No iostat processes found that need cleanup"
@@ -302,7 +307,7 @@ show_monitor_status() {
         else
             # Standard handling for other tasks
             if is_monitor_running "$monitor"; then
-                local pid=$(pgrep -f "$script_name" | head -1)
+                local pid=$(find_monitor_pids "$script_name" | head -1)
                 echo "✅ $monitor ($script_name) - Running (PID: $pid)"
             else
                 echo "❌ $monitor ($script_name) - Stopped"
@@ -333,8 +338,8 @@ show_iostat_status() {
         fi
         
         # Check iostat data files
-        if ls /tmp/iostat_*.data >/dev/null 2>&1; then
-            local data_files=$(ls /tmp/iostat_*.data 2>/dev/null | wc -l)
+        if ls "${TMP_DIR:-/tmp}"/iostat_*.data >/dev/null 2>&1; then
+            local data_files=$(ls "${TMP_DIR:-/tmp}"/iostat_*.data 2>/dev/null | wc -l)
             echo "  └─ Data files: ✅ $data_files device data files"
         else
             echo "  └─ Data files: ❌ Data files not found"
@@ -417,8 +422,7 @@ cleanup_coordinator() {
     # Enhanced cleanup: ensure all related processes are cleaned
     echo "🔍 Cleaning up possible orphan processes..."
     pkill -f "disk_bottleneck_detector" 2>/dev/null || true
-    pkill -f "ena_network_monitor" 2>/dev/null || true
-    pkill -f "^.*network_monitor.sh" 2>/dev/null || true  # Y+ architecture
+    pkill -f "^.*network_monitor.sh" 2>/dev/null || true  # provider-aware network monitor
     pkill -f "block_height_monitor" 2>/dev/null || true
     pkill -f "tail.*performance_latest.csv" 2>/dev/null || true
 
@@ -427,9 +431,9 @@ cleanup_coordinator() {
         echo "🧹 Cleaning up shared memory files..."
         
         # Clean up monitoring related files
-        rm -f "$MEMORY_SHARE_DIR"/latest_metrics.json 2>/dev/null || true
-        rm -f "$MEMORY_SHARE_DIR"/unified_metrics.json 2>/dev/null || true
-        rm -f "$MEMORY_SHARE_DIR"/block_height_monitor_cache.json 2>/dev/null || true
+        rm -f "${LATEST_METRICS_FILE:-${MEMORY_SHARE_DIR}/latest_metrics.json}" 2>/dev/null || true
+        rm -f "${UNIFIED_METRICS_FILE:-${MEMORY_SHARE_DIR}/unified_metrics.json}" 2>/dev/null || true
+        rm -f "${BLOCK_HEIGHT_CACHE_FILE:-${MEMORY_SHARE_DIR}/block_height_monitor_cache.json}" 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/sample_count 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/*cache* 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/*.lock 2>/dev/null || true
@@ -470,7 +474,7 @@ show_usage() {
     echo "  health               Perform health check"
     echo "  start-monitor <name> Start specified monitoring task"
     echo "  stop-monitor <name>  Stop specified monitoring task"
-    echo "  s5_diag              S5 cgroup/K8s diagnostic triplet (read-only,"
+    echo "  s5_diag              cgroup/K8s diagnostic triplet (read-only,"
     echo "                       runs cgroup_collector + pod_device_mapper +"
     echo "                       kubelet_stats_client once and prints results)"
     echo ""
@@ -574,7 +578,7 @@ main() {
             echo "[START] Starting all monitoring tasks (QPS test mode)"
             start_monitor "unified" "${2:-follow_qps_test}"
             start_monitor "block_height" "${2:-follow_qps_test}"
-            start_monitor "bottleneck" "${2:-follow_qps_test}"
+            start_monitor "disk_bottleneck" "${2:-follow_qps_test}"
             echo "[OK] All monitoring tasks started"
             ;;
         "stop")
@@ -604,12 +608,13 @@ main() {
             stop_monitor "$2"
             ;;
         "s5_diag")
-            # S5 三件套一次性诊断 (read-only): cgroup_collector + pod_device_mapper
-            # + kubelet_stats_client。给 SE 排查 K8s 部署 cgroup/kubelet 连通性用。
+            # One-shot read-only diagnostics: cgroup_collector + pod_device_mapper
+            # + kubelet_stats_client. Used to debug Kubernetes cgroup/kubelet
+            # connectivity issues.
             local script_dir
             script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
             echo "═══════════════════════════════════════════════════════════"
-            echo "  S5 三件套诊断 (cgroup + pod_device + kubelet)"
+            echo "  cgroup diagnostics (cgroup + pod_device + kubelet)"
             echo "═══════════════════════════════════════════════════════════"
             echo ""
             echo "[1/3] cgroup_collector --header / --data"
@@ -644,12 +649,12 @@ try:
             vols = getattr(pm, 'volumes', []) or []
             print(f'    {name}: {len(vols)} volume(s)')
     else:
-        print(f'  namespace={ns}: 无 pod 或 API 不可达')
+        print(f'  namespace={ns}: no pods found or API is unavailable')
 except Exception as e:
     print(f'  ERROR: {e}')
 " 2>&1
             else
-                echo "  跳过 (DEPLOYMENT_MODE != k8s*)"
+                echo "  Skip (DEPLOYMENT_MODE != k8s*)"
             fi
             echo ""
             echo "[3/3] kubelet_stats_client (pod_on_node)"
@@ -670,16 +675,16 @@ try:
     else:
         pn = '${POD_NAME}'
         nn = '${NODE_NAME}'
-        print(f'  pod={pn} on node={nn} 未找到 (kubelet 返回空)')
+        print(f'  pod={pn} on node={nn} was not found (kubelet returned an empty result)')
 except Exception as e:
     print(f'  ERROR: {e}')
 " 2>&1
             else
-                echo "  跳过 (需 DEPLOYMENT_MODE=k8s* + POD_NAME + NODE_NAME)"
+                echo "  Skipped (requires DEPLOYMENT_MODE=k8s* + POD_NAME + NODE_NAME)"
             fi
             echo ""
             echo "═══════════════════════════════════════════════════════════"
-            echo "  诊断完成。三件套均为只读,无副作用。"
+            echo "  Diagnostics complete. All three checks are read-only and side-effect free."
             echo "═══════════════════════════════════════════════════════════"
             ;;
         "-h"|"--help"|"help")

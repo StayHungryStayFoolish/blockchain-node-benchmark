@@ -9,7 +9,7 @@
 QPS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${QPS_SCRIPT_DIR}/common_functions.sh"
 source "${QPS_SCRIPT_DIR}/../config/config_loader.sh"
-# CSV Schema Registry (reader 经 registry resolve 取 provider-aware 物理列名, 不裸写)
+# CSV Schema Registry for provider-aware reader column resolution.
 source "${QPS_SCRIPT_DIR}/../config/csv_schema_registry.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 
@@ -173,10 +173,10 @@ parse_arguments() {
                 shift
                 ;;
             --fake-node|--no-proxy)
-                # CP-1: 这两个参数由主入口 parse_rpc_mode_args 消费
+                # These two arguments are consumed by the main entrypoint parse_rpc_mode_args
                 # (--fake-node→FAKE_NODE_MODE, --no-proxy→SKIP_RPC_PROXY),
-                # 但 main() 把原始参数整体透传给本 executor。executor 不需要它们,
-                # 容忍忽略即可(否则撞 default 分支 hard fail,整框架 e2e EXIT=1)。
+                # but the main entrypoint forwards the original argument list to this executor.
+                # Ignore them here so they do not hit the default hard-fail branch.
                 shift
                 ;;
             --initial-qps)
@@ -247,14 +247,14 @@ show_benchmark_config() {
 pre_check() {
     echo "🔍 Performing pre-check..."
     
-    # Check vegeta (hard gate: --quick/standard/intensive 必须安装 vegeta 才能继续)
+    # Check vegeta; benchmark modes require it.
     if ! command -v vegeta >/dev/null 2>&1; then
         echo "❌ Error: vegeta not installed (required: v12.13.0+)"
-        echo "💡 推荐安装(已验证版本 v12.13.0):"
+        echo "💡 Recommended installation (verified version: v12.13.0):"
         echo "   curl -sLO https://github.com/tsenart/vegeta/releases/download/v12.13.0/vegeta_12.13.0_linux_amd64.tar.gz"
         echo "   tar -xzf vegeta_12.13.0_linux_amd64.tar.gz && sudo mv vegeta /usr/local/bin/ && chmod +x /usr/local/bin/vegeta"
-        echo "   # 或加入 PATH:  export PATH=\"\$HOME/.local/bin:\$PATH\"   (写入 ~/.bashrc 永久生效)"
-        echo "💡 或一键安装:    ./blockchain_node_benchmark.sh --install-vegeta"
+        echo "   # Or add it to PATH:  export PATH=\"\$HOME/.local/bin:\$PATH\"   (add this to ~/.bashrc to make it permanent)"
+        echo "💡 Or install it automatically: ./blockchain_node_benchmark.sh --install-vegeta"
         return 1
     fi
     
@@ -284,11 +284,11 @@ pre_check() {
     return 0
 }
 
-# 从 monitoring JSON 取 provider-aware 字段值 (reader 经 registry resolve, 与 writer 同一事实源).
-#   provider 来自 JSON 的 cloud_provider 字段 (铁律: 唯一合法来源 = CSV/JSON 自带, 不运行时探测).
+# Read provider-aware fields from monitoring JSON through the registry.
+#   provider comes from the JSON cloud_provider field; do not re-detect at analysis time.
 #   logical: disk_iops_provider_adjusted | disk_throughput_provider_adjusted
 #   prefix:  data_<device> | accounts_<device>
-# registry 与 writer 同源 → 物理列名严格对齐; jq // 0 仅在该列真不存在时归零 (非列名拼错).
+# jq // 0 is used only when the resolved field is absent.
 _mqe_provider_field() {
     local json="$1" logical="$2" prefix="$3"
     local provider
@@ -430,7 +430,7 @@ check_bottleneck_during_test() {
         # Need to distinguish between Scenario A-RPC and Scenario C
         # Read bottleneck type saved by detector
         local is_rpc_bottleneck=false
-        local bottleneck_status_file="${MEMORY_SHARE_DIR}/bottleneck_status.json"
+        local bottleneck_status_file="${BOTTLENECK_STATUS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_status.json}"
         
         if [[ -f "$bottleneck_status_file" ]]; then
             local bottleneck_types=$(jq -r '.bottleneck_types[]' "$bottleneck_status_file" 2>/dev/null || echo "")
@@ -472,9 +472,9 @@ get_latest_monitoring_data() {
     
     # Try to read latest data from multiple data sources
     local data_sources=(
-        "${MEMORY_SHARE_DIR}/latest_metrics.json"
-        "${MEMORY_SHARE_DIR}/unified_metrics.json"
-        "${LOGS_DIR}/performance_latest.csv"
+        "${LATEST_METRICS_FILE:-${MEMORY_SHARE_DIR}/latest_metrics.json}"
+        "${UNIFIED_METRICS_FILE:-${MEMORY_SHARE_DIR}/unified_metrics.json}"
+        "${PERFORMANCE_LATEST_CSV:-${LOGS_DIR}/performance_latest.csv}"
     )
     
     for source in "${data_sources[@]}"; do
@@ -579,7 +579,7 @@ trigger_immediate_bottleneck_analysis() {
         echo "🔍 Performing real-time bottleneck analysis..."
         
         # Get latest performance data file
-        local performance_csv="${LOGS_DIR}/performance_latest.csv"
+        local performance_csv="${PERFORMANCE_LATEST_CSV:-${LOGS_DIR}/performance_latest.csv}"
         # Get current QPS vegeta test result file
         local vegeta_result="${VEGETA_RESULTS_DIR}/vegeta_${qps}qps_${SESSION_TIMESTAMP}.json"
         

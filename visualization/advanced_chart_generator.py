@@ -691,7 +691,7 @@ class AdvancedChartGenerator(CSVDataProcessor):
         ena_columns = ENAFieldAccessor.get_available_ena_fields(self.df)
         if not ena_columns:
             print("  ⚠️ No ENA network data available, skipping ENA analysis charts")
-            print("  💡 Tip: Ensure ENA_MONITOR_ENABLED=true and ENA_ALLOWANCE_FIELDS is configured")
+            print("  💡 Tip: Ensure ENA_MONITOR_ENABLED=true and the AWS provider exports ENA_ALLOWANCE_FIELDS_STR")
             return []
         
         # Check timestamp column

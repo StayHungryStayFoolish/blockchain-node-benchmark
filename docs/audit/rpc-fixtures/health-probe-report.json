@@ -1,0 +1,518 @@
+{
+  "summary": {
+    "total": 36,
+    "status": {
+      "ok": 36
+    },
+    "evidence_status": {
+      "not-required-for-rest-derived-health": 10,
+      "ok": 26
+    }
+  },
+  "bad": [],
+  "rows": [
+    {
+      "chain": "acala",
+      "family": "substrate",
+      "health_method": "chain_getHeader",
+      "parse_jq": ".result.number",
+      "fixture": "acala/chain_getHeader.json",
+      "candidate_fixtures": [
+        "acala/chain_getHeader.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "algorand",
+      "family": "rest",
+      "health_method": "GET /v2/status",
+      "parse_jq": ".[\"last-round\"]",
+      "fixture": "algorand/GET__v2_status.json",
+      "candidate_fixtures": [
+        "algorand/GET__v2_status.json",
+        "algorand//v2/status",
+        "algorand/v2/status",
+        "algorand/v2_status.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "aptos",
+      "family": "rest",
+      "health_method": "GET /v1",
+      "parse_jq": ".block_height",
+      "fixture": "aptos/GET__v1.json",
+      "candidate_fixtures": [
+        "aptos/GET__v1.json",
+        "aptos//v1",
+        "aptos/v1",
+        "aptos/v1.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "arbitrum",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "arbitrum/eth_syncing.json",
+      "candidate_fixtures": [
+        "arbitrum/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "astar",
+      "family": "substrate",
+      "health_method": "chain_getHeader",
+      "parse_jq": ".result.number",
+      "fixture": "astar/chain_getHeader.json",
+      "candidate_fixtures": [
+        "astar/chain_getHeader.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "avalanche-c",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "avalanche-c/eth_syncing.json",
+      "candidate_fixtures": [
+        "avalanche-c/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "avalanche-x",
+      "family": "jsonrpc",
+      "health_method": "avm.getHeight",
+      "parse_jq": ".result.height",
+      "fixture": "avalanche-x/avm.getHeight.json",
+      "candidate_fixtures": [
+        "avalanche-x/avm.getHeight.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "base",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "base/eth_syncing.json",
+      "candidate_fixtures": [
+        "base/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "bch",
+      "family": "bitcoin_jsonrpc",
+      "health_method": "getblockchaininfo",
+      "parse_jq": ".result.blocks",
+      "fixture": "bch/getblockchaininfo.json",
+      "candidate_fixtures": [
+        "bch/getblockchaininfo.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "bitcoin",
+      "family": "bitcoin_jsonrpc",
+      "health_method": "getblockchaininfo",
+      "parse_jq": ".result.blocks",
+      "fixture": "bitcoin/getblockchaininfo.json",
+      "candidate_fixtures": [
+        "bitcoin/getblockchaininfo.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "bsc",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "bsc/eth_syncing.json",
+      "candidate_fixtures": [
+        "bsc/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "cardano",
+      "family": "rest",
+      "health_method": "GET /tip",
+      "parse_jq": ".[0].block_height",
+      "fixture": "cardano/tip.json",
+      "candidate_fixtures": [
+        "cardano/GET__tip.json",
+        "cardano//tip",
+        "cardano/tip",
+        "cardano/tip.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "celestia",
+      "family": "tendermint",
+      "health_method": "GET /cosmos/base/tendermint/v1beta1/blocks/latest",
+      "parse_jq": ".block.header.height",
+      "fixture": "celestia/cosmos_base_tendermint_v1beta1_blocks_latest.json",
+      "candidate_fixtures": [
+        "celestia/GET__cosmos_base_tendermint_v1beta1_blocks_latest.json",
+        "celestia//cosmos/base/tendermint/v1beta1/blocks/latest",
+        "celestia/cosmos/base/tendermint/v1beta1/blocks/latest",
+        "celestia/cosmos_base_tendermint_v1beta1_blocks_latest.json",
+        "celestia/block.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "cosmos-hub",
+      "family": "tendermint",
+      "health_method": "GET /cosmos/base/tendermint/v1beta1/blocks/latest",
+      "parse_jq": ".block.header.height",
+      "fixture": "cosmos-hub/GET__cosmos_base_tendermint_v1beta1_blocks_latest.json",
+      "candidate_fixtures": [
+        "cosmos-hub/GET__cosmos_base_tendermint_v1beta1_blocks_latest.json",
+        "cosmos-hub//cosmos/base/tendermint/v1beta1/blocks/latest",
+        "cosmos-hub/cosmos/base/tendermint/v1beta1/blocks/latest",
+        "cosmos-hub/cosmos_base_tendermint_v1beta1_blocks_latest.json",
+        "cosmos-hub/block.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "dogecoin",
+      "family": "bitcoin_jsonrpc",
+      "health_method": "getblockchaininfo",
+      "parse_jq": ".result.blocks",
+      "fixture": "dogecoin/getblockchaininfo.json",
+      "candidate_fixtures": [
+        "dogecoin/getblockchaininfo.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "ethereum",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "ethereum/eth_syncing.json",
+      "candidate_fixtures": [
+        "ethereum/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "hedera",
+      "family": "hedera_dual",
+      "health_method": "GET /api/v1/accounts/0.0.2",
+      "parse_jq": ".balance.timestamp",
+      "fixture": "hedera/GET__api_v1_accounts__addr.json",
+      "candidate_fixtures": [
+        "hedera/GET__api_v1_accounts_0.0.2.json",
+        "hedera//api/v1/accounts/0.0.2",
+        "hedera/api/v1/accounts/0.0.2",
+        "hedera/api_v1_accounts_0.0.2.json",
+        "hedera/GET__api_v1_accounts__addr.json",
+        "hedera/mirror/network_nodes.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "injective",
+      "family": "tendermint",
+      "health_method": "GET /status",
+      "parse_jq": ".result.sync_info.latest_block_height // .sync_info.latest_block_height",
+      "fixture": "injective/status.json",
+      "candidate_fixtures": [
+        "injective/GET__status.json",
+        "injective//status",
+        "injective/status",
+        "injective/status.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "kusama",
+      "family": "substrate",
+      "health_method": "chain_getHeader",
+      "parse_jq": ".result.number",
+      "fixture": "kusama/chain_getHeader.json",
+      "candidate_fixtures": [
+        "kusama/chain_getHeader.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "linea",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "linea/eth_syncing.json",
+      "candidate_fixtures": [
+        "linea/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "litecoin",
+      "family": "bitcoin_jsonrpc",
+      "health_method": "getblockchaininfo",
+      "parse_jq": ".result.blocks",
+      "fixture": "litecoin/getblockchaininfo.json",
+      "candidate_fixtures": [
+        "litecoin/getblockchaininfo.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "moonbeam",
+      "family": "substrate",
+      "health_method": "eth_blockNumber",
+      "parse_jq": ".result",
+      "fixture": "moonbeam/eth_blockNumber.json",
+      "candidate_fixtures": [
+        "moonbeam/eth_blockNumber.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "near",
+      "family": "jsonrpc",
+      "health_method": "block",
+      "parse_jq": ".result.header.height",
+      "fixture": "near/block.json",
+      "candidate_fixtures": [
+        "near/block.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "optimism",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "optimism/eth_syncing.json",
+      "candidate_fixtures": [
+        "optimism/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "osmosis",
+      "family": "tendermint",
+      "health_method": "GET /status",
+      "parse_jq": ".result.sync_info.latest_block_height // .sync_info.latest_block_height",
+      "fixture": "osmosis/status.json",
+      "candidate_fixtures": [
+        "osmosis/GET__status.json",
+        "osmosis//status",
+        "osmosis/status",
+        "osmosis/status.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "polkadot",
+      "family": "substrate",
+      "health_method": "chain_getHeader",
+      "parse_jq": ".result.number",
+      "fixture": "polkadot/chain_getHeader.json",
+      "candidate_fixtures": [
+        "polkadot/chain_getHeader.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "polygon",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "polygon/eth_syncing.json",
+      "candidate_fixtures": [
+        "polygon/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "scroll",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "scroll/eth_syncing.json",
+      "candidate_fixtures": [
+        "scroll/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "sei",
+      "family": "tendermint",
+      "health_method": "eth_blockNumber",
+      "parse_jq": ".result",
+      "fixture": "sei/eth_blockNumber.json",
+      "candidate_fixtures": [
+        "sei/eth_blockNumber.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "solana",
+      "family": "jsonrpc",
+      "health_method": "getHealth",
+      "parse_jq": ".error.data.numSlotsBehind // 0",
+      "fixture": "solana/getHealth.json",
+      "candidate_fixtures": [
+        "solana/getHealth.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "starknet",
+      "family": "jsonrpc",
+      "health_method": "starknet_blockNumber",
+      "parse_jq": ".result",
+      "fixture": "starknet/starknet_blockNumber.json",
+      "candidate_fixtures": [
+        "starknet/starknet_blockNumber.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "sui",
+      "family": "jsonrpc",
+      "health_method": "sui_getTotalTransactionBlocks",
+      "parse_jq": ".result",
+      "fixture": "sui/sui_getTotalTransactionBlocks.json",
+      "candidate_fixtures": [
+        "sui/sui_getTotalTransactionBlocks.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "tezos",
+      "family": "rest",
+      "health_method": "GET /chains/main/blocks/head/header",
+      "parse_jq": ".level",
+      "fixture": "tezos/GET__chains_main_blocks_head_header.json",
+      "candidate_fixtures": [
+        "tezos/GET__chains_main_blocks_head_header.json",
+        "tezos//chains/main/blocks/head/header",
+        "tezos/chains/main/blocks/head/header",
+        "tezos/chains_main_blocks_head_header.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "ton",
+      "family": "rest",
+      "health_method": "GET /lookupBlock?workchain=-1&shard=-9223372036854775808&seqno=72033975",
+      "parse_jq": ".result.seqno",
+      "fixture": "ton/lookupBlock.json",
+      "candidate_fixtures": [
+        "ton/GET__lookupBlock_workchain_-1_shard_-9223372036854775808_seqno_72033975.json",
+        "ton//lookupBlock",
+        "ton/lookupBlock",
+        "ton/lookupBlock.json",
+        "ton/GET__lookupBlock.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "not-required-for-rest-derived-health"
+    },
+    {
+      "chain": "tron",
+      "family": "jsonrpc",
+      "health_method": "eth_blockNumber",
+      "parse_jq": ".result",
+      "fixture": "tron/eth_blockNumber.json",
+      "candidate_fixtures": [
+        "tron/eth_blockNumber.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    },
+    {
+      "chain": "zksync-era",
+      "family": "jsonrpc",
+      "health_method": "eth_syncing",
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "fixture": "zksync-era/eth_syncing.json",
+      "candidate_fixtures": [
+        "zksync-era/eth_syncing.json"
+      ],
+      "status": "ok",
+      "reason": "ok",
+      "evidence_status": "ok"
+    }
+  ]
+}

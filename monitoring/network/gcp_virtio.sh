@@ -1,20 +1,20 @@
 #!/bin/bash
 # monitoring/network/gcp_virtio.sh
-# GCP virtio_net 实现 (cloudtop / e2 系列 / 老 GCP 实例, driver=virtio_net)
-# 实测来源: cloudtop ens4 (driver=virtio_net, version=1.0.0)
-# 实现 Y+ 接口契约 4 函数
+# GCP virtio_net implementation (cloudtop / e2 family / older GCP instances).
+# Observed on cloudtop ens4 (driver=virtio_net, version=1.0.0).
+# Implements the provider network interface functions
 
 source "$(dirname "${BASH_SOURCE[0]}")/interface.sh"
 
-# 顶级 counter 4 个 (ethtool 真实字段名按实测保留, 双 tx 不是 typo)
+# Top-level counters. Field names match ethtool output; double "tx" is not a typo.
 readonly GCP_VIRTIO_FIELDS=(
-    "rx_drops"          # 顶级 rx 丢包
-    "tx_tx_timeouts"    # 顶级 tx 超时 (ethtool 里名字真就是 tx_tx_timeouts, 双 tx)
-    "rx_xdp_drops"      # XDP 路径 rx 丢包
-    "tx_xdp_tx_drops"   # XDP 路径 tx 丢包
+    "rx_drops"          # top-level rx drops
+    "tx_tx_timeouts"    # top-level tx timeout
+    "rx_xdp_drops"      # XDP rx drops
+    "tx_xdp_tx_drops"   # XDP tx drops
 )
 
-# 按 queue 的 rx{N}_drops 用正则聚合 (N=0..6+, 数量随 vCPU 变)
+# Aggregate per-queue rx{N}_drops with a regex. Queue count varies with vCPU count.
 readonly GCP_VIRTIO_PER_QUEUE_PATTERN="rx[0-9]+_drops"
 
 init_network_monitoring() {
@@ -32,7 +32,7 @@ generate_network_csv_header() {
     for field in "${GCP_VIRTIO_FIELDS[@]}"; do
         h="${h},virtio_${field}"
     done
-    h="${h},virtio_per_queue_rx_drops_sum"   # 聚合的 per-queue drops
+    h="${h},virtio_per_queue_rx_drops_sum"   # aggregated per-queue drops
     h="${h},network_saturation_signal"
     echo "$h"
 }
@@ -56,7 +56,7 @@ collect_network_metrics() {
         [[ "$v" -gt 0 ]] && saturation=1
     done
 
-    # per-queue drops 聚合: 求和所有 rx{N}_drops
+    # Aggregate all per-queue rx{N}_drops counters.
     local per_queue_drops
     per_queue_drops=$(echo "$ethtool_out" | awk '/^[[:space:]]*rx[0-9]+_drops:/ {sum+=$2} END {print sum+0}')
     [[ "$per_queue_drops" -gt 0 ]] && saturation=1

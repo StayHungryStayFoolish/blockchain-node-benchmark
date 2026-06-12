@@ -4,15 +4,10 @@
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
-    "target_address": "0x0000000000000000000000000000000000000000000000000000000000000005",
+    "target_address": "${TARGET_ADDRESS:-0x0000000000000000000000000000000000000000000000000000000000000005}",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-  },
-  "methods": {
-    "get_owned_objects": "suix_getOwnedObjects",
-    "get_transaction": "sui_getTransactionBlock",
-    "get_transactions": "suix_queryTransactionBlocks"
   },
   "system_addresses": [
     "0x1",
@@ -25,23 +20,23 @@
     "mixed_weighted": [
       {
         "method": "sui_getObject",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "sui_getTotalTransactionBlocks",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "sui_getLatestCheckpointSequenceNumber",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "suix_getReferenceGasPrice",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "sui_getChainIdentifier",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -57,9 +52,27 @@
     "extracted_from": "config/config_loader.sh UNIFIED_BLOCKCHAIN_CONFIG (line 408-652)",
     "baseline_sha": "ffbeeee",
     "extract_date": "2026-05-23",
-    "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持",
+    "note": "Migrated from the original baseline config; keep behavior-compatible unless intentionally changed.",
     "adapter_family": "jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "original_public_endpoints": [
+      {
+        "url": "https://fullnode.mainnet.sui.io",
+        "auth": false,
+        "verified": "E2",
+        "notes": "Sui official RPC"
+      }
+    ],
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Compare numeric cursors returned by the same adapter health probe against local and target RPC endpoints."
+    }
   },
   "proxy_extraction": {
     "extractors": [

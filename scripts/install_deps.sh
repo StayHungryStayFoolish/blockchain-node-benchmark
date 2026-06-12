@@ -3,7 +3,7 @@
 # blockchain-node-benchmark — dependency installer
 # =====================================================================
 # Installs everything the framework needs to run on a bare VM/EC2/GCE:
-#   1. System packages  (sysstat bc jq net-tools procps)
+#   1. System packages  (sysstat bc jq net-tools procps python3-pip python-venv-support)
 #   2. Python packages  (from requirements.txt)
 #   3. vegeta           (HTTP load generator, pinned version)
 #
@@ -11,7 +11,7 @@
 #   - Does NOT edit config/* (you configure your RPC endpoint yourself)
 #   - Does NOT run any benchmark
 #   - Does NOT touch .git or any source files
-#   - Does NOT create a Python virtualenv (you decide where Python lives)
+#   - Does NOT modify system Python packages by default
 #
 # After this script finishes, you still run:
 #   ./blockchain_node_benchmark.sh --quick
@@ -22,6 +22,7 @@
 #   bash scripts/install_deps.sh --check      # audit-only, no changes made
 #   bash scripts/install_deps.sh --no-vegeta  # skip vegeta (e.g. K8s collector pod)
 #   bash scripts/install_deps.sh --no-sudo    # skip steps that require sudo
+#   bash scripts/install_deps.sh --system-python  # allow pip --break-system-packages when required
 #   bash scripts/install_deps.sh --help
 #
 # Supported distros: Ubuntu, Debian, RHEL, CentOS, Rocky, AlmaLinux,
@@ -46,7 +47,7 @@ readonly VEGETA_BIN_DIR="${HOME}/bin"
 readonly VEGETA_SHA256_AMD64="e7ce26c8fa4b9e1a3668aa7f82a4d77fca6a6d955f8dd5e843816115cc568450"
 readonly VEGETA_SHA256_ARM64="b531e93c02727bc84938f3762910fcd3b676cc75d73715960f3cde9c02f5293c"
 
-readonly SYSTEM_PACKAGES=(sysstat bc jq net-tools procps)
+readonly SYSTEM_PACKAGES=(sysstat bc jq net-tools procps python3-pip python-venv-support)
 
 readonly LOG_FILE="/tmp/install_deps_$(date +%Y%m%d_%H%M%S).log"
 
@@ -56,6 +57,7 @@ readonly LOG_FILE="/tmp/install_deps_$(date +%Y%m%d_%H%M%S).log"
 MODE="interactive"   # interactive | yes | check
 SKIP_VEGETA=0
 SKIP_SUDO=0
+ALLOW_SYSTEM_PYTHON=0
 
 # ---------------------------------------------------------------------
 # Colors (auto-disabled if not a TTY)
@@ -92,6 +94,7 @@ while [[ $# -gt 0 ]]; do
         --check)         MODE="check" ;;
         --no-vegeta)     SKIP_VEGETA=1 ;;
         --no-sudo)       SKIP_SUDO=1 ;;
+        --system-python) ALLOW_SYSTEM_PYTHON=1 ;;
         --help|-h)       usage ;;
         *) err "Unknown flag: $1 (try --help)"; exit 2 ;;
     esac
@@ -139,6 +142,11 @@ distro_pkg_name() {
         alpine:net-tools)  echo "net-tools" ;;
         alpine:procps)     echo "procps" ;;
         alpine:sysstat)    echo "sysstat" ;;
+        alpine:python3-pip) echo "py3-pip" ;;
+        ubuntu:python-venv-support|debian:python-venv-support) echo "python3-venv" ;;
+        alpine:python-venv-support) echo "py3-virtualenv" ;;
+        rhel:python-venv-support|centos:python-venv-support|rocky:python-venv-support|almalinux:python-venv-support|amzn:python-venv-support|fedora:python-venv-support)
+            echo "python3-virtualenv" ;;
         # RHEL family ships net-tools under same name; procps-ng instead of procps
         rhel:procps|centos:procps|rocky:procps|almalinux:procps|amzn:procps|fedora:procps)
             echo "procps-ng" ;;
@@ -179,7 +187,7 @@ REFRESH_CMD="$(pkg_manager_refresh_cmd "$DISTRO")"
 
 if [[ -z "$INSTALL_CMD" ]]; then
     err "Unsupported distro: $DISTRO"
-    err "Manual install required. See README Quickstart section."
+    err "Manual install required. See README Quick Start section."
     exit 2
 fi
 ok "Detected: ${C_BOLD}${DISTRO}${C_RESET}  (package manager: ${INSTALL_CMD%% *})"
@@ -196,11 +204,35 @@ declare -A PKG_BIN_MAP=(
     [jq]="jq"
     [net-tools]="netstat"
     [procps]="ps"
+    [python3-pip]="pip3"
+    [python-venv-support]="python3"
 )
+
+venv_support_available() {
+    python3 -m venv --help >/dev/null 2>&1 || python3 -m virtualenv --help >/dev/null 2>&1
+}
+
+create_project_venv() {
+    local venv_dir="$1"
+    if python3 -m venv --help >/dev/null 2>&1; then
+        python3 -m venv "$venv_dir"
+    elif python3 -m virtualenv --help >/dev/null 2>&1; then
+        python3 -m virtualenv "$venv_dir"
+    else
+        return 1
+    fi
+}
 
 for canonical in "${SYSTEM_PACKAGES[@]}"; do
     bin="${PKG_BIN_MAP[$canonical]:-$canonical}"
-    if command -v "$bin" >/dev/null 2>&1; then
+    if [[ "$canonical" == "python-venv-support" ]]; then
+        if venv_support_available; then
+            ok "  $canonical (python3 -m venv or virtualenv) — installed"
+        else
+            warn "  $canonical (python3 -m venv or virtualenv) — MISSING"
+            MISSING_PKGS+=("$(distro_pkg_name "$DISTRO" "$canonical")")
+        fi
+    elif command -v "$bin" >/dev/null 2>&1; then
         ok "  $canonical (provides $bin) — installed"
     else
         warn "  $canonical (provides $bin) — MISSING"
@@ -250,6 +282,16 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 2
 fi
 
+PYTHON_CHECK_BIN="python3"
+PROJECT_VENV_DIR="${REPO_ROOT}/.venv"
+if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python" ]]; then
+    PYTHON_CHECK_BIN="${VIRTUAL_ENV}/bin/python"
+    info "Python checks will use active virtualenv: $VIRTUAL_ENV"
+elif [[ -x "${PROJECT_VENV_DIR}/bin/python" ]]; then
+    PYTHON_CHECK_BIN="${PROJECT_VENV_DIR}/bin/python"
+    info "Python checks will use project virtualenv: $PROJECT_VENV_DIR"
+fi
+
 # Map distribution name (in requirements.txt) → import name (for `import X` check).
 # Most are identical; the table below encodes the exceptions.
 py_import_name() {
@@ -268,7 +310,7 @@ while IFS= read -r line; do
     [[ -z "$pkg" ]] && continue
     [[ "$pkg" == \#* ]] && continue
     import_name="$(py_import_name "$pkg")"
-    if python3 -c "import $import_name" >/dev/null 2>&1; then
+    if "$PYTHON_CHECK_BIN" -c "import $import_name" >/dev/null 2>&1; then
         ok "  $pkg (import $import_name) — installed"
     else
         warn "  $pkg (import $import_name) — MISSING"
@@ -283,11 +325,13 @@ if [[ ${#MISSING_PY[@]} -gt 0 ]]; then
         # Detect PEP 668 (Debian 12+, Ubuntu 23.04+ mark system Python as externally-managed).
         # Note: [[ -f /path/glob* ]] does NOT expand globs inside [[ ]], so we use
         # `compgen -G` or a `ls` fallback to detect the marker file.
-        PIP_ARGS=("-r" "$REQ_FILE")
+        PIP_ARGS=("install" "-r" "$REQ_FILE")
+        PIP_CMD="pip3"
+        SKIP_PY_INSTALL=0
         in_venv=0
         if [[ -n "${VIRTUAL_ENV:-}" ]]; then
             in_venv=1
-        elif ! python3 -c "import sys; sys.exit(0 if sys.prefix == sys.base_prefix else 1)" 2>/dev/null; then
+        elif ! "$PYTHON_CHECK_BIN" -c "import sys; sys.exit(0 if sys.prefix == sys.base_prefix else 1)" 2>/dev/null; then
             # python3 reports we're inside a venv even though $VIRTUAL_ENV is unset
             in_venv=1
         fi
@@ -297,19 +341,43 @@ if [[ ${#MISSING_PY[@]} -gt 0 ]]; then
         fi
         if [[ "$in_venv" == "1" ]]; then
             info "Active virtualenv detected (${VIRTUAL_ENV:-auto-detected}). Will install into it."
+            PIP_CMD="${PYTHON_CHECK_BIN}"
+            PIP_ARGS=("-m" "pip" "install" "-r" "$REQ_FILE")
         elif [[ "$pep668" == "1" ]]; then
-            info "Detected PEP 668 (externally-managed Python). Will install with --user --break-system-packages."
-            PIP_ARGS=("--user" "--break-system-packages" "${PIP_ARGS[@]}")
+            if [[ "$ALLOW_SYSTEM_PYTHON" == "1" ]]; then
+                warn "Detected PEP 668 (externally-managed Python)."
+                warn "--system-python was provided, so pip will use --user --break-system-packages."
+                PIP_ARGS=("install" "--user" "--break-system-packages" "-r" "$REQ_FILE")
+            else
+                VENV_DIR="$PROJECT_VENV_DIR"
+                info "Detected PEP 668 (externally-managed Python)."
+                info "To avoid changing system Python packages, the installer will create/use:"
+                info "    $VENV_DIR"
+                info "After installation, activate it with:"
+                info "    source .venv/bin/activate"
+                if [[ ! -d "$VENV_DIR" ]]; then
+                    if confirm "Create project virtualenv at $VENV_DIR?"; then
+                        create_project_venv "$VENV_DIR" 2>&1 | tee -a "$LOG_FILE"
+                    else
+                        warn "Skipped Python package install (user declined virtualenv creation)"
+                        SKIP_PY_INSTALL=1
+                    fi
+                fi
+                PIP_CMD="${VENV_DIR}/bin/pip"
+                PYTHON_CHECK_BIN="${VENV_DIR}/bin/python"
+            fi
         else
             info "No active virtualenv detected. Will install to user site with --user."
-            PIP_ARGS=("--user" "${PIP_ARGS[@]}")
+            PIP_ARGS=("install" "--user" "-r" "$REQ_FILE")
         fi
-        info "Will run: pip3 install ${PIP_ARGS[*]}"
-        if confirm "Install missing Python packages now?"; then
-            pip3 install "${PIP_ARGS[@]}" 2>&1 | tee -a "$LOG_FILE"
-            ok "Python packages installed"
-        else
-            warn "Skipped Python package install (user declined)"
+        if [[ "$SKIP_PY_INSTALL" == "0" ]]; then
+            info "Will run: $PIP_CMD ${PIP_ARGS[*]}"
+            if confirm "Install missing Python packages now?"; then
+                "$PIP_CMD" "${PIP_ARGS[@]}" 2>&1 | tee -a "$LOG_FILE"
+                ok "Python packages installed"
+            else
+                warn "Skipped Python package install (user declined)"
+            fi
         fi
     fi
 else
@@ -391,14 +459,18 @@ declare -a STILL_MISSING=()
 
 for canonical in "${SYSTEM_PACKAGES[@]}"; do
     bin="${PKG_BIN_MAP[$canonical]:-$canonical}"
-    command -v "$bin" >/dev/null 2>&1 || STILL_MISSING+=("system:$canonical")
+    if [[ "$canonical" == "python-venv-support" ]]; then
+        venv_support_available || STILL_MISSING+=("system:$canonical")
+    else
+        command -v "$bin" >/dev/null 2>&1 || STILL_MISSING+=("system:$canonical")
+    fi
 done
 
 while IFS= read -r line; do
     pkg="${line%%[<>=;!~ ]*}"; pkg="${pkg// /}"
     [[ -z "$pkg" || "$pkg" == \#* ]] && continue
     import_name="$(py_import_name "$pkg")"
-    python3 -c "import $import_name" >/dev/null 2>&1 || STILL_MISSING+=("python:$pkg")
+    "$PYTHON_CHECK_BIN" -c "import $import_name" >/dev/null 2>&1 || STILL_MISSING+=("python:$pkg")
 done < <(grep -v '^[[:space:]]*#' "$REQ_FILE" | grep -v '^[[:space:]]*$')
 
 if [[ "$SKIP_VEGETA" != "1" ]]; then

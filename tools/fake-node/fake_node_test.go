@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// TestSourceDirReturnsAbsolutePath 验证 sourceDir() 在测试运行时返回的就是
-// fake_node.go 所在的绝对目录 (即本测试文件目录)。
+// TestSourceDirReturnsAbsolutePath verifies sourceDir returns the absolute
+// directory containing fake_node.go during tests.
 func TestSourceDirReturnsAbsolutePath(t *testing.T) {
 	got := sourceDir()
 	if got == "" {
@@ -17,14 +17,14 @@ func TestSourceDirReturnsAbsolutePath(t *testing.T) {
 	if !filepath.IsAbs(got) {
 		t.Errorf("sourceDir() = %q; want absolute path", got)
 	}
-	// fake_node.go 与本测试文件同目录,所以目录中应该包含 fake_node.go
+	// fake_node.go lives beside this test file.
 	if _, err := os.Stat(filepath.Join(got, "fake_node.go")); err != nil {
 		t.Errorf("sourceDir()=%q does not contain fake_node.go: %v", got, err)
 	}
 }
 
-// TestExecutableDirReturnsAbsolutePath 验证 executableDir() 行为。
-// `go test` 把 test binary 编译到临时目录,executableDir 应返回该目录。
+// TestExecutableDirReturnsAbsolutePath verifies executableDir behavior.
+// go test builds the test binary in a temp directory, which should be returned.
 func TestExecutableDirReturnsAbsolutePath(t *testing.T) {
 	got := executableDir()
 	if got == "" {
@@ -35,10 +35,10 @@ func TestExecutableDirReturnsAbsolutePath(t *testing.T) {
 	}
 }
 
-// TestDefaultChainsDirResolvesToRepoChains 验证默认 chains 路径解析到仓库内
-// config/chains/ (含 solana.json),无论 cwd 是什么。
+// TestDefaultChainsDirResolvesToRepoChains verifies the default chains path
+// resolves to repo config/chains regardless of cwd.
 func TestDefaultChainsDirResolvesToRepoChains(t *testing.T) {
-	// 临时切换到一个无关 cwd,确保解析不依赖 cwd
+	// Temporarily switch to an unrelated cwd to prove resolution is cwd-independent.
 	tmp := t.TempDir()
 	origCwd, err := os.Getwd()
 	if err != nil {
@@ -62,7 +62,7 @@ func TestDefaultChainsDirResolvesToRepoChains(t *testing.T) {
 	}
 }
 
-// TestDefaultConfigsDirResolvesToFakeNodeConfigs 验证默认 configs 路径。
+// TestDefaultConfigsDirResolvesToFakeNodeConfigs verifies the default configs path.
 func TestDefaultConfigsDirResolvesToFakeNodeConfigs(t *testing.T) {
 	tmp := t.TempDir()
 	origCwd, _ := os.Getwd()
@@ -78,7 +78,7 @@ func TestDefaultConfigsDirResolvesToFakeNodeConfigs(t *testing.T) {
 	}
 }
 
-// TestDefaultFixturesDirResolvesToFakeNodeFixtures 验证默认 fixtures 路径。
+// TestDefaultFixturesDirResolvesToFakeNodeFixtures verifies the default fixtures path.
 func TestDefaultFixturesDirResolvesToFakeNodeFixtures(t *testing.T) {
 	tmp := t.TempDir()
 	origCwd, _ := os.Getwd()
@@ -94,11 +94,10 @@ func TestDefaultFixturesDirResolvesToFakeNodeFixtures(t *testing.T) {
 	}
 }
 
-// TestResolveDefaultPathFallback 验证当 sourceDir 和 executableDir 路径都不存在
-// 资源时,resolveDefaultPath 返回 fallback 字符串。
+// TestResolveDefaultPathFallback verifies fallback behavior when neither
+// source-relative nor executable-relative resources exist.
 func TestResolveDefaultPathFallback(t *testing.T) {
-	// 用一个肯定不存在的子目录名,sourceDir + relFromSource 不存在,
-	// executableDir + relFromExe 也不存在,应返回 fallback。
+	// Use a definitely missing subdirectory so both lookup locations fail.
 	const bogus = "__definitely_not_a_real_dir_xyzzy__"
 	const fallback = "FALLBACK_RELATIVE_PATH"
 	got := resolveDefaultPath(bogus, bogus, fallback)
@@ -107,15 +106,14 @@ func TestResolveDefaultPathFallback(t *testing.T) {
 	}
 }
 
-// TestResolveDefaultPathPrefersExecutableDirWhenSourceMissing 验证
-// 当 sourceDir 的相对路径不存在但 executableDir 的相对路径存在时,
-// resolveDefaultPath 落到第二级 (executable-relative)。
+// TestResolveDefaultPathPrefersExecutableDirWhenSourceMissing verifies the
+// executable-relative fallback path.
 func TestResolveDefaultPathPrefersExecutableDirWhenSourceMissing(t *testing.T) {
 	exeDir := executableDir()
 	if exeDir == "" {
 		t.Skip("executableDir unavailable")
 	}
-	// 在 test binary 目录下创建一个真实的子目录
+	// Create a real subdirectory beside the test binary.
 	marker := filepath.Join(exeDir, "fake_node_test_marker")
 	if err := os.MkdirAll(marker, 0o755); err != nil {
 		t.Fatal(err)

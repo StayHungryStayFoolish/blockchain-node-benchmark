@@ -14,7 +14,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 init_logger "disk_bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/disk_bottleneck_detector.log"
 
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/disk_converter.sh"
-# CSV Schema Registry (S1b: disk 段 reader 经 registry resolve 取物理列名, 不裸写)
+# CSV Schema Registry: resolve disk physical column names through registry
 source "$(dirname "${BASH_SOURCE[0]}")/../config/csv_schema_registry.sh"
 
 # Bottleneck detection configuration
@@ -50,6 +50,10 @@ init_disk_limits() {
                 DEVICE_LIMITS["${LEDGER_DEVICE}_max_iops"]="$DATA_VOL_MAX_IOPS"
                 DEVICE_LIMITS["${LEDGER_DEVICE}_max_throughput"]="$DATA_VOL_MAX_THROUGHPUT"
                 ;;
+            *)
+                DEVICE_LIMITS["${LEDGER_DEVICE}_max_iops"]="$DATA_VOL_MAX_IOPS"
+                DEVICE_LIMITS["${LEDGER_DEVICE}_max_throughput"]="$DATA_VOL_MAX_THROUGHPUT"
+                ;;
         esac
         echo "  DATA Volume (${LEDGER_DEVICE}): ${DEVICE_LIMITS["${LEDGER_DEVICE}_max_iops"]} IOPS, ${DEVICE_LIMITS["${LEDGER_DEVICE}_max_throughput"]} MiB/s"
     fi
@@ -66,6 +70,10 @@ init_disk_limits() {
                 DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_throughput"]="$ACCOUNTS_VOL_MAX_THROUGHPUT"
                 ;;
             "instance-store")
+                DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_iops"]="$ACCOUNTS_VOL_MAX_IOPS"
+                DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_throughput"]="$ACCOUNTS_VOL_MAX_THROUGHPUT"
+                ;;
+            *)
                 DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_iops"]="$ACCOUNTS_VOL_MAX_IOPS"
                 DEVICE_LIMITS["${ACCOUNTS_DEVICE}_max_throughput"]="$ACCOUNTS_VOL_MAX_THROUGHPUT"
                 ;;
@@ -106,9 +114,9 @@ init_csv_field_mapping() {
     return 0
 }
 
-# 从 CSV 数据行的 cloud_provider 列取 provider (铁律: reader 取 provider 的唯一合法来源 =
-# CSV cloud_provider 列, 不做运行时探测 — 保证离线/跨环境分析时与写入该 CSV 的 writer 一致).
-# 入参: fields 数组名 (nameref). 取不到则中立兜底 other (passthrough, 不偏向).
+# Read provider from the CSV cloud_provider column instead of probing the runtime
+# environment. This keeps offline analysis aligned with the writer environment.
+# Input: fields array name (nameref). Fallback is provider-neutral "other".
 _disk_provider_from_row() {
     local -n _fields_ref="$1"
     local idx="${CSV_FIELD_MAP[cloud_provider]:-}"
@@ -117,20 +125,20 @@ _disk_provider_from_row() {
     p=$(echo "$p" | tr -d ' \t\r\n')
     case "$p" in
         aws|gcp|other) echo "$p" ;;
-        *) echo "other" ;;   # unknown/空 → 中立兜底
+        *) echo "other" ;;   # Unknown or empty provider falls back to other.
     esac
 }
 
-# 经 registry 把逻辑名解析为物理列名 (与 writer 同一事实源, provider 一致才对齐).
-# 入参: logical_name prefix provider.
-# registry 在文件头硬 source (第18行, 无容错), 正常必然可用; 万一不可用返回空串,
-# 上层按"字段不存在→默认0"的既有安全路径处理 — 不自拼裸物理名 (避免引入第二解析源).
+# Resolve logical field names to physical CSV column names through the registry.
+# Input: logical_name prefix provider.
+# If the registry is unavailable, return empty so callers use their existing
+# zero-value fallback path.
 _disk_resolve() {
     local logical="$1" prefix="$2" provider="$3"
     if declare -F csv_registry_resolve >/dev/null 2>&1; then
         csv_registry_resolve "$logical" "$provider" "$prefix"
     else
-        echo ""   # registry 缺失 → 空 → 上层走 0 兜底, 不绕过 registry 自拼物理名
+        echo ""   # Missing registry returns empty; callers use their existing zero fallback.
     fi
 }
 
@@ -159,8 +167,8 @@ get_disk_data_from_csv() {
         return
     fi
     
-    # provider 来自 CSV cloud_provider 列 (铁律), 经 registry 解析 provider-aware 物理列名,
-    # 与写入该 CSV 的 writer 严格对齐 (ADR-0002: 三云统一 normalized_* 物理列名, 经 registry 解析).
+    # provider comes from CSV cloud_provider and registry-resolved physical column names,
+    # keeping offline analysis aligned with the writer environment.
     local provider
     provider="$(_disk_provider_from_row fields)"
     local std_iops_field std_throughput_field
@@ -197,8 +205,8 @@ get_disk_data_from_csv() {
 
 # Validate required CSV fields exist
 validate_required_csv_fields() {
-    local required_fields=()           # provider-无关字段, 直接精确匹配
-    local provider_aware_prefixes=()   # provider-aware 字段所属 prefix, 经 registry 校验任一变体存在
+    local required_fields=()           # Provider-independent fields matched exactly.
+    local provider_aware_prefixes=()   # Prefixes for provider-aware registry validation.
     
     # Add required fields for LEDGER_DEVICE
     if [[ -n "$LEDGER_DEVICE" ]]; then
@@ -218,7 +226,7 @@ validate_required_csv_fields() {
         provider_aware_prefixes+=("accounts_${ACCOUNTS_DEVICE}")
     fi
     
-    # Validate each provider-无关 field exists in CSV_FIELD_MAP
+    # Validate each provider-independent field exists in CSV_FIELD_MAP.
     for field in "${required_fields[@]}"; do
         if [[ -z "${CSV_FIELD_MAP[$field]:-}" ]]; then
             log_error "❌ Critical field missing: $field"
@@ -228,8 +236,9 @@ validate_required_csv_fields() {
         fi
     done
 
-    # Validate provider-aware fields (iops/throughput): 物理列名三云统一 normalized (ADR-0002, 经 registry 解析).
-    # 不知道 CSV 来自哪个云时, 只要任一 provider 变体的物理名在 map 里即视为存在 (与 writer 对齐).
+    # Validate provider-aware fields (IOPS/throughput) through the registry.
+    # Any supported provider variant is acceptable because CSVs carry their own
+    # cloud_provider value and current provider naming is normalized.
     local pfx logical phys variant_found
     for pfx in "${provider_aware_prefixes[@]}"; do
         for logical in disk_iops_provider_adjusted disk_throughput_provider_adjusted; do
@@ -242,7 +251,7 @@ validate_required_csv_fields() {
                 fi
             done
             if [[ $variant_found -eq 0 ]]; then
-                log_error "❌ Critical provider-aware field missing: ${pfx} / ${logical} (无任何 provider 变体在 CSV header)"
+                log_error "❌ Critical provider-aware field missing: ${pfx} / ${logical} (no provider variant exists in the CSV header)"
                 log_error "❌ CSV format may be incompatible or device configuration incorrect"
                 log_error "❌ Current configuration: LEDGER_DEVICE=$LEDGER_DEVICE, ACCOUNTS_DEVICE=$ACCOUNTS_DEVICE"
                 return 1
@@ -257,7 +266,7 @@ validate_required_csv_fields() {
 # CSV event-driven monitoring
 start_csv_monitoring() {
     local duration="$1"
-    local csv_file="${LOGS_DIR}/performance_latest.csv"
+    local csv_file="${PERFORMANCE_LATEST_CSV:-${LOGS_DIR}/performance_latest.csv}"
     
     # Set cleanup function
     cleanup_csv_monitoring() {
@@ -385,7 +394,7 @@ start_csv_monitoring() {
 
 # Wait for CSV file to be ready
 wait_for_csv_ready() {
-    local csv_file="${LOGS_DIR}/performance_latest.csv"
+    local csv_file="${PERFORMANCE_LATEST_CSV:-${LOGS_DIR}/performance_latest.csv}"
     local max_wait=60  # 60 second timeout
     local wait_count=0
     

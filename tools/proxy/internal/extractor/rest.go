@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// REST 实现 spec §1.7 rest 模式。第一个 URL.Path 匹配的 pattern 决定 method_name。
-// 若 method_name 形如 "GET /xxx" "POST /xxx" 则前缀 HTTP verb 也参与过滤
-// (兼容 chain template _meta.rest_paths key 约定)。
+// REST implements spec §1.7 rest mode. The first URL.Path pattern match
+// determines method_name. If method_name starts with an HTTP verb such as
+// "GET /xxx" or "POST /xxx", the verb also participates in matching.
 type REST struct {
 	name     string
 	patterns []restPattern
@@ -18,10 +18,10 @@ type REST struct {
 type restPattern struct {
 	regex      *regexp.Regexp
 	methodName string
-	httpMethod string // "" = 任意, "GET" / "POST" = 限定
+	httpMethod string // "" = any, "GET" / "POST" = restricted
 }
 
-// httpMethodPrefix 检测 method_name 是否以 HTTP verb 前缀开头,返回 (verb, ok)。
+// httpMethodPrefix detects whether method_name starts with an HTTP verb prefix.
 func httpMethodPrefix(s string) (string, bool) {
 	for _, v := range []string{"GET ", "POST ", "PUT ", "DELETE ", "PATCH ", "HEAD ", "OPTIONS "} {
 		if strings.HasPrefix(s, v) {

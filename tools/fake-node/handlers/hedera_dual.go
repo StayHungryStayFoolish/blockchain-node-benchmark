@@ -1,4 +1,4 @@
-// Package handlers — hedera_dual family handler (ADR-0005).
+// Package handlers — hedera_dual family handler.
 //
 // Covers 1/36 chain: hedera.
 //
@@ -13,10 +13,8 @@
 // switching logic needed at this layer; the fixture file path encodes the side
 // (fixtures/hedera/mirror/* vs fixtures/hedera/jsonrpc/*).
 //
-// 2026-05-24 dual-protocol case lesson (see skill
-// honest-self-check-no-fake-evidence/references/protocol-layer-changes-require-live-http.md):
-//   L1/L2 schema-only tests are not enough for dual-protocol chains — the
-//   ci_smoke step that actually hits both endpoints is mandatory.
+// Dual-protocol chains need live endpoint smoke coverage in addition to
+// schema-only tests, because routing and response envelopes differ by method.
 
 package handlers
 

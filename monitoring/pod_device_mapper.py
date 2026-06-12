@@ -21,7 +21,7 @@ Hop chain
   Device path normalization (/dev/disk/by-id/... → sda/nvme0n1)
     → device name as it appears in iostat / cgroup io.stat
 
-Supported volume sources (S5 v1; more in S6/S7)
+Supported volume sources
 ------------------------------------------------
   csi.driver=pd.csi.storage.gke.io           — GCE PD (CSI)
   csi.driver=ebs.csi.aws.com                 — AWS EBS (CSI)

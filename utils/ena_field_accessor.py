@@ -1,11 +1,11 @@
-"""ENA Field Unified Access Interface - Fully configuration-driven, no hardcoding"""
+"""ENA field access helpers driven by the provider contract."""
 
 import os
 import pandas as pd
 from typing import Dict, List, Optional, Any
 
 class ENAFieldAccessor:
-    """ENA Field Unified Access Interface - Based on system_config.sh configuration, fully configuration-driven"""
+    """ENA field access helpers based on ENA_ALLOWANCE_FIELDS_STR."""
     
     # Accurate field configuration based on AWS official ENA documentation
     FIELD_CONFIG = {
@@ -55,30 +55,20 @@ class ENAFieldAccessor:
     
     @classmethod
     def get_configured_ena_fields(cls) -> List[str]:
-        """Get ENA field name configuration from environment variables - based on existing system_config.sh configuration"""
-        # Prioritize string format environment variable
+        """Get ENA field names exported by config_loader.sh from the AWS provider."""
         ena_fields_str = os.getenv('ENA_ALLOWANCE_FIELDS_STR', '')
-        
-        # If string format not available, try original format
-        if not ena_fields_str:
-            ena_fields_str = os.getenv('ENA_ALLOWANCE_FIELDS', '')
-        
+
         if ena_fields_str:
-            # Handle bash array format: (field1 field2 field3) or field1 field2 field3
-            ena_fields_str = ena_fields_str.strip('()')
             fields = [field.strip('"\'') for field in ena_fields_str.split()]
-            if fields and fields[0]:  # Ensure not empty list
+            if fields and fields[0]:
                 return fields
-        
-        # If environment variable not available, use standard ENA field list as fallback
+
         print("⚠️ Unable to get ENA field configuration from environment variables")
         print("   Diagnostic information:")
         print(f"   - ENA_ALLOWANCE_FIELDS_STR: '{os.getenv('ENA_ALLOWANCE_FIELDS_STR', '')}'")
-        print(f"   - ENA_ALLOWANCE_FIELDS: '{os.getenv('ENA_ALLOWANCE_FIELDS', '')}'")
         print(f"   - ENA_MONITOR_ENABLED: {os.getenv('ENA_MONITOR_ENABLED', 'undefined')}")
         print("   - Using standard ENA field list as fallback")
-        
-        # Return standard ENA field list
+
         return list(cls.FIELD_CONFIG.keys())
     
     @classmethod

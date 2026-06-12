@@ -1,0 +1,256 @@
+name: pr-gate
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-hygiene:
+    name: repository hygiene and static contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PR title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          pattern='^(feat|fix|docs|test|refactor|perf|ci|chore)(\([a-z0-9._-]+\))?: .+'
+          if [[ ! "$PR_TITLE" =~ $pattern ]]; then
+            echo "PR title must follow Conventional Commits:"
+            echo "  type(scope): short summary"
+            echo "Allowed types: feat, fix, docs, test, refactor, perf, ci, chore"
+            echo "Current title: $PR_TITLE"
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate shell syntax
+        run: |
+          set -euo pipefail
+          git ls-files '*.sh' | xargs -r -n 1 bash -n
+
+      - name: Validate chain template JSON
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          chains = sorted(Path("config/chains").glob("*.json"))
+          assert len(chains) == 36, f"expected 36 chain templates, got {len(chains)}"
+          for path in chains:
+              json.loads(path.read_text())
+          print(f"validated {len(chains)} chain templates")
+          PY
+
+      - name: Validate README and docs local links
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path(".").resolve()
+          files = [
+              "README.md",
+              "README_ZH.md",
+              "docs/README.md",
+              "docs/en/README.md",
+              "docs/en/framework-flow.md",
+              "docs/en/module-guide.md",
+              "docs/en/how-to-add-chain.md",
+              "docs/en/local-closed-loop-testing.md",
+              "docs/en/github-pr-gates.md",
+              "docs/zh/README.md",
+              "docs/zh/framework-flow.md",
+              "docs/zh/module-guide.md",
+              "docs/zh/how-to-add-chain.md",
+              "docs/zh/local-closed-loop-testing.md",
+              "docs/zh/github-pr-gates.md",
+              "config/README.md",
+              "deploy/k8s/README.md",
+              "deploy/observability/README.md",
+          ]
+          missing = []
+          for name in files:
+              path = root / name
+              if not path.exists():
+                  missing.append((name, name))
+                  continue
+              text = path.read_text(encoding="utf-8")
+              for match in re.finditer(r"\[[^\]]+\]\((?!https?://|#|mailto:)([^)]+)\)", text):
+                  target = match.group(1).split("#", 1)[0].strip("<>")
+                  if not target:
+                      continue
+                  if not (path.parent / target).resolve().exists():
+                      missing.append((name, target))
+          if missing:
+              for name, target in missing:
+                  print(f"{name}: missing local link target {target}")
+              raise SystemExit(1)
+          print("local documentation links ok")
+          PY
+
+      - name: Run repository policy guards
+        run: |
+          set -euo pipefail
+          bash ci/check_parallel_entry.sh
+          bash ci/check_csv_registry_bypass.sh
+          python3 tools/check_public_repo_markers.py --root .
+
+  chain-and-fixture-contracts:
+    name: chain templates, adapters, and fake-node fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run chain and fake-node contract tests
+        run: |
+          set -euo pipefail
+          python3 tests/test_chain_template_proxy_extraction.py
+          python3 tests/test_chain_adapters.py
+          bash tests/test_target_generator_mixed_weighted.sh
+          python3 tests/test_sync_health_audit.py
+          python3 tools/fake-node/check_fixture_coverage.py --json >/tmp/fixture_coverage.json
+
+  report-and-observability:
+    name: reports, attribution, and observability
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt pyyaml
+
+      - name: Run report and exporter tests
+        run: |
+          set -euo pipefail
+          python3 tests/test_per_method_attribution.py
+          python3 tests/test_per_method_charts.py
+          python3 tests/test_per_method_report.py
+          python3 tests/test_degraded_report.py
+          python3 tests/test_disk_visualization_synthetic.py
+          python3 tests/test_prometheus_exporter.py
+
+  monitoring-contracts:
+    name: monitoring lifecycle and runtime file contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux monitoring tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends sysstat bc jq net-tools procps iproute2
+
+      - name: Run monitoring contract tests
+        run: |
+          set -euo pipefail
+          bash tests/test_runtime_path_registry.sh
+          bash tests/test_runtime_startup_cleanup.sh
+          bash tests/test_monitoring_lifecycle_audit.sh
+          bash tests/test_monitoring_lifecycle_smoke.sh
+          bash tests/test_monitoring_runtime_contract.sh
+          bash tests/test_node_health_cache_path.sh
+          bash tests/test_node_sync_health_state_machine.sh
+          bash tests/test_block_height_csv_reader.sh
+          bash tests/test_csv_registry_symmetry.sh
+          bash tests/test_csv_header_data_alignment.sh
+
+  go-modules:
+    name: Go module tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - tools/proxy
+          - tools/fake-node
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      - name: Run Go tests
+        working-directory: ${{ matrix.module }}
+        run: go test ./...
+
+  deployment-static-checks:
+    name: Docker and Kubernetes static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install YAML parser
+        run: python3 -m pip install pyyaml
+
+      - name: Run deployment static tests
+        run: |
+          set -euo pipefail
+          python3 tests/test_dockerfile_structure.py
+          python3 tests/test_k8s_manifests.py
+          python3 tests/test_k8s_api_client_regression.py
+          python3 tests/test_k8s_socket_timeout.py
+          python3 tests/test_k8s_monitoring_stack.py
+          python3 tests/test_rbac_endpoints.py
+          bash tests/run_monitoring_k8s_tests.sh

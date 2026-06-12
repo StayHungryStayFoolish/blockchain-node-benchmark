@@ -4,14 +4,10 @@
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
-    "target_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "target_address": "${TARGET_ADDRESS:-0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913}",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT"
-  },
-  "methods": {
-    "get_logs": "eth_getLogs",
-    "get_transaction": "eth_getTransactionByHash"
   },
   "system_addresses": [
     "0x0000000000000000000000000000000000000000",
@@ -23,19 +19,19 @@
     "mixed_weighted": [
       {
         "method": "eth_getBalance",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "eth_getTransactionCount",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "eth_blockNumber",
-        "weight": 1
+        "weight": 25
       },
       {
         "method": "eth_gasPrice",
-        "weight": 1
+        "weight": 25
       }
     ]
   },
@@ -50,9 +46,48 @@
     "extracted_from": "config/config_loader.sh UNIFIED_BLOCKCHAIN_CONFIG (line 408-652)",
     "baseline_sha": "ffbeeee",
     "extract_date": "2026-05-23",
-    "note": "8 链原始 baseline,P2 plugin 化第一阶段拆出,diff=0 必须保持",
+    "note": "Migrated from the original baseline config; keep behavior-compatible unless intentionally changed.",
     "adapter_family": "jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "original_public_endpoints": [
+      {
+        "url": "https://base-mainnet.public.blastapi.io",
+        "auth": false,
+        "verified": "E2",
+        "notes": "BlastAPI public endpoint"
+      },
+      {
+        "url": "https://base.gateway.tenderly.co",
+        "auth": false,
+        "verified": "E2",
+        "notes": "Tenderly gateway"
+      },
+      {
+        "url": "https://base-rpc.publicnode.com",
+        "auth": false,
+        "verified": "E2",
+        "notes": "publicnode public endpoint"
+      }
+    ],
+    "sync_health": {
+      "mode": "conditional_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": null,
+      "comparison": "local_sync_object_lag",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Use eth_syncing on the local node: false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD."
+    },
+    "health_probe": {
+      "method": "eth_syncing",
+      "params": [],
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "conditional_gap_fields": {
+        "lag_value": ".result.highestBlock - .result.currentBlock",
+        "healthy_value": ".result == false"
+      }
+    }
   },
   "proxy_extraction": {
     "extractors": [

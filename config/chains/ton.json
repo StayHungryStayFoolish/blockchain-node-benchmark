@@ -1,6 +1,5 @@
 {
   "chain_type": "ton",
-  "methods": {},
   "param_formats": {
     "getMasterchainInfo": "{}",
     "getAddressBalance": "{address: friendly_base64url|raw}",
@@ -14,7 +13,7 @@
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N",
+    "target_address": "${TARGET_ADDRESS:-EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N}",
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
@@ -23,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "getAddressBalance",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getAddressInformation",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getTransactions",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "lookupBlock",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "runGetMethod",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -47,39 +46,53 @@
   "system_addresses": [],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/30-ton.md",
     "extracted_at": "2026-05-24T00:33:48Z",
-    "extracted_by": "subagent_ton_dedicated",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "TON research conducted independently with H8 curl evidence. 4/7 endpoints verified E2 200 OK. param_formats may need normalization in S1 alignment with TONAdapter.",
+    "note": "TON template normalized for adapter-driven REST request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.944219+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "mixed",
     "rest_paths": {
       "getMasterchainInfo": {
         "method": "GET",
-        "path": "/getMasterchainInfo"
+        "path": "/getMasterchainInfo",
+        "base_url": "https://toncenter.com/api/v2"
       },
       "getAddressBalance": {
         "method": "GET",
-        "path": "/getAddressBalance?address={address}"
+        "path": "/getAddressBalance?address={address}",
+        "base_url": "https://toncenter.com/api/v2"
       },
       "getAddressInformation": {
         "method": "GET",
-        "path": "/getAddressInformation?address={address}"
+        "path": "/getAddressInformation?address={address}",
+        "base_url": "https://toncenter.com/api/v2"
       },
       "getTransactions": {
         "method": "GET",
-        "path": "/getTransactions?address={address}&limit=10"
+        "path": "/getTransactions?address={address}&limit=10",
+        "base_url": "https://toncenter.com/api/v2"
       },
       "lookupBlock": {
         "method": "GET",
-        "path": "/lookupBlock?workchain=-1&shard=-9223372036854775808&seqno=1"
+        "path": "/lookupBlock?workchain=-1&shard=-9223372036854775808&seqno=72033975",
+        "base_url": "https://toncenter.com/api/v2"
       },
       "runGetMethod": {
         "method": "POST",
-        "path": "/runGetMethod",
-        "body": "{\"address\":\"{address}\",\"method\":\"seqno\",\"stack\":[]}"
+        "base_url": "https://toncenter.com/api/v2",
+        "path": "/jsonRPC",
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "runGetMethod",
+          "params": {
+            "address": "{address}",
+            "method": "seqno",
+            "stack": []
+          }
+        }
       }
     },
     "original_public_endpoints": [
@@ -87,31 +100,23 @@
         "url": "https://toncenter.com/api/v2/jsonRPC",
         "auth": false,
         "verified": "E2",
-        "notes": "toncenter v2 JSON-RPC, HTTP:200 getMasterchainInfo, ratelimit 1 RPS without key"
-      },
-      {
-        "url": "https://toncenter.com/api/v2",
-        "auth": false,
-        "verified": "E2",
-        "notes": "toncenter v2 REST (same backend as jsonRPC), HTTP:200 across 8 methods"
-      },
-      {
-        "url": "https://toncenter.com/api/v3",
-        "auth": false,
-        "verified": "E2",
-        "notes": "toncenter v3 REST indexer, HTTP:200 masterchainInfo and transactions; envelope-less"
-      },
-      {
-        "url": "https://mainnet-v4.tonhubapi.com",
-        "auth": false,
-        "verified": "E2",
-        "notes": "Tonhub v4 API, HTTP:200 /block/latest, camelCase schema, independent of toncenter"
+        "notes": "TON Center public endpoint"
       }
     ],
-    "original_notes": "TON独立family,需新建TONAdapter。toncenter v2同时提供REST和JSON-RPC双协议;响应envelope非标准({ok,result,@extra}包装)。地址三态:raw(0:hex64)/friendly bounceable(EQ...)/non-bounceable(UQ...),adapter必须normalize到raw去重。tx_id是(account,lt,hash)三元组,非单hash。native decimals=9 nanoton。公链限流1RPS无key,性能基准必须self-host ton-http-api。",
+    "original_notes": "TON uses a dedicated protocol family and requires TONAdapter. toncenter v2 provides both REST and JSON-RPC; response envelopes are non-standard ({ok,result,@extra}). Addresses may be raw (0:hex64), friendly bounceable (EQ...), or non-bounceable (UQ...), so adapters must normalize to raw form for de-duplication. tx_id is a tuple (account, lt, hash), not a single hash. Native decimals are 9 nanoton. Public endpoints are rate-limited to 1 RPS without an API key; production benchmarks should self-host ton-http-api.",
     "adapter_required": true,
     "adapter_family": "rest",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Compare numeric cursors returned by the same adapter health probe against local and target RPC endpoints."
+    }
   },
   "proxy_extraction": {
     "extractors": [

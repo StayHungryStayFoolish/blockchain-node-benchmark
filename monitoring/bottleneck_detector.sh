@@ -24,7 +24,7 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
 fi
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/unified_logger.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/disk_converter.sh"
-# CSV Schema Registry (reader 经 registry resolve 取 provider-aware 物理列名, 不裸写)
+# CSV Schema Registry: readers resolve provider-aware physical column names.
 source "$(dirname "${BASH_SOURCE[0]}")/../config/csv_schema_registry.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh"
 
@@ -35,7 +35,7 @@ init_logger "bottleneck_detector" $LOG_LEVEL "${LOGS_DIR}/bottleneck_detector.lo
 BOTTLENECK_LOG="${LOGS_DIR}/bottleneck_detector.log"
 # Dynamically build device field matching patterns - fix hardcoded device name issue
 build_device_field_patterns() {
-    local field_type="$1"  # util, r_await, avg_await, throughput_mibs (provider-aware iops 见 build_provider_aware_patterns)
+    local field_type="$1"  # util, r_await, avg_await, throughput_mibs; provider-aware iops uses build_provider_aware_patterns
     local patterns=()
     
     # DATA device pattern (required)
@@ -51,9 +51,9 @@ build_device_field_patterns() {
     echo "${patterns[*]}"
 }
 
-# === provider-aware 物理列名解析 (reader 经 registry, 与 writer 同一事实源) ===
-# 从 CSV header+data 行取 cloud_provider 列值定 provider (铁律: 唯一合法来源 = CSV 列, 不探测).
-# 入参: header 数组名, data 数组名 (nameref). 取不到→中立兜底 other.
+# === Provider-aware physical column resolution ===
+# Resolve provider from the CSV cloud_provider column, without runtime re-detection.
+# Inputs: header array name and data array name (nameref). Fallback provider is "other".
 _bd_provider_from_csv() {
     local -n _h_ref="$1"
     local -n _d_ref="$2"
@@ -68,7 +68,7 @@ _bd_provider_from_csv() {
     case "$p" in aws|gcp|other) echo "$p" ;; *) echo "other" ;; esac
 }
 
-# 经 registry 解析逻辑名→物理列名; registry 缺失返回空 (上层走既有 0 兜底, 不自拼裸名).
+# Resolve logical name -> physical column via registry; empty means use existing fallback.
 _bd_resolve() {
     local logical="$1" prefix="$2" provider="$3"
     if declare -F csv_registry_resolve >/dev/null 2>&1; then
@@ -78,8 +78,8 @@ _bd_resolve() {
     fi
 }
 
-# 构造 provider-aware 字段全变体匹配模式 (模块加载时不知 CSV provider, 故含 aws/gcp/other 三变体,
-# 任一写入云的 CSV 列名都能命中). 用于 DISK_IOPS_PATTERNS 等模块级 pattern.
+# Build provider-aware field patterns for all provider variants. The module does
+# not know the CSV provider at load time, so aws/gcp/other variants are included.
 build_provider_aware_patterns() {
     local logical="$1"   # disk_iops_provider_adjusted | disk_throughput_provider_adjusted
     local patterns=() variant phys
@@ -119,8 +119,8 @@ handle_detector_error() {
 # Set error trap
 trap 'handle_detector_error $LINENO' ERR
 
-readonly BOTTLENECK_STATUS_FILE="${MEMORY_SHARE_DIR}/bottleneck_status.json"
-readonly BOTTLENECK_COUNTERS_FILE="${MEMORY_SHARE_DIR}/bottleneck_counters.json"
+readonly BOTTLENECK_STATUS_FILE="${BOTTLENECK_STATUS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_status.json}"
+readonly BOTTLENECK_COUNTERS_FILE="${BOTTLENECK_COUNTERS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_counters.json}"
 
 # Create performance metrics JSON string
 create_performance_metrics_json() {
@@ -440,12 +440,12 @@ check_disk_bottleneck() {
     
     # Validate baseline values
     if [[ -z "$provisioned_iops" || -z "$provisioned_throughput" ]]; then
-        log_debug "Invalid baseline values, skipping AWS baseline bottleneck detection"
+        log_debug "Invalid baseline values, skipping provider baseline bottleneck detection"
         provisioned_iops=""
         provisioned_throughput=""
     fi
     
-    # AWS baseline IOPS bottleneck detection (using device-specific baseline values)
+    # Provider-normalized IOPS bottleneck detection (using device-specific baseline values)
     if [[ -n "$disk_iops" && -n "$provisioned_iops" ]]; then
         local iops_utilization=$(awk "BEGIN {printf \"%.4f\", $disk_iops / $provisioned_iops}" 2>/dev/null || echo "0")
         local iops_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_DISK_IOPS_THRESHOLD:-90} / 100}")
@@ -463,7 +463,7 @@ check_disk_bottleneck() {
         fi
     fi
     
-    # AWS baseline throughput bottleneck detection (using device-specific baseline values)
+    # Provider-normalized throughput bottleneck detection (using device-specific baseline values)
     if [[ -n "$disk_throughput" && -n "$provisioned_throughput" ]]; then
         local throughput_utilization=$(awk "BEGIN {printf \"%.4f\", $disk_throughput / $provisioned_throughput}" 2>/dev/null || echo "0")
         local throughput_threshold=$(awk "BEGIN {printf \"%.2f\", ${BOTTLENECK_DISK_THROUGHPUT_THRESHOLD:-90} / 100}")
@@ -722,30 +722,60 @@ check_qps_bottleneck() {
     fi
 }
 
-# Detect RPC connection failure
-check_rpc_connection_bottleneck() {
-    local timeout=2
-    
-    # Don't use cache, test connection directly (avoid cache masking failures)
-    local result=$(timeout $timeout curl -s -X POST -H "Content-Type: application/json" \
-        --data '{"jsonrpc":"2.0","id":1,"method":"getBlockHeight","params":[]}' \
-        "$LOCAL_RPC_URL" 2>&1)
-    
-    local exit_code=$?
-    
-    if [[ $exit_code -ne 0 ]]; then
-        # Connection failed
-        BOTTLENECK_COUNTERS["rpc_connection"]=$((${BOTTLENECK_COUNTERS["rpc_connection"]:-0} + 1))
-        echo "⚠️  RPC connection failed: exit_code=$exit_code (${BOTTLENECK_COUNTERS["rpc_connection"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
-        
-        if [[ ${BOTTLENECK_COUNTERS["rpc_connection"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
-            return 0  # Connection bottleneck detected
-        fi
-    else
-        BOTTLENECK_COUNTERS["rpc_connection"]=0
+record_rpc_connection_failure() {
+    local reason="$1"
+
+    BOTTLENECK_COUNTERS["rpc_connection"]=$((${BOTTLENECK_COUNTERS["rpc_connection"]:-0} + 1))
+    echo "⚠️  RPC connection unhealthy: ${reason} (${BOTTLENECK_COUNTERS["rpc_connection"]:-0}/${BOTTLENECK_CONSECUTIVE_COUNT})" | tee -a "$BOTTLENECK_LOG"
+
+    if [[ ${BOTTLENECK_COUNTERS["rpc_connection"]:-0} -ge $BOTTLENECK_CONSECUTIVE_COUNT ]]; then
+        return 0
     fi
-    
     return 1
+}
+
+# Detect RPC connection failure using the block-height monitor as the primary producer.
+check_rpc_connection_bottleneck() {
+    local monitor_rate="${BLOCK_HEIGHT_MONITOR_RATE:-1}"
+    if ! awk "BEGIN {exit !($monitor_rate > 0)}" 2>/dev/null; then
+        monitor_rate=1
+    fi
+
+    # The block-height monitor normally writes once per second. Allow two monitor
+    # intervals so bottleneck detection can tolerate scheduler jitter.
+    local cache_max_age_seconds
+    cache_max_age_seconds=$(awk "BEGIN {printf \"%.3f\", 2 / $monitor_rate}" 2>/dev/null || echo "2")
+
+    local cache_data=""
+    if [[ -n "${BLOCK_HEIGHT_CACHE_FILE:-}" ]] && cache_data=$(get_fresh_block_height_cache "$BLOCK_HEIGHT_CACHE_FILE" "$cache_max_age_seconds"); then
+        local local_health mainnet_health data_loss local_block_height block_height_diff sync_mode sync_status
+        local_health=$(echo "$cache_data" | jq -r '.local_health // "0"' 2>/dev/null || echo "0")
+        mainnet_health=$(echo "$cache_data" | jq -r '.mainnet_health // "0"' 2>/dev/null || echo "0")
+        data_loss=$(echo "$cache_data" | jq -r '.data_loss // "0"' 2>/dev/null || echo "0")
+        local_block_height=$(echo "$cache_data" | jq -r '.local_block_height // "null"' 2>/dev/null || echo "null")
+        block_height_diff=$(echo "$cache_data" | jq -r '.block_height_diff // "null"' 2>/dev/null || echo "null")
+        sync_mode=$(echo "$cache_data" | jq -r '.sync_mode // "unknown"' 2>/dev/null || echo "unknown")
+        sync_status=$(echo "$cache_data" | jq -r '.sync_status // "unknown"' 2>/dev/null || echo "unknown")
+
+        if [[ "$local_health" == "0" || "$data_loss" == "1" || "$sync_status" == "unhealthy" ]]; then
+            record_rpc_connection_failure "sync cache reports mode=${sync_mode}, status=${sync_status}, local_health=${local_health}, mainnet_health=${mainnet_health}, data_loss=${data_loss}, local_height=${local_block_height}, diff=${block_height_diff}"
+            return $?
+        fi
+
+        BOTTLENECK_COUNTERS["rpc_connection"]=0
+        return 1
+    fi
+
+    # Fallback for startup races or a stopped block-height monitor. This still uses
+    # the 36-chain adapter/template path instead of a chain-specific hardcoded RPC.
+    local block_height
+    if block_height=$(get_block_height "$LOCAL_RPC_URL" 2>/dev/null) && [[ "$block_height" =~ ^[0-9]+$ ]]; then
+        BOTTLENECK_COUNTERS["rpc_connection"]=0
+        return 1
+    fi
+
+    record_rpc_connection_failure "fresh block-height cache unavailable and adapter probe failed"
+    return $?
 }
 
 # Detect RPC performance bottleneck (success rate and latency)
@@ -902,8 +932,9 @@ detect_all_disk_bottlenecks() {
     IFS=',' read -ra field_names <<< "$header_line"
     IFS=',' read -ra data_values <<< "$latest_line"
 
-    # provider 来自 CSV cloud_provider 列 (铁律), 经 registry 解析 provider-aware 物理列名,
-    # 与写入该 CSV 的 writer 对齐 (ADR-0002: 三云统一 normalized_*, provider 由 cloud_provider 列承载).
+    # provider comes from CSV cloud_provider and registry-resolved physical column names,
+    # Align with the CSV writer: normalized_* columns are provider-neutral, and
+    # cloud_provider carries the provider.
     local _bd_prov
     _bd_prov="$(_bd_provider_from_csv field_names data_values)"
     local data_std_iops_col data_std_tput_col acct_std_iops_col acct_std_tput_col
@@ -935,7 +966,7 @@ detect_all_disk_bottlenecks() {
     # Detect DATA device bottleneck
     if check_disk_bottleneck "$data_aws_iops" "$data_throughput" "data"; then
         bottleneck_detected=true
-        bottleneck_info+=("DATA device bottleneck: AWS_IOPS=${data_aws_iops}, Throughput=${data_throughput}MiB/s")
+        bottleneck_info+=("DATA device bottleneck: NORMALIZED_IOPS=${data_aws_iops}, Throughput=${data_throughput}MiB/s")
     fi
     
     # Detect ACCOUNTS device (if configured)
@@ -962,7 +993,7 @@ detect_all_disk_bottlenecks() {
         # Detect ACCOUNTS device bottleneck
         if check_disk_bottleneck "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
             bottleneck_detected=true
-            bottleneck_info+=("ACCOUNTS device bottleneck: AWS_IOPS=${accounts_aws_iops}, Throughput=${accounts_throughput}MiB/s")
+            bottleneck_info+=("ACCOUNTS device bottleneck: NORMALIZED_IOPS=${accounts_aws_iops}, Throughput=${accounts_throughput}MiB/s")
         fi
     fi
     
@@ -996,7 +1027,7 @@ detect_bottleneck() {
     local network_util=$(echo "$metrics" | cut -d',' -f7)
     local error_rate=$(echo "$metrics" | cut -d',' -f8)
     
-    echo "📊 Current QPS: $current_qps, Performance metrics: CPU=${cpu_usage}%, MEM=${memory_usage}%, Disk=${disk_util}%/${disk_latency}ms, AWS_IOPS=${disk_iops}, THROUGHPUT=${disk_throughput}MiB/s, NET=${network_util}%, ERR=${error_rate}%" | tee -a "$BOTTLENECK_LOG"
+    echo "📊 Current QPS: $current_qps, Performance metrics: CPU=${cpu_usage}%, MEM=${memory_usage}%, Disk=${disk_util}%/${disk_latency}ms, NORMALIZED_IOPS=${disk_iops}, THROUGHPUT=${disk_throughput}MiB/s, NET=${network_util}%, ERR=${error_rate}%" | tee -a "$BOTTLENECK_LOG"
     
     # Create performance metrics JSON
     local metrics_json=$(create_performance_metrics_json "$cpu_usage" "$memory_usage" "$disk_util" "$disk_latency" "$disk_iops" "$disk_throughput" "$network_util" "$error_rate")
@@ -1041,8 +1072,8 @@ detect_bottleneck() {
         local accounts_throughput=0
         
         # Extract ACCOUNTS device metrics from CSV data
-        # provider 来自 CSV cloud_provider 列 (铁律), 经 registry 解析 provider-aware 物理列名.
-        # 自包含解析 header/data (本函数未自行解析 field_names, 历史依赖全局残留, 此处独立取以免脆弱).
+        # provider comes from CSV cloud_provider and registry-resolved physical column names.
+        # Parse header/data locally to avoid relying on stale global field arrays.
         local _bd_hdr _bd_dat
         _bd_hdr="$(head -n 1 "$performance_csv" 2>/dev/null)"
         _bd_dat="$(tail -n 1 "$performance_csv" 2>/dev/null)"
@@ -1078,7 +1109,7 @@ detect_bottleneck() {
             fi
         done
         
-        log_debug "ACCOUNTS device metrics: AWS_IOPS=${accounts_aws_iops}, Throughput=${accounts_throughput}MiB/s"
+        log_debug "ACCOUNTS device metrics: NORMALIZED_IOPS=${accounts_aws_iops}, Throughput=${accounts_throughput}MiB/s"
         
         if check_disk_bottleneck "$accounts_aws_iops" "$accounts_throughput" "accounts"; then
             bottleneck_detected=true
@@ -1099,9 +1130,8 @@ detect_bottleneck() {
         bottleneck_values+=("${network_util}%")
     fi
     
-    # Detect ENA network limit bottleneck
-    # TODO(Y+): once network_monitor.sh CSV is wired into bottleneck logic,
-    # add platform-aware check_network_bottleneck call here
+    # Detect provider-specific network limit bottlenecks. Future provider
+    # collectors should plug into this check through a platform-aware wrapper.
     if check_ena_network_bottleneck "$performance_csv"; then
         bottleneck_detected=true
         bottleneck_types+=("ENA_Network_Limit")

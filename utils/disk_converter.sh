@@ -1,10 +1,7 @@
 #!/bin/bash
 
-# AWS EBS IOPS/Throughput Processing Script
-# Used for processing Disk performance metrics, type recommendations, and io2 throughput calculation
-
-# AWS EBS throughput baseline (for throughput conversion, maintain compatibility)
-AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB=${AWS_EBS_BASELINE_THROUGHPUT_SIZE_KIB:-128}
+# Provider-aware IOPS/throughput processing helpers.
+# Includes AWS EBS split accounting and GCP/other passthrough accounting.
 
 if [[ -z "${IO2_THROUGHPUT_RATIO:-}" ]]; then
     readonly IO2_THROUGHPUT_RATIO=0.256
@@ -14,33 +11,31 @@ if [[ -z "${IO2_MAX_THROUGHPUT:-}" ]]; then
     readonly IO2_MAX_THROUGHPUT=4000
 fi
 
-# Note: IOPS conversion is provider-aware via get_iops_conversion_func (CP-1 双云对等).
+# Note: IOPS conversion is provider-aware via get_iops_conversion_func.
 #   AWS EBS: I/O size capped at 256 KiB (SSD) / 1024 KiB (HDD) — count splits by ceil(io_size/cap).
-#            官方实证: analysis-notes/aws-gcp-io-counting-rules-verified.md (AWS EBS docs:
-#            "I/O size is capped at 256 KiB for SSD volumes and 1,024 KiB for HDD volumes")
-#   GCP PD/Hyperdisk + other: passthrough (不按 I/O size 拆分,直接用 r/s+w/s).
-# 分流键来自 config/providers/{aws,gcp,other}_provider.sh 的 get_iops_conversion_func.
+#   GCP PD/Hyperdisk + other: passthrough without I/O-size split accounting.
+# The routing key comes from get_iops_conversion_func in config/providers/.
 
 # Convert actual IOPS to provider-standard IOPS
 # Parameters: actual_iops              - Actual IOPS (r/s + w/s)
 #             actual_avg_io_size_kib   - Average I/O size in KiB (used for AWS split)
 #             io_cap_kib (optional)    - I/O size cap: 256 (SSD, default) | 1024 (HDD)
 # Returns: provider-standard IOPS
-#   AWS:        actual_iops * ceil(avg_io_size_kib / cap)   (保守上界,见官方 merge/split 语义)
+#   AWS:        actual_iops * ceil(avg_io_size_kib / cap)
 #   GCP/other:  actual_iops (passthrough)
-# 命名: 函数本就是 provider-aware(按 get_iops_conversion_func 分流), 故主名中立.
 convert_to_standard_iops() {
     local actual_iops=$1
     local actual_avg_io_size_kib=${2:-0}
-    local io_cap_kib=${3:-256}   # SSD 默认 256 KiB; HDD caller 传 1024
+    local io_cap_kib=${3:-256}   # SSD default 256 KiB; HDD callers pass 1024.
 
-    # 非正 IOPS 直接 0
+    # Non-positive IOPS maps to 0.
     if (( $(awk "BEGIN {print ($actual_iops <= 0) ? 1 : 0}") )); then
         echo "0"
         return
     fi
 
-    # provider 分流: getter 不可用时(未 source provider)默认 passthrough,保守不夸大
+    # Provider routing: if the provider getter is unavailable, default to
+    # passthrough so we do not inflate values accidentally.
     local conv_func="passthrough"
     if declare -F get_iops_conversion_func >/dev/null 2>&1; then
         conv_func=$(get_iops_conversion_func)
@@ -48,10 +43,10 @@ convert_to_standard_iops() {
 
     case "$conv_func" in
         aws_ssd_ceil_256|aws_*|*ceil*)
-            # AWS: 按 I/O size 拆分. io_size<=cap 时 multiplier=1 (无放大).
-            # multiplier = ceil(avg_io_size_kib / cap), 最小为 1.
+            # AWS: split by I/O size. If io_size<=cap, multiplier=1.
+            # multiplier = ceil(avg_io_size_kib / cap), minimum 1.
             if (( $(awk "BEGIN {print ($actual_avg_io_size_kib <= 0) ? 1 : 0}") )); then
-                # 无 io_size 信息 → 退化为 passthrough(不凭空放大),避免假告警
+                # No I/O-size signal: degrade to passthrough to avoid false alerts.
                 echo "$actual_iops"
                 return
             fi
@@ -60,7 +55,7 @@ convert_to_standard_iops() {
             awk "BEGIN {printf \"%.2f\", $actual_iops * $multiplier}"
             ;;
         *)
-            # GCP / other / passthrough: 不拆分
+            # GCP / other / passthrough: no split accounting.
             echo "$actual_iops"
             ;;
     esac
@@ -80,7 +75,7 @@ convert_to_standard_throughput() {
         return 1
     fi
     
-    # 🔧 Throughput does not need conversion by 128 KiB baseline, return actual value directly
+    # Throughput does not need 128 KiB baseline conversion; return the actual value.
     # AWS EBS Throughput configuration is actual MiB/s, no standardization needed
     echo "$actual_throughput_mibs"
 }

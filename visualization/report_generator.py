@@ -14,6 +14,8 @@ import argparse
 import glob
 import traceback
 import numpy as np
+import html
+import re
 import matplotlib
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -55,8 +57,31 @@ TRANSLATIONS = {
         'no_aws_disk_data': 'No disk baseline data available',
         'no_iostat_data': 'No iostat sampling data available',
         # Configuration Section
-        'config_status_check': 'Configuration Status Check',
-        'config_item': 'Configuration Item',
+            'config_status_check': 'Configuration Status Check',
+            'run_environment': 'Run Environment',
+            'cloud_and_machine': 'Cloud & Machine',
+            'storage_profile': 'Storage Profile',
+            'network_profile': 'Network Profile',
+            'cloud_provider': 'Cloud Provider',
+            'cloud_region': 'Cloud Region',
+            'cloud_zone': 'Cloud Zone',
+            'machine_type': 'Machine Type',
+            'deployment_mode': 'Deployment Mode',
+            'network_interface': 'Network Interface',
+            'network_bandwidth': 'Network Bandwidth',
+            'volume_size_gib': 'Volume Size (GiB)',
+            'max_iops': 'Max IOPS',
+            'max_throughput_mibs': 'Max Throughput (MiB/s)',
+            'data_quality_summary': 'Data Quality Summary',
+            'monitor_samples': 'Monitor Samples',
+            'active_qps_samples': 'Active QPS Samples',
+            'valid_disk_samples': 'Valid Disk Samples',
+            'proxy_records': 'Proxy Records',
+            'workload_rpc_records': 'Workload RPC Records',
+            'excluded_probe_records': 'Excluded Probe Records',
+            'disk_data_note': 'Disk charts need valid iostat samples. In Docker or mock runs, disk samples may be empty even when the report pipeline is healthy.',
+            'proxy_filter_note': 'Per-method attribution counts only RPC methods configured in the selected single/mixed workload; sync-health probes are excluded.',
+            'config_item': 'Configuration Item',
         'status': 'Status',
         'value': 'Value',
         'blockchain_node_type': 'Blockchain Node Type',
@@ -413,8 +438,10 @@ TRANSLATIONS = {
         'block_height_sync_time_series': 'Block Height Sync Time Series',
         'block_height_sync_status': 'Block Height Sync Status',
         'chart_shows_block_height_diff': 'This chart shows the block height difference between local node and mainnet during testing',
+        'chart_shows_sync_health': 'This chart shows block-height gap or sync health status during testing',
         'blue_curve': 'Blue Curve',
         'block_height_diff_mainnet_minus_local': 'Block height difference (Mainnet - Local)',
+        'sync_health_status_timeline': 'Sync health status timeline when numeric height gap is unavailable',
         'red_dashed_line': 'Red Dashed Line',
         'anomaly_threshold_50_blocks': 'Anomaly threshold (±50 blocks)',
         'red_area': 'Red Area',
@@ -483,7 +510,7 @@ TRANSLATIONS = {
         'disk_professional_charts': 'Disk Professional Charts',
         'core_performance_charts': 'Core Performance Charts',
         'monitoring_overhead_charts': 'Monitoring & Overhead Charts',
-        'network_ena_charts': 'Network & ENA Charts',
+        'network_ena_charts': 'Provider Network Charts',
         'additional_charts': 'Additional Charts',
         'chart_display_error': 'Chart Display Error',
         'chart_section_generation_failed': 'Chart section generation failed',
@@ -595,6 +622,9 @@ TRANSLATIONS = {
         'local_block_height': 'Local Block Height',
         'mainnet_block_height': 'Mainnet Block Height',
         'block_height_diff': 'Block Height Diff',
+        'sync_mode': 'Sync Mode',
+        'sync_status': 'Sync Status',
+        'lag_value': 'Lag Value',
     },
     'zh': {
         # Disk Analysis Section
@@ -619,8 +649,31 @@ TRANSLATIONS = {
         'no_aws_disk_data': '暂无磁盘基准数据',
         'no_iostat_data': '暂无iostat采样数据',
         # Configuration Section
-        'config_status_check': '配置状态检查',
-        'config_item': '配置项',
+            'config_status_check': '配置状态检查',
+            'run_environment': '运行环境',
+            'cloud_and_machine': '云与机器',
+            'storage_profile': '存储配置',
+            'network_profile': '网络配置',
+            'cloud_provider': '云厂商',
+            'cloud_region': '云区域',
+            'cloud_zone': '云可用区',
+            'machine_type': '机器类型',
+            'deployment_mode': '部署模式',
+            'network_interface': '网络接口',
+            'network_bandwidth': '网络带宽',
+            'volume_size_gib': '卷大小 (GiB)',
+            'max_iops': '最大 IOPS',
+            'max_throughput_mibs': '最大吞吐 (MiB/s)',
+            'data_quality_summary': '数据质量摘要',
+            'monitor_samples': '监控样本数',
+            'active_qps_samples': '有效 QPS 样本',
+            'valid_disk_samples': '有效磁盘样本',
+            'proxy_records': 'Proxy 记录数',
+            'workload_rpc_records': '业务 RPC 记录数',
+            'excluded_probe_records': '已排除探针记录数',
+            'disk_data_note': '磁盘图表需要有效 iostat 样本。Docker 或 mock 闭环测试中，即使报告链路正常，磁盘样本也可能为空。',
+            'proxy_filter_note': 'Per-method 性能归因只统计当前 single/mixed workload 配置的 RPC method；同步健康探针会被排除。',
+            'config_item': '配置项',
         'status': '状态',
         'value': '值',
         'blockchain_node_type': '区块链节点类型',
@@ -970,8 +1023,10 @@ TRANSLATIONS = {
         'block_height_sync_time_series': '区块高度同步时序图',
         'block_height_sync_status': '区块高度同步状态',
         'chart_shows_block_height_diff': '此图表展示了测试期间本地节点与主网的区块高度差值变化',
+        'chart_shows_sync_health': '此图表展示测试期间的区块高度差值或同步健康状态',
         'blue_curve': '蓝色曲线',
         'block_height_diff_mainnet_minus_local': '区块高度差值 (主网 - 本地)',
+        'sync_health_status_timeline': '当无法获取数值高度差时，显示同步健康状态时间线',
         'red_dashed_line': '红色虚线',
         'anomaly_threshold_50_blocks': '异常阈值 (±50个区块)',
         'red_area': '红色区域',
@@ -1005,7 +1060,7 @@ TRANSLATIONS = {
         'no_system_bottleneck_detected': '未检测到系统级性能瓶颈',
         'bottleneck_criteria_title': '系统级瓶颈判定条件',
         'bottleneck_criteria_note': '框架采用五场景逻辑与双重验证机制：',
-        'bottleneck_condition_1': '<strong>检测维度（8个指标）：</strong><br>&nbsp;&nbsp;• 资源指标：CPU>85%、内存>90%、Disk AWS标准IOPS/吞吐量>90%、网络>80%<br>&nbsp;&nbsp;• <strong>RPC性能（必要条件）：</strong>成功率&lt;95% 或 P99延迟>1000ms<br>&nbsp;&nbsp;• RPC错误：错误率>5%、连接失败',
+        'bottleneck_condition_1': '<strong>检测维度（8个指标）：</strong><br>&nbsp;&nbsp;• 资源指标：CPU>85%、内存>90%、Disk provider-normalized IOPS/吞吐量>90%、网络>80%<br>&nbsp;&nbsp;• <strong>RPC性能（必要条件）：</strong>成功率&lt;95% 或 P99延迟>1000ms<br>&nbsp;&nbsp;• RPC错误：错误率>5%、连接失败',
         'bottleneck_condition_2': '<strong>五场景判断逻辑：</strong><br>&nbsp;&nbsp;• <strong>场景A-Resource：</strong>资源超标 + 节点健康 → 误判 → 重置计数器 → 继续测试<br>&nbsp;&nbsp;• <strong>场景A-RPC：</strong>RPC性能违规（必要条件）→ 真瓶颈 → 累积计数 → 连续3次 → 停止测试<br>&nbsp;&nbsp;• <strong>场景B：</strong>任意瓶颈 + 节点不健康 → 真瓶颈 → 累积计数 → 连续3次 → 停止测试<br>&nbsp;&nbsp;• <strong>场景C：</strong>无瓶颈 + 节点持续不健康 → 节点故障 → 立即停止<br>&nbsp;&nbsp;• <strong>场景D：</strong>全部指标正常 + 节点健康 → 继续测试',
         'bottleneck_condition_3': '<strong>节点健康验证：</strong><br>&nbsp;&nbsp;• 判定标准：区块高度差异 > 50 且 持续时间 > 300秒<br>&nbsp;&nbsp;• 验证目的：区分误判（场景A-Resource）与真瓶颈（场景B）<br>&nbsp;&nbsp;• <strong>关键说明：</strong>RPC性能违规是必要条件，无需节点健康验证',
         'bottleneck_current_status': '当前状态',
@@ -1040,7 +1095,7 @@ TRANSLATIONS = {
         'disk_professional_charts': '磁盘专业图表',
         'core_performance_charts': '核心性能图表',
         'monitoring_overhead_charts': '监控与开销图表',
-        'network_ena_charts': '网络与 ENA 图表',
+        'network_ena_charts': 'Provider 网络图表',
         'additional_charts': '附加图表',
         'chart_display_error': '图表展示错误',
         'chart_section_generation_failed': '图表部分生成失败',
@@ -1154,6 +1209,9 @@ TRANSLATIONS = {
         'local_block_height': '本地区块高度',
         'mainnet_block_height': '主网区块高度',
         'block_height_diff': '区块高度差值',
+        'sync_mode': '同步模式',
+        'sync_status': '同步状态',
+        'lag_value': 'Lag 值',
     }
 }
 
@@ -1186,19 +1244,37 @@ class ReportGenerator:
         self.language = language
         self.t = TRANSLATIONS.get(language, TRANSLATIONS['en'])
         self.output_dir = os.getenv('REPORTS_DIR', os.path.dirname(performance_csv))
-        self.disk_log_path = os.path.join(os.getenv('LOGS_DIR', '/tmp/blockchain-node-benchmark/logs'), 'disk_bottleneck_detector.log')
+        self.logs_dir = self._runtime_logs_dir()
+        self.disk_log_path = os.path.join(self.logs_dir, 'disk_bottleneck_detector.log')
         self.config = self._load_config()
         self.overhead_data = self._load_overhead_data()
         self.bottleneck_data = self._load_bottleneck_data()
-        
+
         # Execute data integrity validation
         self.validation_results = self.validate_data_integrity()
-        
+
+    def _runtime_logs_dir(self):
+        return os.getenv('LOGS_DIR') or os.path.dirname(os.getenv('PERFORMANCE_LATEST_CSV', self.performance_csv))
+
+    def _runtime_file_candidates(self, env_var, *fallback_paths):
+        candidates = []
+        env_path = os.getenv(env_var)
+        if env_path:
+            candidates.append(env_path)
+        for path in fallback_paths:
+            if path and path not in candidates:
+                candidates.append(path)
+        return candidates
+
     def _load_config(self):
         config = {}
         # Read configuration from environment variables
         config_keys = [
-            'BLOCKCHAIN_NODE', 'DATA_VOL_TYPE', 'ACCOUNTS_VOL_TYPE',
+            'BLOCKCHAIN_NODE',
+            'CLOUD_PROVIDER', 'REPORT_CLOUD_PROVIDER', 'CLOUD_REGION', 'CLOUD_ZONE', 'MACHINE_TYPE',
+            'DEPLOYMENT_PLATFORM', 'DEPLOYMENT_MODE',
+            'NETWORK_INTERFACE',
+            'DATA_VOL_TYPE', 'DATA_VOL_SIZE', 'ACCOUNTS_VOL_TYPE', 'ACCOUNTS_VOL_SIZE',
             'NETWORK_MAX_BANDWIDTH_GBPS', 'ENA_MONITOR_ENABLED',
             'LEDGER_DEVICE', 'ACCOUNTS_DEVICE',
             'DATA_VOL_MAX_IOPS', 'DATA_VOL_MAX_THROUGHPUT',
@@ -1209,7 +1285,200 @@ class ReportGenerator:
             if value:
                 config[key] = value
         return config
-    
+
+    def _config_value(self, key, default='N/A'):
+        value = self.config.get(key) if hasattr(self, 'config') else None
+        if value is None or str(value).strip() == '':
+            return default
+        return str(value)
+
+    def _first_csv_value(self, df, column, default='N/A'):
+        if df is None or column not in df.columns or df[column].dropna().empty:
+            return default
+        value = df[column].dropna().iloc[0]
+        if value is None or str(value).strip() == '':
+            return default
+        return str(value)
+
+    def _env_item(self, label, value):
+        return f"""
+        <div class="env-item">
+            <span class="env-label">{html.escape(str(label))}</span>
+            <span class="env-value">{html.escape(str(value))}</span>
+        </div>
+        """
+
+    def _generate_environment_summary_section(self, df):
+        """Generate a concise first-screen environment summary."""
+        cloud_provider = self._config_value(
+            'REPORT_CLOUD_PROVIDER',
+            self._config_value('CLOUD_PROVIDER', self._first_csv_value(df, 'cloud_provider'))
+        )
+        cloud_region = self._config_value('CLOUD_REGION')
+        cloud_zone = self._config_value('CLOUD_ZONE')
+        machine_type = self._config_value('MACHINE_TYPE')
+        deployment_mode = self._config_value('DEPLOYMENT_MODE', self._config_value('DEPLOYMENT_PLATFORM'))
+        chain = self._config_value('BLOCKCHAIN_NODE', self._first_csv_value(df, 'blockchain_node', 'General'))
+        network_interface = self._config_value('NETWORK_INTERFACE')
+        network_bandwidth = self._config_value('NETWORK_MAX_BANDWIDTH_GBPS')
+        if network_bandwidth != 'N/A':
+            network_bandwidth = f"{network_bandwidth} Gbps"
+
+        data_storage = [
+            self._env_item(self.t['data_device'], self._config_value('LEDGER_DEVICE')),
+            self._env_item(self.t['data_volume_type'], self._config_value('DATA_VOL_TYPE')),
+            self._env_item(self.t['volume_size_gib'], self._config_value('DATA_VOL_SIZE')),
+            self._env_item(self.t['max_iops'], self._config_value('DATA_VOL_MAX_IOPS')),
+            self._env_item(self.t['max_throughput_mibs'], self._config_value('DATA_VOL_MAX_THROUGHPUT')),
+        ]
+        accounts_storage = [
+            self._env_item(self.t['accounts_device'], self._config_value('ACCOUNTS_DEVICE')),
+            self._env_item(self.t['accounts_volume_type'], self._config_value('ACCOUNTS_VOL_TYPE')),
+            self._env_item(self.t['volume_size_gib'], self._config_value('ACCOUNTS_VOL_SIZE')),
+            self._env_item(self.t['max_iops'], self._config_value('ACCOUNTS_VOL_MAX_IOPS')),
+            self._env_item(self.t['max_throughput_mibs'], self._config_value('ACCOUNTS_VOL_MAX_THROUGHPUT')),
+        ]
+
+        return f"""
+        <div class="section environment-section">
+            <h2>{self.t['run_environment']}</h2>
+            <div class="environment-grid">
+                <div class="environment-card">
+                    <h3>{self.t['cloud_and_machine']}</h3>
+                    {self._env_item(self.t['cloud_provider'], cloud_provider)}
+                    {self._env_item(self.t['cloud_region'], cloud_region)}
+                    {self._env_item(self.t['cloud_zone'], cloud_zone)}
+                    {self._env_item(self.t['machine_type'], machine_type)}
+                    {self._env_item(self.t['deployment_mode'], deployment_mode)}
+                    {self._env_item(self.t['blockchain_node_type'], chain)}
+                </div>
+                <div class="environment-card">
+                    <h3>{self.t['storage_profile']} - DATA</h3>
+                    {''.join(data_storage)}
+                </div>
+                <div class="environment-card">
+                    <h3>{self.t['storage_profile']} - ACCOUNTS</h3>
+                    {''.join(accounts_storage)}
+                </div>
+                <div class="environment-card">
+                    <h3>{self.t['network_profile']}</h3>
+                    {self._env_item(self.t['network_interface'], network_interface)}
+                    {self._env_item(self.t['network_bandwidth'], network_bandwidth)}
+                    {self._env_item('ENA', self._config_value('ENA_MONITOR_ENABLED'))}
+                </div>
+            </div>
+        </div>
+        """
+
+    def _quality_item(self, label, value, tone='neutral'):
+        return f"""
+        <div class="quality-item quality-{html.escape(str(tone))}">
+            <span class="quality-label">{html.escape(str(label))}</span>
+            <span class="quality-value">{html.escape(str(value))}</span>
+        </div>
+        """
+
+    def _count_valid_disk_samples(self, df):
+        if df is None or df.empty:
+            return 0
+        disk_cols = [
+            col for col in df.columns
+            if (col.startswith('data_') or col.startswith('accounts_'))
+            and (
+                col.endswith('_total_iops')
+                or col.endswith('_total_throughput_mibs')
+                or col.endswith('_util')
+                or col.endswith('_avg_await')
+            )
+        ]
+        if not disk_cols:
+            return 0
+        numeric = df[disk_cols].apply(pd.to_numeric, errors='coerce')
+        return int(numeric.notna().any(axis=1).sum())
+
+    def _read_proxy_record_count(self):
+        proxy_csv = next(
+            (path for path in self._runtime_file_candidates(
+                'PROXY_METHOD_CSV',
+                os.path.join(self.logs_dir, 'proxy_method.csv'),
+                os.path.join(self.output_dir, 'proxy_method.csv'),
+            ) if os.path.exists(path)),
+            None,
+        )
+        if not proxy_csv:
+            return 0, 0, 0
+        try:
+            from analysis.per_method_attribution import (
+                filter_proxy_records_by_methods,
+                read_proxy_csv,
+            )
+            records = list(read_proxy_csv(proxy_csv))
+            allowed_methods = self._load_configured_workload_methods()
+            workload_records = filter_proxy_records_by_methods(records, allowed_methods)
+            excluded = max(len(records) - len(workload_records), 0) if allowed_methods else 0
+            return len(records), len(workload_records), excluded
+        except Exception:
+            return 0, 0, 0
+
+    def _generate_data_quality_section(self, df):
+        """Summarize whether missing charts are caused by missing source data."""
+        monitor_samples = len(df) if df is not None else 0
+        active_qps_samples = 0
+        if df is not None and 'current_qps' in df.columns:
+            active_qps_samples = int((pd.to_numeric(df['current_qps'], errors='coerce').fillna(0) > 0).sum())
+        valid_disk_samples = self._count_valid_disk_samples(df)
+        proxy_records, workload_records, excluded_probe_records = self._read_proxy_record_count()
+
+        disk_tone = 'ok' if valid_disk_samples > 0 else 'warn'
+        proxy_tone = 'ok' if workload_records > 0 else 'warn'
+        qps_tone = 'ok' if active_qps_samples > 0 else 'warn'
+
+        return f"""
+        <div class="section data-quality-section">
+            <h2>{self.t['data_quality_summary']}</h2>
+            <div class="quality-grid">
+                {self._quality_item(self.t['monitor_samples'], monitor_samples, 'ok' if monitor_samples > 0 else 'warn')}
+                {self._quality_item(self.t['active_qps_samples'], active_qps_samples, qps_tone)}
+                {self._quality_item(self.t['valid_disk_samples'], valid_disk_samples, disk_tone)}
+                {self._quality_item(self.t['proxy_records'], proxy_records, 'ok' if proxy_records > 0 else 'warn')}
+                {self._quality_item(self.t['workload_rpc_records'], workload_records, proxy_tone)}
+                {self._quality_item(self.t['excluded_probe_records'], excluded_probe_records, 'neutral')}
+            </div>
+            <div class="quality-notes">
+                <p>{self.t['disk_data_note']}</p>
+                <p>{self.t['proxy_filter_note']}</p>
+            </div>
+        </div>
+        """
+
+    def _add_section_id(self, section_html, section_id):
+        """Attach a stable id to the first top-level section div."""
+        if not section_html or not str(section_html).strip():
+            return section_html
+        first_div = re.search(r'<div\b[^>]*\bclass="[^"]*\bsection\b[^"]*"[^>]*>', section_html)
+        if not first_div:
+            return section_html
+
+        opening = first_div.group(0)
+        if re.search(r'\bid=', opening):
+            updated = re.sub(r'\bid="[^"]*"', f'id="{section_id}"', opening, count=1)
+        else:
+            updated = opening.replace('<div', f'<div id="{section_id}"', 1)
+
+        return section_html[:first_div.start()] + updated + section_html[first_div.end():]
+
+    def _generate_report_nav(self, items):
+        links = []
+        for section_id, label, is_available in items:
+            if not is_available:
+                continue
+            links.append(
+                f'<a href="#{html.escape(section_id)}">{html.escape(str(label))}</a>'
+            )
+        if not links:
+            return ""
+        return f'<nav class="report-nav" aria-label="Report navigation">{"".join(links)}</nav>'
+
     def _load_bottleneck_data(self):
         """Load bottleneck detection data - enhanced fault tolerance"""
         # Default bottleneck data structure
@@ -1226,20 +1495,20 @@ class ReportGenerator:
             "last_check": datetime.now().isoformat(),
             "version": "1.0"
         }
-        
+
         # Try loading bottleneck data from multiple possible locations
         bottleneck_files = []
         if self.bottleneck_info:
             bottleneck_files.append(self.bottleneck_info)
-        
-        # Add default locations
+
         memory_share_dir = os.getenv('MEMORY_SHARE_DIR', '/tmp/blockchain_monitoring')
-        bottleneck_files.extend([
+        bottleneck_files.extend(self._runtime_file_candidates(
+            'BOTTLENECK_STATUS_FILE',
             os.path.join(memory_share_dir, "bottleneck_status.json"),
+            os.path.join(self.logs_dir, "bottleneck_status.json"),
             os.path.join(self.output_dir, "bottleneck_status.json"),
-            "logs/bottleneck_status.json"
-        ])
-        
+        ))
+
         for bottleneck_file in bottleneck_files:
             try:
                 if os.path.exists(bottleneck_file):
@@ -1251,11 +1520,11 @@ class ReportGenerator:
                             return data
                         else:
                             print(f"⚠️ Invalid bottleneck data format: {bottleneck_file}")
-                            
+
             except (json.JSONDecodeError, IOError) as e:
                 print(f"⚠️ Failed to load bottleneck data {bottleneck_file}: {e}")
                 continue
-        
+
         print(f"ℹ️ No valid bottleneck data file found, using default data")
         return default_data
 
@@ -1268,11 +1537,11 @@ class ReportGenerator:
                 self.overhead_csv = auto_discovered_file
                 print(f"✅ Auto-discovered monitoring overhead file: {os.path.basename(auto_discovered_file)}")
                 return self._load_from_overhead_csv()
-            
+
             # Method 2: Fallback, extract IOPS data from performance_csv
             if hasattr(self, 'performance_csv') and os.path.exists(self.performance_csv):
                 return self._extract_iops_from_performance_csv()
-            
+
             # Method 3: Last resort, return empty data
             return None
         except Exception as e:
@@ -1285,10 +1554,10 @@ class ReportGenerator:
             df = pd.read_csv(self.overhead_csv)
             if df.empty:
                 return None
-            
+
             # Record sample count
             sample_count = len(df)
-                
+
             # Define required fields and their possible variants
             field_mappings = {
                 # Monitoring process resources
@@ -1296,28 +1565,28 @@ class ReportGenerator:
                 'monitoring_memory_percent': ['monitoring_memory_percent', 'monitor_memory_percent'],
                 'monitoring_memory_mb': ['monitoring_memory_mb', 'monitor_memory', 'overhead_memory'],
                 'monitoring_process_count': ['monitoring_process_count', 'process_count', 'monitor_processes'],
-                
+
                 # Blockchain node resources
                 'blockchain_cpu_sum': ['blockchain_cpu'],  # Multi-process CPU sum (can be >100%)
                 'blockchain_cpu_percent': ['blockchain_cpu_percent'],  # System-wide CPU percentage
                 'blockchain_memory_percent': ['blockchain_memory_percent'],
                 'blockchain_memory_mb': ['blockchain_memory_mb', 'blockchain_memory'],
                 'blockchain_process_count': ['blockchain_process_count'],
-                
+
                 # System static resources
                 'system_cpu_cores': ['system_cpu_cores', 'cpu_cores'],
                 'system_memory_gb': ['system_memory_gb', 'memory_gb'],
                 'system_disk_gb': ['system_disk_gb', 'disk_gb'],
-                
+
                 # System dynamic resources
                 'system_cpu_usage': ['system_cpu_usage', 'cpu_usage'],
                 'system_memory_usage': ['system_memory_usage', 'memory_usage'],
                 'system_disk_usage': ['system_disk_usage', 'disk_usage'],
-                
+
                 'monitoring_iops': ['monitoring_iops', 'monitor_iops', 'overhead_iops'],
                 'monitoring_throughput_mibs': ['monitoring_throughput_mibs', 'monitor_throughput', 'overhead_throughput']
             }
-            
+
             # Try to find matching fields
             data: Dict[str, Union[int, float]] = {'sample_count': sample_count}
             for target_field, possible_fields in field_mappings.items():
@@ -1330,28 +1599,28 @@ class ReportGenerator:
                         if 'percent' in target_field or 'usage' in target_field:
                             data[f'{target_field}_p90'] = df[field].quantile(0.9)
                         break
-            
+
             # Convert blockchain_cpu_sum to system-wide percentage if needed
             if 'blockchain_cpu_sum_avg' in data and 'system_cpu_cores_avg' in data and data['system_cpu_cores_avg'] > 0:
                 # blockchain_cpu_sum is multi-process CPU sum (can be >100%)
                 # Convert to system-wide percentage: (sum / cores) = percentage
                 data['blockchain_cpu_percent_avg'] = data['blockchain_cpu_sum_avg'] / data['system_cpu_cores_avg']
                 data['blockchain_cpu_percent_max'] = data.get('blockchain_cpu_sum_max', 0) / data['system_cpu_cores_avg']
-            
+
             # Calculate monitoring overhead ratio
             if 'monitoring_cpu_percent_avg' in data and 'system_cpu_usage_avg' in data and data['system_cpu_usage_avg'] > 0:
                 data['monitoring_cpu_ratio'] = data['monitoring_cpu_percent_avg'] / data['system_cpu_usage_avg']
-            
+
             if 'monitoring_memory_percent_avg' in data and 'system_memory_usage_avg' in data and data['system_memory_usage_avg'] > 0:
                 data['monitoring_memory_ratio'] = data['monitoring_memory_percent_avg'] / data['system_memory_usage_avg']
-            
+
             # Calculate blockchain node ratio
             if 'blockchain_cpu_percent_avg' in data and 'system_cpu_usage_avg' in data and data['system_cpu_usage_avg'] > 0:
                 data['blockchain_cpu_ratio'] = data['blockchain_cpu_percent_avg'] / data['system_cpu_usage_avg']
-            
+
             if 'blockchain_memory_percent_avg' in data and 'system_memory_usage_avg' in data and data['system_memory_usage_avg'] > 0:
                 data['blockchain_memory_ratio'] = data['blockchain_memory_percent_avg'] / data['system_memory_usage_avg']
-                        
+
             return data
         except Exception as e:
             print(f"Error loading from overhead CSV: {e}")
@@ -1360,21 +1629,18 @@ class ReportGenerator:
     def _find_latest_monitoring_overhead_file(self):
         """Auto-discover the latest monitoring overhead file"""
         try:
-            
-            # Get logs directory path - use environment variable or current/logs structure
-            logs_dir = os.getenv('LOGS_DIR', os.path.join(self.output_dir, 'current', 'logs'))
-            
+
             # Search for monitoring overhead files
-            pattern = os.path.join(logs_dir, 'monitoring_overhead_*.csv')
+            pattern = os.path.join(self.logs_dir, 'monitoring_overhead_*.csv')
             files = glob.glob(pattern)
-            
+
             if not files:
                 return None
-            
+
             # Return the latest file (sorted by creation time, consistent with comprehensive_analysis.py)
             latest_file = max(files, key=os.path.getctime)
             return latest_file
-            
+
         except Exception as e:
             print(f"Warning: Failed to find monitoring overhead file: {e}")
             return None
@@ -1384,67 +1650,67 @@ class ReportGenerator:
         try:
             df = pd.read_csv(self.performance_csv)
             data = {}
-            
+
             # Extract IOPS data
             if 'monitoring_iops_per_sec' in df.columns:
                 iops_data = pd.to_numeric(df['monitoring_iops_per_sec'], errors='coerce').dropna()
                 if not iops_data.empty:
                     data['monitoring_iops_avg'] = iops_data.mean()
                     data['monitoring_iops_max'] = iops_data.max()
-            
+
             # Extract throughput data
             if 'monitoring_throughput_mibs_per_sec' in df.columns:
                 throughput_data = pd.to_numeric(df['monitoring_throughput_mibs_per_sec'], errors='coerce').dropna()
                 if not throughput_data.empty:
                     data['monitoring_throughput_mibs_avg'] = throughput_data.mean()
                     data['monitoring_throughput_mibs_max'] = throughput_data.max()
-            
+
             return data if data else None
-            
+
         except Exception as e:
             # Log error but don't affect main functionality
             print(f"Warning: Failed to extract IOPS data from performance CSV: {e}")
             return None
-    
+
     def _validate_overhead_csv_format(self):
         """Validate monitoring overhead CSV format"""
         if not self.overhead_csv:
             print("⚠️ Monitoring overhead CSV file not specified")
             return False
-            
+
         if not os.path.exists(self.overhead_csv):
             print(f"⚠️ Monitoring overhead CSV file does not exist: {self.overhead_csv}")
             return False
-        
+
         try:
             with open(self.overhead_csv, 'r') as f:
                 header = f.readline().strip()
                 if not header:
                     print("⚠️ Monitoring overhead CSV file missing header")
                     return False
-                
+
                 field_count = len(header.split(','))
                 expected_fields = 20  # Based on configured field count
-                
+
                 if field_count < 10:  # Should have at least 10 basic fields
                     print(f"⚠️ Monitoring overhead CSV has too few fields, expected at least 10, got {field_count}")
                     return False
                 elif field_count != expected_fields:
                     print(f"ℹ️ Monitoring overhead CSV field count: {field_count} (expected {expected_fields})")
-                
+
                 # Check if there are data rows
                 data_line = f.readline().strip()
                 if not data_line:
                     print("⚠️ Monitoring overhead CSV file has no data rows")
                     return False
-                    
+
                 print(f"✅ Monitoring overhead CSV format validation passed: {field_count} fields")
                 return True
-                
+
         except Exception as e:
             print(f"❌ CSV format validation failed: {e}")
             return False
-    
+
     def validate_data_integrity(self):
         """Validate data integrity"""
         validation_results = {
@@ -1453,7 +1719,7 @@ class ReportGenerator:
             'bottleneck_data': False,
             'config': False
         }
-        
+
         # Validate performance CSV
         if os.path.exists(self.performance_csv):
             try:
@@ -1467,10 +1733,10 @@ class ReportGenerator:
                 print(f"❌ Performance CSV validation failed: {e}")
         else:
             print(f"❌ Performance CSV file does not exist: {self.performance_csv}")
-        
+
         # Validate overhead CSV
         validation_results['overhead_csv'] = self._validate_overhead_csv_format()
-        
+
         # Validate bottleneck data
         if self.bottleneck_data and isinstance(self.bottleneck_data, dict):
             # Support both new format (bottleneck_detected) and old format (bottlenecks)
@@ -1482,7 +1748,7 @@ class ReportGenerator:
         else:
             print("ℹ️ Using default bottleneck data")
             validation_results['bottleneck_data'] = True  # Default data also counts as passed
-        
+
         # Validate configuration
         if self.config and isinstance(self.config, dict) and len(self.config) > 0:
             validation_results['config'] = True
@@ -1490,59 +1756,59 @@ class ReportGenerator:
         else:
             validation_results['config'] = False
             print("ℹ️ Configuration data incomplete (does not affect core functionality)")
-        
+
         # Output validation summary
         passed = sum(validation_results.values())
         total = len(validation_results)
         print(f"\n📊 Data integrity validation results: {passed}/{total} items passed")
-        
+
         return validation_results
-    
+
     def parse_disk_analyzer_log(self):
         """Parse Disk bottleneck detector log file"""
         warnings = []
         performance_metrics = {}
-        
+
         if not os.path.exists(self.disk_log_path):
             return warnings, performance_metrics
-        
+
         try:
             with open(self.disk_log_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
                 i = 0
                 while i < len(lines):
                     line = lines[i].strip()
-                    
-                    # Parse bottleneck warning: ⚠️  [时间] Disk BOTTLENECK DETECTED: 设备 - 类型, (Severity: 级别)
+
+                    # Parse bottleneck warning: [time] Disk BOTTLENECK DETECTED: device - type, (Severity: level)
                     if '⚠️' in line and 'Disk BOTTLENECK DETECTED' in line:
                         try:
                             # Extract timestamp
                             timestamp = line.split('[')[1].split(']')[0] if '[' in line and ']' in line else ''
-                            
+
                             # Extract device and type: "nvme2n1 - IOPS"
                             main_part = line.split('Disk BOTTLENECK DETECTED:')[1].split('(Severity:')[0].strip()
                             device = main_part.split('-')[0].strip()
                             bottleneck_type = main_part.split('-')[1].strip().rstrip(',')
-                            
+
                             # Extract severity
                             severity = line.split('Severity:')[1].split(')')[0].strip()
-                            
+
                             # Read next line for detailed metrics
                             if i + 1 < len(lines):
                                 detail_line = lines[i + 1].strip()
                                 iops_value = ''
                                 throughput_value = ''
-                                
+
                                 # Extract IOPS: "IOPS: 29788.00/30000 (99%)"
                                 if 'IOPS:' in detail_line:
                                     iops_part = detail_line.split('IOPS:')[1].split(',')[0].strip()
                                     iops_value = iops_part.split('/')[0].strip()
-                                
+
                                 # Extract Throughput: "Throughput: 2779.61/4000.00 MiB/s (69%)"
                                 if 'Throughput:' in detail_line:
                                     throughput_part = detail_line.split('Throughput:')[1].strip()
                                     throughput_value = throughput_part.split('/')[0].strip()
-                                
+
                                 # Determine value based on bottleneck type
                                 if bottleneck_type == 'IOPS':
                                     value = iops_value
@@ -1553,7 +1819,7 @@ class ReportGenerator:
                                 else:
                                     value = iops_value
                                     type_label = 'High Utilization'
-                                
+
                                 warnings.append({
                                     'type': type_label,
                                     'device': device,
@@ -1565,42 +1831,42 @@ class ReportGenerator:
                                 })
                         except (IndexError, ValueError) as e:
                             pass
-                    
+
                     i += 1
-        
+
         except Exception as e:
             print(f"⚠️ Error parsing Disk log: {e}")
-        
+
         return warnings, performance_metrics
-    
+
     def _calculate_data_completeness(self):
         """Calculate monitoring data completeness - file exists, has data, fields complete = 100%"""
         try:
             # Check performance CSV file
             if not os.path.exists(self.performance_csv):
                 return 0.0
-            
+
             perf_df = pd.read_csv(self.performance_csv)
-            
+
             # Check if there are data rows
             if len(perf_df) == 0:
                 return 0.0
-            
+
             # Check if key fields exist (field completeness)
             required_fields = ['timestamp', 'cpu_usage', 'mem_usage']
             missing_fields = [f for f in required_fields if f not in perf_df.columns]
-            
+
             if missing_fields:
                 # Has missing fields, calculate partial completeness
                 return (len(required_fields) - len(missing_fields)) / len(required_fields) * 100
-            
+
             # File exists + has data + fields complete = 100%
             return 100.0
-            
+
         except Exception as e:
             print(f"⚠️ Error calculating data completeness: {e}")
             return 0.0
-    
+
     def _format_monitoring_io(self, value, metric_type='iops'):
         """Format monitoring IO value, display tiny values"""
         if value == 0:
@@ -1611,7 +1877,7 @@ class ReportGenerator:
             return f"{value:.2f}"
         else:
             return f"{value:.4f}"
-    
+
     def _format_stat_value(self, value, decimal=0):
         """Format statistical value"""
         if isinstance(value, (int, float)):
@@ -1623,9 +1889,10 @@ class ReportGenerator:
 
     @staticmethod
     def _provider_from_df(df):
-        """铁律: provider 从 CSV cloud_provider 列取 (不猜不硬编码).
+        """Provider is read from the CSV cloud_provider column; do not guess or hardcode it.
 
-        cloud_provider 列缺失或为空时回退 'other' (registry 对未知 provider 用中性 normalized 前缀).
+        Missing or empty cloud_provider falls back to 'other'; the registry uses
+        the neutral normalized prefix for unknown providers.
         """
         if df is not None and 'cloud_provider' in df.columns and not df['cloud_provider'].empty:
             val = df['cloud_provider'].dropna()
@@ -1637,19 +1904,20 @@ class ReportGenerator:
 
     @classmethod
     def _resolve_disk_columns(cls, df, device_prefix, logical_name):
-        """经 CSV Schema Registry 解析 provider_aware disk 列, 返回匹配的物理列名列表.
+        """Resolve provider-aware disk columns through CSVSchemaRegistry.
 
-        物理列形如 '<device_prefix>_<dev>_<dfp>_<suffix>' (dev 为运行时设备名, 动态).
-        registry.resolve(logical_name, provider, '') 产出 '_<dfp>_<suffix>' 后缀
-        (模板 {prefix} 替换为空), 用该后缀做精确匹配 — 不保留任何 aws_standard 字面量.
+        Physical columns look like '<device_prefix>_<dev>_<dfp>_<suffix>', where
+        dev is the runtime device name. registry.resolve(logical_name, provider,
+        '') returns the suffix used for exact matching, without retaining
+        provider-specific literals.
 
-        device_prefix: 'data' 或 'accounts'.
-        logical_name : 'disk_iops_provider_adjusted' 或 'disk_throughput_provider_adjusted'.
+        device_prefix: 'data' or 'accounts'.
+        logical_name : 'disk_iops_provider_adjusted' or 'disk_throughput_provider_adjusted'.
         """
         if df is None:
             return []
         provider = cls._provider_from_df(df)
-        # 后缀来自 registry: prefix='' -> '_{dfp}_iops' / '_{dfp}_throughput_mibs'
+        # Suffix comes from registry: prefix='' -> '_{dfp}_iops' / '_{dfp}_throughput_mibs'.
         suffix = CSVSchemaRegistry.resolve(logical_name, provider, '')
         prefix = f'{device_prefix}_'
         return [col for col in df.columns if col.startswith(prefix) and col.endswith(suffix)]
@@ -1658,21 +1926,21 @@ class ReportGenerator:
         """Generate Disk analysis report HTML section - enhanced version with dual-layer statistics"""
         if not warnings and not performance_metrics:
             return ""
-        
+
         # Read CSV data to calculate statistics
         try:
             df = pd.read_csv(self.performance_csv)
         except:
             df = None
-        
+
         html = f"""
         <div class="section">
             <h2>&#128202; {self.t['disk_performance_analysis']}</h2>
-            
+
             <div class="subsection">
                 <h3>&#9888; {self.t['performance_warnings']}</h3>
         """
-        
+
         if warnings:
             # Generate statistics summary
             summary = {}
@@ -1691,58 +1959,58 @@ class ReportGenerator:
                 except:
                     pass
                 summary[key]['last_time'] = w['timestamp']
-            
+
             # Display summary table
             html += f'''
-            <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 15px; margin: 15px 0;">
-                <h4 style="margin-top: 0; color: #856404;">&#128202; {self.t.get('warning_statistics', 'Warning Statistics')}</h4>
-                <table style="width: 100%; border-collapse: collapse;">
+            <div class="status-callout status-callout-warning">
+                <h4>&#128202; {self.t.get('warning_statistics', 'Warning Statistics')}</h4>
+                <table class="report-table disk-warning-table">
                     <thead>
-                        <tr style="background: #ffc107;">
-                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('device', 'Device')}</th>
-                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('type', 'Type')}</th>
-                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('count', 'Count')}</th>
-                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('max_value', 'Max Value')}</th>
-                            <th style="padding: 8px; border: 1px solid #ddd;">{self.t.get('time_range', 'Time Range')}</th>
+                        <tr>
+                            <th>{self.t.get('device', 'Device')}</th>
+                            <th>{self.t.get('type', 'Type')}</th>
+                            <th>{self.t.get('count', 'Count')}</th>
+                            <th>{self.t.get('max_value', 'Max Value')}</th>
+                            <th>{self.t.get('time_range', 'Time Range')}</th>
                         </tr>
                     </thead>
                     <tbody>
             '''
-            
+
             for (device, type_label), stats in summary.items():
                 html += f'''
                         <tr>
-                            <td style="padding: 8px; border: 1px solid #ddd;"><strong>{device}</strong></td>
-                            <td style="padding: 8px; border: 1px solid #ddd;">{type_label}</td>
-                            <td style="padding: 8px; border: 1px solid #ddd; text-align: center;"><strong style="color: #dc3545;">{stats['count']}</strong></td>
-                            <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">{stats['max_value']:.2f}</td>
-                            <td style="padding: 8px; border: 1px solid #ddd; font-size: 0.9em;">{stats['first_time']} - {stats['last_time']}</td>
+                            <td><strong>{device}</strong></td>
+                            <td>{type_label}</td>
+                            <td class="numeric-cell metric-value">{stats['count']}</td>
+                            <td class="numeric-cell">{stats['max_value']:.2f}</td>
+                            <td class="muted-cell">{stats['first_time']} - {stats['last_time']}</td>
                         </tr>
                 '''
-            
+
             html += '''
                     </tbody>
                 </table>
-                <p style="margin: 10px 0 0 0; font-size: 0.9em; color: #856404;">
+                <p class="table-note">
                     &#128202; {tip_text}
                 </p>
             </div>
-            '''.format(tip_text=self.t.get('refer_to_disk_charts_hint', 
-                '💡 提示：警告的时间分布可在下方"Disk 专业图表"部分查看 → 点击"Disk 瓶颈分析"和"Disk 时间序列分析"图表' if self.language == 'zh' 
+            '''.format(tip_text=self.t.get('refer_to_disk_charts_hint',
+                '💡 提示：警告的时间分布可在下方"Disk 专业图表"部分查看 → 点击"Disk 瓶颈分析"和"Disk 时间序列分析"图表' if self.language == 'zh'
                 else '💡 Tip: View warning time distribution in "Disk Professional Charts" section below → Click "Disk Bottleneck Analysis" and "Disk Time Series Analysis" charts'))
-            
+
             # Display detailed list (Top 20) as table
             display_warnings = warnings[:20]
             html += f'<h4>{self.t.get("detailed_warnings", "Detailed Warnings")} ({"Top 20" if len(warnings) > 20 else "All"} / {len(warnings)})</h4>'
             html += '''
-            <table style="width: 100%; border-collapse: collapse; margin: 15px 0; background: white;">
+            <table class="report-table disk-warning-table">
                 <thead>
-                    <tr style="background: #f8f9fa;">
-                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">#</th>
-                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">{device}</th>
-                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">{type}</th>
-                        <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">{value}</th>
-                        <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">{time}</th>
+                    <tr>
+                        <th>#</th>
+                        <th>{device}</th>
+                        <th>{type}</th>
+                        <th class="numeric-cell">{value}</th>
+                        <th>{time}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1752,81 +2020,81 @@ class ReportGenerator:
                 value=self.t.get('value', 'Value'),
                 time=self.t.get('time', 'Time')
             )
-            
+
             for idx, warning in enumerate(display_warnings, 1):
                 color = "#dc3545" if warning['type'] == 'High Utilization' else "#fd7e14"
                 unit = "%" if warning['type'] == 'High Utilization' else ""
                 html += f'''
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 8px; border: 1px solid #ddd; color: #999;">{idx}</td>
-                    <td style="padding: 8px; border: 1px solid #ddd;"><strong>{warning['device']}</strong></td>
-                    <td style="padding: 8px; border: 1px solid #ddd; color: {color};">{warning['type']}</td>
-                    <td style="padding: 8px; border: 1px solid #ddd; text-align: right;"><strong>{warning['value']}{unit}</strong></td>
-                    <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 0.9em;">{warning.get('data_time', warning['timestamp'])}</td>
+                <tr>
+                    <td class="muted-cell">{idx}</td>
+                    <td><strong>{warning['device']}</strong></td>
+                    <td><span class="status-pill status-warn">{warning['type']}</span></td>
+                    <td class="numeric-cell metric-value">{warning['value']}{unit}</td>
+                    <td class="muted-cell">{warning.get('data_time', warning['timestamp'])}</td>
                 </tr>
                 '''
-            
+
             html += '</tbody></table>'
-            
+
             if len(warnings) > 20:
                 html += f'<p style="color: #6c757d; font-style: italic; margin-top: 10px;">... {self.t.get("and", "and")} {len(warnings) - 20} {self.t.get("more_warnings", "more warnings")}. {self.t.get("check_full_log", "Check full log for details")}: <code>{self.disk_log_path}</code></p>'
         else:
             html += f'<p style="color: #28a745; font-weight: bold;">&#9989; {self.t["no_performance_anomaly"]}</p>'
-        
+
         html += '</div>'
-        
-        # Layer 1: disk baseline data statistics (通用磁盘基准, 不分云)
+
+        # Layer 1: provider-neutral disk baseline statistics.
         html += f'''
             <div class="subsection">
                 <h3>&#128200; {self.t['disk_baseline_stats']}</h3>
         '''
-        
+
         if df is not None and not df.empty:
             # Get configured baseline values
             data_max_iops = self.config.get('DATA_VOL_MAX_IOPS', 'N/A')
             data_max_throughput = self.config.get('DATA_VOL_MAX_THROUGHPUT', 'N/A')
             accounts_max_iops = self.config.get('ACCOUNTS_VOL_MAX_IOPS', 'N/A')
             accounts_max_throughput = self.config.get('ACCOUNTS_VOL_MAX_THROUGHPUT', 'N/A')
-            
+
             # Calculate actual usage statistics
             stats_data = {}
-            
-            # DATA Device provider-adjusted fields (经 registry 解析, 不认 aws_standard 字面量)
+
+            # DATA device provider-adjusted fields resolved through the registry.
             data_iops_col = self._resolve_disk_columns(df, 'data', 'disk_iops_provider_adjusted')
             data_throughput_col = self._resolve_disk_columns(df, 'data', 'disk_throughput_provider_adjusted')
-            
+
             if data_iops_col:
                 # Filter out noise values (< 10 IOPS) for Min calculation
                 meaningful_data = df[df[data_iops_col[0]] >= 10][data_iops_col[0]]
                 stats_data['DATA_IOPS_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                 stats_data['DATA_IOPS_Max'] = df[data_iops_col[0]].max()
                 stats_data['DATA_IOPS_Avg'] = df[data_iops_col[0]].mean()
-            
+
             if data_throughput_col:
                 # Filter out noise values (< 1.0 MiB/s) for Min calculation
                 meaningful_data = df[df[data_throughput_col[0]] >= 1.0][data_throughput_col[0]]
                 stats_data['DATA_Throughput_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                 stats_data['DATA_Throughput_Max'] = df[data_throughput_col[0]].max()
                 stats_data['DATA_Throughput_Avg'] = df[data_throughput_col[0]].mean()
-            
-            # ACCOUNTS Device provider-adjusted fields (经 registry 解析, 不认 aws_standard 字面量)
+
+            # ACCOUNTS device provider-adjusted fields resolved through the registry.
             accounts_iops_col = self._resolve_disk_columns(df, 'accounts', 'disk_iops_provider_adjusted')
             accounts_throughput_col = self._resolve_disk_columns(df, 'accounts', 'disk_throughput_provider_adjusted')
-            
+
             if accounts_iops_col:
                 # Filter out noise values (< 10 IOPS) for Min calculation
                 meaningful_data = df[df[accounts_iops_col[0]] >= 10][accounts_iops_col[0]]
                 stats_data['ACCOUNTS_IOPS_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                 stats_data['ACCOUNTS_IOPS_Max'] = df[accounts_iops_col[0]].max()
                 stats_data['ACCOUNTS_IOPS_Avg'] = df[accounts_iops_col[0]].mean()
-            
+
             if accounts_throughput_col:
                 # Filter out noise values (< 1.0 MiB/s) for Min calculation
                 meaningful_data = df[df[accounts_throughput_col[0]] >= 1.0][accounts_throughput_col[0]]
                 stats_data['ACCOUNTS_Throughput_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                 stats_data['ACCOUNTS_Throughput_Max'] = df[accounts_throughput_col[0]].max()
                 stats_data['ACCOUNTS_Throughput_Avg'] = df[accounts_throughput_col[0]].mean()
-            
+
             # Format values
             data_iops_min = self._format_stat_value(stats_data.get('DATA_IOPS_Min'), 0)
             data_iops_avg = self._format_stat_value(stats_data.get('DATA_IOPS_Avg'), 0)
@@ -1834,37 +2102,37 @@ class ReportGenerator:
             data_tp_min = self._format_stat_value(stats_data.get('DATA_Throughput_Min'), 1)
             data_tp_avg = self._format_stat_value(stats_data.get('DATA_Throughput_Avg'), 1)
             data_tp_max = self._format_stat_value(stats_data.get('DATA_Throughput_Max'), 1)
-            
+
             html += f'''
-                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
+                <table class="report-table disk-stats-table">
                     <thead>
                         <tr>
-                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['device']}</th>
-                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
-                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['baseline_config']}</th>
-                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['min']}</th>
-                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['avg']}</th>
-                            <th style="background: #E67E22; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['max']}</th>
+                            <th>{self.t['device']}</th>
+                            <th>{self.t['metric']}</th>
+                            <th>{self.t['baseline_config']}</th>
+                            <th>{self.t['min']}</th>
+                            <th>{self.t['avg']}</th>
+                            <th>{self.t['max']}</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td rowspan="2" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{self.t['data_device']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['iops']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_max_iops}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_iops_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_iops_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_iops_max}</td>
+                            <td rowspan="2" class="row-group-label">{self.t['data_device']}</td>
+                            <td>{self.t['iops']}</td>
+                            <td class="numeric-cell">{data_max_iops}</td>
+                            <td class="numeric-cell">{data_iops_min}</td>
+                            <td class="numeric-cell metric-value">{data_iops_avg}</td>
+                            <td class="numeric-cell">{data_iops_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['throughput_mibs']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_max_throughput}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_tp_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_tp_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{data_tp_max}</td>
+                            <td>{self.t['throughput_mibs']}</td>
+                            <td class="numeric-cell">{data_max_throughput}</td>
+                            <td class="numeric-cell">{data_tp_min}</td>
+                            <td class="numeric-cell metric-value">{data_tp_avg}</td>
+                            <td class="numeric-cell">{data_tp_max}</td>
                         </tr>
             '''
-            
+
             # If ACCOUNTS device data exists, add ACCOUNTS rows
             if accounts_iops_col or accounts_throughput_col:
                 acc_iops_min = self._format_stat_value(stats_data.get('ACCOUNTS_IOPS_Min'), 0)
@@ -1873,43 +2141,43 @@ class ReportGenerator:
                 acc_tp_min = self._format_stat_value(stats_data.get('ACCOUNTS_Throughput_Min'), 1)
                 acc_tp_avg = self._format_stat_value(stats_data.get('ACCOUNTS_Throughput_Avg'), 1)
                 acc_tp_max = self._format_stat_value(stats_data.get('ACCOUNTS_Throughput_Max'), 1)
-                
+
                 html += f'''
                         <tr>
-                            <td rowspan="2" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{self.t['accounts_device']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['iops']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{accounts_max_iops}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{acc_iops_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{acc_iops_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{acc_iops_max}</td>
+                            <td rowspan="2" class="row-group-label">{self.t['accounts_device']}</td>
+                            <td>{self.t['iops']}</td>
+                            <td class="numeric-cell">{accounts_max_iops}</td>
+                            <td class="numeric-cell">{acc_iops_min}</td>
+                            <td class="numeric-cell metric-value">{acc_iops_avg}</td>
+                            <td class="numeric-cell">{acc_iops_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['throughput_mibs']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{accounts_max_throughput}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{acc_tp_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{acc_tp_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{acc_tp_max}</td>
+                            <td>{self.t['throughput_mibs']}</td>
+                            <td class="numeric-cell">{accounts_max_throughput}</td>
+                            <td class="numeric-cell">{acc_tp_min}</td>
+                            <td class="numeric-cell metric-value">{acc_tp_avg}</td>
+                            <td class="numeric-cell">{acc_tp_max}</td>
                         </tr>
                 '''
-            
+
             html += '''
                     </tbody>
                 </table>
             '''
         else:
             html += f'<p style="color: #6c757d;">{self.t["no_disk_baseline"]}</p>'
-        
+
         html += '</div>'
-        
+
         # Second layer: iostat raw sampling data statistics
         html += f'''
             <div class="subsection">
                 <h3>&#128200; {self.t["iostat_raw_sampling_stats"]}</h3>
         '''
-        
+
         if df is not None and not df.empty:
             iostat_stats = {}
-            
+
             # DATA Device iostat fields
             for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
                 data_col = [col for col in df.columns if col.startswith('data_') and col.endswith(f'_{metric}')]
@@ -1925,11 +2193,11 @@ class ReportGenerator:
                         meaningful_data = df[df[data_col[0]] >= 0.1][data_col[0]]  # >= 0.1 ms
                     else:
                         meaningful_data = df[df[data_col[0]] > 0][data_col[0]]
-                    
+
                     iostat_stats[f'DATA_{metric}_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                     iostat_stats[f'DATA_{metric}_Max'] = df[data_col[0]].max()
                     iostat_stats[f'DATA_{metric}_Avg'] = df[data_col[0]].mean()
-            
+
             # ACCOUNTS Device iostat fields
             for metric in ['total_iops', 'total_throughput_mibs', 'util', 'avg_await']:
                 accounts_col = [col for col in df.columns if col.startswith('accounts_') and col.endswith(f'_{metric}')]
@@ -1945,25 +2213,25 @@ class ReportGenerator:
                         meaningful_data = df[df[accounts_col[0]] >= 0.1][accounts_col[0]]  # >= 0.1 ms
                     else:
                         meaningful_data = df[df[accounts_col[0]] > 0][accounts_col[0]]
-                    
+
                     iostat_stats[f'ACCOUNTS_{metric}_Min'] = meaningful_data.min() if len(meaningful_data) > 0 else 0
                     iostat_stats[f'ACCOUNTS_{metric}_Max'] = df[accounts_col[0]].max()
                     iostat_stats[f'ACCOUNTS_{metric}_Avg'] = df[accounts_col[0]].mean()
-            
+
             html += f'''
-                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
+                <table class="report-table disk-stats-table">
                     <thead>
                         <tr>
-                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['device']}</th>
-                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
-                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['min']}</th>
-                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['avg']}</th>
-                            <th style="background: #D35400; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['max']}</th>
+                            <th>{self.t['device']}</th>
+                            <th>{self.t['metric']}</th>
+                            <th>{self.t['min']}</th>
+                            <th>{self.t['avg']}</th>
+                            <th>{self.t['max']}</th>
                         </tr>
                     </thead>
                     <tbody>
             '''
-            
+
             # DATA Device data
             if any(k.startswith('DATA_') for k in iostat_stats.keys()):
                 d_iops_min = self._format_stat_value(iostat_stats.get('DATA_total_iops_Min'), 0)
@@ -1978,35 +2246,35 @@ class ReportGenerator:
                 d_lat_min = self._format_stat_value(iostat_stats.get('DATA_avg_await_Min'), 2)
                 d_lat_avg = self._format_stat_value(iostat_stats.get('DATA_avg_await_Avg'), 2)
                 d_lat_max = self._format_stat_value(iostat_stats.get('DATA_avg_await_Max'), 2)
-                
+
                 html += f'''
                         <tr>
-                            <td rowspan="4" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{self.t['data_device']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['iops']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_iops_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_iops_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_iops_max}</td>
+                            <td rowspan="4" class="row-group-label">{self.t['data_device']}</td>
+                            <td>{self.t['iops']}</td>
+                            <td class="numeric-cell">{d_iops_min}</td>
+                            <td class="numeric-cell metric-value">{d_iops_avg}</td>
+                            <td class="numeric-cell">{d_iops_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['throughput_mibs']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_tp_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_tp_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_tp_max}</td>
+                            <td>{self.t['throughput_mibs']}</td>
+                            <td class="numeric-cell">{d_tp_min}</td>
+                            <td class="numeric-cell metric-value">{d_tp_avg}</td>
+                            <td class="numeric-cell">{d_tp_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['utilization_pct']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_util_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_util_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_util_max}</td>
+                            <td>{self.t['utilization_pct']}</td>
+                            <td class="numeric-cell">{d_util_min}</td>
+                            <td class="numeric-cell metric-value">{d_util_avg}</td>
+                            <td class="numeric-cell">{d_util_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['latency_ms']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_lat_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_lat_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{d_lat_max}</td>
+                            <td>{self.t['latency_ms']}</td>
+                            <td class="numeric-cell">{d_lat_min}</td>
+                            <td class="numeric-cell metric-value">{d_lat_avg}</td>
+                            <td class="numeric-cell">{d_lat_max}</td>
                         </tr>
                 '''
-            
+
             # ACCOUNTS Device data
             if any(k.startswith('ACCOUNTS_') for k in iostat_stats.keys()):
                 a_iops_min = self._format_stat_value(iostat_stats.get('ACCOUNTS_total_iops_Min'), 0)
@@ -2021,142 +2289,144 @@ class ReportGenerator:
                 a_lat_min = self._format_stat_value(iostat_stats.get('ACCOUNTS_avg_await_Min'), 2)
                 a_lat_avg = self._format_stat_value(iostat_stats.get('ACCOUNTS_avg_await_Avg'), 2)
                 a_lat_max = self._format_stat_value(iostat_stats.get('ACCOUNTS_avg_await_Max'), 2)
-                
+
                 html += f'''
                         <tr>
-                            <td rowspan="4" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{self.t['accounts_device']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['iops']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_iops_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_iops_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_iops_max}</td>
+                            <td rowspan="4" class="row-group-label">{self.t['accounts_device']}</td>
+                            <td>{self.t['iops']}</td>
+                            <td class="numeric-cell">{a_iops_min}</td>
+                            <td class="numeric-cell metric-value">{a_iops_avg}</td>
+                            <td class="numeric-cell">{a_iops_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['throughput_mibs']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_tp_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_tp_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_tp_max}</td>
+                            <td>{self.t['throughput_mibs']}</td>
+                            <td class="numeric-cell">{a_tp_min}</td>
+                            <td class="numeric-cell metric-value">{a_tp_avg}</td>
+                            <td class="numeric-cell">{a_tp_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['utilization_pct']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_util_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_util_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_util_max}</td>
+                            <td>{self.t['utilization_pct']}</td>
+                            <td class="numeric-cell">{a_util_min}</td>
+                            <td class="numeric-cell metric-value">{a_util_avg}</td>
+                            <td class="numeric-cell">{a_util_max}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{self.t['latency_ms']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_lat_min}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_lat_avg}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{a_lat_max}</td>
+                            <td>{self.t['latency_ms']}</td>
+                            <td class="numeric-cell">{a_lat_min}</td>
+                            <td class="numeric-cell metric-value">{a_lat_avg}</td>
+                            <td class="numeric-cell">{a_lat_max}</td>
                         </tr>
                 '''
-            
+
             html += '''
                     </tbody>
                 </table>
             '''
         else:
             html += f'<p style="color: #6c757d;">{self.t["no_iostat_data"]}</p>'
-        
+
         html += '</div>'
-        
+
         html += '''
         </div>
         '''
-        
+
         return html
     def generate_html_report(self):
         """Generate HTML report - using safe field access"""
         try:
             df = pd.read_csv(self.performance_csv)
-            
+
             html_content = self._generate_html_content(df)
-            
+
             output_file = os.path.join(self.output_dir, f'performance_report_{self.language}_{os.environ.get("SESSION_TIMESTAMP")}.html')
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(html_content)
-            
+
             print(f"✅ Enhanced HTML report generated: {output_file}")
             return output_file
-            
+
         except Exception as e:
             print(f"❌ HTML report generation failed: {e}")
             return None
 
     def _generate_config_status_section(self):
         """Generate configuration status check section"""
-        ledger_status = f"✅ {self.t['configured']}" if self.config.get('LEDGER_DEVICE') else f"❌ {self.t['not_configured']}"
-        accounts_status = f"✅ {self.t['configured']}" if DeviceManager.is_accounts_configured() else f"⚠️ {self.t['not_configured']}"
+        ledger_status = f"<span class='status-pill status-ok'>{self.t['configured']}</span>" if self.config.get('LEDGER_DEVICE') else f"<span class='status-pill status-bad'>{self.t['not_configured']}</span>"
+        accounts_status = f"<span class='status-pill status-ok'>{self.t['configured']}</span>" if DeviceManager.is_accounts_configured() else f"<span class='status-pill status-warn'>{self.t['not_configured']}</span>"
         blockchain_node = self.config.get('BLOCKCHAIN_NODE', 'General')
-        
+        data_volume_status = f"<span class='status-pill status-ok'>{self.t['configured']}</span>" if self.config.get('DATA_VOL_TYPE') else f"<span class='status-pill status-warn'>{self.t['not_configured']}</span>"
+        accounts_volume_status = f"<span class='status-pill status-ok'>{self.t['configured']}</span>" if self.config.get('ACCOUNTS_VOL_TYPE') else f"<span class='status-pill status-warn'>{self.t['not_configured']}</span>"
+
         accounts_note = ""
         if not DeviceManager.is_accounts_configured():
             accounts_note = f'<div class="warning"><strong>{self.t["note"]}:</strong> {self.t["accounts_not_configured_note"]}</div>'
-        
+
         return f"""
         <div class="section">
             <h2>&#9881; {self.t['config_status_check']}</h2>
-            <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
+            <table class="report-table config-table">
                 <thead>
                     <tr>
-                        <th style="background: #34495E; color: white; padding: 12px;">{self.t['config_item']}</th>
-                        <th style="background: #34495E; color: white; padding: 12px;">{self.t['status']}</th>
-                        <th style="background: #34495E; color: white; padding: 12px;">{self.t['value']}</th>
+                        <th>{self.t['config_item']}</th>
+                        <th>{self.t['status']}</th>
+                        <th>{self.t['value']}</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['blockchain_node_type']}</td><td style="padding: 10px; border: 1px solid #ddd;">&#9989; {self.t['configured']}</td><td style="padding: 10px; border: 1px solid #ddd;">{blockchain_node}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['data_device']}</td><td style="padding: 10px; border: 1px solid #ddd;">{ledger_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('LEDGER_DEVICE', 'N/A')}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['accounts_device']}</td><td style="padding: 10px; border: 1px solid #ddd;">{accounts_status}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('ACCOUNTS_DEVICE', 'N/A')}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['data_volume_type']}</td><td style="padding: 10px; border: 1px solid #ddd;">{'&#9989; ' + self.t['configured'] if self.config.get('DATA_VOL_TYPE') else '&#9888; ' + self.t['not_configured']}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('DATA_VOL_TYPE', 'N/A')}</td></tr>
-                    <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['accounts_volume_type']}</td><td style="padding: 10px; border: 1px solid #ddd;">{'&#9989; ' + self.t['configured'] if self.config.get('ACCOUNTS_VOL_TYPE') else '&#9888; ' + self.t['not_configured']}</td><td style="padding: 10px; border: 1px solid #ddd;">{self.config.get('ACCOUNTS_VOL_TYPE', 'N/A')}</td></tr>
+                    <tr><td>{self.t['blockchain_node_type']}</td><td><span class="status-pill status-ok">{self.t['configured']}</span></td><td>{html.escape(str(blockchain_node))}</td></tr>
+                    <tr><td>{self.t['data_device']}</td><td>{ledger_status}</td><td>{html.escape(str(self.config.get('LEDGER_DEVICE', 'N/A')))}</td></tr>
+                    <tr><td>{self.t['accounts_device']}</td><td>{accounts_status}</td><td>{html.escape(str(self.config.get('ACCOUNTS_DEVICE', 'N/A')))}</td></tr>
+                    <tr><td>{self.t['data_volume_type']}</td><td>{data_volume_status}</td><td>{html.escape(str(self.config.get('DATA_VOL_TYPE', 'N/A')))}</td></tr>
+                    <tr><td>{self.t['accounts_volume_type']}</td><td>{accounts_volume_status}</td><td>{html.escape(str(self.config.get('ACCOUNTS_VOL_TYPE', 'N/A')))}</td></tr>
                 </tbody>
             </table>
             {accounts_note}
         </div>
         """
-    
+
     def _generate_monitoring_overhead_section(self):
         """Generate monitoring overhead section - enhanced with full resource analysis"""
         overhead_data = self.overhead_data  # Use cached data instead of reloading
-        
+
         if overhead_data:
             # Monitoring process resources
             monitoring_cpu_avg = overhead_data.get('monitoring_cpu_percent_avg', 0)
             monitoring_memory_percent_avg = overhead_data.get('monitoring_memory_percent_avg', 0)
             monitoring_memory_mb_avg = overhead_data.get('monitoring_memory_mb_avg', 0)
             monitoring_process_count = overhead_data.get('monitoring_process_count_avg', 0)
-            
+
             # Blockchain node resources
             blockchain_cpu_avg = overhead_data.get('blockchain_cpu_percent_avg', 0)
             blockchain_memory_percent_avg = overhead_data.get('blockchain_memory_percent_avg', 0)
             blockchain_memory_mb_avg = overhead_data.get('blockchain_memory_mb_avg', 0)
             blockchain_process_count = overhead_data.get('blockchain_process_count_avg', 0)
-            
+
             # System resources
             system_cpu_cores = overhead_data.get('system_cpu_cores_avg', 0)
             system_memory_gb = overhead_data.get('system_memory_gb_avg', 0)
             system_cpu_usage_avg = overhead_data.get('system_cpu_usage_avg', 0)
             system_memory_usage_avg = overhead_data.get('system_memory_usage_avg', 0)
-            
+
             # Resource ratio
             monitoring_cpu_ratio = overhead_data.get('monitoring_cpu_ratio', 0) * 100
             monitoring_memory_ratio = overhead_data.get('monitoring_memory_ratio', 0) * 100
             blockchain_cpu_ratio = overhead_data.get('blockchain_cpu_ratio', 0) * 100
             blockchain_memory_ratio = overhead_data.get('blockchain_memory_ratio', 0) * 100
-            
+
             # Currently used I/O monitoring fields
             monitoring_iops_avg = overhead_data.get('monitoring_iops_avg', 0)
             monitoring_iops_max = overhead_data.get('monitoring_iops_max', 0)
             monitoring_throughput_avg = overhead_data.get('monitoring_throughput_mibs_avg', 0)
             monitoring_throughput_max = overhead_data.get('monitoring_throughput_mibs_max', 0)
-            
+
             # Format to two decimal places
             format_num = lambda x: f"{x:.2f}"
-            
+
             section_html = f"""
             <div class="section">
                 <h2>&#128202; {self.t['monitoring_overhead_comprehensive_analysis']}</h2>
-                
+
                 <div class="info-card">
                     <h3>{self.t['system_resource_overview']}</h3>
                     <table class="data-table">
@@ -2182,7 +2452,7 @@ class ReportGenerator:
                         </tr>
                     </table>
                 </div>
-                
+
                 <div class="info-card">
                     <h3>{self.t['resource_usage_comparison']}</h3>
                     <table class="data-table">
@@ -2219,7 +2489,7 @@ class ReportGenerator:
                     </table>
                     <p class="note">{self.t['percentage_note']}</p>
                 </div>
-                
+
                 <div class="info-card">
                     <h3>{self.t['monitoring_io_overhead']}</h3>
                     <table class="data-table">
@@ -2240,7 +2510,7 @@ class ReportGenerator:
                         </tr>
                     </table>
                 </div>
-                
+
                 <div class="conclusion">
                     <h3>&#128221; {self.t['monitoring_overhead_conclusion']}</h3>
                     <p>{self.t['monitoring_resource_analysis']}</p>
@@ -2249,15 +2519,15 @@ class ReportGenerator:
                         <li>{self.t['memory_overhead']}: {format_num(monitoring_memory_percent_avg)}% ({format_num(monitoring_memory_mb_avg)} MB)</li>
                         <li>{self.t['io_overhead']}: {format_num(monitoring_iops_avg)} {self.t['iops']}</li>
                     </ul>
-                    
+
                     <p>{self.t['blockchain_resource_analysis']}</p>
                     <ul>
                         <li>{self.t['cpu_usage']}: {format_num(blockchain_cpu_ratio)}%</li>
                         <li>{self.t['memory_usage']}: {format_num(blockchain_memory_percent_avg)}% ({format_num(blockchain_memory_mb_avg/1024)} GB)</li>
                     </ul>
-                    
+
                     <p class="{'warning' if monitoring_cpu_avg > 5 else 'success'}">
-                        {self.t['monitoring_impact']} 
+                        {self.t['monitoring_impact']}
                         {'<strong>' + self.t['significant'] + '</strong> (' + self.t['monitoring_cpu_exceeds_5'] + ')' if monitoring_cpu_avg > 5 else '<strong>' + self.t['minor'] + '</strong> (' + self.t['monitoring_cpu_below_5'] + ')'}
                     </p>
                 </div>
@@ -2284,21 +2554,21 @@ class ReportGenerator:
                 </div>
             </div>
             """
-            
+
         return section_html
 
     def _generate_monitoring_overhead_detailed_section(self):
         """Generate detailed monitoring overhead analysis section"""
         overhead_data = self.overhead_data  # Use cached data instead of reloading
-        
+
         if overhead_data and os.path.exists(os.path.join(self.output_dir, "monitoring_overhead_analysis.png")):
             # Generate resource usage trend charts
             self._generate_resource_usage_charts()
-            
+
             section_html = f"""
             <div class="section">
                 <h2>&#128200; {self.t['monitoring_overhead_detailed']}</h2>
-                
+
                 <div class="info-card">
                     <h3>&#128202; {self.t['resource_usage_trends']}</h3>
                     <div class="chart-container">
@@ -2313,7 +2583,7 @@ class ReportGenerator:
                         </ul>
                     </div>
                 </div>
-                
+
                 <div class="info-card">
                     <h3>&#128202; {self.t['resource_proportion_chart']}</h3>
                     <div class="chart-container">
@@ -2328,7 +2598,7 @@ class ReportGenerator:
                         </ul>
                     </div>
                 </div>
-                
+
                 <div class="info-card">
                     <h3>&#128202; {self.t['monitoring_performance_chart']}</h3>
                     <div class="chart-container">
@@ -2364,45 +2634,45 @@ class ReportGenerator:
                 </div>
             </div>
             """
-            
+
         return section_html
-        
+
     def _generate_resource_usage_charts(self):
         """Generate resource usage trend charts"""
         try:
             if not self.overhead_csv or not os.path.exists(self.overhead_csv):
                 return
-                
+
             df = pd.read_csv(self.overhead_csv)
             if df.empty:
                 return
-                
+
             # Resource distribution pie chart
             self._generate_resource_distribution_chart(df)
-            
+
             # Monitoring impact analysis chart
             if self.performance_csv and os.path.exists(self.performance_csv):
                 self._generate_monitoring_impact_chart(df)
-                
+
         except Exception as e:
             print(f"Error generating resource usage charts: {e}")
-            
+
     def _generate_resource_distribution_chart(self, df):
         """Generate resource distribution chart - 3x2 layout (using actual available data)"""
         try:
-            
+
             UnifiedChartStyle.setup_matplotlib()
-            
+
             # Read CPU data
             blockchain_cpu = df['blockchain_cpu'].mean() if 'blockchain_cpu' in df.columns else 0
             monitoring_cpu = df['monitoring_cpu'].mean() if 'monitoring_cpu' in df.columns else 0
             system_cpu_cores = df['system_cpu_cores'].mean() if 'system_cpu_cores' in df.columns else 96
-            
+
             # Read Memory data - using basic fields
             blockchain_memory_mb = df['blockchain_memory_mb'].mean() if 'blockchain_memory_mb' in df.columns else 0
             monitoring_memory_mb = df['monitoring_memory_mb'].mean() if 'monitoring_memory_mb' in df.columns else 0
             system_memory_gb = df['system_memory_gb'].mean() if 'system_memory_gb' in df.columns else 739.70
-            
+
             # Read basic memory data from performance CSV (unit: MB, needs conversion to GB)
             mem_used_mb = 0
             mem_total_mb = system_memory_gb * 1024
@@ -2413,11 +2683,11 @@ class ReportGenerator:
                     mem_total_mb = perf_df['mem_total'].mean() if 'mem_total' in perf_df.columns else system_memory_gb * 1024
                 except Exception as e:
                     print(f"⚠️ {self.t['read_memory_data_failed']}: {e}")
-            
+
             # Convert to GB
             mem_used_gb = mem_used_mb / 1024
             mem_total_gb = mem_total_mb / 1024
-            
+
             # Read Network data
             net_total_gbps = 0
             network_max_gbps = 25
@@ -2428,25 +2698,25 @@ class ReportGenerator:
                     network_max_gbps = float(os.getenv('NETWORK_MAX_BANDWIDTH_GBPS', '25'))
                 except Exception as e:
                     print(f"⚠️ {self.t['read_network_data_failed']}: {e}")
-            
+
             # Calculate derived metrics
             blockchain_cores = blockchain_cpu / 100 if blockchain_cpu > 0 else 0
             monitoring_cores = monitoring_cpu / 100 if monitoring_cpu > 0 else 0
             idle_cores = max(0, system_cpu_cores - blockchain_cores - monitoring_cores)
-            
+
             blockchain_memory_gb = blockchain_memory_mb / 1024
             monitoring_memory_gb = monitoring_memory_mb / 1024
             mem_free_gb = max(0, mem_total_gb - mem_used_gb)
-            
+
             network_used_gbps = net_total_gbps
             network_available_gbps = max(0, network_max_gbps - net_total_gbps)
             network_utilization = (net_total_gbps / network_max_gbps * 100) if network_max_gbps > 0 else 0
-            
+
             # Create 3x2 layout
             fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
-            fig.suptitle('System Resource Distribution Analysis', 
+            fig.suptitle('System Resource Distribution Analysis',
                         fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold', y=0.995)
-            
+
             # Subplot 1: CPU Core Usage
             cpu_sizes = [blockchain_cores, monitoring_cores, idle_cores]
             cpu_labels = [f'Blockchain\n{blockchain_cores:.2f} cores',
@@ -2457,13 +2727,13 @@ class ReportGenerator:
             wedges1, texts1, autotexts1 = ax1.pie(cpu_sizes, labels=cpu_labels, colors=cpu_colors,
                                                    autopct='%1.1f%%', startangle=45, labeldistance=1.15,
                                                    textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
-            ax1.set_title(f'CPU Core Usage (Total: {system_cpu_cores:.0f} cores)', 
+            ax1.set_title(f'CPU Core Usage (Total: {system_cpu_cores:.0f} cores)',
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
             for autotext in autotexts1:
                 autotext.set_fontsize(UnifiedChartStyle.FONT_CONFIG['text_size'])
                 autotext.set_color('white')
                 autotext.set_weight('bold')
-            
+
             # Subplot 2: Memory Usage Distribution
             mem_sizes = [blockchain_memory_gb, monitoring_memory_gb, mem_free_gb]
             mem_labels = [f'Blockchain\n{blockchain_memory_gb:.2f} GB',
@@ -2474,13 +2744,13 @@ class ReportGenerator:
             wedges2, texts2, autotexts2 = ax2.pie(mem_sizes, labels=mem_labels, colors=mem_colors,
                                                    autopct='%1.1f%%', startangle=45, labeldistance=1.15,
                                                    textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
-            ax2.set_title(f'Memory Usage Distribution (Total: {mem_total_gb:.0f} GB)', 
+            ax2.set_title(f'Memory Usage Distribution (Total: {mem_total_gb:.0f} GB)',
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
             for autotext in autotexts2:
                 autotext.set_fontsize(UnifiedChartStyle.FONT_CONFIG['text_size'])
                 autotext.set_color('white')
                 autotext.set_weight('bold')
-            
+
             # Subplot 3: Memory Usage Comparison
             mem_categories = ['Blockchain', 'Monitoring', 'Free']
             mem_values = [blockchain_memory_gb, monitoring_memory_gb, mem_free_gb]
@@ -2492,9 +2762,9 @@ class ReportGenerator:
             ax3.grid(True, alpha=0.3, axis='y')
             for bar, val in zip(bars3, mem_values):
                 pct = (val / mem_total_gb * 100) if mem_total_gb > 0 else 0
-                ax3.text(bar.get_x() + bar.get_width()/2, val + max(mem_values)*0.02, 
+                ax3.text(bar.get_x() + bar.get_width()/2, val + max(mem_values)*0.02,
                         f'{val:.1f} GB\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
-            
+
             # Subplot 4: CPU Usage Comparison
             cpu_categories = ['Blockchain', 'Monitoring']
             cpu_values = [blockchain_cpu, monitoring_cpu]
@@ -2504,9 +2774,9 @@ class ReportGenerator:
             ax4.set_title('CPU Usage Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
             ax4.grid(True, alpha=0.3, axis='y')
             for bar, val in zip(bars4, cpu_values):
-                ax4.text(bar.get_x() + bar.get_width()/2, val + max(cpu_values)*0.02, 
+                ax4.text(bar.get_x() + bar.get_width()/2, val + max(cpu_values)*0.02,
                         f'{val:.2f}%', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
-            
+
             # Subplot 5: Network Bandwidth
             if net_total_gbps > 0:
                 net_sizes = [network_used_gbps, network_available_gbps]
@@ -2516,7 +2786,7 @@ class ReportGenerator:
                 wedges5, texts5, autotexts5 = ax5.pie(net_sizes, labels=net_labels, colors=net_colors,
                                                       autopct='%1.1f%%', startangle=45, labeldistance=1.15,
                                                       textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
-                ax5.set_title(f'Network Bandwidth (Max: {network_max_gbps:.0f} Gbps, Util: {network_utilization:.2f}%)', 
+                ax5.set_title(f'Network Bandwidth (Max: {network_max_gbps:.0f} Gbps, Util: {network_utilization:.2f}%)',
                              fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
                 for autotext in autotexts5:
                     autotext.set_fontsize(UnifiedChartStyle.FONT_CONFIG['text_size'])
@@ -2528,7 +2798,7 @@ class ReportGenerator:
                         bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.5))
                 ax5.set_title('Network Bandwidth', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
                 ax5.axis('off')
-            
+
             # Subplot 6: Resource Overhead Summary
             overhead_categories = ['CPU\nOverhead', 'Memory\nOverhead']
             total_cpu = blockchain_cpu + monitoring_cpu
@@ -2544,28 +2814,28 @@ class ReportGenerator:
             for bar, val in zip(bars6, overhead_values):
                 ax6.text(bar.get_x() + bar.get_width()/2, val + max(overhead_values)*0.02, f'{val:.2f}%',
                         ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
-            
+
             UnifiedChartStyle.apply_layout('auto')
             reports_dir = self.output_dir
             plt.savefig(os.path.join(reports_dir, 'resource_distribution_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()
-            
+
             print(f"✅ Generation complete: resource_distribution_chart.png")
-            
+
         except Exception as e:
             print(f"❌ {self.t['resource_distribution_failed']}: {e}")
             import traceback
             traceback.print_exc()
-    
+
     def _generate_monitoring_impact_chart(self, overhead_df):
         """Generate monitoring impact analysis chart - 3x2 layout (using actual available data)"""
         try:
-            
+
             UnifiedChartStyle.setup_matplotlib()
-            
+
             # Read performance data
             perf_df = pd.read_csv(self.performance_csv) if self.performance_csv and os.path.exists(self.performance_csv) else pd.DataFrame()
-            
+
             # Calculate averages - from overhead CSV
             blockchain_cpu = overhead_df['blockchain_cpu'].mean() if 'blockchain_cpu' in overhead_df.columns else 0
             monitoring_cpu = overhead_df['monitoring_cpu'].mean() if 'monitoring_cpu' in overhead_df.columns else 0
@@ -2573,84 +2843,84 @@ class ReportGenerator:
             monitoring_memory_mb = overhead_df['monitoring_memory_mb'].mean() if 'monitoring_memory_mb' in overhead_df.columns else 0
             system_cpu_cores = overhead_df['system_cpu_cores'].mean() if 'system_cpu_cores' in overhead_df.columns else 96
             system_memory_gb = overhead_df['system_memory_gb'].mean() if 'system_memory_gb' in overhead_df.columns else 739.70
-            
+
             # Get I/O data and basic memory data from performance CSV
             monitoring_iops = perf_df['monitoring_iops_per_sec'].mean() if not perf_df.empty and 'monitoring_iops_per_sec' in perf_df.columns else 0
             monitoring_throughput = perf_df['monitoring_throughput_mibs_per_sec'].mean() if not perf_df.empty and 'monitoring_throughput_mibs_per_sec' in perf_df.columns else 0
-            
+
             # Use basic memory data from performance CSV (unit: MB, needs conversion to GB)
             mem_used_mb = perf_df['mem_used'].mean() if not perf_df.empty and 'mem_used' in perf_df.columns else 0
             mem_total_mb = perf_df['mem_total'].mean() if not perf_df.empty and 'mem_total' in perf_df.columns else system_memory_gb * 1024
             mem_usage_pct = perf_df['mem_usage'].mean() if not perf_df.empty and 'mem_usage' in perf_df.columns else 0
-            
+
             # Convert to GB
             mem_used = mem_used_mb / 1024
             mem_total = mem_total_mb / 1024
-            
+
             # Convert to cores and GB
             blockchain_cores = blockchain_cpu / 100
             monitoring_cores = monitoring_cpu / 100
             blockchain_memory_gb = blockchain_memory_mb / 1024
             monitoring_memory_gb = monitoring_memory_mb / 1024
-            
+
             # Calculate proportions
             total_cpu = blockchain_cpu + monitoring_cpu
             cpu_overhead_pct = (monitoring_cpu / total_cpu * 100) if total_cpu > 0 else 0
             total_memory = blockchain_memory_gb + monitoring_memory_gb
             memory_overhead_pct = (monitoring_memory_gb / total_memory * 100) if total_memory > 0 else 0
-            
+
             # Create 3x2 layout
             fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
-            fig.suptitle('Monitoring Overhead Impact Analysis', 
+            fig.suptitle('Monitoring Overhead Impact Analysis',
                         fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold', y=0.995)
-            
+
             # Subplot 1: CPU Core Usage
             cpu_categories = ['Blockchain', 'Monitoring']
             cpu_values = [blockchain_cores, monitoring_cores]
             cpu_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning']]
             bars1 = ax1.bar(cpu_categories, cpu_values, color=cpu_colors, alpha=0.7)
             ax1.set_ylabel('CPU Cores', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
-            ax1.set_title(f'CPU Core Usage (Total: {system_cpu_cores:.0f} cores)', 
+            ax1.set_title(f'CPU Core Usage (Total: {system_cpu_cores:.0f} cores)',
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
             ax1.grid(True, alpha=0.3, axis='y')
             for bar, val in zip(bars1, cpu_values):
                 pct = (val / system_cpu_cores * 100) if system_cpu_cores > 0 else 0
-                ax1.text(bar.get_x() + bar.get_width()/2, val + max(cpu_values)*0.02, 
+                ax1.text(bar.get_x() + bar.get_width()/2, val + max(cpu_values)*0.02,
                         f'{val:.2f}\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
-            
+
             # Subplot 2: Memory Usage
             mem_categories = ['Blockchain', 'Monitoring']
             mem_values = [blockchain_memory_gb, monitoring_memory_gb]
             mem_colors = [UnifiedChartStyle.COLORS['data_primary'], UnifiedChartStyle.COLORS['warning']]
             bars2 = ax2.bar(mem_categories, mem_values, color=mem_colors, alpha=0.7)
             ax2.set_ylabel('Memory (GB)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
-            ax2.set_title(f'Memory Usage (Total: {system_memory_gb:.1f} GB)', 
+            ax2.set_title(f'Memory Usage (Total: {system_memory_gb:.1f} GB)',
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
             ax2.grid(True, alpha=0.3, axis='y')
             for bar, val in zip(bars2, mem_values):
                 pct = (val / system_memory_gb * 100) if system_memory_gb > 0 else 0
-                ax2.text(bar.get_x() + bar.get_width()/2, val + max(mem_values)*0.02, 
+                ax2.text(bar.get_x() + bar.get_width()/2, val + max(mem_values)*0.02,
                         f'{val:.2f}\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
-            
+
             # Subplot 3: Monitoring I/O Impact
             # Calculate I/O overhead percentage - use DeviceManager to dynamically get fields
             device_manager = DeviceManager(perf_df) if not perf_df.empty else None
             data_total_iops = 0
             accounts_total_iops = 0
-            
+
             if device_manager:
                 data_iops_field = device_manager.get_mapped_field('data_total_iops')
                 if data_iops_field and data_iops_field in perf_df.columns:
                     data_total_iops = perf_df[data_iops_field].mean()
-                
+
                 if device_manager.is_accounts_configured():
                     accounts_iops_field = device_manager.get_mapped_field('accounts_total_iops')
                     if accounts_iops_field and accounts_iops_field in perf_df.columns:
                         accounts_total_iops = perf_df[accounts_iops_field].mean()
-            
+
             total_system_iops = data_total_iops + accounts_total_iops
             io_overhead_pct = (monitoring_iops / total_system_iops * 100) if total_system_iops > 0 else 0
-            
+
             if monitoring_iops > 0.01 or monitoring_throughput > 0.01:
                 io_categories = ['IOPS/sec', 'Throughput\n(MiB/s)']
                 io_values = [monitoring_iops, monitoring_throughput]
@@ -2661,10 +2931,10 @@ class ReportGenerator:
                 ax3.grid(True, alpha=0.3, axis='y')
                 for bar, val in zip(bars3, io_values):
                     if max(io_values) > 0:
-                        ax3.text(bar.get_x() + bar.get_width()/2, val + max(io_values)*0.02, 
+                        ax3.text(bar.get_x() + bar.get_width()/2, val + max(io_values)*0.02,
                                 f'{val:.3f}', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             else:
-                ax3.text(0.5, 0.5, 'Monitoring I/O Data Unavailable\n(All values are 0)', 
+                ax3.text(0.5, 0.5, 'Monitoring I/O Data Unavailable\n(All values are 0)',
                         ha='center', va='center', transform=ax3.transAxes,
                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'],
                         bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.3))
@@ -2672,7 +2942,7 @@ class ReportGenerator:
                 ax3.set_xlabel('I/O Type', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax3.set_ylabel('Monitoring I/O', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax3.grid(True, alpha=0.3)
-            
+
             # Subplot 4: System Memory Overview (using basic memory data)
             if mem_used > 0 and mem_total > 0:
                 mem_free = mem_total - mem_used
@@ -2681,29 +2951,29 @@ class ReportGenerator:
                 mem_overview_colors = [UnifiedChartStyle.COLORS['warning'], UnifiedChartStyle.COLORS['success']]
                 bars4 = ax4.bar(mem_overview_labels, mem_overview_values, color=mem_overview_colors, alpha=0.7)
                 ax4.set_ylabel('Memory (GB)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
-                ax4.set_title(f'System Memory Overview (Usage: {mem_usage_pct:.1f}%)', 
+                ax4.set_title(f'System Memory Overview (Usage: {mem_usage_pct:.1f}%)',
                              fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
                 ax4.grid(True, alpha=0.3, axis='y')
                 for bar, val in zip(bars4, mem_overview_values):
                     pct = (val / mem_total * 100) if mem_total > 0 else 0
-                    ax4.text(bar.get_x() + bar.get_width()/2, val + max(mem_overview_values)*0.02, 
+                    ax4.text(bar.get_x() + bar.get_width()/2, val + max(mem_overview_values)*0.02,
                             f'{val:.1f} GB\n({pct:.1f}%)', ha='center', fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
             else:
                 ax4.text(0.5, 0.5, 'Memory Data\nNot Available', ha='center', va='center',
                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax4.set_title('System Memory Overview', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
                 ax4.axis('off')
-            
+
             # Subplot 5: CPU Overhead Trend
             if 'timestamp' in overhead_df.columns and 'monitoring_cpu' in overhead_df.columns and 'blockchain_cpu' in overhead_df.columns:
                 if not pd.api.types.is_datetime64_any_dtype(overhead_df['timestamp']):
                     overhead_df['timestamp'] = pd.to_datetime(overhead_df['timestamp'])
-                
-                overhead_df['cpu_overhead_pct'] = (overhead_df['monitoring_cpu'] / 
+
+                overhead_df['cpu_overhead_pct'] = (overhead_df['monitoring_cpu'] /
                                                    (overhead_df['blockchain_cpu'] + overhead_df['monitoring_cpu']) * 100)
-                ax5.plot(overhead_df['timestamp'], overhead_df['cpu_overhead_pct'], 
+                ax5.plot(overhead_df['timestamp'], overhead_df['cpu_overhead_pct'],
                         linewidth=2, color=UnifiedChartStyle.COLORS['warning'], alpha=0.7)
-                ax5.axhline(y=overhead_df['cpu_overhead_pct'].mean(), color=UnifiedChartStyle.COLORS['critical'], 
+                ax5.axhline(y=overhead_df['cpu_overhead_pct'].mean(), color=UnifiedChartStyle.COLORS['critical'],
                            linestyle='--', alpha=0.7, label=f'Average: {overhead_df["cpu_overhead_pct"].mean():.2f}%')
                 ax5.set_ylabel('Overhead (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax5.set_title('CPU Overhead Trend Over Time', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'], pad=15)
@@ -2711,10 +2981,10 @@ class ReportGenerator:
                 ax5.grid(True, alpha=0.3)
                 format_time_axis(ax5, overhead_df['timestamp'])
             else:
-                ax5.text(0.5, 0.5, 'No Time Series Data', ha='center', va='center', 
+                ax5.text(0.5, 0.5, 'No Time Series Data', ha='center', va='center',
                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax5.axis('off')
-            
+
             # Subplot 6: Monitoring Efficiency Summary
             summary_lines = [
                 "Monitoring Overhead Summary:",
@@ -2733,31 +3003,31 @@ class ReportGenerator:
             ]
             summary_text = "\n".join(summary_lines)
             UnifiedChartStyle.add_text_summary(ax6, summary_text, 'Monitoring Efficiency Summary')
-            
+
             UnifiedChartStyle.apply_layout('auto')
             reports_dir = self.output_dir
             plt.savefig(os.path.join(reports_dir, 'monitoring_impact_chart.png'), dpi=300, bbox_inches='tight')
             plt.close()
-            
+
             print(f"✅ {self.t['generation_complete_monitoring']}")
-            
+
         except Exception as e:
             print(f"❌ {self.t['monitoring_impact_failed']}: {e}")
             import traceback
             traceback.print_exc()
-    
+
     def _generate_disk_bottleneck_section(self):
         """Generate Disk bottleneck analysis section - enhanced version with multi-device and root cause analysis"""
         bottleneck_info = self._load_bottleneck_data()
         overhead_data = self.overhead_data  # Use cached data instead of reloading
-        
+
         # Device type list
         device_types = ['data', 'accounts']
         device_labels = {'data': 'DATA', 'accounts': 'ACCOUNTS'}
-        
+
         if bottleneck_info and 'disk_bottlenecks' in bottleneck_info:
             disk_bottlenecks = bottleneck_info['disk_bottlenecks']
-            
+
             # Group bottlenecks by device type
             device_bottlenecks = {}
             for bottleneck in disk_bottlenecks:
@@ -2765,26 +3035,26 @@ class ReportGenerator:
                 if device_type not in device_bottlenecks:
                     device_bottlenecks[device_type] = []
                 device_bottlenecks[device_type].append(bottleneck)
-            
+
             # Generate device bottleneck HTML
             devices_html = ""
             for device_type in device_types:
                 if device_type in device_bottlenecks and device_bottlenecks[device_type]:
                     # This device has bottlenecks
                     bottlenecks = device_bottlenecks[device_type]
-                    
+
                     # Format bottleneck information
                     bottleneck_html = ""
                     for bottleneck in bottlenecks:
                         bottleneck_type = bottleneck.get('type', 'Unknown')
                         severity = bottleneck.get('severity', 'Medium')
                         details = bottleneck.get('details', {})
-                        
+
                         # Format details
                         details_html = ""
                         for key, value in details.items():
                             details_html += f"<li><strong>{key}:</strong> {value}</li>"
-                        
+
                         bottleneck_html += f"""
                         <div class="bottleneck-item severity-{severity.lower()}">
                             <h4>{bottleneck_type} <span class="severity">{severity}</span></h4>
@@ -2793,10 +3063,10 @@ class ReportGenerator:
                             </ul>
                         </div>
                         """
-                    
+
                     # Get monitoring overhead data for root cause analysis
                     root_cause_html = self._generate_bottleneck_root_cause_analysis(device_type, overhead_data)
-                    
+
                     devices_html += f"""
                     <div class="device-bottleneck">
                         <h3>&#128192; {device_labels[device_type]}{self.t['device_bottleneck']}</h3>
@@ -2817,7 +3087,7 @@ class ReportGenerator:
                         </div>
                     </div>
                     """
-            
+
             section_html = f"""
             <div class="section">
                 <h2>&#128192; {self.t['disk_bottleneck_analysis']}</h2>
@@ -2838,9 +3108,9 @@ class ReportGenerator:
                 </div>
             </div>
             """
-            
+
         return section_html
-        
+
     def _generate_bottleneck_root_cause_analysis(self, device_type, overhead_data):
         """Generate bottleneck root cause analysis HTML"""
         if not overhead_data:
@@ -2850,11 +3120,11 @@ class ReportGenerator:
                 <p>{self.t['missing_overhead_data']}</p>
             </div>
             """
-        
+
         # Get monitoring overhead data
         monitoring_iops_avg = overhead_data.get('monitoring_iops_avg', 0)
         monitoring_throughput_avg = overhead_data.get('monitoring_throughput_mibs_avg', 0)
-        
+
         # Estimate monitoring overhead impact on Disk
         # Note: Monitoring system reads /proc virtual filesystem, IOPS usually < 0.01
         if monitoring_iops_avg > 1.0:  # Very high (abnormal)
@@ -2866,7 +3136,7 @@ class ReportGenerator:
         else:  # Normal (< 0.1 IOPS)
             impact_level = self.t['low_label']
             impact_percent = min(20, monitoring_iops_avg * 200)  # 0.01 IOPS = 2%
-        
+
         # Generate different HTML based on impact level
         if impact_level == self.t['high_label']:
             return f"""
@@ -2904,7 +3174,7 @@ class ReportGenerator:
                 <p class="recommendation">{self.t['recommendation']}: {device_type.upper()}{self.t['bottleneck_from_workload']}</p>
             </div>
             """
-    
+
 
 
     def _generate_overhead_data_table(self):
@@ -2919,7 +3189,7 @@ class ReportGenerator:
                 <p><strong>{self.t['description_label']}</strong>: {self.t['overhead_auto_generated']}</p>
             </div>
             """
-        
+
         try:
             # Generate detailed monitoring overhead table
             table_html = f"""
@@ -2928,28 +3198,28 @@ class ReportGenerator:
                 <h4>&#128202; {self.t['overhead_detailed_data']}</h4>
                 <p>{self.t['data_shows_component_consumption']}</p>
             </div>
-            
-            <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
+
+            <table class="report-table monitoring-overhead-table">
                 <thead>
                     <tr>
-                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['monitoring_component_label']}</th>
-                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['avg_cpu_usage_label']}</th>
-                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['peak_cpu_usage_label']}</th>
-                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['avg_memory_usage_label']}</th>
-                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['peak_memory_usage_label']}</th>
-                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['avg_iops_label']}</th>
-                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['peak_iops_label']}</th>
-                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['avg_throughput_label']}</th>
-                        <th style="background: #8E44AD; color: white; padding: 12px;">{self.t['data_completeness_label']}</th>
+                        <th>{self.t['monitoring_component_label']}</th>
+                        <th>{self.t['avg_cpu_usage_label']}</th>
+                        <th>{self.t['peak_cpu_usage_label']}</th>
+                        <th>{self.t['avg_memory_usage_label']}</th>
+                        <th>{self.t['peak_memory_usage_label']}</th>
+                        <th>{self.t['avg_iops_label']}</th>
+                        <th>{self.t['peak_iops_label']}</th>
+                        <th>{self.t['avg_throughput_label']}</th>
+                        <th>{self.t['data_completeness_label']}</th>
                     </tr>
                 </thead>
                 <tbody>
             """
-            
+
             # Monitoring component data (estimated based on overall monitoring data)
             # Calculate unified completeness
             data_completeness = self._calculate_data_completeness()
-            
+
             monitoring_components = [
                 {
                     'name': self.t['iostat_monitoring'],
@@ -3007,35 +3277,35 @@ class ReportGenerator:
                     'completeness': data_completeness
                 }
             ]
-            
+
             for i, component in enumerate(monitoring_components):
                 # Set style based on whether it's a total row
                 if component['name'] == self.t['total_monitoring_overhead']:
-                    row_style = 'background: #f0f8ff; font-weight: bold; border-top: 2px solid #007bff;'
+                    row_class = ' class="total-row"'
                 else:
-                    row_style = 'background: white;' if i % 2 == 0 else 'background: #f8f9fa;'
-                
+                    row_class = ''
+
                 # Data completeness color
                 completeness_color = 'green' if component['completeness'] > 95 else 'orange' if component['completeness'] > 90 else 'red'
-                
+
                 table_html += f"""
-                <tr style="{row_style}">
-                    <td style="padding: 10px; border: 1px solid #ddd;">{component['name']}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{component['cpu_avg']:.2f}%</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{component['cpu_max']:.2f}%</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{component['mem_avg']:.1f} MB</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{component['mem_max']:.1f} MB</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{self._format_monitoring_io(component['iops_avg'], 'iops')}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{self._format_monitoring_io(component['iops_max'], 'iops')}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{self._format_monitoring_io(component['throughput_avg'], 'throughput')} MiB/s</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; color: {completeness_color};">{component['completeness']:.1f}%</td>
+                <tr{row_class}>
+                    <td>{component['name']}</td>
+                    <td class="numeric-cell">{component['cpu_avg']:.2f}%</td>
+                    <td class="numeric-cell">{component['cpu_max']:.2f}%</td>
+                    <td class="numeric-cell">{component['mem_avg']:.1f} MB</td>
+                    <td class="numeric-cell">{component['mem_max']:.1f} MB</td>
+                    <td class="numeric-cell">{self._format_monitoring_io(component['iops_avg'], 'iops')}</td>
+                    <td class="numeric-cell">{self._format_monitoring_io(component['iops_max'], 'iops')}</td>
+                    <td class="numeric-cell">{self._format_monitoring_io(component['throughput_avg'], 'throughput')} MiB/s</td>
+                    <td class="numeric-cell completeness-{completeness_color}">{component['completeness']:.1f}%</td>
                 </tr>
                 """
-            
+
             table_html += f"""
                 </tbody>
             </table>
-            
+
             <div class="info" style="margin-top: 15px;">
                 <h4>&#128202; {self.t['overhead_analysis_notes']}</h4>
                 <ul>
@@ -3056,9 +3326,9 @@ class ReportGenerator:
                 </ul>
             </div>
             """
-            
+
             return table_html
-            
+
         except Exception as e:
             print(f"❌ {self.t['overhead_table_generation_failed']}: {e}")
             return f"""
@@ -3068,9 +3338,9 @@ class ReportGenerator:
                 <p>{self.t['check_data_format']}</p>
             </div>
             """
-    
 
-    
+
+
     def _generate_independent_tools_results(self):
         """Generate independent analysis tools results display"""
         return f"""
@@ -3105,10 +3375,10 @@ class ReportGenerator:
             ena_columns = ENAFieldAccessor.get_available_ena_fields(df)
             if not ena_columns:
                 return ""
-            
+
             # Analyze ENA limitation data
             limitations = self._analyze_ena_limitations(df)
-            
+
             if not limitations:
                 return f"""
                 <div class="info" style="background-color: #E8F8F5; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #27AE60;">
@@ -3116,7 +3386,7 @@ class ReportGenerator:
                     <p>{self.t['no_ena_limitations']}</p>
                 </div>
                 """
-            
+
             # Generate warning HTML
             html = f"""
             <div class="warning">
@@ -3124,12 +3394,12 @@ class ReportGenerator:
                 <p>{self.t['detected_ena_limitations']}</p>
                 <ul>
             """
-            
+
             for limit in limitations:
                 duration = ""
                 if limit['first_time'] != limit['last_time']:
                     duration = f" ({self.t['duration_time']}: {limit['first_time']} {self.t['to']} {limit['last_time']})"
-                
+
                 html += f"""
                 <li>
                     <strong>{limit['type']}</strong>{duration}
@@ -3140,15 +3410,15 @@ class ReportGenerator:
                     </ul>
                 </li>
                 """
-            
+
             html += f"""
                 </ul>
                 <p><strong>{self.t['recommendation_label']}</strong>: {self.t['consider_optimize_network']}</p>
             </div>
             """
-            
+
             return html
-            
+
         except Exception as e:
             return f'<div class="error">{self.t["ena_warning_generation_failed"]}: {str(e)}</div>'
 
@@ -3156,7 +3426,7 @@ class ReportGenerator:
         """Analyze ENA limitation occurrences - using ENAFieldAccessor"""
         limitations = []
         available_fields = ENAFieldAccessor.get_available_ena_fields(df)
-        
+
         # Analyze exceeded type fields
         for field in available_fields:
             if 'exceeded' in field and field in df.columns:
@@ -3165,7 +3435,7 @@ class ReportGenerator:
                 if field_analysis:
                     # Filter records with limitations (value > 0)
                     limited_records = df[df[field] > 0]
-                    
+
                     if not limited_records.empty:
                         limitations.append({
                             'type': field_analysis['description'],
@@ -3176,14 +3446,14 @@ class ReportGenerator:
                             'max_value': limited_records[field].max(),
                             'total_affected': limited_records[field].sum()
                         })
-        
+
         # Special handling: Connection capacity insufficient warning - find available type fields
         available_field = None
         for field in available_fields:
             if 'available' in field and 'conntrack' in field:
                 available_field = field
                 break
-        
+
         if available_field and available_field in df.columns:
             # Use dynamic threshold: calculate based on network threshold and data max value
             thresholds = get_visualization_thresholds()
@@ -3201,7 +3471,7 @@ class ReportGenerator:
                     'max_value': f"{self.t['minimum_remaining']} {low_connection_records[available_field].min()} {self.t['connections']}",
                     'total_affected': f"{self.t['average_remaining']} {low_connection_records[available_field].mean():.0f} {self.t['connections']}" if available_field in low_connection_records.columns else self.t['data_not_available']
                 })
-        
+
         return limitations
 
     def _generate_ena_data_table(self, df):
@@ -3210,10 +3480,10 @@ class ReportGenerator:
             ena_columns = ENAFieldAccessor.get_available_ena_fields(df)
             if not ena_columns:
                 return ""
-            
+
             # Generate statistics - use ENAFieldAccessor to get field descriptions
             ena_stats = {}
-            
+
             for col in ena_columns:
                 field_analysis = ENAFieldAccessor.analyze_ena_field(df, col)
                 if field_analysis:
@@ -3225,12 +3495,12 @@ class ReportGenerator:
                         'mean': df[col].mean(),
                         'current': df[col].iloc[-1] if len(df) > 0 else 0
                     }
-            
+
             # Generate HTML table
             table_rows = ""
             for field, stats in ena_stats.items():
                 field_analysis = ENAFieldAccessor.analyze_ena_field(df, field)
-                
+
                 # Set different formats for different field types
                 if field_analysis and field_analysis['type'] == 'gauge':  # available type fields
                     current_val = f"{stats['current']:,.0f}"
@@ -3240,7 +3510,7 @@ class ReportGenerator:
                     current_val = f"{stats['current']}"
                     max_val = f"{stats['max']}"
                     mean_val = f"{stats['mean']:.1f}"
-                
+
                 # Status indicator
                 status_class = "normal"
                 if field_analysis and field_analysis['type'] == 'counter' and stats['current'] > 0:
@@ -3252,7 +3522,7 @@ class ReportGenerator:
                     warning_threshold = int(max_available * (100 - thresholds['io_warning']) / 100)
                     if stats['current'] < warning_threshold:
                         status_class = "warning"
-                
+
                 table_rows += f"""
                 <tr class="{status_class}">
                     <td>{stats['description']}</td>
@@ -3261,7 +3531,7 @@ class ReportGenerator:
                     <td>{mean_val}</td>
                 </tr>
                 """
-            
+
             return f"""
             <div class="section">
                 <h3>&#127760; {self.t['ena_network_statistics']}</h3>
@@ -3279,13 +3549,13 @@ class ReportGenerator:
                     </tbody>
                 </table>
                 <p class="table-note">
-                    <strong>{self.t['note_label']}</strong>: 
+                    <strong>{self.t['note_label']}</strong>:
                     • {self.t['exceeded_fields_show_drops']}
                     • {self.t['available_connections_show_capacity']}
                 </p>
             </div>
             """
-            
+
         except Exception as e:
             return f'<div class="error">{self.t["ena_table_generation_failed"]}: {str(e)}</div>'
 
@@ -3299,43 +3569,43 @@ class ReportGenerator:
             ('cpu_usr', 'r_s', self.t['user_cpu_vs_read_requests']),
             ('cpu_sys', 'w_s', self.t['system_cpu_vs_write_requests']),
         ]
-        
+
         correlation_data = []
         data_cols = [col for col in df.columns if col.startswith('data_')]
         accounts_cols = [col for col in df.columns if col.startswith('accounts_')]
-        
+
         # Safe correlation analysis function
         def safe_correlation_analysis(cpu_col, iostat_col, description, device_type):
             """Safe correlation analysis"""
             try:
                 if cpu_col not in df.columns:
                     return None, f"{self.t['missing_cpu_field']}: {cpu_col}"
-                
+
                 if iostat_col not in df.columns:
                     return None, f"{self.t['missing_disk_field']}: {iostat_col}"
-                
+
                 # Data validity check
                 cpu_data = df[cpu_col].dropna()
                 disk_data = df[iostat_col].dropna()
-                
+
                 if len(cpu_data) == 0 or len(disk_data) == 0:
                     return None, self.t['data_is_empty']
-                
+
                 # Align data and remove NaN
                 combined_data = pd.concat([df[cpu_col], df[iostat_col]], axis=1).dropna()
                 if len(combined_data) < 10:
                     return None, f"{self.t['insufficient_data_points']} ({self.t['only']}{len(combined_data)}{self.t['items']})"
-                
+
                 x_clean = combined_data.iloc[:, 0]
                 y_clean = combined_data.iloc[:, 1]
-                
+
                 # Calculate correlation
                 corr, p_value = pearsonr(x_clean, y_clean)
-                
+
                 # Check result validity
                 if np.isnan(corr) or np.isnan(p_value):
                     return None, self.t['correlation_result_nan']
-                
+
                 # Improved correlation strength classification
                 abs_corr = abs(corr)
                 if abs_corr >= 0.8:
@@ -3348,7 +3618,7 @@ class ReportGenerator:
                     strength = self.t['weak_correlation']
                 else:
                     strength = self.t['very_weak_correlation']
-                
+
                 # Improved statistical significance determination
                 if p_value < 0.001:
                     significant = self.t['highly_significant_3']
@@ -3358,7 +3628,7 @@ class ReportGenerator:
                     significant = self.t['significant_1']
                 else:
                     significant = self.t['not_significant']
-                
+
                 return {
                     self.t['device_type']: device_type,
                     self.t['analysis_item']: description,
@@ -3371,47 +3641,47 @@ class ReportGenerator:
                     self.t['valid_sample_count']: len(combined_data),
                     self.t['data_integrity']: f"{len(combined_data)/len(df)*100:.1f}%"
                 }, None
-                
+
             except Exception as e:
                 return None, f"{self.t['analysis_failed']}: {str(e)[:50]}"
-        
+
         def find_matching_column(target_field, column_list):
             """Precise field matching"""
             # Exact match
             exact_matches = [col for col in column_list if col.endswith(f'_{target_field}')]
             if exact_matches:
                 return exact_matches[0]
-            
+
             # Fuzzy matching (stricter)
             fuzzy_matches = [col for col in column_list if target_field in col and not any(x in col for x in ['avg', 'max', 'min', 'sum'])]
             if fuzzy_matches:
                 return fuzzy_matches[0]
-            
+
             return None
-        
+
         # Analyze DATA Device
         for cpu_field, iostat_field, description in key_correlations:
             iostat_col = find_matching_column(iostat_field, data_cols)
-            
+
             if iostat_col:
                 result, error = safe_correlation_analysis(cpu_field, iostat_col, description, 'DATA')
                 if result:
                     correlation_data.append(result)
                 else:
                     print(f"⚠️ DATA Device {description}: {error}")
-        
+
         # Analyze ACCOUNTS Device
         if accounts_cols:
             for cpu_field, iostat_field, description in key_correlations:
                 iostat_col = find_matching_column(iostat_field, accounts_cols)
-                
+
                 if iostat_col:
                     result, error = safe_correlation_analysis(cpu_field, iostat_col, description.replace('Device', 'ACCOUNTS Device'), 'ACCOUNTS')
                     if result:
                         correlation_data.append(result)
                     else:
                         print(f"⚠️ ACCOUNTS Device {description}: {error}")
-        
+
         if not correlation_data:
             return f"""
             <div class="warning">
@@ -3424,50 +3694,50 @@ class ReportGenerator:
                 </ul>
             </div>
             """
-        
+
         # Generate improved HTML table
         table_html = f"""
-        <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
+        <table class="report-table correlation-table">
             <thead>
                 <tr>
-                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['device_type']}</th>
-                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['analysis_item']}</th>
-                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['correlation_coefficient']}</th>
-                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['p_value']}</th>
-                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['statistical_significance']}</th>
-                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['correlation_strength']}</th>
-                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['valid_sample_count']}</th>
-                    <th style="background: #C0392B; color: white; padding: 12px;">{self.t['data_integrity']}</th>
+                    <th>{self.t['device_type']}</th>
+                    <th>{self.t['analysis_item']}</th>
+                    <th>{self.t['correlation_coefficient']}</th>
+                    <th>{self.t['p_value']}</th>
+                    <th>{self.t['statistical_significance']}</th>
+                    <th>{self.t['correlation_strength']}</th>
+                    <th>{self.t['valid_sample_count']}</th>
+                    <th>{self.t['data_integrity']}</th>
                 </tr>
             </thead>
             <tbody>
         """
-        
+
         for i, data in enumerate(correlation_data):
             # Set row color based on correlation strength
             strength_val = data[self.t['correlation_strength']]
             if self.t['very_strong_correlation'] in strength_val:
-                row_color = "#e8f5e8"
+                row_class = "correlation-very-strong"
             elif self.t['strong_correlation'] in strength_val:
-                row_color = "#f0f8f0"
+                row_class = "correlation-strong"
             elif self.t['moderate_correlation'] in strength_val:
-                row_color = "#fff8e1"
+                row_class = "correlation-moderate"
             else:
-                row_color = "#f8f9fa"
-            
+                row_class = "correlation-weak"
+
             table_html += f"""
-                <tr style="background: {row_color};">
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['device_type']]}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['analysis_item']]}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{data[self.t['correlation_coefficient']]}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['p_value']]}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['statistical_significance']]}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{data[self.t['correlation_strength']]}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['valid_sample_count']]}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">{data[self.t['data_integrity']]}</td>
+                <tr class="{row_class}">
+                    <td>{data[self.t['device_type']]}</td>
+                    <td>{data[self.t['analysis_item']]}</td>
+                    <td class="metric-value">{data[self.t['correlation_coefficient']]}</td>
+                    <td>{data[self.t['p_value']]}</td>
+                    <td>{data[self.t['statistical_significance']]}</td>
+                    <td class="metric-value">{data[self.t['correlation_strength']]}</td>
+                    <td class="numeric-cell">{data[self.t['valid_sample_count']]}</td>
+                    <td>{data[self.t['data_integrity']]}</td>
                 </tr>
             """
-        
+
         table_html += f"""
             </tbody>
         </table>
@@ -3481,7 +3751,7 @@ class ReportGenerator:
             </ul>
         </div>
         """
-        
+
         return table_html
 
     def _format_block_height_value(self, field_name, value):
@@ -3498,14 +3768,14 @@ class ReportGenerator:
         """Enhanced block height performance analysis - using comparison table display"""
         if not block_height_fields or df.empty:
             return f"<div class='info-card'><h4>{self.t['block_height_monitoring']}</h4><p>{self.t['no_block_height_data']}</p></div>"
-        
+
         try:
             # Add time series chart display
             sync_chart_html = self._generate_block_height_chart_section()
-            
+
             # Add data_loss_stats.json file display
             stats_file_html = self._generate_data_loss_stats_section()
-            
+
             # Collect block height data
             block_height_data = {}
             for field in block_height_fields:
@@ -3519,23 +3789,34 @@ class ReportGenerator:
                             'max': numeric_data.max(),
                             'data': numeric_data
                         }
-            
+
             # Generate comparison table
+            current_sync_mode = df['sync_mode'].dropna().iloc[-1] if 'sync_mode' in df.columns and not df['sync_mode'].dropna().empty else 'N/A'
+            current_sync_status = df['sync_status'].dropna().iloc[-1] if 'sync_status' in df.columns and not df['sync_status'].dropna().empty else 'N/A'
+            current_lag_value = df['lag_value'].dropna().iloc[-1] if 'lag_value' in df.columns and not df['lag_value'].dropna().empty else 'N/A'
+            current_lag_unit = df['lag_unit'].dropna().iloc[-1] if 'lag_unit' in df.columns and not df['lag_unit'].dropna().empty else ''
+            lag_display = f"{current_lag_value} {current_lag_unit}".strip()
+
             comparison_table = f"""
-            <div style="margin: 20px 0;">
+            <div class="sync-comparison-panel">
                 <h3>📊 {self.t['block_height_data_comparison']}</h3>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
+                <div class="stats-grid sync-stats-grid">
+                    <div class="stat-card"><div class="stat-label">{self.t['sync_mode']}</div><div class="stat-value">{current_sync_mode}</div></div>
+                    <div class="stat-card"><div class="stat-label">{self.t['sync_status']}</div><div class="stat-value">{current_sync_status}</div></div>
+                    <div class="stat-card"><div class="stat-label">{self.t['lag_value']}</div><div class="stat-value">{lag_display}</div></div>
+                </div>
+                <table class="report-table sync-health-table">
                     <thead>
                         <tr>
-                            <th style="background: #16A085; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['metric']}</th>
-                            <th style="background: #16A085; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['local_block_height']}</th>
-                            <th style="background: #16A085; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['mainnet_block_height']}</th>
-                            <th style="background: #16A085; color: white; padding: 12px; border: 1px solid #ddd;">{self.t['block_height_diff']}</th>
+                            <th>{self.t['metric']}</th>
+                            <th>{self.t['local_block_height']}</th>
+                            <th>{self.t['mainnet_block_height']}</th>
+                            <th>{self.t['block_height_diff']}</th>
                         </tr>
                     </thead>
                     <tbody>
             """
-            
+
             # Add data rows
             metrics = [
                 ('Current', 'current'),
@@ -3543,32 +3824,32 @@ class ReportGenerator:
                 ('Min', 'min'),
                 ('Max', 'max')
             ]
-            
+
             for metric_name, metric_key in metrics:
                 local_val = block_height_data.get('local_block_height', {}).get(metric_key, 'N/A')
                 mainnet_val = block_height_data.get('mainnet_block_height', {}).get(metric_key, 'N/A')
                 diff_val = block_height_data.get('block_height_diff', {}).get(metric_key, 'N/A')
-                
+
                 # Format numeric values
                 local_str = f"{local_val:.0f}" if isinstance(local_val, (int, float)) else str(local_val)
                 mainnet_str = f"{mainnet_val:.0f}" if isinstance(mainnet_val, (int, float)) else str(mainnet_val)
                 diff_str = f"{diff_val:.0f}" if isinstance(diff_val, (int, float)) else str(diff_val)
-                
+
                 comparison_table += f"""
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">{metric_name}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{local_str}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{mainnet_str}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{diff_str}</td>
+                            <td class="metric-value">{metric_name}</td>
+                            <td class="numeric-cell">{local_str}</td>
+                            <td class="numeric-cell">{mainnet_str}</td>
+                            <td class="numeric-cell metric-value">{diff_str}</td>
                         </tr>
                 """
-            
+
             comparison_table += """
                     </tbody>
                 </table>
             </div>
             """
-            
+
             # Combine all parts
             complete_html = f"""
             <div class="section">
@@ -3578,9 +3859,9 @@ class ReportGenerator:
                 {stats_file_html}
             </div>
             """
-            
+
             return complete_html
-                
+
         except Exception as e:
             return f"<div class='error'>{self.t['block_height_analysis_failed']}: {str(e)}</div>"
 
@@ -3592,14 +3873,14 @@ class ReportGenerator:
             os.path.join(os.path.dirname(self.output_dir), 'reports', 'block_height_sync_chart.png'),
             os.path.join(self.output_dir, 'current', 'reports', 'block_height_sync_chart.png')
         ]
-        
+
         chart_src = None
         for path in possible_paths:
             if os.path.exists(path):
                 # Calculate relative path
                 chart_src = os.path.relpath(path, self.output_dir)
                 break
-        
+
         if chart_src:
             return f"""
             <div class="info-card">
@@ -3608,9 +3889,10 @@ class ReportGenerator:
                     <img src="{chart_src}" alt="{self.t['block_height_sync_status']}" class="chart-image">
                 </div>
                 <div class="chart-info">
-                    <p>{self.t['chart_shows_block_height_diff']}:</p>
+                    <p>{self.t['chart_shows_sync_health']}:</p>
                     <ul>
                         <li><strong>{self.t['blue_curve']}</strong>: {self.t['block_height_diff_mainnet_minus_local']}</li>
+                        <li><strong>{self.t['sync_status']}</strong>: {self.t['sync_health_status_timeline']}</li>
                         <li><strong>{self.t['red_dashed_line']}</strong>: {self.t['anomaly_threshold_50_blocks']}</li>
                         <li><strong>{self.t['red_area']}</strong>: {self.t['data_loss_detected_periods']}</li>
                         <li><strong>{self.t['statistics_info']}</strong>: {self.t['sync_quality_stats_top_left']}</li>
@@ -3631,7 +3913,7 @@ class ReportGenerator:
 
     def _generate_data_loss_stats_section(self):
         """Generate data_loss_stats.json file display section"""
-        
+
         # Check stats file in archive
         stats_file = None
         possible_paths = [
@@ -3639,20 +3921,20 @@ class ReportGenerator:
             os.path.join(self.output_dir, 'data_loss_stats.json'),
             os.path.join(os.path.dirname(self.output_dir), 'stats', 'data_loss_stats.json')
         ]
-        
+
         for path in possible_paths:
             if os.path.exists(path):
                 stats_file = path
                 break
-        
+
         if stats_file:
             try:
                 with open(stats_file, 'r') as f:
                     stats_data = json.load(f)
-                
+
                 # Calculate derived metrics
                 avg_duration = (stats_data['total_duration'] / stats_data['data_loss_periods']) if stats_data['data_loss_periods'] > 0 else 0
-                
+
                 return f"""
                 <div class="info-card">
                     <h3>📋 {self.t['data_loss_stats_summary']}</h3>
@@ -3705,7 +3987,7 @@ class ReportGenerator:
         """Dynamically discover all generated chart files - scan multiple directories, support archive paths"""
         chart_patterns = ["*.png", "*.jpg", "*.svg"]
         chart_files = []
-        
+
         # Scan directory list - support archived path structure
         scan_dirs = [
             self.output_dir,  # Main output directory (may be archive directory)
@@ -3713,7 +3995,7 @@ class ReportGenerator:
             os.path.join(self.output_dir, 'reports'),  # Backup reports directory
             os.path.join(self.output_dir, 'logs'),  # Archived logs directory
         ]
-        
+
         # If output_dir looks like archive directory, add special scan paths
         if 'archives' in self.output_dir or 'run_' in os.path.basename(self.output_dir):
             # This is archive directory, scan its subdirectories directly
@@ -3722,27 +4004,27 @@ class ReportGenerator:
                 os.path.join(self.output_dir, 'reports'),
                 os.path.join(self.output_dir, 'current', 'reports'),
             ])
-        
+
         # Add sibling reports directory scan (critical fix)
         parent_dir = os.path.dirname(self.output_dir)
         sibling_reports = os.path.join(parent_dir, 'reports')
         if os.path.exists(sibling_reports):
             scan_dirs.append(sibling_reports)
-        
+
         for scan_dir in scan_dirs:
             if os.path.exists(scan_dir):
                 for pattern in chart_patterns:
                     chart_files.extend(glob.glob(os.path.join(scan_dir, pattern)))
-        
+
         # Deduplicate and sort
         unique_charts = list(set(chart_files))
-        
+
         # Filter out timestamped duplicates (e.g., keep xxx.png, remove xxx_20251024_104814.png)
         import re
         timestamp_pattern = re.compile(r'_\d{8}_\d{6}\.png$')
         filtered_charts = []
         base_names = {}
-        
+
         for chart in unique_charts:
             basename = os.path.basename(chart)
             # Check if this is a timestamped version
@@ -3753,13 +4035,13 @@ class ReportGenerator:
             else:
                 # Non-timestamped version, always keep
                 filtered_charts.append(chart)
-        
+
         # For timestamped files, only add if no non-timestamped version exists
         for base_name, charts in base_names.items():
             if base_name not in [os.path.basename(f) for f in filtered_charts]:
                 # No non-timestamped version, keep the timestamped one
                 filtered_charts.extend(charts)
-        
+
         return sorted([f for f in filtered_charts if os.path.exists(f)])
 
     def _categorize_charts(self, chart_files):
@@ -3771,24 +4053,24 @@ class ReportGenerator:
             'monitoring_impact_chart.png',  # Already displayed in monitoring overhead and performance relationship section
             'resource_distribution_chart.png'  # Already displayed in resource proportion analysis section
         }
-        
+
         categories = {
             'advanced': {'title': self.t.get('advanced_analysis_charts', 'Advanced Analysis Charts'), 'charts': []},
             'disk': {'title': self.t.get('disk_professional_charts', 'Disk Professional Charts'), 'charts': []},
             'performance': {'title': self.t.get('core_performance_charts', 'Core Performance Charts'), 'charts': []},
             'monitoring': {'title': self.t.get('monitoring_overhead_charts', 'Monitoring & Overhead Charts'), 'charts': []},
-            'network': {'title': self.t.get('network_ena_charts', 'Network & ENA Charts'), 'charts': []},
+            'network': {'title': self.t.get('network_ena_charts', 'Provider Network Charts'), 'charts': []},
             'other': {'title': self.t.get('additional_charts', 'Additional Charts'), 'charts': []}
         }
-        
+
         for chart_file in chart_files:
             filename = os.path.basename(chart_file)
             filename_lower = filename.lower()
-            
+
             # Skip excluded charts
             if filename in excluded_charts:
                 continue
-            
+
             # Advanced analysis charts
             if any(keyword in filename_lower for keyword in ['pearson', 'correlation', 'regression', 'heatmap', 'matrix']):
                 categories['advanced']['charts'].append(chart_file)
@@ -3806,7 +4088,7 @@ class ReportGenerator:
                 categories['performance']['charts'].append(chart_file)
             else:
                 categories['other']['charts'].append(chart_file)
-        
+
         return categories
 
     def _generate_chart_gallery_section(self):
@@ -3814,10 +4096,10 @@ class ReportGenerator:
         chart_files = self._discover_chart_files()
         if not chart_files:
             return f'<div class="section"><h2>📊 {self.t["performance_charts"]}</h2><p>{self.t["no_charts_found"]}</p></div>'
-        
+
         categories = self._categorize_charts(chart_files)
         total_charts = len(chart_files)
-        
+
         html = f'''
         <div class="section">
             <h2>📊 {self.t["performance_chart_gallery"]}</h2>
@@ -3825,7 +4107,7 @@ class ReportGenerator:
                 <p><strong>{self.t["total_charts_generated"]}:</strong> {total_charts}</p>
             </div>
         '''
-        
+
         for category_key, category_data in categories.items():
             if category_data['charts']:
                 html += f'''
@@ -3833,24 +4115,24 @@ class ReportGenerator:
                     <h3 style="color: #2C3E50;">📈 {category_data['title']} ({len(category_data['charts'])} charts)</h3>
                     <div class="chart-grid">
                 '''
-                
+
                 for chart_file in category_data['charts']:
                     chart_name = os.path.basename(chart_file)
                     chart_key = chart_name.replace('.png', '')
-                    
+
                     # Get localized title and description
                     title_key = f'chart_{chart_key}'
                     desc_key = f'chart_{chart_key}_desc'
                     chart_title = self.t.get(title_key, chart_name.replace('_', ' ').replace('.png', '').title())
                     chart_desc = self.t.get(desc_key, '')
-                    
+
                     # Fix capitalization if using fallback title
                     if title_key not in self.t:
                         chart_title = chart_title.replace('Cpu', 'CPU').replace('Aws', 'AWS').replace('Qps', 'QPS').replace('Ena', 'ENA')
-                    
+
                     # Calculate relative path
                     rel_path = os.path.relpath(chart_file, self.output_dir)
-                    
+
                     html += f'''
                     <div class="chart-item">
                         <h4>{chart_title}</h4>
@@ -3860,12 +4142,12 @@ class ReportGenerator:
                         </div>
                     </div>
                     '''
-                
+
                 html += '''
                     </div>
                 </div>
                 '''
-        
+
         html += '</div>'
         return html
 
@@ -3874,35 +4156,71 @@ class ReportGenerator:
         try:
             # Identify block_height related fields
             block_height_fields = [col for col in df.columns if 'block_height' in col.lower() or 'height' in col.lower()]
-            
+
             # Generate each section - using actually existing methods
             monitoring_overhead_analysis = self._generate_monitoring_overhead_section()
             monitoring_overhead_detailed = self._generate_monitoring_overhead_detailed_section()
             ena_warnings = self._generate_ena_warnings_section(df)
             ena_data_table = self._generate_ena_data_table(df)
-            
+
             config_status_section = self._generate_config_status_section()
             block_height_analysis = self._analyze_block_height_performance(df, block_height_fields)
 
             correlation_table = self._generate_cpu_disk_correlation_table(df)
             overhead_table = self._generate_overhead_data_table()
-            
+
             # Generate performance summary
             performance_summary = self._generate_performance_summary(df)
-            
+            environment_summary = self._generate_environment_summary_section(df)
+            data_quality_summary = self._generate_data_quality_section(df)
+
             # Generate bottleneck information display (if available)
             bottleneck_section = self._generate_bottleneck_section()
-            
+
             # Generate dynamic chart display section
             charts_section = self._generate_chart_gallery_section()
-            
+
             # Generate Disk analysis results
             disk_warnings, disk_metrics = self.parse_disk_analyzer_log()
             disk_analysis_section = self.generate_disk_analysis_section(disk_warnings, disk_metrics)
 
-            # S4.2 W3.4: Per-method attribution section (optional — empty if proxy data absent)
+            # Per-method attribution section (optional; empty if proxy data is absent)
             per_method_section = self._generate_per_method_section_safe()
-            
+            correlation_section = f"""
+            <div class="section" id="cpu-disk-correlation">
+                <h2>&#128202; {self.t['cpu_disk_correlation_analysis']}</h2>
+                {correlation_table}
+            </div>
+            """
+
+            section_specs = [
+                ('run-environment', self.t['run_environment'], environment_summary),
+                ('data-quality', self.t['data_quality_summary'], data_quality_summary),
+                ('system-bottleneck', self.t['system_bottleneck_analysis'], bottleneck_section),
+                ('performance-summary', self.t['performance_summary'], performance_summary),
+                ('configuration', self.t['config_status_check'], config_status_section),
+                ('sync-health', self.t['blockchain_node_sync_analysis'], block_height_analysis),
+                ('disk-analysis', self.t['disk_performance_analysis'], disk_analysis_section),
+                ('charts', self.t['performance_analysis_charts'], charts_section),
+                ('monitoring-overhead', self.t['monitoring_overhead_comprehensive_analysis'], monitoring_overhead_analysis),
+                ('monitoring-overhead-detail', self.t['monitoring_overhead_detailed'], monitoring_overhead_detailed),
+                ('overhead-table', self.t['monitoring_overhead_breakdown'], overhead_table),
+                ('ena-warnings', self.t['ena_network_statistics'], ena_warnings),
+                ('ena-data', self.t['ena_network_statistics'], ena_data_table),
+                ('per-method', 'Per-Method', per_method_section),
+                ('cpu-disk-correlation', self.t['cpu_disk_correlation_analysis'], correlation_section),
+            ]
+
+            section_html = []
+            nav_items = []
+            for section_id, label, content in section_specs:
+                available = bool(content and str(content).strip())
+                nav_items.append((section_id, label, available))
+                if available:
+                    section_html.append(self._add_section_id(content, section_id))
+
+            report_nav = self._generate_report_nav(nav_items)
+
             return f"""
             <!DOCTYPE html>
             <html>
@@ -3916,26 +4234,20 @@ class ReportGenerator:
             </head>
             <body>
                 <div class="container">
-                    <h1>{self.t['report_title']}</h1>
-                    <p>{self.t['generated_time']}: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    <p>{self.t['unified_field_naming']} | {self.t['complete_device_support']} | {self.t['monitoring_overhead_analysis']} | {self.t['blockchain_node_specific_analysis']} | {self.t['bottleneck_detection_analysis']}</p>
-                    
-                    {bottleneck_section}
-                    {performance_summary}
-                    {config_status_section}
-                    {block_height_analysis}
-                    {disk_analysis_section}
-                    {charts_section}
-                    {monitoring_overhead_analysis}
-                    {monitoring_overhead_detailed}
-                    {overhead_table}
-                    {ena_warnings}
-                    {ena_data_table}
+                    <div class="report-header">
+                        <h1>{self.t['report_title']}</h1>
+                        <div class="report-meta">{self.t['generated_time']}: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>
+                        <div class="report-capabilities">
+                            <span>{self.t['unified_field_naming']}</span>
+                            <span>{self.t['complete_device_support']}</span>
+	                            <span>{self.t['monitoring_overhead_analysis']}</span>
+	                            <span>{self.t['blockchain_node_specific_analysis']}</span>
+	                            <span>{self.t['bottleneck_detection_analysis']}</span>
+	                        </div>
+                        {report_nav}
+	                    </div>
 
-                    {per_method_section}
-                    
-                    <h2>&#128202; {self.t['cpu_disk_correlation_analysis']}</h2>
-                    {correlation_table}
+                    {''.join(section_html)}
                 </div>
             </body>
             </html>
@@ -3999,7 +4311,7 @@ class ReportGenerator:
                     'title': f'&#128680; {self.t["chart_bottleneck_identification"]}',
                     'description': self.t['chart_bottleneck_identification_desc']
                 },
-                
+
                 # Charts generated by advanced_chart_generator.py
                 {
                     'filename': 'pearson_correlation_analysis.png',
@@ -4046,7 +4358,7 @@ class ReportGenerator:
                     'title': f'&#128293; {self.t["chart_performance_correlation_heatmap"]}',
                     'description': self.t['chart_performance_correlation_heatmap_desc']
                 },
-                
+
                 {
                     'filename': 'performance_cliff_analysis.png',
                     'title': f'&#128201; {self.t["chart_performance_cliff_analysis"]}',
@@ -4062,7 +4374,7 @@ class ReportGenerator:
                     'title': f'&#127919; {self.t["chart_qps_performance_analysis"]}',
                     'description': self.t['chart_qps_performance_analysis_desc']
                 },
-                
+
                 # Disk professional analysis chart group
                 {
                     'filename': 'disk_capacity_planning.png',
@@ -4105,7 +4417,7 @@ class ReportGenerator:
                     'description': self.t['chart_block_height_sync_chart_desc']
                 }
             ]
-            
+
             # Check chart file existence and generate HTML
             charts_html = f"""
             <div class="section">
@@ -4114,33 +4426,33 @@ class ReportGenerator:
                     <p>{self.t['charts_provide_comprehensive_visualization']}</p>
                 </div>
             """
-            
+
             # Get report output directory - use environment variable or current/reports structure
             reports_dir = os.getenv('REPORTS_DIR', os.path.join(self.output_dir, 'current', 'reports'))
             if not os.path.exists(reports_dir):
                 reports_dir = self.output_dir
-            
+
             available_charts = []
             missing_charts = []
-            
+
             for chart in chart_definitions:
                 chart_path = os.path.join(reports_dir, chart['filename'])
                 # Also check charts directly in output_dir
                 alt_chart_path = os.path.join(self.output_dir, os.path.basename(chart['filename']))
-                
+
                 if os.path.exists(chart_path):
                     available_charts.append((chart, chart['filename']))
                 elif os.path.exists(alt_chart_path):
                     available_charts.append((chart, os.path.basename(chart['filename'])))
                 else:
                     missing_charts.append(chart)
-            
+
             # Generate HTML for available charts
             if available_charts:
                 charts_html += """
                 <div class="charts-grid">
                 """
-                
+
                 for chart, relative_path in available_charts:
                     charts_html += f"""
                     <div class="chart-item">
@@ -4153,11 +4465,11 @@ class ReportGenerator:
                         </div>
                     </div>
                     """
-                
+
                 charts_html += """
                 </div>
                 """
-                
+
                 # Add chart statistics
                 charts_html += f"""
                 <div class="charts-summary">
@@ -4182,7 +4494,7 @@ class ReportGenerator:
                     <p>{self.t['ensure_run_chart_scripts_before_report']}</p>
                 </div>
                 """
-            
+
             # If there are missing charts, show notice
             if missing_charts:
                 charts_html += f"""
@@ -4193,21 +4505,21 @@ class ReportGenerator:
                 """
                 for chart in missing_charts[:5]:  # Show only first 5
                     charts_html += f"<li>{chart['title']} - {chart['description']}</li>"
-                
+
                 if len(missing_charts) > 5:
                     charts_html += f"<li>... {self.t['and']} {len(missing_charts) - 5} {self.t['more_charts']}</li>"
-                
+
                 charts_html += """
                     </ul>
                 </div>
                 """
-            
+
             charts_html += """
             </div>
             """
-            
+
             return charts_html
-            
+
         except Exception as e:
             return f"""
             <div class="section error">
@@ -4217,10 +4529,10 @@ class ReportGenerator:
             """
 
     def _generate_per_method_section_safe(self):
-        """S4.2 W3.4: Generate per-method attribution section if proxy data is available.
+        """Generate per-method attribution section if proxy data is available.
 
         Looks for:
-          - {output_dir}/proxy_method.csv     (or env PROXY_METHOD_CSV)
+          - env PROXY_METHOD_CSV or LOGS_DIR/proxy_method.csv
           - {output_dir}/unified_monitor.csv  (or env UNIFIED_MONITOR_CSV, falls back to
                                                the same self.performance_csv if absent)
 
@@ -4228,10 +4540,15 @@ class ReportGenerator:
         without proxy data still render unchanged.
         """
         try:
-            proxy_csv = os.environ.get('PROXY_METHOD_CSV')
+            proxy_csv = next(
+                (path for path in self._runtime_file_candidates(
+                    'PROXY_METHOD_CSV',
+                    os.path.join(self.logs_dir, 'proxy_method.csv'),
+                    os.path.join(self.output_dir, 'proxy_method.csv'),
+                ) if os.path.exists(path)),
+                None,
+            )
             if not proxy_csv:
-                proxy_csv = os.path.join(self.output_dir, 'proxy_method.csv')
-            if not os.path.exists(proxy_csv):
                 return ""  # no proxy data — silent degradation
 
             monitor_csv = os.environ.get('UNIFIED_MONITOR_CSV')
@@ -4245,6 +4562,7 @@ class ReportGenerator:
             from analysis.per_method_attribution import (
                 compute_per_method_qps,
                 compute_per_method_resource,
+                filter_proxy_records_by_methods,
                 read_monitor_csv,
                 read_proxy_csv,
             )
@@ -4256,15 +4574,17 @@ class ReportGenerator:
             )
 
             proxy_recs = list(read_proxy_csv(proxy_csv))
+            allowed_methods = self._load_configured_workload_methods()
+            proxy_recs = filter_proxy_records_by_methods(proxy_recs, allowed_methods)
             if not proxy_recs:
                 return ""
             qps_rows = compute_per_method_qps(proxy_recs)
             # Re-read proxy (Iterator already consumed)
             resource_rows = compute_per_method_resource(
-                list(read_proxy_csv(proxy_csv)),
-                # CP-1 fix: unified monitor CSV 真实内存列名是 'mem_used' (unified_monitor.sh:1927
-                # basic_header),而 read_monitor_csv 默认 mem_col='mem_used_mb'(仅匹配单测桩数据).
-                # 不显式指定会导致生产 per-method 资源图的内存归因恒为 0(静默). CPU 列名一致无此问题.
+                filter_proxy_records_by_methods(read_proxy_csv(proxy_csv), allowed_methods),
+                # The unified monitor CSV memory column is 'mem_used', while
+                # read_monitor_csv defaults to 'mem_used_mb' for unit fixtures.
+                # Passing mem_col explicitly keeps production memory attribution non-zero.
                 list(read_monitor_csv(monitor_csv, mem_col="mem_used")),
             )
 
@@ -4284,13 +4604,53 @@ class ReportGenerator:
             import html as _html_mod
             return f'<!-- per_method section skipped: {_html_mod.escape(str(e))} -->'
 
+    def _load_configured_workload_methods(self):
+        """Return methods configured for the active single/mixed workload.
+
+        Health probes also pass through the proxy, but per-method attribution is
+        only for user workload methods declared in the chain template.
+        """
+        chain_name = self.config.get('BLOCKCHAIN_NODE') if hasattr(self, 'config') else None
+        chain_name = chain_name or os.getenv('BLOCKCHAIN_NODE')
+        if not chain_name:
+            return None
+
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        chain_file = os.path.join(root, 'config', 'chains', f'{chain_name}.json')
+        if not os.path.exists(chain_file):
+            return None
+
+        try:
+            with open(chain_file, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+        except Exception:
+            return None
+
+        rpc_methods = cfg.get('rpc_methods', {})
+        methods = set()
+        single = rpc_methods.get('single')
+        if isinstance(single, str) and single.strip():
+            methods.add(single.strip())
+
+        mixed = rpc_methods.get('mixed')
+        if isinstance(mixed, str):
+            methods.update(m.strip() for m in mixed.split(',') if m.strip())
+
+        weighted = rpc_methods.get('mixed_weighted')
+        if isinstance(weighted, list):
+            for item in weighted:
+                if isinstance(item, dict) and item.get('method'):
+                    methods.add(str(item['method']).strip())
+
+        return methods or None
+
     def _generate_bottleneck_section(self):
         """Generate system-level bottleneck analysis section - always display"""
         try:
             bottleneck_detected = False
             if self.bottleneck_data:
                 bottleneck_detected = self.bottleneck_data.get('bottleneck_detected', False)
-            
+
             if bottleneck_detected:
                 # Has bottleneck: display detailed information
                 max_qps = self.bottleneck_data.get('max_successful_qps', 0)
@@ -4299,52 +4659,52 @@ class ReportGenerator:
                 severity = self.bottleneck_data.get('severity', 'medium')
                 detection_time = self.bottleneck_data.get('detection_time', self.t['unknown'])
                 consecutive_detections = self.bottleneck_data.get('consecutive_detections', 0)
-                
+
                 performance_drop = 0.0
                 if max_qps > 0:
                     performance_drop = ((bottleneck_qps - max_qps) / max_qps) * 100
-                
+
                 severity_color = {
                     'low': '#28a745',
-                    'medium': '#ffc107', 
+                    'medium': '#ffc107',
                     'high': '#dc3545'
                 }.get(severity.lower(), '#ffc107')
-                
+
                 return f"""
-                <div class="section" style="border-left: 5px solid {severity_color}; background-color: #FEF5E7;">
-                    <h2 style="color: {severity_color};">&#128680; {self.t['system_bottleneck_analysis']}</h2>
-                    
-                    <div style="background: #fff3cd; border: 1px solid {severity_color}; padding: 15px; border-radius: 4px; margin: 15px 0;">
-                        <h3 style="color: {severity_color}; margin-top: 0;">&#9888; {self.t['system_bottleneck_detected']}</h3>
+                <div class="section bottleneck-section bottleneck-detected">
+                    <h2>&#128680; {self.t['system_bottleneck_analysis']}</h2>
+
+                    <div class="status-callout status-callout-warning">
+                        <h3>&#9888; {self.t['system_bottleneck_detected']}</h3>
                     </div>
-                    
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0;">
-                        <div style="background: white; padding: 15px; border-radius: 4px; border: 1px solid #ddd;">
-                            <h4 style="margin: 0 0 10px 0; color: #666;">&#127942; {self.t['max_successful_qps']}</h4>
-                            <div style="color: #28a745; font-size: 2em; font-weight: bold;">{max_qps}</div>
+
+                    <div class="metric-card-grid">
+                        <div class="metric-card">
+                            <h4>&#127942; {self.t['max_successful_qps']}</h4>
+                            <div class="metric-card-value good">{max_qps}</div>
                         </div>
-                        <div style="background: white; padding: 15px; border-radius: 4px; border: 1px solid #ddd;">
-                            <h4 style="margin: 0 0 10px 0; color: #666;">&#128680; {self.t['bottleneck_trigger_qps']}</h4>
-                            <div style="color: #dc3545; font-size: 2em; font-weight: bold;">{bottleneck_qps}</div>
+                        <div class="metric-card">
+                            <h4>&#128680; {self.t['bottleneck_trigger_qps']}</h4>
+                            <div class="metric-card-value bad">{bottleneck_qps}</div>
                         </div>
-                        <div style="background: white; padding: 15px; border-radius: 4px; border: 1px solid #ddd;">
-                            <h4 style="margin: 0 0 10px 0; color: #666;">&#128201; {self.t['performance_drop']}</h4>
-                            <div style="color: #dc3545; font-size: 2em; font-weight: bold;">{performance_drop:.1f}%</div>
+                        <div class="metric-card">
+                            <h4>&#128201; {self.t['performance_drop']}</h4>
+                            <div class="metric-card-value bad">{performance_drop:.1f}%</div>
                         </div>
                     </div>
-                    
-                    <div style="background: white; padding: 15px; border-radius: 4px; margin: 15px 0;">
+
+                    <div class="detail-panel">
                         <h3>&#128269; {self.t['bottleneck_details']}</h3>
                         <p><strong>{self.t['detection_time']}:</strong> {detection_time}</p>
                         <p><strong>{self.t['severity_level']}:</strong> <span style="color: {severity_color}; font-weight: bold;">{severity.upper()}</span></p>
                         <p><strong>{self.t['bottleneck_reason']}:</strong> {reasons}</p>
                         <p><strong>{self.t['consecutive_detections']}:</strong> {consecutive_detections}</p>
                     </div>
-                    
-                    <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 15px; border-radius: 4px; margin: 15px 0;">
+
+                    <div class="bottleneck-criteria-card">
                         <h3 style="margin-top: 0;">&#128203; {self.t['bottleneck_criteria_title']}</h3>
                         <p><strong>{self.t['bottleneck_criteria_note']}</strong></p>
-                        <ol style="margin: 10px 0; padding-left: 20px;">
+                        <ol class="bottleneck-criteria-list">
                             <li>{self.t['bottleneck_condition_1']}</li>
                             <li>{self.t['bottleneck_condition_2']}</li>
                             <li>{self.t['bottleneck_condition_3']}</li>
@@ -4355,30 +4715,30 @@ class ReportGenerator:
             else:
                 # No bottleneck: display criteria
                 return f"""
-                <div class="section">
+                <div class="section bottleneck-section">
                     <h2>&#9989; {self.t['system_bottleneck_analysis']}</h2>
-                    
-                    <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin: 15px 0;">
-                        <h3 style="color: #155724; margin-top: 0;">&#9989; {self.t['no_system_bottleneck_detected']}</h3>
+
+                    <div class="status-callout status-callout-success">
+                        <h3>&#9989; {self.t['no_system_bottleneck_detected']}</h3>
                     </div>
-                    
-                    <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 15px; border-radius: 4px; margin: 15px 0;">
+
+                    <div class="bottleneck-criteria-card">
                         <h3 style="margin-top: 0;">&#128203; {self.t['bottleneck_criteria_title']}</h3>
                         <p><strong>{self.t['bottleneck_criteria_note']}</strong></p>
-                        <ol style="margin: 10px 0; padding-left: 20px;">
+                        <ol class="bottleneck-criteria-list">
                             <li>{self.t['bottleneck_condition_1']}</li>
                             <li>{self.t['bottleneck_condition_2']}</li>
                             <li>{self.t['bottleneck_condition_3']}</li>
                         </ol>
                     </div>
-                    
-                    <div style="background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 4px; margin: 15px 0;">
-                        <h3 style="margin-top: 0;">&#128202; {self.t['bottleneck_current_status']}</h3>
+
+                    <div class="detail-panel">
+                        <h3>&#128202; {self.t['bottleneck_current_status']}</h3>
                         <p>{self.t['bottleneck_status_normal']}</p>
                     </div>
                 </div>
                 """
-                
+
         except Exception as e:
             return f"""
             <div class="section error">
@@ -4390,33 +4750,313 @@ class ReportGenerator:
     def _get_css_styles(self):
         """Get CSS styles - enhanced version with chart display support"""
         return """
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0; 
-            padding: 20px; 
-            background-color: #f5f7fa; 
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #f4f6f8;
+            color: #1f2933;
             line-height: 1.6;
         }
-        .container { 
-            width: 95%;
-            margin: 0 auto; 
-            background-color: white; 
-            padding: 30px; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1); 
+        .container {
+            width: min(1440px, 96%);
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 32px;
+            border-radius: 10px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
         }
-        .section { 
-            margin: 30px 0; 
-            padding: 20px; 
-            border: 1px solid #e1e8ed; 
-            border-radius: 8px; 
-            background-color: #fafbfc;
+        .report-header {
+            border-bottom: 1px solid #d9e2ec;
+            padding: 4px 0 22px 0;
+            margin-bottom: 20px;
+            text-align: center;
         }
-        .info { 
-            background-color: #EBF5FB; 
-            padding: 15px; 
-            border-radius: 6px; 
-            margin: 15px 0; 
+        .report-header h1 {
+            margin-bottom: 8px;
+        }
+        .report-meta {
+            color: #627d98;
+            font-size: 0.95em;
+            margin-bottom: 14px;
+        }
+        .report-capabilities {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .report-capabilities span {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            padding: 4px 10px;
+            border: 1px solid #dbe3ed;
+            border-radius: 999px;
+            background: #f8fafc;
+            color: #52606d;
+            font-size: 0.86em;
+            line-height: 1.25;
+        }
+        .report-nav {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid #eef2f6;
+        }
+        .report-nav:empty {
+            display: none;
+        }
+        .report-nav a {
+            display: inline-flex;
+            align-items: center;
+            max-width: 260px;
+            min-height: 30px;
+            padding: 5px 11px;
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #334e68;
+            font-size: 0.86em;
+            line-height: 1.25;
+            text-decoration: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .report-nav a:hover {
+            background: #f0f7ff;
+            border-color: #9fb3c8;
+            color: #102a43;
+        }
+        .section {
+            margin: 26px 0;
+            padding: 22px;
+            border: 1px solid #d9e2ec;
+            border-radius: 8px;
+            background-color: #ffffff;
+        }
+        .section p {
+            line-height: 1.72;
+            margin: 10px 0;
+        }
+        .section li {
+            line-height: 1.72;
+            margin: 7px 0;
+        }
+        .section ul, .section ol {
+            padding-left: 24px;
+        }
+        .bottleneck-criteria-card {
+            background: #f0f7ff;
+            border: 1px solid #b9d7f4;
+            border-left: 4px solid #2b6cb0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+        }
+        .bottleneck-criteria-card p {
+            line-height: 1.78;
+            margin: 10px 0 14px 0;
+        }
+        .bottleneck-criteria-list {
+            margin: 12px 0 0 0;
+            padding-left: 24px;
+        }
+        .bottleneck-criteria-list li {
+            line-height: 1.9;
+            margin: 13px 0;
+            padding-left: 4px;
+        }
+        .bottleneck-criteria-list strong {
+            color: #243b53;
+        }
+        .bottleneck-section {
+            border-left: 4px solid #2f855a;
+        }
+        .bottleneck-detected {
+            border-left-color: #c53030;
+            background: #fffafa;
+        }
+        .status-callout {
+            border: 1px solid #dbe3ed;
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin: 16px 0;
+        }
+        .status-callout h3,
+        .status-callout h4 {
+            margin: 0;
+        }
+        .status-callout-success {
+            background: #f0fff4;
+            border-color: #c6f6d5;
+        }
+        .status-callout-success h3 {
+            color: #276749;
+        }
+        .status-callout-warning {
+            background: #fffaf0;
+            border-color: #f6e05e;
+        }
+        .status-callout-warning h3 {
+            color: #975a16;
+        }
+        .metric-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin: 18px 0;
+        }
+        .metric-card,
+        .detail-panel {
+            background: #ffffff;
+            border: 1px solid #dbe3ed;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+        }
+        .metric-card h4,
+        .detail-panel h3 {
+            margin-top: 0;
+        }
+        .metric-card-value {
+            color: #102a43;
+            font-size: 2em;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .metric-card-value.good {
+            color: #2f855a;
+        }
+        .metric-card-value.bad {
+            color: #c53030;
+        }
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 0.86em;
+            font-weight: 600;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+        .status-ok {
+            background: #f0fff4;
+            color: #276749;
+            border: 1px solid #c6f6d5;
+        }
+        .status-warn {
+            background: #fffaf0;
+            color: #975a16;
+            border: 1px solid #f6e05e;
+        }
+        .status-bad {
+            background: #fff5f5;
+            color: #c53030;
+            border: 1px solid #fed7d7;
+        }
+        .environment-section {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        .environment-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            margin-top: 14px;
+        }
+        .environment-card {
+            background: #ffffff;
+            border: 1px solid #dbe3ed;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+        }
+        .environment-card h3 {
+            color: #243b53;
+            margin: 0 0 12px 0;
+            font-size: 1.02em;
+            border-bottom: 1px solid #e5ebf2;
+            padding-bottom: 8px;
+        }
+        .env-item {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 7px 0;
+            border-bottom: 1px solid #eef2f6;
+        }
+        .env-item:last-child {
+            border-bottom: 0;
+        }
+        .env-label {
+            color: #627d98;
+            font-size: 0.88em;
+        }
+        .env-value {
+            color: #102a43;
+            font-weight: 600;
+            text-align: right;
+            word-break: break-word;
+        }
+        .data-quality-section {
+            background: #ffffff;
+        }
+        .quality-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-top: 14px;
+        }
+        .quality-item {
+            border: 1px solid #dbe3ed;
+            border-radius: 8px;
+            padding: 14px;
+            background: #f8fafc;
+        }
+        .quality-label {
+            display: block;
+            color: #627d98;
+            font-size: 0.86em;
+            margin-bottom: 8px;
+        }
+        .quality-value {
+            display: block;
+            color: #102a43;
+            font-size: 1.55em;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+        .quality-ok {
+            border-left: 4px solid #2f855a;
+        }
+        .quality-warn {
+            border-left: 4px solid #d69e2e;
+            background: #fffaf0;
+        }
+        .quality-neutral {
+            border-left: 4px solid #718096;
+        }
+        .quality-notes {
+            margin-top: 14px;
+            color: #52606d;
+            font-size: 0.94em;
+        }
+        .quality-notes p {
+            margin: 6px 0;
+        }
+        .info {
+            background-color: #EBF5FB;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
             border-left: 4px solid #3498DB;
         }
         .success {
@@ -4426,12 +5066,12 @@ class ReportGenerator:
             margin: 15px 0;
             border-left: 4px solid #27AE60;
         }
-        .warning { 
-            background-color: #FEF5E7; 
-            padding: 15px; 
-            border-radius: 6px; 
-            margin: 15px 0; 
-            border-left: 4px solid #F39C12; 
+        .warning {
+            background-color: #FEF5E7;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #F39C12;
         }
         .warning tr.warning {
             background-color: #FEF5E7 !important;
@@ -4442,43 +5082,43 @@ class ReportGenerator:
             margin-top: 10px;
             font-style: italic;
         }
-        .error { 
-            background-color: #FADBD8; 
-            padding: 15px; 
-            border-radius: 6px; 
-            margin: 15px 0; 
-            border-left: 4px solid #E74C3C; 
+        .error {
+            background-color: #FADBD8;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #E74C3C;
         }
-        .bottleneck-alert { 
-            background-color: #FEF5E7 !important; 
-            border-left: 5px solid #E74C3C !important; 
+        .bottleneck-alert {
+            background-color: #FEF5E7 !important;
+            border-left: 5px solid #E74C3C !important;
         }
-        .bottleneck-summary { 
-            margin: 20px 0; 
+        .bottleneck-summary {
+            margin: 20px 0;
         }
-        .bottleneck-stats { 
-            display: flex; 
-            justify-content: space-around; 
-            margin: 25px 0; 
+        .bottleneck-stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 25px 0;
             flex-wrap: wrap;
         }
-        .stat-item { 
-            text-align: center; 
-            padding: 20px; 
-            background-color: #f8f9fa; 
-            border-radius: 10px; 
-            min-width: 180px; 
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            min-width: 180px;
             margin: 10px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
-        .stat-value { 
-            margin-top: 10px; 
+        .stat-value {
+            margin-top: 10px;
             font-weight: bold;
         }
-        .bottleneck-details, .bottleneck-recommendations, .bottleneck-actions { 
-            margin: 25px 0; 
+        .bottleneck-details, .bottleneck-recommendations, .bottleneck-actions {
+            margin: 25px 0;
         }
-        
+
         /* Chart display styles */
         .charts-grid {
             display: grid;
@@ -4570,7 +5210,7 @@ class ReportGenerator:
             margin: 8px 0;
             color: #856404;
         }
-        
+
         /* Block height statistics styles */
         .stats-grid {
             display: grid;
@@ -4610,52 +5250,52 @@ class ReportGenerator:
             border-radius: 3px;
             font-family: 'Courier New', monospace;
         }
-        
+
         /* Table styles */
-        table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin: 15px 0; 
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
             background-color: white;
             border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
         }
-        th, td { 
-            border: 1px solid #dee2e6; 
-            padding: 12px 15px; 
-            text-align: left; 
+        th, td {
+            border: 1px solid #dbe3ed;
+            padding: 12px 15px;
+            text-align: left;
         }
-        th { 
-            background-color: #f8f9fa; 
+        th {
+            background-color: #edf2f7;
             font-weight: 600;
-            color: #495057;
+            color: #243b53;
         }
         tr:nth-child(even) {
-            background-color: #f8f9fa;
+            background-color: #f8fafc;
         }
         tr:hover {
-            background-color: #e9ecef;
+            background-color: #eef5ff;
         }
-        
+
         /* Heading styles */
-        h1 { 
-            color: #2c3e50; 
-            text-align: center; 
+        h1 {
+            color: #102a43;
+            text-align: center;
             margin-bottom: 10px;
             font-size: 2.2em;
         }
-        h2 { 
-            color: #34495e; 
-            border-bottom: 3px solid #2C3E50; 
-            padding-bottom: 8px; 
+        h2 {
+            color: #243b53;
+            border-bottom: 2px solid #9fb3c8;
+            padding-bottom: 8px;
             margin-top: 30px;
         }
-        h3 { 
-            color: #5a6c7d; 
+        h3 {
+            color: #5a6c7d;
             margin-top: 20px;
         }
-        
+
         /* Responsive design */
         @media (max-width: 1200px) {
             .container {
@@ -4666,45 +5306,35 @@ class ReportGenerator:
                 font-size: 0.9em;
             }
         }
-        
-        @media (max-width: 768px) {
-            .container {
-                padding: 15px;
-                margin: 10px;
-                width: 98%;
-            }
-            .charts-grid {
-                grid-template-columns: 1fr;
-            }
-            .chart-grid {
-                grid-template-columns: 1fr;
-            }
-            .bottleneck-stats {
-                flex-direction: column;
-                align-items: center;
-            }
-            .stat-item {
-                min-width: 250px;
-            }
-            table {
-                font-size: 0.85em;
-                display: block;
-                overflow-x: auto;
-                white-space: nowrap;
-            }
-            h1 {
-                font-size: 1.5em;
-            }
-            h2 {
-                font-size: 1.3em;
-            }
-        }
-        
+
         /* Print styles */
         @media print {
+            body {
+                background: #ffffff;
+                padding: 0;
+            }
             .container {
                 box-shadow: none;
                 border: 1px solid #ccc;
+                width: 100%;
+                padding: 18px;
+            }
+            .report-nav,
+            .report-capabilities {
+                display: none;
+            }
+            .section,
+            .chart-item,
+            .environment-card,
+            .quality-item,
+            .metric-card,
+            .detail-panel {
+                box-shadow: none !important;
+                break-inside: avoid;
+            }
+            table,
+            img {
+                break-inside: avoid;
             }
             .chart-item:hover {
                 transform: none;
@@ -4714,7 +5344,7 @@ class ReportGenerator:
                 transform: none;
             }
         }
-        
+
         /* Chart Gallery Styles */
         .chart-summary {
             background-color: #e3f2fd;
@@ -4774,6 +5404,255 @@ class ReportGenerator:
         .chart:hover {
             transform: scale(1.02);
         }
+
+        /* Modern report polish overrides */
+        .container > .section:first-of-type {
+            margin-top: 22px;
+        }
+        .section h2 {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #102a43;
+            border-bottom: 1px solid #d9e2ec;
+            padding-bottom: 12px;
+            margin: 0 0 18px 0;
+            font-size: 1.34em;
+            line-height: 1.35;
+        }
+        .section h3 {
+            color: #243b53;
+            margin: 18px 0 12px 0;
+            line-height: 1.45;
+        }
+        .section h4 {
+            color: #334e68;
+            line-height: 1.45;
+        }
+        .info,
+        .success,
+        .warning,
+        .error,
+        .missing-charts,
+        .charts-summary,
+        .file-info {
+            border-radius: 8px;
+            padding: 16px 18px;
+            box-shadow: none;
+        }
+        .info {
+            background: #f0f7ff;
+            border-left-color: #2b6cb0;
+        }
+        .success {
+            background: #f0fff4;
+            border-left-color: #2f855a;
+        }
+        .warning,
+        .missing-charts {
+            background: #fffaf0;
+            border-left-color: #d69e2e;
+        }
+        .error {
+            background: #fff5f5;
+            border-left-color: #c53030;
+        }
+        .info-card,
+        .chart-category,
+        .chart-item,
+        .stat-card,
+        .stat-item {
+            border: 1px solid #dbe3ed !important;
+            border-radius: 8px !important;
+            background: #ffffff !important;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05) !important;
+        }
+        .info-card {
+            padding: 18px;
+            margin: 16px 0;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+        .stats-grid {
+            gap: 16px;
+        }
+        .stat-card,
+        .stat-item {
+            padding: 16px !important;
+        }
+        .stat-card .stat-label,
+        .stat-item .stat-label {
+            color: #627d98;
+            font-size: 0.84em;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .stat-card .stat-value,
+        .stat-item .stat-value {
+            color: #102a43;
+            font-size: 1.45em;
+            line-height: 1.2;
+        }
+        table,
+        .report-table,
+        .data-table,
+        .performance-table {
+            border: 1px solid #dbe3ed !important;
+            border-radius: 8px !important;
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06) !important;
+            overflow: hidden;
+        }
+        .report-table {
+            width: 100%;
+            min-width: 680px;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: #ffffff;
+        }
+        .report-table th,
+        .report-table td {
+            padding: 12px 14px;
+        }
+        .config-table td:first-child,
+        .summary-table td:first-child {
+            color: #52606d;
+            font-weight: 500;
+        }
+        .numeric-cell {
+            text-align: right;
+        }
+        .metric-value {
+            color: #102a43;
+            font-weight: 700;
+        }
+        .muted-cell {
+            color: #627d98;
+            font-size: 0.92em;
+        }
+        .total-row {
+            background: #f0f7ff !important;
+            font-weight: 700;
+            border-top: 2px solid #9fb3c8;
+        }
+        .completeness-green {
+            color: #2f855a;
+            font-weight: 700;
+        }
+        .completeness-orange {
+            color: #975a16;
+            font-weight: 700;
+        }
+        .completeness-red {
+            color: #c53030;
+            font-weight: 700;
+        }
+        .correlation-very-strong {
+            background: #f0fff4 !important;
+        }
+        .correlation-strong {
+            background: #f7fffa !important;
+        }
+        .correlation-moderate {
+            background: #fffaf0 !important;
+        }
+        .correlation-weak {
+            background: #f8fafc !important;
+        }
+        .monitoring-overhead-table,
+        .correlation-table,
+        .disk-warning-table,
+        .disk-stats-table,
+        .sync-health-table {
+            font-size: 0.95em;
+        }
+        .disk-warning-table {
+            margin-top: 12px;
+        }
+        .row-group-label {
+            color: #243b53;
+            font-weight: 700;
+            background: #f8fafc;
+            vertical-align: middle;
+        }
+        .disk-stats-table td:nth-child(n+3),
+        .sync-health-table td:nth-child(n+2) {
+            font-variant-numeric: tabular-nums;
+        }
+        .sync-comparison-panel {
+            margin: 20px 0;
+        }
+        .sync-stats-grid {
+            margin: 10px 0 16px 0;
+        }
+        th {
+            background: #edf2f7 !important;
+            color: #243b53 !important;
+            border-color: #dbe3ed !important;
+            line-height: 1.45;
+        }
+        td {
+            border-color: #e5ebf2 !important;
+            color: #334e68;
+            line-height: 1.55;
+        }
+        tr:nth-child(even) {
+            background: #f8fafc !important;
+        }
+        tr:hover {
+            background: #eef5ff !important;
+        }
+        .charts-grid,
+        .chart-grid {
+            gap: 20px;
+        }
+        .chart-category {
+            padding: 18px;
+            margin-bottom: 22px;
+        }
+        .chart-category h3,
+        .chart-item h3,
+        .chart-item h4 {
+            border-bottom: 1px solid #d9e2ec !important;
+            color: #243b53 !important;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .chart-item {
+            padding: 18px !important;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .chart-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08) !important;
+        }
+        .chart-container {
+            background: #f8fafc !important;
+            border-color: #e5ebf2 !important;
+            border-radius: 8px !important;
+        }
+        .chart-image,
+        .chart {
+            border-radius: 6px;
+            box-shadow: none;
+        }
+        .chart-image:hover,
+        .chart:hover {
+            transform: none;
+        }
+        .table-note {
+            color: #627d98;
+            line-height: 1.6;
+            font-style: normal;
+        }
+        div[style*="background: #d4edda"],
+        div[style*="background: #e7f3ff"],
+        div[style*="background: #f8f9fa"],
+        div[style*="background: white"] {
+            border-radius: 8px !important;
+        }
         """
 
     def _generate_performance_summary(self, df):
@@ -4783,32 +5662,32 @@ class ReportGenerator:
             cpu_avg = df['cpu_usage'].mean() if 'cpu_usage' in df.columns and len(df) > 0 else 0
             cpu_max = df['cpu_usage'].max() if 'cpu_usage' in df.columns and len(df) > 0 else 0
             mem_avg = df['mem_usage'].mean() if 'mem_usage' in df.columns and len(df) > 0 else 0
-            
+
             # DATA Device statistics - using unified field format matching
             data_iops_cols = [col for col in df.columns if col.startswith('data_') and col.endswith('_total_iops')]
             data_iops_avg = df[data_iops_cols[0]].mean() if data_iops_cols and len(df) > 0 else 0
-            
+
             # ACCOUNTS Device statistics - using unified field format matching
             accounts_iops_cols = [col for col in df.columns if col.startswith('accounts_') and col.endswith('_total_iops')]
             accounts_iops_avg = df[accounts_iops_cols[0]].mean() if accounts_iops_cols and len(df) > 0 else 0
-            
+
             return f"""
             <div class="section">
                 <h2>&#128202; {self.t['performance_summary']}</h2>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; background: white;">
+                <table class="report-table summary-table">
                     <thead>
                         <tr>
-                            <th style="background: #2C3E50; color: white; padding: 12px; text-align: left;">{self.t['metric']}</th>
-                            <th style="background: #2C3E50; color: white; padding: 12px; text-align: right;">{self.t['value']}</th>
+                            <th>{self.t['metric']}</th>
+                            <th class="numeric-cell">{self.t['value']}</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['avg_cpu_usage']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{cpu_avg:.1f}%</td></tr>
-                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['peak_cpu_usage']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{cpu_max:.1f}%</td></tr>
-                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['avg_memory_usage']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{mem_avg:.1f}%</td></tr>
-                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['data_device_avg_iops']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{data_iops_avg:.0f}</td></tr>
-                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['accounts_device_avg_iops']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{accounts_iops_avg:.0f}</td></tr>
-                        <tr><td style="padding: 10px; border: 1px solid #ddd;">{self.t['monitoring_data_points']}</td><td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">{len(df):,}</td></tr>
+                        <tr><td>{self.t['avg_cpu_usage']}</td><td class="numeric-cell metric-value">{cpu_avg:.1f}%</td></tr>
+                        <tr><td>{self.t['peak_cpu_usage']}</td><td class="numeric-cell metric-value">{cpu_max:.1f}%</td></tr>
+                        <tr><td>{self.t['avg_memory_usage']}</td><td class="numeric-cell metric-value">{mem_avg:.1f}%</td></tr>
+                        <tr><td>{self.t['data_device_avg_iops']}</td><td class="numeric-cell metric-value">{data_iops_avg:.0f}</td></tr>
+                        <tr><td>{self.t['accounts_device_avg_iops']}</td><td class="numeric-cell metric-value">{accounts_iops_avg:.0f}</td></tr>
+                        <tr><td>{self.t['monitoring_data_points']}</td><td class="numeric-cell metric-value">{len(df):,}</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -4824,13 +5703,13 @@ def main():
     parser.add_argument('--bottleneck-mode', action='store_true', help='Enable bottleneck analysis mode')
     parser.add_argument('--bottleneck-info', help='Bottleneck information JSON file path')
     parser.add_argument('--language', choices=['en', 'zh'], default='en', help='Report language (en or zh)')
-    
+
     args = parser.parse_args()
-    
+
     if not os.path.exists(args.performance_csv):
         print(f"❌ File does not exist: {args.performance_csv}")
         return 1
-    
+
     # Check bottleneck information file
     bottleneck_info_file = None
     if args.bottleneck_mode or args.bottleneck_info:
@@ -4839,12 +5718,12 @@ def main():
             print(f"📊 Using bottleneck information file: {bottleneck_info_file}")
         else:
             print("⚠️ Bottleneck mode enabled but bottleneck information file not found, will generate standard report")
-    
+
     # Create generator with specified language
     generator = ReportGenerator(args.performance_csv, args.config, args.overhead_csv, bottleneck_info_file, args.language)
-    
+
     result = generator.generate_html_report()
-    
+
     if result:
         if bottleneck_info_file:
             print("🎉 Bottleneck mode HTML report generated successfully!")

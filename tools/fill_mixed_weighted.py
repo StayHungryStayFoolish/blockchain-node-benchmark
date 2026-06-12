@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""
-W1.1 — chain template 批量填 mixed_weighted 字段 (Q4-14)
+"""Backfill rpc_methods.mixed_weighted in chain templates.
 
-策略:把现有 rpc_methods.mixed (逗号分隔字符串) 转为 mixed_weighted (数组,
-每个 method weight=1)。等权重 = 平均 = 与原 mixed 完全等价行为,
-向后兼容(保留 mixed 字段不删除,见 spec §1.8 优先级规则)。
+Strategy: convert the existing comma-separated rpc_methods.mixed value into a
+mixed_weighted array, with each method assigned weight=1. Equal weights preserve
+the original mixed behavior. The legacy mixed field is kept for readability and
+backward compatibility.
 
-幂等:已有 mixed_weighted 的链跳过。
+Idempotent: chain templates that already define mixed_weighted are skipped.
 """
 import json
 import sys

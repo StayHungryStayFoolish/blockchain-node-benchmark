@@ -1,6 +1,5 @@
 {
   "chain_type": "zksync-era",
-  "methods": {},
   "param_formats": {
     "eth_blockNumber": "no_params",
     "eth_getBalance": "address_latest",
@@ -13,7 +12,7 @@
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "0xC0fFee254729296a45a3885639AC7E10F9d54979",
+    "target_address": "${TARGET_ADDRESS:-0xC0fFee254729296a45a3885639AC7E10F9d54979}",
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
@@ -22,23 +21,23 @@
     "mixed_weighted": [
       {
         "method": "eth_blockNumber",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_getBalance",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_getBlockByNumber",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "zks_L1BatchNumber",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "zks_getBlockDetails",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -48,33 +47,57 @@
   ],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/17-zksync-era.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.945631+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "json-rpc",
     "original_public_endpoints": [
       {
         "url": "https://mainnet.era.zksync.io",
         "auth": false,
         "verified": "E2",
-        "notes": "官方 RPC,~150ms,zks_* 全支持"
+        "notes": "zkSync Era official RPC"
       },
       {
         "url": "https://zksync-era-rpc.publicnode.com",
         "auth": false,
         "verified": "E2",
-        "notes": "publicnode 备用,多数 zks_* 支持"
+        "notes": "publicnode public endpoint"
+      },
+      {
+        "url": "https://zksync.drpc.org",
+        "auth": false,
+        "verified": "E2",
+        "notes": "dRPC public endpoint"
       }
     ],
-    "original_notes": "ZK Rollup Type 4; chain_id=324; native AA (EOA 即合约); tx type 113 含 paymasterParams; 三阶段 finality (committed/proven/executed)",
+    "original_notes": "ZK Rollup Type 4; chain_id=324; native account abstraction where EOAs are contracts; tx type 113 includes paymasterParams; three-stage finality (committed/proven/executed).",
     "adapter_required": false,
     "adapter_family": "jsonrpc",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
-    "s3_a_fix": "zks_getBlockDetails uses int not latest"
+    "s3_a_fix": "zks_getBlockDetails uses int not latest",
+    "sync_health": {
+      "mode": "conditional_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": null,
+      "comparison": "local_sync_object_lag",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Use eth_syncing on the local node: false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD."
+    },
+    "health_probe": {
+      "method": "eth_syncing",
+      "params": [],
+      "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+      "conditional_gap_fields": {
+        "lag_value": ".result.highestBlock - .result.currentBlock",
+        "healthy_value": ".result == false"
+      }
+    }
   },
   "proxy_extraction": {
     "extractors": [

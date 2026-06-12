@@ -1,5 +1,5 @@
-// Package selfreport 每秒采集 proxy 自身 cpu_pct/mem_mb,写独立 CSV。
-// stdlib only,Linux 通过 /proc/self 读;非 Linux 输出 0/0。
+// Package selfreport samples the proxy process cpu_pct/mem_mb into a CSV.
+// It uses only stdlib; Linux reads /proc/self, while non-Linux returns 0/0.
 package selfreport
 
 import (
@@ -77,7 +77,7 @@ func (r *Reporter) Stop() {
 	r.wg.Wait()
 }
 
-// readCPUTicks 读 /proc/self/stat 字段 14+15 (utime+stime, clock ticks)。
+// readCPUTicks reads /proc/self/stat fields 14+15 (utime+stime clock ticks).
 func readCPUTicks() int64 {
 	b, err := os.ReadFile("/proc/self/stat")
 	if err != nil {
@@ -97,7 +97,7 @@ func readCPUTicks() int64 {
 	return ut + st
 }
 
-// readMemMB 读 /proc/self/status VmRSS (kB) → MB。
+// readMemMB reads /proc/self/status VmRSS (kB) and converts it to MB.
 func readMemMB() float64 {
 	b, err := os.ReadFile("/proc/self/status")
 	if err != nil {

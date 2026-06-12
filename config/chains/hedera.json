@@ -1,20 +1,20 @@
 {
   "chain_type": "hedera",
-  "methods": {},
   "param_formats": {
     "mirror_account_query": "path_account_3part",
     "mirror_balance_query": "query_account_3part",
     "mirror_tx_lookup": "path_tx_id_3part_dash",
     "eth_getBalance": "address_latest",
-    "eth_call": "address_with_options"
+    "eth_call": "eth_call_object_latest"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "0.0.2",
-    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+    "target_address": "${TARGET_ADDRESS:-0.0.2}",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "target_evm_address": "${TARGET_EVM_ADDRESS:-0x0000000000000000000000000000000000000002}"
   },
   "rpc_methods": {
     "single": "GET /api/v1/accounts/{addr}",
@@ -22,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "GET /api/v1/accounts/{addr}",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /api/v1/balances?account.id={addr}",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "GET /api/v1/transactions/{addr}",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_getBalance",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_call",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -52,34 +52,33 @@
   ],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/14-hedera.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.938884+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "mixed",
     "original_public_endpoints": [
       {
         "url": "https://mainnet-public.mirrornode.hedera.com",
         "auth": false,
-        "verified": "E2",
-        "notes": "Mirror REST API,GET 风格"
+        "verified": "live-2026-06-08",
+        "notes": "Hedera Mirror REST public endpoint"
       },
       {
         "url": "https://mainnet.hashio.io/api",
         "auth": false,
         "verified": "E2",
-        "notes": "JSON-RPC Relay (EVM-compat),chainId=295"
+        "notes": "Hashio JSON-RPC relay"
       }
     ],
-    "original_notes": "双协议 Mirror REST + JSON-RPC; 3-part account ID (shard.realm.num); tinybar vs weibar 单位换算; gRPC 不测",
+    "original_notes": "Dual protocol: Mirror REST + JSON-RPC; 3-part account ID (shard.realm.num); tinybar/weibar unit conversion; gRPC is not benchmarked.",
     "adapter_required": true,
     "adapter_family": "hedera_dual",
     "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
     "adapter_family_upgraded_at": "2026-05-24T18:00:00Z",
-    "adapter_family_upgrade_note": "S3-E.3: was 'rest' (broken — couldn't route eth_*); upgraded to dual-protocol adapter that routes per-method between Mirror REST and JSON-RPC Relay.",
+    "adapter_family_upgrade_note": "Uses a dual-protocol adapter that routes each method between Mirror REST and JSON-RPC Relay.",
     "known_broken_mixed": {
       "status": "ADAPTER_OK_BUT_UPSTREAM_BROKEN",
       "evidence_date": "2026-05-24",
@@ -87,8 +86,7 @@
       "blockers": [
         "PARAM: cli.py L40 reads tpl['params'] (fetcher config) instead of tpl['param_formats'] (method→format) — eth_getBalance call gets [addr] not [addr, 'latest']. Affects all JSON-RPC chains.",
         "ADDR_FMT: fetch_active_accounts.py does not produce EVM-format addresses for hedera (only 3-part 0.0.N). Mirror REST works (path uses raw ID), JSON-RPC Relay requires 0x-prefixed 20-byte hex."
-      ],
-      "fix_wave": "cli-param-bug (PARAM) + S4 (ADDR_FMT)"
+      ]
     },
     "json_rpc_url": "https://mainnet.hashio.io/api",
     "rest_paths": {
@@ -102,7 +100,7 @@
       },
       "GET /api/v1/transactions/{addr}": {
         "method": "GET",
-        "path": "/api/v1/transactions/{address}"
+        "path": "/api/v1/transactions?account.id={address}&limit=1"
       },
       "GET /api/v1/blocks?limit=1&order=desc": {
         "method": "GET",
@@ -115,8 +113,19 @@
     },
     "health_probe": {
       "method": "GET",
-      "path": "/api/v1/network/supply",
-      "parse_jq": ".timestamp"
+      "path": "/api/v1/accounts/0.0.2",
+      "parse_jq": ".balance.timestamp"
+    },
+    "mirror_url": "https://mainnet-public.mirrornode.hedera.com",
+    "sync_health": {
+      "mode": "freshness_only",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": null,
+      "comparison": "local_freshness",
+      "threshold_env": null,
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "timestamp_seconds",
+      "notes": "The probe returns a monotonic freshness cursor rather than a canonical block height; judge health by probe success and sustained freshness state."
     }
   },
   "proxy_extraction": {

@@ -1,3 +1,5 @@
-# fixtures are recorded on-demand from public endpoints, not stored in git.
-# Run: bash scripts/record_solana_fixtures.sh
-fixtures/
+# Runtime fixtures are part of the deterministic local closed-loop test suite
+# and should be committed when they represent sanitized fake-node responses.
+#
+# Large per-method request/response audit evidence lives under
+# docs/audit/rpc-fixtures/<chain>/<method>/ and is ignored at the repository root.

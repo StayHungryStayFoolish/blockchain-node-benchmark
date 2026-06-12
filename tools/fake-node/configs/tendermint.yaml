@@ -1,4 +1,4 @@
-# fake-node v2 config — tendermint family (ADR-0005).
+# fake-node v2 config — tendermint family.
 #
 # Covers 5 chains under _meta.adapter_family=tendermint:
 #   cosmos-hub, osmosis, celestia, injective, sei.

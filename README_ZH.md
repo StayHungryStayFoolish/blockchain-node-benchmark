@@ -7,76 +7,232 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Shell Script](https://img.shields.io/badge/shell-bash-green.svg)](https://www.gnu.org/software/bash/)
 
-一个专业的多区块链节点性能基准测试框架，具备全面的 QPS 测试、实时监控、智能瓶颈检测和高级可视化报告功能。
+一个面向生产环境的多链区块链节点性能基准测试框架。它不只是发送 RPC
+压测流量，还会生成 chain-aware Vegeta workload，通过 proxy 记录每个 RPC
+method 的表现，采集系统与节点健康指标，统计监控系统自身开销，生成 HTML
+报告，归档每次运行，并可选通过 Prometheus/Grafana 暴露只读观测数据。
+
+## 架构概览
+
+```mermaid
+flowchart LR
+    Config["config/user_config.sh<br/>config/chains/*.json"] --> Entry["blockchain_node_benchmark.sh"]
+    Entry --> Targets["Target generation<br/>single 或 weighted mixed"]
+    Targets --> Vegeta["Vegeta QPS executor"]
+    Vegeta --> Proxy["RPC proxy<br/>method 与 success telemetry"]
+    Proxy --> Node["真实节点或 fake-node"]
+
+    Entry --> Monitor["Monitoring coordinator"]
+    Monitor --> System["系统、磁盘、网络、<br/>cgroup 与 sync-health collector"]
+    System --> Runtime["current/ logs 与 reports<br/>MEMORY_SHARE_DIR 实时状态"]
+    Proxy --> Runtime
+    Vegeta --> Runtime
+
+    Runtime --> Analysis["Analysis 与 per-method attribution"]
+    Analysis --> Report["HTML reports 与 charts"]
+    Report --> Archive["archives/run_id/"]
+    Runtime -. read-only .-> Exporter["可选 Prometheus/Grafana"]
+```
 
 ## 🎯 核心特性
 
-- **[多模式 QPS 测试](#-测试模式)**：快速（15+分钟）、标准（90+分钟）和密集（8+小时）测试模式
-- **跨平台兼容性**：支持 8 个主流区块链节点（Solana、Ethereum、BSC、Base、Polygon、Scroll、Starknet、Sui）在 AWS、其他云、IDC 或本地 Linux 环境运行
-- **真实交易数据测试**：从区块链节点获取活跃账户地址，使用 single 或 mixed RPC 方法生成测试目标
-- **[多层次性能监控](#-监控指标)**：专业监控系统，4 个专业化数据流
-  - 统一指标（79 个字段）：CPU、内存、磁盘、网络、ENA、区块高度、QPS
-  - 监控开销跟踪（20 个字段）：自我监控和影响分析
-  - ENA 深度监控（15 个字段）：AWS 专属网络性能分析
-  - 区块链健康跟踪（7 个字段）：节点同步状态和数据丢失检测
-- **双重瓶颈监测机制**：
-  - **即时监测**：8 维度监控，5 种场景判断逻辑避免误判
-    - 资源瓶颈 + 节点健康 → 误报（重置计数器）
-    - RPC 性能违规（成功率 < 95% 或 延迟 > 1000ms）→ 真实瓶颈（必要条件）
-    - 任意瓶颈 + 节点不健康 → 真实瓶颈（连续 3 次）
-    - 仅节点持续不健康 → 节点故障（立即停止）
-    - 全部正常 → 继续测试
-  - **离线分析**：测试完成后的多维度深度分析
-    - 时间窗口分析（瓶颈前后 ±30 秒）聚焦根因调查
-    - 性能悬崖分析识别 QPS 降级模式
-    - 磁盘 性能深度剖析与 AWS 基线对比
-    - CPU-磁盘 关联分析识别资源瓶颈
-    - RPC 方法性能剖析和优化建议
-- **AWS 深度集成**：EBS 性能基线、ENA 网络监控
-- **专业可视化**：[32 张专业图表](#-生成的报告)和[全面的 HTML 报告](./docs/image/performance_report_zh_20251030_171541.html)
+- **36 链模板模型**：链支持集中在 `config/chains/*.json`，按 6 个 RPC
+  protocol family 归类，并由 `tools/chain_adapters/` 生成真实请求。
+- **Single 或 weighted mixed workload**：用户选择 `single` 或 `mixed`；
+  mixed 模式读取 chain template 中的 `rpc_methods.mixed_weighted`。
+- **Per-method RPC 归因**：workload 流量经过 proxy，记录 method、status、
+  latency，用于生成 method 级 QPS、延迟、错误率和资源归因。
+- **真实 sync-health 模型**：chain template 声明该链使用高度差、条件同步对象、
+  节点自报 lag、freshness 或 boolean health 信号。
+- **可插拔监控栈**：coordinator 统一启动系统监控、provider-aware 网络监控、
+  block-height/sync-health、cgroup 采集和实时瓶颈检测。
+- **自我监控与 observer-cost 分析**：框架会记录监控系统自身 CPU、内存、
+  进程数量、I/O rate 和吞吐量，让 benchmark 开销在报告中可见。
+- **解耦文件生命周期**：每次运行写入 `current/`，通过 `MEMORY_SHARE_DIR`
+  共享实时状态，并将最终结果归档到 `archives/`。
+- **fake-node 确定性闭环测试**：通过录制 fixture 验证 36 链请求/响应行为，
+  不需要同时部署所有真实节点。
+- **可选观测出口**：Prometheus/Grafana 通过只读 exporter 读取运行产物，
+  默认关闭。
+
+完整执行链路见：[框架流程与数据生命周期](docs/zh/framework-flow.md)。
+
+## 🚀 快速开始
+
+如果你想先把框架跑起来，再阅读内部设计，按下面顺序执行。
+
+### 1. 检查依赖
+
+先使用只检查模式。它只报告缺失依赖，不会修改机器环境：
+
+```bash
+bash scripts/install_deps.sh --check
+```
+
+然后使用交互模式安装缺失依赖：
+
+```bash
+bash scripts/install_deps.sh
+```
+
+CI、Docker 或无人值守 Linux VM 可以使用：
+
+```bash
+bash scripts/install_deps.sh --yes
+```
+
+该脚本会检查系统包、Python 包和 Vegeta。它不会修改项目配置、不会运行
+benchmark、不会触碰 Git 状态，也不会替换已有 Vegeta 二进制。在 Debian 12+
+或较新的 Ubuntu 这类 externally-managed Python 系统上，脚本默认创建/使用
+项目 `.venv`，避免修改系统 Python 包。只有当你明确希望 pip 使用
+`--break-system-packages` 时，才使用 `--system-python`。
+
+### 2. 配置必需运行参数
+
+运行真实 benchmark 前，编辑 `config/user_config.sh`：
+
+```bash
+BLOCKCHAIN_NODE="solana"
+RPC_MODE="single"
+LOCAL_RPC_URL="http://localhost:8899"
+
+BLOCKCHAIN_PROCESS_NAMES=(
+    "agave-validator"
+    "solana-validator"
+    "validator"
+)
+
+CLOUD_PROVIDER="gcp"
+CLOUD_REGION="us-central1"
+MACHINE_TYPE="c3-standard-22"
+
+LEDGER_DEVICE="sdb"
+DATA_VOL_TYPE="hyperdisk-extreme"
+DATA_VOL_MAX_IOPS="30000"
+DATA_VOL_MAX_THROUGHPUT="700"
+NETWORK_MAX_BANDWIDTH_GBPS=25
+```
+
+请用 `ps aux`、`systemctl status`、容器运行时和 `lsblk` 确认进程名与磁盘名。
+如果这些值和真实主机不匹配，报告仍可能生成，但资源归因会不准确。
+
+### 3A. 在 VM 或裸机 Linux 主机运行
+
+```bash
+./blockchain_node_benchmark.sh --quick
+```
+
+标准测试和密集测试建议使用 `screen` 或 `tmux`，否则 SSH 断开会终止 benchmark。
+
+### 3B. 对 Kubernetes 中的节点运行
+
+benchmark 入口脚本不会自动创建 Kubernetes 监控资源。请先部署并验证 collector：
+
+```bash
+deploy/k8s/validate.sh --preflight
+kubectl apply -f deploy/k8s/
+kubectl rollout status -n blockchain-bench ds/blockchain-bench-collector
+deploy/k8s/validate.sh --post-deploy
+```
+
+当 collector 开始持续输出 cgroup CSV 数据行后，再从选定的 runner 使用同一份
+`config/user_config.sh` 配置运行 benchmark：
+
+```bash
+./blockchain_node_benchmark.sh --quick
+```
+
+### 3C. 运行本地 fake-node 闭环
+
+如果你想在没有真实区块链节点的情况下验证 chain template、proxy extraction、
+fixture、per-method attribution 和 HTML 输出，请使用 fake-node。
+
+见：[使用 fake-node 进行本地闭环测试](./docs/zh/local-closed-loop-testing.md)。
+
+### 4. 查看报告
+
+当前运行文件位于 runtime `current/` 目录，最终结果会在运行结束后归档。关键输出：
+
+- `current/reports/performance_report_*.html`
+- `current/logs/proxy_method.csv`
+- `current/logs/performance_latest.csv`
+- `archives/<run-id>/`
+
+Prometheus/Grafana 默认关闭。只有需要可选只读观测栈时再开启。
 
 
 
-## ⚡ 快速配置
+## ⚙️ 必需配置
 
 **在运行框架之前**，您必须配置以下参数：
+完整配置层级和高级选项说明请查看
+[`config/README.md`](config/README.md)。
 
-### 必需配置（在 `config/config_loader.sh` 中）
+### 必需配置（在 `config/user_config.sh` 中）
 
 ```bash
 # 1. RPC 端点（必需）
 LOCAL_RPC_URL="http://localhost:8899"  # 您的区块链节点 RPC 端点
+MAINNET_RPC_URL=""                     # 可选主网参考端点覆盖；留空则使用 config/chains 默认值
 
 # 2. 区块链类型（必需）
-BLOCKCHAIN_NODE="Solana"  # 支持：Solana、Ethereum、BSC、Base、Polygon、Scroll、Starknet、Sui
+BLOCKCHAIN_NODE="solana"  # config/chains/*.json 中的链名，例如 solana、ethereum、bitcoin、cosmos-hub
+RPC_MODE="single"         # 选项：single | mixed
 
 # 3. 区块链进程名称（监控必需）
 BLOCKCHAIN_PROCESS_NAMES=(
-    "agave-validator"    # 您实际的区块链节点进程名称
-    "solana-validator"   # 添加所有可能的进程名称
+    "agave-validator"    # 您实际的区块链节点进程名或命令行关键字
+    "solana-validator"   # 添加当前部署中所有可能出现的名称
     "validator"
 )
 # 使用以下命令检查您的进程名称：ps aux | grep -i validator
 ```
 
-### EBS 配置（在 `config/user_config.sh` 中）
+`BLOCKCHAIN_PROCESS_NAMES` 是唯一需要用户维护的节点身份列表。它用于监控
+归因，也会作为 systemd unit 前缀用于自动识别 `DEPLOYMENT_MODE=vm_systemd`。
+进程名和部署方式强相关：Docker/Kubernetes 环境中可能看到 container 或 pod
+名称，VM 环境中常见 `geth.service` 或 `agave-validator.service`。如果报告中的
+资源图表为空，或 runtime label 不正确，优先检查这里是否匹配真实的
+`ps aux`、`systemctl status` 或容器运行时输出；也可以显式设置
+`DEPLOYMENT_MODE`。
+
+### 云磁盘与机器配置（同样在 `config/user_config.sh` 中）
 
 ```bash
-# 4. DATA 设备配置（必需）
-LEDGER_DEVICE="nvme1n1"              # DATA 设备名称（使用 'lsblk' 检查）
-DATA_VOL_TYPE="io2"                  # 选项："gp3" | "io2" | "instance-store"
-DATA_VOL_MAX_IOPS="30000"            # 您的 EBS 卷预配置的 IOPS
-DATA_VOL_MAX_THROUGHPUT="700"        # 您的 EBS 卷吞吐量（MiB/s）
+# 4. 云厂商 / 机器信息（用于报告展示）
+CLOUD_PROVIDER="gcp"                  # 选项：gcp | aws | azure | other
+CLOUD_REGION="us-central1"            # 示例：us-central1、ap-east-1
+CLOUD_ZONE="us-central1-a"            # 非 GCP 环境可留空
+MACHINE_TYPE="c3-standard-22"          # 示例：c3-standard-22、m7i.4xlarge
 
-# 5. ACCOUNTS 设备（可选，但建议配置以进行完整监控）
-ACCOUNTS_DEVICE="nvme2n1"            # ACCOUNTS 设备名称
-ACCOUNTS_VOL_TYPE="io2"              # 选项："gp3" | "io2" | "instance-store"
-ACCOUNTS_VOL_MAX_IOPS="30000"        # ACCOUNTS 卷的 IOPS
-ACCOUNTS_VOL_MAX_THROUGHPUT="700"    # ACCOUNTS 卷的吞吐量（MiB/s）
+# 5. DATA 设备配置（必需）
+LEDGER_DEVICE="sdb"                  # DATA 设备名称（使用 'lsblk' 检查）
+DATA_VOL_TYPE="hyperdisk-extreme"    # 示例：hyperdisk-extreme、hyperdisk-balanced、pd-ssd、gp3、io2、instance-store
+DATA_VOL_MAX_IOPS="30000"            # 预配置磁盘 IOPS 或等效基线
+DATA_VOL_MAX_THROUGHPUT="700"        # 预配置磁盘吞吐量（MiB/s）
 
-# 6. 网络配置（AWS 环境必需）
+# 6. ACCOUNTS 设备（可选，但建议配置以进行完整监控）
+ACCOUNTS_DEVICE="sdc"                # 可选 ACCOUNTS 设备名称；单盘节点可留空
+ACCOUNTS_VOL_TYPE="hyperdisk-extreme" # 示例：hyperdisk-extreme、hyperdisk-balanced、pd-ssd、gp3、io2、instance-store
+ACCOUNTS_VOL_MAX_IOPS="30000"        # ACCOUNTS 磁盘 IOPS 或等效基线
+ACCOUNTS_VOL_MAX_THROUGHPUT="700"    # ACCOUNTS 磁盘吞吐量（MiB/s）
+
+# 7. 网络配置
 NETWORK_MAX_BANDWIDTH_GBPS=25        # 您的实例网络带宽（Gbps）
 ```
+
+部分链的某些方法会使用可选辅助端点，例如 indexer、REST/LCD API、
+Substrate Sidecar、mirror node 或 companion EVM/JSON-RPC route。这些变量
+统一在 `config/user_config.sh` 中配置：`CHAIN_REST_URL`、
+`CHAIN_INDEXER_URL`、`CHAIN_SIDECAR_URL`、`CHAIN_EVM_RPC_URL`、
+`CHAIN_JSON_RPC_URL`、`CHAIN_MIRROR_URL`。fake-node 本地闭环测试时请保持
+为空；如果当前链和当前方法全部走 `LOCAL_RPC_URL`，也不需要配置。
+
+chain template 中也保留了实测样本值，例如 `target_address`、
+`target_tx_hash`、`target_block_hash`。如果需要替换为您自己节点上的真实
+样本，可以在 `config/user_config.sh` 中配置 `TARGET_ADDRESS`、
+`TARGET_TX_HASH`、`TARGET_TXID`、`TARGET_BLOCK_HASH`、`TARGET_HEIGHT` 等
+`TARGET_*` 变量。留空则使用模板默认值。
 
 **快速配置检查：**
 ```bash
@@ -84,27 +240,197 @@ NETWORK_MAX_BANDWIDTH_GBPS=25        # 您的实例网络带宽（Gbps）
 ps aux | grep -i validator
 ps aux | grep -i agave
 
-# 验证您的 EBS 设备
+# 验证您的数据磁盘
 lsblk
 
-# 在 AWS 控制台检查您的 EBS 卷配置：
-# EC2 → 卷 → 选择您的卷 → 详细信息选项卡
-# - IOPS：预配置的 IOPS 值
-# - 吞吐量：预配置的吞吐量值
+# 检查您的磁盘配置：
+# GCP：Compute Engine → Storage → Disks → 选择对应磁盘
+# AWS：EC2 → Volumes → 选择对应卷
+# - IOPS：预配置 IOPS 值
+# - 吞吐量：预配置吞吐量值
 
 # 检查您的实例网络带宽：
-# EC2 → 实例类型 → 搜索您的实例类型 → 网络
+# GCP：查看 Compute Engine machine type 文档或 VM 详情
+# AWS：EC2 → Instance Types → 搜索实例类型 → Networking
 ```
 
 **配置文件位置：**
-- `config/config_loader.sh` - RPC 端点、区块链类型、进程名称
-- `config/user_config.sh` - EBS 设备、网络带宽、监控间隔
+- `config/user_config.sh` - RPC 端点、区块链类型、节点进程名称、云厂商信息、磁盘设备、网络带宽、监控间隔
+- `config/config_loader.sh` - 配置加载器、运行时探测、派生路径和 chain template 解析
+- `config/chains/*.json` - 每条链的 RPC method 模板、协议 family、参数格式和 REST path 映射
+
+本地 fake-node 闭环测试手册：[本地闭环测试与 fake-node 使用指南](docs/zh/local-closed-loop-testing.md)。
+
+GKE、EKS 和自建 Kubernetes 集群的监控部署入口位于
+[deploy/k8s](deploy/k8s/README.md)。仓库内已通过静态测试和 mock API 测试验证
+manifest 与 K8s 监控 helper，但真实集群部署仍取决于使用者自己的 RBAC、
+admission policy、hostPath、hostPID 和 privileged workload 权限配置。
 
 **注意**：如果您没有正确配置这些参数，框架将使用默认值，这可能与您的实际硬件不匹配，导致性能分析不准确。
 
+## 🔌 Chain Template、RPC Family 与扩展模型
+
+框架当前通过 `config/chains/*.json` 支持 36 个 chain template。链不是按品牌、token 或生态归类，而是按真实 RPC 请求与解析方式归入 6 个 family：
+
+| Family | 链数量 | 判断依据 |
+|---|---:|---|
+| `jsonrpc` | 16 | 标准 JSON-RPC 2.0 POST，请求体包含 method，params 按链使用数组或对象 |
+| `bitcoin_jsonrpc` | 4 | Bitcoin Core / UTXO 风格 JSON-RPC，公共节点不支持的 address 查询使用 REST workaround |
+| `rest` | 5 | REST 为主，逻辑 method 通过 `_meta.rest_paths` 映射到 HTTP path/body |
+| `substrate` | 5 | Polkadot SDK / Substrate RPC，如 `chain_*`、`state_*`、`system_*`，必要时路由到 sidecar REST 或 EVM RPC |
+| `tendermint` | 5 | Cosmos SDK / Tendermint / CometBFT REST-RPC 路径，混合 EVM 链按 method 路由 |
+| `hedera_dual` | 1 | Hedera 特殊双协议：Mirror REST + Hashio JSON-RPC Relay |
+
+也就是说，family 的判断标准是：请求 envelope、参数结构、endpoint 路由、认证/header、响应 envelope、区块高度解析方式是否一致。
+
+### 如何在现有 family 内新增一条链
+
+完整实操手册见：[如何新增区块链或 RPC Method](docs/zh/how-to-add-chain.md)。
+
+如果新链的 RPC 形态属于现有 family，通常只需要新增配置并录制真实 fixture：
+
+1. 新建 `config/chains/<chain>.json`。
+2. 设置 `_meta.adapter_family` 为 6 个 family 之一。
+3. 配置 `rpc_methods.single`、`rpc_methods.mixed`、`rpc_methods.mixed_weighted`。
+4. 对 JSON-RPC 类 method，配置 `param_formats.<method>`。
+5. 对 REST 或 sidecar method，配置 `_meta.rest_paths.<method>`。
+6. 配置 `_meta.sync_health`，声明该链使用区块高度差、节点自报 lag，还是只能使用 freshness/health 信号。
+7. 在 `params` 中使用 `${TARGET_*:-measured-default}` 形式准备真实样本，例如 `target_address`、`target_tx_hash`、`target_height`、`target_block_hash`。
+8. 录制并验证：
+
+```bash
+tools/fake-node/record_rpc_fixtures.sh <chain>
+
+python3 tools/fake-node/check_fixture_coverage.py
+```
+
+### 示例：新增一条 EVM-compatible JSON-RPC 链
+
+```json
+{
+  "chain_type": "example-evm",
+  "rpc_url": "LOCAL_RPC_URL",
+  "param_formats": {
+    "eth_getBalance": "address_latest",
+    "eth_blockNumber": "no_params",
+    "eth_getBlockByNumber": "block_number",
+    "eth_call": "eth_call_object_latest"
+  },
+  "params": {
+    "target_address": "${TARGET_ADDRESS:-0x0000000000000000000000000000000000000000}"
+  },
+  "rpc_methods": {
+    "single": "eth_getBalance",
+    "mixed": "eth_getBalance,eth_blockNumber,eth_getBlockByNumber,eth_call",
+    "mixed_weighted": [
+      {"method": "eth_getBalance", "weight": 40},
+      {"method": "eth_blockNumber", "weight": 30},
+      {"method": "eth_getBlockByNumber", "weight": 20},
+      {"method": "eth_call", "weight": 10}
+    ]
+  },
+  "_meta": {
+    "adapter_family": "jsonrpc",
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "比较 local 和 target RPC endpoint 返回的 eth_blockNumber。"
+    },
+    "original_public_endpoints": [
+      {"url": "https://example-rpc.invalid", "auth": false}
+    ]
+  }
+}
+```
+
+### 示例：给现有 REST 链新增一个 RPC method
+
+REST 类 method 的名字可以是逻辑 key，真实 HTTP 请求由 `_meta.rest_paths` 定义：
+
+```json
+{
+  "param_formats": {
+    "GET /v1/accounts/{addr}/transactions": "path_addr"
+  },
+  "rpc_methods": {
+    "mixed": "GET /v1/accounts/{addr},GET /v1/accounts/{addr}/transactions",
+    "mixed_weighted": [
+      {"method": "GET /v1/accounts/{addr}", "weight": 70},
+      {"method": "GET /v1/accounts/{addr}/transactions", "weight": 30}
+    ]
+  },
+  "_meta": {
+    "adapter_family": "rest",
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "比较 REST health probe 返回的数值高度。"
+    },
+    "rest_paths": {
+      "GET /v1/accounts/{addr}/transactions": {
+        "method": "GET",
+        "path": "/v1/accounts/{address}/transactions"
+      }
+    }
+  }
+}
+```
+
+### Sync Health 模型
+
+`block_height_monitor.sh` 会写入内存 JSON cache 和 CSV，供 `bottleneck_detector.sh`、报告和图表消费。每条链如何解释同步健康信号，以 chain template 中的 `_meta.sync_health` 为准。
+
+支持的模式：
+
+- `absolute_gap`：本地节点和 target/mainnet endpoint 都返回数值高度或 slot，使用 `target - local` 与 `BLOCK_HEIGHT_DIFF_THRESHOLD` 判断。
+- `conditional_gap`：只有节点正在同步时才返回同步对象；如果返回“未同步中 / not syncing”，视为当前健康。
+- `reported_lag`：本地节点直接返回自己的 lag 值，例如落后多少 slot。
+- `freshness_only`：probe 返回的是单调游标或 liveness 信号，不是严格区块高度；主要根据 probe 成功与持续不健康时间判断。
+- `health_only`：只能获取 boolean 或粗粒度健康状态。
+
+框架会尽量复用已有的 `BLOCK_HEIGHT_TIME_THRESHOLD` 来判断“持续不健康”。只有当某条链暴露了完全无法映射到现有 diff/time 语义的新单位时，才应该新增阈值变量。
+
+### RPC method 与响应结构如何匹配
+
+框架不是只按参数名匹配响应，也不会认为“都传 `tx_hash` 就能共用响应”。匹配粒度是 `chain + method + fixture`：
+
+- `param_formats` 和 `_meta.rest_paths` 决定请求如何构造。
+- `tools/fake-node/record_rpc_fixtures.py` 记录真实 request/response。
+- `tools/fake-node/fixtures/<chain>/<fixture>.json` 保存并回放对应链、对应 method 的真实响应。
+- `tools/fake-node/validate_fixture_authenticity.py` 可在本地重新录制 fixture evidence 后运行，用于拒绝 placeholder、HTTP 错误和 JSON-RPC 语义错误。
+
+如果新增 method 的参数格式现有 adapter 已能表达，则通常不需要改 Python 或 Go。如果它需要新的请求 envelope、新认证方式、新 endpoint 路由规则，或新的区块高度解析方式，就需要扩展 `tools/chain_adapters/<family>.py` 和 fake-node 的 method 映射。
 
 
-## 🚀 快速开始
+
+## ▶️ 运行命令参考
+
+### 选择运行路径
+
+框架有两种部署路径：
+
+- **VM / 裸机 / systemd Linux**：配置 `config/user_config.sh`，安装依赖，
+  然后运行 `./blockchain_node_benchmark.sh --quick`。入口脚本会在本机启动
+  benchmark、proxy、monitor、per-method attribution 和报告生成。
+- **GKE / EKS / 自建 Kubernetes**：入口脚本**不会**自动创建集群资源。
+  如果目标区块链节点运行在 Kubernetes 中，需要先部署并验证
+  [`deploy/k8s`](deploy/k8s/README.md) 下的 collector DaemonSet，包括镜像、
+  RBAC、`hostPath`、`hostPID`、security context 和 runtime path 配置。
+  当 collector 已经可以持续输出 cgroup CSV 数据后，再从选定的 runner
+  按正常方式配置 `config/user_config.sh` 并运行 benchmark 入口。
+
+普通 Linux 主机使用 VM 路径即可。只有当区块链节点进程或容器运行在集群内，
+并且需要节点/容器级资源归因时，才需要使用 Kubernetes 路径。
 
 ### 前置条件
 
@@ -125,8 +451,8 @@ bash scripts/install_deps.sh --help
 ```
 
 安装器涵盖：
-- **系统包**（`sysstat bc jq net-tools procps`）— 自动检测 apt/yum/dnf/apk
-- **Python 包**（来自 `requirements.txt`）— 自动处理 PEP 668（Debian 12+）
+- **系统包**（`sysstat bc jq net-tools procps python3-pip` 以及 Python venv/virtualenv 支持）— 自动检测 apt/yum/dnf/apk 和不同发行版的软件包名
+- **Python 包**（来自 `requirements.txt`）— 有 active virtualenv 时安装到该环境；PEP 668 系统默认创建项目 `.venv`；只有显式传入 `--system-python` 才会使用 `--break-system-packages`
 - **vegeta v12.12.0** — 锁定版本，SHA256 校验，安装到 `~/bin/vegeta`
 
 支持的发行版：Ubuntu、Debian、RHEL、CentOS、Rocky、AlmaLinux、Amazon Linux、Fedora、Alpine。
@@ -141,13 +467,18 @@ tar -xzf vegeta_12.12.0_linux_amd64.tar.gz
 sudo mv vegeta /usr/local/bin/
 vegeta -version  # 验证安装
 
-# 安装系统监控工具（框架硬依赖 — 全部必需）
+# Debian/Ubuntu：安装系统监控工具
 sudo apt-get install -y sysstat bc jq net-tools procps
 # sysstat → iostat/mpstat/sar  |  bc → shell 脚本中的算术运算
 # jq → JSON 解析  |  net-tools → netstat  |  procps → ps/top
 
-# 安装 Python 和虚拟环境支持
+# Debian/Ubuntu：安装 Python 和虚拟环境支持
 sudo apt-get install python3 python3-venv
+
+# CentOS/RHEL/Rocky/Alma/Amazon Linux：
+# sudo yum install -y sysstat bc jq net-tools procps-ng python3-pip python3-virtualenv
+# # 或在 dnf-based 系统上：
+# sudo dnf install -y sysstat bc jq net-tools procps-ng python3-pip python3-virtualenv
 
 # 创建虚拟环境
 python3 -m venv node-env
@@ -172,7 +503,7 @@ which sar       # 网络监控工具
 
 </details>
 
-### 基本使用
+### VM / 裸机基本使用
 
 ```bash
 # 快速测试（15+ 分钟）- 可以直接运行
@@ -196,6 +527,40 @@ screen -S benchmark_$(date +%m%d_%H%M)
 
 详见下方[长时间测试最佳实践](#长时间测试最佳实践)。
 
+### Kubernetes 基本使用
+
+Kubernetes 目标需要先完成集群侧监控部署：
+
+```bash
+# 1. 确认目标集群和权限。
+kubectl config current-context
+kubectl get nodes -o wide
+kubectl auth can-i create daemonsets.apps --all-namespaces
+kubectl auth can-i get nodes/proxy
+# 或执行：deploy/k8s/validate.sh --preflight
+
+# 2. 构建并推送 collector 镜像，或将 DaemonSet 镜像改为您已有的镜像地址。
+docker build -t REGISTRY/blockchain-node-benchmark/collector:latest \
+    -f deploy/k8s/Dockerfile .
+docker push REGISTRY/blockchain-node-benchmark/collector:latest
+
+# 3. 检查 deploy/k8s/03-configmap.yaml 和 deploy/k8s/04-daemonset.yaml。
+#    根据集群类型设置 DEPLOYMENT_MODE 为 k8s_gke、k8s_eks 或 k8s_other。
+
+# 4. 部署 Kubernetes 监控资源。
+kubectl apply -f deploy/k8s/
+kubectl rollout status -n blockchain-bench ds/blockchain-bench-collector
+kubectl logs -f -n blockchain-bench ds/blockchain-bench-collector
+# 或执行：deploy/k8s/validate.sh --post-deploy
+```
+
+当 DaemonSet 日志中出现 cgroup CSV header 并持续输出数据行后，再从选定的
+runner 执行 `./blockchain_node_benchmark.sh --quick` 或更长时间的测试。
+框架默认集群管理员已经审阅并批准所需的 Kubernetes 权限。
+
+完整的逐步命令、每一步会发生什么、如何判断可以进入下一步，请查看
+[Kubernetes Operator Runbook](deploy/k8s/README.md#kubernetes-operator-runbook)。
+
 ### 自定义测试
 
 ```bash
@@ -209,111 +574,51 @@ screen -S benchmark_$(date +%m%d_%H%M)
 ```
 
 
-
-## 📦 系统架构
-
-```
-blockchain-node-benchmark/
-├── 🎯 核心执行层
-│   ├── blockchain_node_benchmark.sh    # 主入口脚本
-│   ├── master_qps_executor.sh          # QPS 测试引擎
-│   └── common_functions.sh             # 共享函数库
-├── ⚙️ 配置管理
-│   ├── config_loader.sh                # 配置加载器
-│   └── system_config.sh                # 系统配置
-├── 📊 监控数据层
-│   ├── unified_monitor.sh              # 统一监控器
-│   ├── bottleneck_detector.sh          # 瓶颈检测器
-│   └── monitoring_coordinator.sh       # 监控协调器
-├── 🔬 分析处理层
-│   ├── comprehensive_analysis.py       # 综合分析器
-│   ├── qps_analyzer.py                 # QPS 分析器
-│   └── rpc_deep_analyzer.py            # RPC 深度分析器
-├── 📈 可视化层
-│   ├── report_generator.py             # HTML 报告生成器
-│   ├── performance_visualizer.py       # 性能可视化引擎
-│   └── advanced_chart_generator.py     # 高级图表生成器
-└── 🛠️ 工具与实用程序
-    ├── benchmark_archiver.sh           # 测试结果归档器
-    ├── disk_bottleneck_detector.sh      # 磁盘 瓶颈检测器
-    └── target_generator.sh             # 测试目标生成器
-```
-
-
-
 ## 📚 文档
 
-`docs/` 目录中提供了全面的文档：
+请优先阅读以下当前流程文档。这些文件描述的是当前维护中的运行链路。
 
 ### 核心文档
 
-#### [架构概览](./docs/architecture-overview-zh.md)
-- 4 层模块化架构设计
-- 组件交互和数据流
-- 32 张专业图表详解
-- 系统集成点
+#### [框架流程与数据生命周期](./docs/zh/framework-flow.md)
+- 从入口命令到 QPS 执行、监控、分析、报告生成和归档的完整链路。
+- 解耦文件生命周期：`current/`、`archives/` 和 `MEMORY_SHARE_DIR`。
+- 可插拔监控、sync-health、per-method 归因和 observer-cost 计算。
+- 可选 Prometheus/Grafana 数据流及其只读边界。
 
-#### [数据架构](./docs/data-architecture-zh.md)
-- 完整的数据文件结构和字段定义
-- 79 字段性能数据 CSV 格式
-- 20 字段监控开销 CSV 格式
-- 数据流架构和文件命名约定
-- 测试结果的 JSON 格式规范
+#### [模块说明](./docs/zh/module-guide.md)
+- 按模块说明职责、输入、输出和扩展边界。
+- 覆盖配置、chain adapter、benchmark core、proxy、monitoring、analysis、report、archive、fake-node 和 observability。
 
-#### [配置指南](./docs/configuration-guide-zh.md)
-- 4 层配置系统（用户/系统/内部/动态）
-- EBS 卷配置（gp3/io2/instance-store）
-- 网络和 ENA 设置
-- 区块链特定参数
+#### [配置层说明](./config/README.md)
+- `config/user_config.sh` 中的用户配置。
+- runtime path registry 和生成文件位置。
+- chain template 格式与环境变量覆盖。
 
-#### [监控机制](./docs/monitoring-mechanism-zh.md)
-- 双层监控架构
-- 79 项性能指标收集（已更新）
-- 自我监控和开销分析
-- AWS 标准转换公式
+#### [Kubernetes Operator Runbook](./deploy/k8s/README.md)
+- GKE、EKS 和自建 Kubernetes 的监控部署路径。
+- preflight 检查、DaemonSet 部署和 post-deploy 验证。
 
-#### [区块链测试特性](./docs/blockchain-testing-features-zh.md)
-- 单一 vs 混合 RPC 测试模式
-- 多区块链支持（Solana/Ethereum/BSC/Base/Polygon/Scroll/Starknet/Sui）
-- RPC 方法配置
-- 真实交易数据测试
+#### [Prometheus / Grafana Observability](./deploy/observability/README.md)
+- 可选只读 exporter 和本地 Prometheus/Grafana 栈。
+- runtime artifact 路径和 dashboard 启停命令。
 
+#### [GitHub PR Gate 与分支保护](./docs/zh/github-pr-gates.md)
+- PR CI、CODEOWNERS、Pull Request 模板和分支保护设置。
+- GitHub 可以自动验证的内容，以及维护者需要手动 smoke 的内容。
 
+#### [Contributing](./CONTRIBUTING.md)
+- 按变更类型划分的本地验证命令。
+- 开发、review 和公开仓库 hygiene 规则。
 
-## ⚙️ 配置
+#### Chain 扩展与本地闭环测试
+- [如何新增区块链或 RPC Method](./docs/zh/how-to-add-chain.md)
+- [使用 fake-node 进行本地闭环测试](./docs/zh/local-closed-loop-testing.md)
 
-### 基本配置
+## ⚙️ 配置参考
 
-**RPC 和区块链设置**（`config/config_loader.sh`）：
-```bash
-LOCAL_RPC_URL="http://localhost:8899"
-BLOCKCHAIN_NODE="Solana"
-BLOCKCHAIN_PROCESS_NAMES=(
-    "agave-validator"
-    "solana-validator"
-    "validator"
-)
-```
-
-**EBS 设备配置**（`config/user_config.sh`）：
-```bash
-# DATA 设备（必需）
-LEDGER_DEVICE="nvme1n1"
-DATA_VOL_TYPE="io2"                  # io2/gp3/instance-store
-DATA_VOL_MAX_IOPS="30000"
-DATA_VOL_MAX_THROUGHPUT="700"        # MiB/s
-
-# ACCOUNTS 设备（可选）
-ACCOUNTS_DEVICE="nvme2n1"
-ACCOUNTS_VOL_TYPE="io2"              # io2/gp3/instance-store
-ACCOUNTS_VOL_MAX_IOPS="30000"
-ACCOUNTS_VOL_MAX_THROUGHPUT="700"    # MiB/s
-
-# 网络配置
-NETWORK_MAX_BANDWIDTH_GBPS=25        # Gbps
-```
-
-**注意：** ACCOUNTS 设备是可选的。如果未配置，框架将仅监控 DATA 设备。
+必需运行参数已经在上文“必需配置”中列出。完整配置层级、默认值和
+环境变量覆盖方式请查看[配置层说明](./config/README.md)。
 
 ### 高级配置
 
@@ -347,123 +652,110 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 
 ## 🔍 监控指标
 
-### 系统指标（共 73-79 项）
-- **时间戳**：统一时间戳（1 个字段）
-- **CPU**：使用率、I/O 等待、系统调用（6 个字段）
-- **内存**：使用率、可用内存、缓存（3 个字段）
-- **磁盘 存储**：IOPS、吞吐量、延迟、利用率（每设备 21 个字段，2 个设备共 42 个字段）
-- **网络**：带宽利用率、PPS、连接数（10 个字段）
-- **ENA 网络**：配额超限、带宽限制（6 个字段，仅 AWS）
-- **监控开销**：系统影响指标（2 个字段）
-- **区块高度**：本地 vs 主网同步状态（6 个字段）
-- **QPS 性能**：当前 QPS、延迟、可用性（3 个字段）
+监控系统基于文件契约运行。实际 CSV schema 会根据云厂商、设备配置、runtime
+mode 和可用 cgroup 信号变化。消费者按列名读取，不应该依赖固定字段数量。
 
-**总计**：79 个字段（AWS 环境含 ENA）或 73 个字段（非 AWS 环境不含 ENA）
+主要运行文件：
 
-### 详细监控数据文件
+- `performance_<session>.csv`：统一系统、磁盘、网络、sync-health、QPS、
+  cgroup 和 provider 标记数据。
+- `performance_latest.csv`：指向当前 performance CSV 的 symlink，供分析和
+  bottleneck detection 使用。
+- `monitoring_overhead_<session>.csv`：监控进程开销、区块链节点进程开销和
+  系统资源拆分。
+- `block_height_monitor_<session>.csv`：链同步健康数据，根据链能力记录高度差、
+  reported lag、freshness 或 health-only 信号。
+- `network_<session>.csv`：GCP gVNIC/virtio、AWS ENA 或通用 Linux 网卡的
+  provider-aware 网络详情。
+- `proxy_method.csv`：proxy 记录的 workload RPC method telemetry，包含
+  HTTP transport success 与 RPC-level success/failure 摘要，不保存完整响应体。
 
-框架生成多个专业化 CSV 文件用于细粒度分析：
+框架还会在 `MEMORY_SHARE_DIR` 写入短生命周期 JSON 状态，用于运行时判定，
+包括 latest metrics、QPS 状态、bottleneck 状态和 sync-health cache。
 
-**1. 性能指标** (`performance_YYYYMMDD_HHMMSS.csv` - 79 个字段)
-- 统一的性能数据，整合所有系统指标
-- 可配置间隔的实时采集（默认 5 秒）
-- 用于综合性能分析和关联研究
+### 运行后文件夹结构
 
-**2. 监控开销** (`monitoring_overhead_YYYYMMDD_HHMMSS.csv` - 20 个字段)
-- 监控系统资源消耗（CPU、内存、进程数）
-- 区块链节点资源消耗
-- 系统级资源统计（核心数、内存、磁盘、缓存、缓冲区）
-- 用于监控影响分析和开销优化
+默认情况下，所有运行产物会写入 `blockchain-node-benchmark-result/`。可以通过 `BLOCKCHAIN_BENCHMARK_DATA_DIR` 覆盖基础目录。
 
-**3. ENA 网络详情** (`ena_network_YYYYMMDD_HHMMSS.csv` - 15 个字段，仅 AWS)
-- 网络接口统计（rx/tx 字节数、数据包数）
-- ENA 配额跟踪（带宽入/出、PPS、连接跟踪、本地链路）
-- 网络限制状态（network_limited、pps_limited、bandwidth_limited）
-- 用于 AWS ENA 特定瓶颈检测和网络性能分析
+```text
+blockchain-node-benchmark-result/
+├── current/
+│   ├── logs/
+│   │   ├── performance_YYYYMMDD_HHMMSS.csv
+│   │   ├── performance_latest.csv
+│   │   ├── proxy_method.csv
+│   │   ├── monitoring_overhead_YYYYMMDD_HHMMSS.csv
+│   │   ├── block_height_monitor_YYYYMMDD_HHMMSS.csv
+│   │   ├── network_YYYYMMDD_HHMMSS.csv
+│   │   └── *.log
+│   ├── reports/
+│   │   ├── performance_report_<lang>_YYYYMMDD_HHMMSS.html
+│   │   ├── *.png
+│   │   ├── *.svg
+│   │   └── per_method_charts/
+│   ├── vegeta_results/
+│   │   ├── vegeta_<qps>qps_YYYYMMDD_HHMMSS.json
+│   │   └── vegeta_<qps>qps_YYYYMMDD_HHMMSS.txt
+│   ├── tmp/
+│   │   ├── targets_single.json
+│   │   ├── targets_mixed.json
+│   │   ├── qps_test_status
+│   │   └── monitor_pids.txt
+│   ├── error_logs/
+│   └── python_errors/
+└── archives/
+```
 
-**4. 区块高度监控** (`block_height_monitor_YYYYMMDD_HHMMSS.csv` - 7 个字段)
-- 本地和主网区块高度跟踪
-- 区块高度差异和同步状态
-- 节点健康指标（local_health、mainnet_health）
-- 数据丢失检测标志
-- 用于区块链节点同步分析和健康监控
+实时共享状态会单独放在 memory-share 目录中，Linux 下通常是 `/dev/shm/blockchain-node-benchmark/`。这些文件是短生命周期运行态文件，由判定链路直接消费：
 
-### 瓶颈检测（8 个维度）
-1. **CPU 瓶颈**：阈值 85%
-2. **内存瓶颈**：阈值 90%
-3. **磁盘 瓶颈**：IOPS/吞吐量/利用率 > 90% 基线
-4. **网络瓶颈**：带宽/PPS 利用率 > 80%
-5. **ENA 瓶颈**：配额限制超限
-6. **RPC 成功率**：< 95%（必要条件）
-7. **RPC 延迟**：P99 > 1000ms（必要条件）
-8. **RPC 错误率**：> 5%
+- `latest_metrics.json` 和 `unified_metrics.json`：统一监控器写入的最新系统指标，供 QPS executor 和 bottleneck detector 使用。
+- `block_height_monitor_cache.json`：`block_height_monitor.sh` 生产的最新同步健康样本。
+- `block_height_time_exceeded.flag`：同步健康异常持续超过 `BLOCK_HEIGHT_TIME_THRESHOLD` 后写入的持续异常标志。
+- `qps_status.json` 和 `bottleneck_status.json`：当前 QPS 与瓶颈判定状态。
+
+### 瓶颈检测
+
+瓶颈检测会结合资源压力、RPC 质量和节点健康状态：
+
+- CPU、内存、磁盘、网络和 provider NIC 饱和度是资源信号。
+- RPC 成功率、延迟和错误率用于判断 workload 是否真的退化。
+- sync-health 状态用于避免在节点落后、不健康或 stale 时误读资源信号。
+- 持续不健康状态尽量复用 `BLOCK_HEIGHT_TIME_THRESHOLD`。
 
 
 
 ## 📈 生成的报告
 
-### 示例报告
+每次运行后，报告会生成在：
 
-查看基于真实测试数据生成的完整示例报告（标准模式，90+ 分钟）：
+```text
+blockchain-node-benchmark-result/current/reports/
+blockchain-node-benchmark-result/archives/run_<number>_<session>/reports/
+```
 
-- [HTML 报告](./docs/image/performance_report_zh_20251030_171541.html) - 包含所有图表的交互式 HTML
-- [PDF 报告](./docs/image/performance_report_zh_20251030_171541.pdf) - 可打印的 PDF 版本
+典型输出包括：
 
-### 32 张专业图表（完整框架覆盖）
-
-**高级分析图表（9 张）**：
-
-1. `pearson_correlation_analysis.png` - Pearson 相关性分析
-2. `linear_regression_analysis.png` - 线性回归分析
-3. `negative_correlation_analysis.png` - 负相关性分析
-4. `ena_limitation_trends.png` - ENA 限制趋势
-5. `ena_connection_capacity.png` - ENA 连接容量
-6. `ena_comprehensive_status.png` - ENA 综合状态
-7. `comprehensive_correlation_matrix.png` - 综合相关性矩阵
-8. `performance_trend_analysis.png` - 性能趋势分析
-9. `performance_correlation_heatmap.png` - 性能相关性热图
-
-**磁盘 专业图表（7 张）**：
-
-10. `disk_capacity_planning.png` - AWS 容量规划分析
-11. `disk_iostat_performance.png` - Iostat 性能分析
-12. `disk_bottleneck_correlation.png` - 瓶颈相关性分析
-13. `disk_performance_overview.png` - 磁盘 性能概览
-14. `disk_bottleneck_analysis.png` - 磁盘 瓶颈分析
-15. `disk_normalized_comparison.png` - 磁盘 折算值对比
-16. `disk_time_series_analysis.png` - 磁盘 时间序列分析
-
-**核心性能图表（11 张）**：
-
-17. `performance_overview.png` - 性能概览
-18. `cpu_disk_correlation_visualization.png` - CPU-磁盘 相关性分析
-19. `device_performance_comparison.png` - 设备性能对比
-20. `await_threshold_analysis.png` - I/O 延迟阈值分析
-21. `monitoring_overhead_analysis.png` - 监控开销分析
-22. `qps_trend_analysis.png` - QPS 趋势分析
-23. `resource_efficiency_analysis.png` - 资源效率分析
-24. `bottleneck_identification.png` - 瓶颈识别
-25. `block_height_sync_chart.png` - 区块高度同步图表
-26. `smoothed_trend_analysis.png` - 平滑趋势分析
-27. `util_threshold_analysis.png` - 利用率阈值分析
-
-**附加分析图表（5 张）**：
-
-28. `resource_distribution_chart.png` - 资源分布图表
-29. `monitoring_impact_chart.png` - 监控影响分析
-30. `comprehensive_analysis_charts.png` - 综合分析图表
-31. `performance_cliff_analysis.png` - 性能悬崖分析
-32. `qps_performance_analysis.png` - QPS 性能分析
+- `performance_report_en_<timestamp>.html` - 英文 HTML 报告
+- `performance_report_zh_<timestamp>.html` - 中文 HTML 报告
+- `*.png` - 根据当前运行可用数据生成的图表
+- `per_method_charts/` - 当 proxy method 数据可用时生成
 
 ### HTML 报告章节
-- **系统级瓶颈分析**：瓶颈检测结果和优化建议
-- **性能摘要**：测试概览和关键性能指标
-- **配置状态检查**：系统配置验证
-- **区块链节点同步分析**：区块高度监控和同步状态
-- **磁盘 性能分析结果**：存储性能深度分析与 AWS 基线对比
-- **性能图表库**：所有 32 张专业可视化图表按类别组织
-- **监控开销分析**：监控系统影响的综合分析
-- **CPU-磁盘 关联分析**：资源关联和瓶颈识别
+
+报告会根据数据可用性生成内容。真实数据存在时展示图表；Docker/mock
+场景无法产生某类信号时，会解释缺失原因。
+
+- **配置与数据质量**：链、云厂商/机器元数据、设备、proxy 记录和有效样本数。
+- **性能摘要**：QPS、延迟、成功率和 workload 状态。
+- **系统级瓶颈判定**：资源压力结合 RPC 质量和 sync-health 背景。
+- **磁盘性能**：provider-aware 存储基线、iostat 样本、延迟、利用率、
+  normalized IOPS 和吞吐量。
+- **Sync Health**：根据链能力展示高度差、reported lag、freshness 或
+  health-only 状态。
+- **Per-Method 归因**：workload method 的 QPS、延迟、RPC 失败率、
+  成功/失败请求数和资源归因；sync-health probe method 会被排除。
+- **监控开销**：框架 observer cost 以及与区块链节点进程的资源对比。
+- **图表库**：基于当前运行生成的图表，以及缺失输入的提示。
 
 
 
@@ -475,11 +767,11 @@ ULTRA_HIGH_FREQ_INTERVAL=0.5    # 超高频监控间隔
 ./blockchain_node_benchmark.sh --standard
 
 # 查看结果
-ls reports/
-# comprehensive_analysis_report.html
-# performance_overview.png
-# cpu_disk_correlation_visualization.png
-# ...（其他图表文件）
+ls blockchain-node-benchmark-result/current/reports/
+# performance_report_en_YYYYMMDD_HHMMSS.html
+# performance_report_zh_YYYYMMDD_HHMMSS.html
+# per_method_charts/
+# ... 基于可用数据生成的图表
 ```
 
 ### 示例 2：自定义密集测试
@@ -510,17 +802,13 @@ ls reports/
 
 ### 常见问题
 
-#### 1. Vegeta 未安装
+#### 1. 依赖缺失
 ```bash
-# 推荐：安装特定版本 v12.12.0
-wget https://github.com/tsenart/vegeta/releases/download/v12.12.0/vegeta_12.12.0_linux_amd64.tar.gz
-tar -xzf vegeta_12.12.0_linux_amd64.tar.gz
-sudo mv vegeta /usr/local/bin/
-vegeta -version  # 应显示：Version: 12.12.0
+# 只检查，不修改环境。
+bash scripts/install_deps.sh --check
 
-# 备选：通过包管理器安装（可能是旧版本）
-# Ubuntu/Debian
-sudo apt-get install vegeta
+# 交互式安装缺失依赖。
+bash scripts/install_deps.sh
 ```
 
 #### 2. 网络接口检测问题
@@ -537,22 +825,30 @@ export NETWORK_INTERFACE="eth0"    # 替换为您的接口名称
 # NETWORK_INTERFACE="eth0"
 
 # 常见接口名称：
-# - AWS：eth0、eth1
-# - 其他云：eth0、ens3、ens5
+# - GCP：ens4、eth0，具体取决于镜像和机器族
+# - AWS：eth0、ens5
+# - 其他云：eth0、ens3
 # - 本地：eth0、enp0s3、wlan0
 ```
 
 #### 3. 缺少系统监控工具
 ```bash
-# 安装 sysstat 包
+# 推荐先使用依赖检查脚本。
+bash scripts/install_deps.sh --check
+
+# 手动安装示例：
 sudo apt-get install sysstat  # Ubuntu/Debian
 sudo yum install sysstat      # CentOS/RHEL
 ```
 
 #### 4. Python 依赖问题
 ```bash
-# 重新安装依赖
-pip3 install --upgrade -r requirements.txt
+# 推荐先使用依赖检查脚本。
+bash scripts/install_deps.sh --check
+
+# 如果使用项目虚拟环境：
+source .venv/bin/activate
+pip install -r requirements.txt
 
 # 检查特定包
 python3 -c "import matplotlib, pandas, numpy; print('All packages OK')"
@@ -574,10 +870,10 @@ chmod +x monitoring/monitoring_coordinator.sh
 - **监控日志**：`unified_monitor.log` - 系统监控数据
 - **瓶颈检测**：`bottleneck_detector.log` - 瓶颈检测事件
 - **磁盘分析**：`disk_bottleneck_detector.log` - 磁盘性能分析
-- **性能数据**：`performance_YYYYMMDD_HHMMSS.csv` - 原始性能指标（79 个字段）
-- **监控开销**：`monitoring_overhead_YYYYMMDD_HHMMSS.csv` - 监控系统开销（20 个字段）
-- **ENA 网络**：`ena_network_YYYYMMDD_HHMMSS.csv` - ENA 网络详细指标（15 个字段，仅 AWS）
-- **区块高度监控**：`block_height_monitor_YYYYMMDD_HHMMSS.csv` - 区块高度同步跟踪（7 个字段）
+- **性能数据**：`performance_YYYYMMDD_HHMMSS.csv` - 统一性能指标；schema 会根据云厂商、设备、runtime mode 和可用 collector 变化
+- **监控开销**：`monitoring_overhead_YYYYMMDD_HHMMSS.csv` - 监控进程开销、区块链节点进程开销和系统资源拆分
+- **Provider-Aware 网络**：`network_YYYYMMDD_HHMMSS.csv` - 包含 GCP gVNIC、GCP virtio、AWS ENA 或通用 fallback 字段的网卡指标
+- **区块高度 / 同步健康监控**：`block_height_monitor_YYYYMMDD_HHMMSS.csv` - 链同步健康数据；根据链能力记录高度差、reported lag、freshness 或 health-only 信号
 
 ### 查看测试进度
 
@@ -609,13 +905,16 @@ ls -lt blockchain-node-benchmark-result/current/vegeta_results/ | head -10
 ls -lt blockchain-node-benchmark-result/archives/
 
 # 访问特定测试运行
-cd blockchain-node-benchmark-result/archives/run_XXX_YYYYMMDD_HHMMSS/
+cd blockchain-node-benchmark-result/archives/run_001_YYYYMMDD_HHMMSS/
 
 # 查看日志
 cat logs/master_qps_executor.log
 
-# 查看报告
-open reports/performance_report_zh_*.html
+# 在 Linux 桌面环境查看报告：
+xdg-open reports/performance_report_zh_*.html
+
+# 在服务器环境：
+# 下载 reports/performance_report_zh_*.html 后在本地浏览器打开。
 ```
 
 ### 长时间测试最佳实践
@@ -706,19 +1005,19 @@ nohup ./blockchain_node_benchmark.sh --intensive > test.log 2>&1 &
 ./tools/benchmark_archiver.sh --list
 
 # 比较测试结果
-./tools/benchmark_archiver.sh --compare run_001 run_002
+./tools/benchmark_archiver.sh --compare run_001_YYYYMMDD_HHMMSS run_002_YYYYMMDD_HHMMSS
 
 # 清理旧测试
-./tools/benchmark_archiver.sh --cleanup --days 30
+./tools/benchmark_archiver.sh --cleanup --keep 10
 ```
 
 ### 自定义分析
-```python
-# 使用 Python 分析组件
-from analysis.comprehensive_analysis import ComprehensiveAnalyzer
+```bash
+# 大多数用户应先查看生成的 HTML 报告。
+ls blockchain-node-benchmark-result/current/reports/
 
-analyzer = ComprehensiveAnalyzer("reports")
-analyzer.run_comprehensive_analysis("logs/performance_latest.csv")
+# 可选：校验最新归档运行的数据质量。
+./tools/framework_data_quality_checker.sh
 ```
 
 ### 批量测试
@@ -767,10 +1066,10 @@ bash --version
 5. **Pull Request**：提交 PR 并附上详细说明
 
 ### 添加新的监控指标
-1. 在 `monitoring/unified_monitor.sh` 中添加数据收集逻辑
-2. 更新 `generate_csv_header()` 函数以添加新字段
-3. 在 Python 分析脚本中添加相应的分析逻辑
-4. 更新可视化组件以生成相关图表
+1. 如果指标不需要进入 benchmark CSV contract，优先使用 sidecar/exporter 或独立 collector 模块。
+2. 如果指标必须持久化到 `performance_*.csv`，需要同时更新 CSV registry 和写入路径。
+3. 修改运行时监控前，先增加 row width、required fields、report behavior 相关 contract tests。
+4. 运行时数据 contract 稳定后，再添加对应的分析和可视化逻辑。
 
 ### 有疑问？
 

@@ -1,0 +1,46 @@
+name: full-smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 18 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fake-node-entrypoint-smoke:
+    name: full fake-node entrypoint lifecycle smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Set up Go for proxy and fake-node
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.2"
+
+      - name: Install runtime dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends sysstat bc jq net-tools procps iproute2 curl
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt pyyaml
+          bash scripts/install_deps.sh --yes
+
+      - name: Run full entrypoint smoke
+        run: bash tests/test_full_entrypoint_fake_node_lifecycle_smoke.sh

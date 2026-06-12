@@ -6,13 +6,11 @@
 //   each handler registers itself by adapter_family name; main() reads BLOCKCHAIN_NODE
 //   env, loads the chain template, extracts adapter_family, and looks up the handler.
 //
-// GREP-EVIDENCE (2026-05-27, parallel-entry-trap loaded-but-violated gate):
-//   - tools/chain_adapters/base.py:107 → _REGISTRY: dict[str, type[ChainAdapter]] = {}
-//   - tools/chain_adapters/base.py:113 → @register("family") decorator
-//   - tools/chain_adapters/base.py:126 → family = tpl["_meta"]["adapter_family"]
-//   Therefore: fake-node MUST key handler dispatch on adapter_family, NOT chain_type.
+// The handler registry intentionally mirrors tools/chain_adapters/base.py:
+// chain templates select a protocol family with _meta.adapter_family, and both
+// the benchmark adapters and fake-node handlers dispatch on that family name.
 //
-// 36-chain breakdown by adapter_family (from grep on config/chains/*.json):
+// 36-chain breakdown by adapter_family:
 //   jsonrpc          16 chains  (solana, ethereum/bsc/base/polygon/.../arbitrum, sui, starknet, near, tron)
 //   substrate         5 chains  (polkadot, kusama, acala, astar, moonbeam)
 //   tendermint        5 chains  (cosmos-hub, osmosis, celestia, injective, sei)

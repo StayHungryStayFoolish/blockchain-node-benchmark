@@ -2,9 +2,9 @@
 # =====================================================================
 # Unit test: systemctl unit-name regex in deployment_mode_detector.sh
 # =====================================================================
-# Purpose: prevent regression of v1.4.3 fix for Issue #1 (multi-instance
+# Purpose: prevent regression of a multi-instance unit-name parsing regression (multi-instance
 #          unit names like solana-validator-mainnet.service were missed
-#          by the v1.3 regex `^\s*${unit}(\.service|@)`).
+#          by a narrower systemd-unit regex).
 #
 # Strategy: extract the regex pattern from the production grep -E line,
 #           feed it 19 hand-crafted systemd line samples, assert each
@@ -12,7 +12,7 @@
 #
 # Why not exec the detector? It calls real systemctl, which we cannot
 # mock cheaply on a cloudtop. We test the regex in isolation, which is
-# exactly the layer where the v1.3 bug lived.
+# exactly the layer where the parser regression lived.
 #
 # Failure mode this guards against: someone widens the regex (e.g. drops
 # the anchor) and starts matching `some-geth-tool.service`, OR narrows
@@ -40,7 +40,7 @@ echo
 PASS=0
 FAIL=0
 
-# Run one case: substitute ${unit} into template, feed `line` to grep -qE,
+# Run one case: substitute ${unit_prefix} into template, feed `line` to grep -qE,
 # assert exit matches expectation.
 run_case() {
     local unit="$1"
@@ -48,9 +48,9 @@ run_case() {
     local expect="$3"  # "match" | "nomatch"
     local desc="$4"
 
-    # Substitute ${unit} placeholder with the literal (escape regex metachars)
-    local unit_escaped="${unit//./\\.}"
-    local pattern="${REGEX_TEMPLATE//\$\{unit\}/$unit_escaped}"
+    local unit_prefix="${unit%.service}"
+    local unit_escaped="${unit_prefix//./\\.}"
+    local pattern="${REGEX_TEMPLATE//\$\{unit_prefix\}/$unit_escaped}"
 
     if echo "$line" | grep -qE "$pattern"; then
         actual="match"
@@ -82,7 +82,7 @@ run_case "sui-node"         "  sui-node.service                loaded active run
 run_case "solana-validator" "  solana-validator@mainnet.service loaded active running" "match" "tmpl: solana-validator@mainnet"
 run_case "geth"             "  geth@1.service                   loaded active running" "match" "tmpl: geth@1"
 
-# --- Suffix variant (-) — v1.4.3 NEW SUPPORT ---
+# --- Suffix variant (-) ---
 run_case "solana-validator" "  solana-validator-mainnet.service loaded active running" "match" "suffix: solana-validator-mainnet"
 run_case "solana-validator" "  solana-validator-1.service       loaded active running" "match" "suffix: solana-validator-1"
 run_case "geth"             "  geth-mainnet.service             loaded active running" "match" "suffix: geth-mainnet"

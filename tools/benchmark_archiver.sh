@@ -40,21 +40,21 @@ copy_shared_memory_stats() {
     fi
     
     # Copy other important statistics files
-    if [[ -f "$MEMORY_SHARE_DIR/bottleneck_status.json" ]]; then
-        cp "$MEMORY_SHARE_DIR/bottleneck_status.json" "$stats_dir/"
+    if [[ -f "${BOTTLENECK_STATUS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_status.json}" ]]; then
+        cp "${BOTTLENECK_STATUS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_status.json}" "$stats_dir/"
         echo "✅ bottleneck_status.json archived to: $stats_dir/"
     fi
     
     # Copy qps_status.json to archive (system-level bottleneck detection data)
-    if [[ -f "$MEMORY_SHARE_DIR/qps_status.json" ]]; then
-        cp "$MEMORY_SHARE_DIR/qps_status.json" "$stats_dir/"
+    if [[ -f "${QPS_STATUS_FILE:-${MEMORY_SHARE_DIR}/qps_status.json}" ]]; then
+        cp "${QPS_STATUS_FILE:-${MEMORY_SHARE_DIR}/qps_status.json}" "$stats_dir/"
         echo "✅ qps_status.json archived to: $stats_dir/"
     fi
 }
 
 # Auto-detect bottleneck information (development environment optimized version)
 auto_detect_bottlenecks() {
-    local bottleneck_file="${MEMORY_SHARE_DIR}/bottleneck_status.json"
+    local bottleneck_file="${BOTTLENECK_STATUS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_status.json}"
     
     if [[ -f "$bottleneck_file" ]]; then
         # Validate JSON format
@@ -262,10 +262,10 @@ archive_current_test() {
     # Clean up archived shared memory files
     if [[ -n "${MEMORY_SHARE_DIR:-}" ]] && [[ -d "$MEMORY_SHARE_DIR" ]]; then
         echo "🧹 Cleaning up archived shared memory files..."
-        rm -f "$MEMORY_SHARE_DIR"/bottleneck_status.json 2>/dev/null || true
-        rm -f "$MEMORY_SHARE_DIR"/qps_status.json 2>/dev/null || true
+        rm -f "${BOTTLENECK_STATUS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_status.json}" 2>/dev/null || true
+        rm -f "${QPS_STATUS_FILE:-${MEMORY_SHARE_DIR}/qps_status.json}" 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/data_loss_stats.json 2>/dev/null || true
-        rm -f "$MEMORY_SHARE_DIR"/event_notification.json 2>/dev/null || true
+        rm -f "${EVENT_NOTIFICATION_FILE:-${MEMORY_SHARE_DIR}/event_notification.json}" 2>/dev/null || true
         rm -f "$MEMORY_SHARE_DIR"/*.flag 2>/dev/null || true
         echo "✅ Archived shared memory files cleaned up"
     fi

@@ -1,21 +1,24 @@
 """
-Per-method 资源归因模块 (S4.2 W3.1).
+Per-method resource attribution module.
 
-输入:
-- proxy sink CSV (W2 输出, 9 列: timestamp_ns, method_name, protocol,
-  request_id, batch_idx, status_code, latency_ms, upstream, client_addr)
-- unified monitor CSV (现有, 每秒 1 行)
+Inputs:
+- proxy sink CSV. Current schema:
+  timestamp_ns, method_name, protocol, request_id, batch_idx, status_code,
+  transport_success, rpc_success, rpc_error_code, rpc_error_message,
+  latency_ms, upstream, client_addr
+  Legacy 9-column proxy CSVs are still accepted.
+- unified monitor CSV (existing per-second rows)
 
-输出:
-- per_method_qps_<chain>.csv          每秒每 method 的 QPS / 错误率 / p50/p99 延迟
-- per_method_resource_<chain>.csv     每秒每 method 的归因 CPU%/MEM% (按 method count 权重)
+Outputs:
+- per_method_qps_<chain>.csv          per-method per-second QPS, error rate, and p50/p99 latency
+- per_method_resource_<chain>.csv     per-method per-second attributed CPU%/MEM% weighted by method counts
 
-归因公式 (Q4-7 已锁):
+Attribution formula:
     method_weight(method, t)  = count(method in [t, t+1)) / total_count(in [t, t+1))
     method_cpu(method, t)     = total_cpu(t) * method_weight(method, t)
     method_mem(method, t)     = total_mem_mb(t) * method_weight(method, t)
 
-时间窗对齐 (W3-1 自决): 左闭右开 [t, t+1) — 与 monitor.csv 每秒采样自然对齐。
+Time-window alignment: left-closed, right-open [t, t+1), matching per-second monitor samples.
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ from typing import Iterable, Iterator, Sequence
 
 @dataclass
 class ProxyRecord:
-    """一条 proxy sink 记录 (对应 W2 sink.Record)."""
+    """One proxy sink record."""
     timestamp_ns: int
     method_name: str
     protocol: str
@@ -39,22 +42,26 @@ class ProxyRecord:
     latency_ms: int
     upstream: str
     client_addr: str
+    transport_success: bool = True
+    rpc_success: bool = True
+    rpc_error_code: str = ""
+    rpc_error_message: str = ""
 
 
 @dataclass
 class MonitorRecord:
-    """一条 monitor CSV 记录 — 只取归因需要的字段."""
+    """One monitor CSV record with only fields needed for attribution."""
     timestamp_s: int        # epoch seconds
-    cpu_pct: float          # 系统 CPU% 0-100
-    mem_mb: float           # 已用内存 MB
+    cpu_pct: float          # system CPU% 0-100
+    mem_mb: float           # used memory MB
 
 
 @dataclass
 class PerMethodQpsRow:
     timestamp_s: int
     method_name: str
-    qps: int                # 该秒该 method 的请求数 (= QPS, 因窗 1s)
-    error_count: int        # status >= 400 的数量
+    qps: int                # request count for this method in this second (= QPS for a 1s window)
+    error_count: int        # rpc_success=false count
     p50_ms: float
     p99_ms: float
 
@@ -64,31 +71,51 @@ class PerMethodResourceRow:
     timestamp_s: int
     method_name: str
     weight: float           # 0-1
-    cpu_pct: float          # 归因 CPU% = total_cpu * weight
-    mem_mb: float           # 归因 mem MB = total_mem * weight
+    cpu_pct: float          # attributed CPU% = total_cpu * weight
+    mem_mb: float           # attributed memory MB = total_mem * weight
 
 
 def read_proxy_csv(path: str | Path) -> Iterator[ProxyRecord]:
-    """流式读 W2 sink CSV.
+    """Stream-read proxy sink CSV.
 
-    跳过 method_name == '__unmatched__' 的记录 (extractor 没匹配上, 不应归因到任何 method).
+    Skip method_name == '__unmatched__'. Extractor misses should not be
+    attributed to any workload method.
     """
     with open(path, newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row.get("method_name") == "__unmatched__":
                 continue
+            status_code = int(row["status_code"])
+            transport_success = _parse_bool(
+                row.get("transport_success"),
+                default=(200 <= status_code < 400),
+            )
+            rpc_success = _parse_bool(
+                row.get("rpc_success"),
+                default=transport_success,
+            )
             yield ProxyRecord(
                 timestamp_ns=int(row["timestamp_ns"]),
                 method_name=row["method_name"],
                 protocol=row.get("protocol", ""),
                 request_id=row.get("request_id", ""),
                 batch_idx=int(row.get("batch_idx", "0") or "0"),
-                status_code=int(row["status_code"]),
+                status_code=status_code,
+                transport_success=transport_success,
+                rpc_success=rpc_success,
+                rpc_error_code=row.get("rpc_error_code", ""),
+                rpc_error_message=row.get("rpc_error_message", ""),
                 latency_ms=int(row["latency_ms"]),
                 upstream=row.get("upstream", ""),
                 client_addr=row.get("client_addr", ""),
             )
+
+
+def _parse_bool(value: str | None, default: bool) -> bool:
+    if value is None or value == "":
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
 
 def read_monitor_csv(
@@ -97,20 +124,20 @@ def read_monitor_csv(
     cpu_col: str = "cpu_usage",
     mem_col: str = "mem_used_mb",
 ) -> Iterator[MonitorRecord]:
-    """读 unified monitor CSV.
+    """Read unified monitor CSV.
 
-    列名可配 (项目内不同 collector 列名各异). 默认按 cgroup_collector 输出.
-    timestamp 列接受两种格式 (自动识别):
-      1. epoch int/float (秒/毫秒/微秒/纳秒, 按数量级判断单位)
-      2. ISO/datetime 字符串 (如 '2026-05-31 19:19:50' 或 ISO8601) — unified_monitor.sh
-         的 timestamp 列就是这种本地时间字符串. 解析为本地时区 epoch 秒,
-         与 proxy sink 的 epoch 秒对齐 (二者都在同一主机同一次运行内产生).
+    Column names are configurable because collectors use different schemas.
+    The timestamp column accepts two auto-detected formats:
+      1. epoch int/float, with unit inferred from magnitude (s/ms/us/ns)
+      2. ISO/datetime strings, such as '2026-05-31 19:19:50' or ISO8601.
+         unified_monitor.sh emits local timestamp strings, which are parsed as
+         local-time epoch seconds to align with the proxy sink from the same run.
     """
     import datetime as _dt
 
     def _parse_ts_to_epoch_s(ts_raw: str) -> int:
         ts_raw = (ts_raw or "").strip()
-        # 优先尝试纯数字 epoch (秒/ms/us/ns 按数量级)
+        # Prefer numeric epoch values and infer seconds/ms/us/ns by magnitude.
         try:
             ts_int = int(float(ts_raw))
         except (ValueError, TypeError):
@@ -124,21 +151,22 @@ def read_monitor_csv(
                 return ts_int // 1000
             else:                  # seconds
                 return ts_int
-        # 字符串日期时间: unified_monitor 用 '%Y-%m-%d %H:%M:%S'; 也兼容 ISO8601 'T' 分隔.
+        # String datetime: unified_monitor uses '%Y-%m-%d %H:%M:%S';
+        # also accept ISO8601 strings with a 'T' separator.
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
             try:
                 dt = _dt.datetime.strptime(ts_raw, fmt)
-                return int(dt.timestamp())  # 本地时区 → epoch 秒
+                return int(dt.timestamp())  # local timezone -> epoch seconds
             except ValueError:
                 continue
-        # 最后尝试 fromisoformat (覆盖带微秒/时区的变体)
+        # Finally try fromisoformat for fractional seconds or timezone offsets.
         try:
             dt = _dt.datetime.fromisoformat(ts_raw)
             return int(dt.timestamp())
         except ValueError:
             raise ValueError(
-                f"read_monitor_csv: 无法解析 timestamp {ts_raw!r} "
-                f"(既非 epoch 数字也非已知日期格式)"
+                f"read_monitor_csv: unable to parse timestamp {ts_raw!r}; "
+                f"expected numeric epoch or a supported datetime string"
             )
 
     with open(path, newline="") as f:
@@ -153,7 +181,7 @@ def read_monitor_csv(
 
 
 def _percentile(sorted_values: Sequence[float], pct: float) -> float:
-    """从已排序列表算 percentile (线性插值)."""
+    """Compute percentile from a sorted list with linear interpolation."""
     if not sorted_values:
         return 0.0
     if len(sorted_values) == 1:
@@ -168,9 +196,9 @@ def _percentile(sorted_values: Sequence[float], pct: float) -> float:
 def compute_per_method_qps(
     proxy_records: Iterable[ProxyRecord],
 ) -> list[PerMethodQpsRow]:
-    """秒级 group_by (method, timestamp_s) 算 QPS + 错误率 + p50/p99 延迟.
+    """Group by (method, timestamp_s) and compute QPS, error rate, p50, and p99.
 
-    返回按 (timestamp_s, method_name) 字典序排序的列表.
+    Returns rows sorted by (timestamp_s, method_name).
     """
     # bucket: (ts_s, method) -> list[latency_ms]
     latencies: dict[tuple[int, str], list[int]] = defaultdict(list)
@@ -180,7 +208,7 @@ def compute_per_method_qps(
         ts_s = r.timestamp_ns // 1_000_000_000
         key = (ts_s, r.method_name)
         latencies[key].append(r.latency_ms)
-        if r.status_code >= 400:
+        if not r.rpc_success:
             errors[key] += 1
 
     rows: list[PerMethodQpsRow] = []
@@ -199,16 +227,35 @@ def compute_per_method_qps(
     return rows
 
 
+def filter_proxy_records_by_methods(
+    proxy_records: Iterable[ProxyRecord],
+    allowed_methods: Iterable[str] | None,
+) -> list[ProxyRecord]:
+    """Keep only workload methods declared by the chain template.
+
+    Proxy CSV also contains framework probes, such as block-height/sync-health
+    RPCs. Per-method attribution is intended for the user-selected single or
+    mixed workload, so monitor probes must not be charged to business methods.
+    If allowed_methods is None/empty, return all records to preserve legacy
+    behavior for old reports that lack chain template context.
+    """
+    allowed = {m for m in (allowed_methods or []) if m}
+    records = list(proxy_records)
+    if not allowed:
+        return records
+    return [r for r in records if r.method_name in allowed]
+
+
 def compute_per_method_resource(
     proxy_records: Iterable[ProxyRecord],
     monitor_records: Iterable[MonitorRecord],
 ) -> list[PerMethodResourceRow]:
-    """按秒级 weight = method_count / total_count 归因 CPU%/MEM 到 method.
+    """Attribute CPU%/memory by per-second method_count / total_count weight.
 
-    proxy_records 和 monitor_records 都被消费一次 (Iterator 不可重用).
-    缺失监控数据的秒不出归因行 (避免误把 0 当真实零负载).
+    proxy_records and monitor_records are consumed once. Seconds without monitor
+    data are skipped to avoid treating missing data as real zero load.
     """
-    # 第 1 步: 秒级 method count
+    # Step 1: per-second method counts.
     method_count: dict[tuple[int, str], int] = defaultdict(int)
     total_count: dict[int, int] = defaultdict(int)
     for r in proxy_records:
@@ -216,15 +263,15 @@ def compute_per_method_resource(
         method_count[(ts_s, r.method_name)] += 1
         total_count[ts_s] += 1
 
-    # 第 2 步: 秒级 monitor lookup
+    # Step 2: per-second monitor lookup.
     monitor_by_ts: dict[int, MonitorRecord] = {m.timestamp_s: m for m in monitor_records}
 
-    # 第 3 步: 归因
+    # Step 3: attribution.
     rows: list[PerMethodResourceRow] = []
     for (ts_s, method), cnt in method_count.items():
         m = monitor_by_ts.get(ts_s)
         if m is None:
-            continue  # 该秒无监控数据, 跳过
+            continue  # no monitor data for this second
         total = total_count[ts_s]
         if total == 0:
             continue

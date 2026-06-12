@@ -1,6 +1,5 @@
 {
   "chain_type": "moonbeam",
-  "methods": {},
   "param_formats": {
     "eth_chainId": "no_params",
     "eth_blockNumber": "no_params",
@@ -13,7 +12,7 @@
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "0x0000000000000000000000000000000000000000",
+    "target_address": "${TARGET_ADDRESS:-0x0000000000000000000000000000000000000000}",
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
   },
   "rpc_methods": {
@@ -22,23 +21,23 @@
     "mixed_weighted": [
       {
         "method": "eth_chainId",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_blockNumber",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_getBalance",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "eth_gasPrice",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "system_health",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -46,32 +45,41 @@
   "system_addresses": [],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/28-moonbeam.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.940953+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "mixed",
     "original_public_endpoints": [
       {
         "url": "https://rpc.api.moonbeam.network",
         "auth": false,
         "verified": "E2",
-        "notes": "单端点双协议 EVM+Substrate"
+        "notes": "Moonbeam official RPC"
       },
       {
-        "url": "wss://wss.api.moonbeam.network",
+        "url": "https://moonbeam-rpc.publicnode.com",
         "auth": false,
         "verified": "E2",
-        "notes": "WSS subscription"
+        "notes": "publicnode public endpoint"
       }
     ],
-    "original_notes": "Polkadot parachain 2004;EVM primary + Substrate secondary;ChainID 1284 = SS58Prefix(刻意对齐);GLMR 18 dec",
+    "original_notes": "Polkadot parachain 2004; EVM primary + Substrate secondary; ChainID 1284 intentionally matches SS58Prefix; GLMR has 18 decimals.",
     "adapter_required": true,
     "adapter_family": "substrate",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Compare numeric cursors returned by the same adapter health probe against local and target RPC endpoints."
+    }
   },
   "proxy_extraction": {
     "extractors": [

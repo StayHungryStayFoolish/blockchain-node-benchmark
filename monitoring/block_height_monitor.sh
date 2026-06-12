@@ -12,6 +12,15 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
     BLOCK_HEIGHT_MONITOR_RATE=${BLOCK_HEIGHT_MONITOR_RATE:-1}
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
+source "$(dirname "${BASH_SOURCE[0]}")/../config/csv_schema_registry.sh" 2>/dev/null || true
+
+get_block_height_csv_header() {
+    if declare -F csv_registry_block_csv_header >/dev/null 2>&1; then
+        csv_registry_block_csv_header
+    else
+        echo "timestamp,local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss,sync_mode,sync_status,lag_value,lag_unit,freshness_gap_seconds,probe_error"
+    fi
+}
 
 # Initialize variables
 MONITOR_PID=""
@@ -39,10 +48,10 @@ cleanup_and_exit() {
     rm -f "${TMP_DIR}/block_height_monitor.pid" 2>/dev/null || true
     
     # Clean shared memory cache - only clean block_height related files, keep QPS status file
-    if [[ -n "$BASE_MEMORY_DIR" ]]; then
+    if [[ -n "${MEMORY_SHARE_DIR:-}" ]]; then
         # Only clean block_height related cache files, keep other process status files
-        rm -f "$MEMORY_SHARE_DIR"/block_height_monitor_cache.json 2>/dev/null || true
-        rm -f "$BASE_MEMORY_DIR"/node_health_*.cache 2>/dev/null || true
+        rm -f "${BLOCK_HEIGHT_CACHE_FILE:-${MEMORY_SHARE_DIR}/block_height_monitor_cache.json}" 2>/dev/null || true
+        rm -f "${NODE_HEALTH_CACHE_DIR:-${MEMORY_SHARE_DIR}/node_health_cache}"/node_health_*.cache 2>/dev/null || true
     fi
     
     echo "Block height monitor cleanup completed"
@@ -168,20 +177,36 @@ monitor_block_height_diff() {
     local local_health=$(echo "$block_height_data" | jq -r '.local_health')
     local mainnet_health=$(echo "$block_height_data" | jq -r '.mainnet_health')
     local data_loss=$(echo "$block_height_data" | jq -r '.data_loss')
+    local sync_mode=$(echo "$block_height_data" | jq -r '.sync_mode // "absolute_gap"')
+    local sync_status=$(echo "$block_height_data" | jq -r '.sync_status // "unknown"')
+    local lag_value=$(echo "$block_height_data" | jq -r '.lag_value // "null"')
+    local lag_unit=$(echo "$block_height_data" | jq -r '.lag_unit // "null"')
+    local freshness_gap_seconds=$(echo "$block_height_data" | jq -r '.freshness_gap_seconds // "null"')
+    local probe_error=$(echo "$block_height_data" | jq -r '.probe_error // "null"')
     
     # Use buffered write to reduce disk I/O
-    local data_line="$timestamp,$local_block_height,$mainnet_block_height,$block_height_diff,$local_health,$mainnet_health,$data_loss"
+    local data_line="$timestamp,$local_block_height,$mainnet_block_height,$block_height_diff,$local_health,$mainnet_health,$data_loss,$sync_mode,$sync_status,$lag_value,$lag_unit,$freshness_gap_seconds,$probe_error"
     source "$(dirname "${BASH_SOURCE[0]}")/../core/common_functions.sh" && buffered_write "$BLOCK_HEIGHT_DATA_FILE" "$data_line" 10
     
-    # Check if block height difference exceeds threshold
+    local sync_threshold_exceeded=false
+    local sync_alert_reason=""
     if [[ "$block_height_diff" != "null" && "$block_height_diff" != "N/A" && $block_height_diff -gt $BLOCK_HEIGHT_DIFF_THRESHOLD ]]; then
+        sync_threshold_exceeded=true
+        sync_alert_reason="Block height difference $block_height_diff exceeds threshold $BLOCK_HEIGHT_DIFF_THRESHOLD"
+    elif [[ "$sync_status" == "behind" || "$sync_status" == "stale" || "$sync_status" == "unhealthy" ]]; then
+        sync_threshold_exceeded=true
+        sync_alert_reason="Sync status $sync_status in $sync_mode mode (lag=${lag_value} ${lag_unit}, freshness_gap=${freshness_gap_seconds}s, probe_error=${probe_error})"
+    fi
+
+    # Check if sync health exceeds its threshold or enters an unhealthy state.
+    if [[ "$sync_threshold_exceeded" == "true" ]]; then
         if [[ "$BLOCK_HEIGHT_DIFF_ALERT" == "false" ]]; then
             BLOCK_HEIGHT_DIFF_ALERT=true
             BLOCK_HEIGHT_DIFF_START_TIME=$(get_unified_timestamp)
-            echo "⚠️ ALERT: Block height difference ($block_height_diff) exceeds threshold ($BLOCK_HEIGHT_DIFF_THRESHOLD) at $BLOCK_HEIGHT_DIFF_START_TIME"
+            echo "⚠️ ALERT: $sync_alert_reason at $BLOCK_HEIGHT_DIFF_START_TIME"
             
             # Record exception event start
-            BLOCK_HEIGHT_DIFF_EVENT_ID=$(./unified_event_manager.sh start "block_height_diff" "block_height_monitor" "Block height difference $block_height_diff exceeds threshold $BLOCK_HEIGHT_DIFF_THRESHOLD")
+            BLOCK_HEIGHT_DIFF_EVENT_ID=$(./unified_event_manager.sh start "sync_health" "block_height_monitor" "$sync_alert_reason")
         fi
         
         # Check if duration exceeds threshold
@@ -191,14 +216,14 @@ monitor_block_height_diff() {
             local duration=$((current_seconds - start_seconds))
             
             if [[ $duration -gt $BLOCK_HEIGHT_TIME_THRESHOLD ]]; then
-                echo "🚨 CRITICAL: Block height difference has exceeded threshold for ${duration}s (> ${BLOCK_HEIGHT_TIME_THRESHOLD}s)"
+                echo "🚨 CRITICAL: Sync health has remained unhealthy for ${duration}s (> ${BLOCK_HEIGHT_TIME_THRESHOLD}s)"
                 echo "🚨 CRITICAL: Local node may be considered unavailable for service"
                 
                 # Set persistent exceeded flag file (for system-level bottleneck judgment)
                 echo "1" > "${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag"
                 
                 # Record event
-                BLOCK_HEIGHT_DIFF_EVENTS+=("CRITICAL: Block height diff $block_height_diff for ${duration}s at $(get_unified_timestamp)")
+                BLOCK_HEIGHT_DIFF_EVENTS+=("CRITICAL: $sync_alert_reason for ${duration}s at $(get_unified_timestamp)")
             fi
         fi
     elif [[ "$BLOCK_HEIGHT_DIFF_ALERT" == "true" ]]; then
@@ -210,7 +235,7 @@ monitor_block_height_diff() {
         local end_seconds=$(date -d "$BLOCK_HEIGHT_DIFF_END_TIME" +%s)
         local duration=$((end_seconds - start_seconds))
         
-        echo "✅ RESOLVED: Block height difference is now below threshold at $BLOCK_HEIGHT_DIFF_END_TIME (lasted ${duration}s)"
+        echo "✅ RESOLVED: Sync health is now healthy at $BLOCK_HEIGHT_DIFF_END_TIME (lasted ${duration}s)"
         
         # Record event end
         if [[ -n "$BLOCK_HEIGHT_DIFF_EVENT_ID" ]]; then
@@ -218,7 +243,7 @@ monitor_block_height_diff() {
         fi
         
         # Record event
-        BLOCK_HEIGHT_DIFF_EVENTS+=("RESOLVED: Block height diff normalized after ${duration}s at $BLOCK_HEIGHT_DIFF_END_TIME")
+        BLOCK_HEIGHT_DIFF_EVENTS+=("RESOLVED: Sync health normalized after ${duration}s at $BLOCK_HEIGHT_DIFF_END_TIME")
         
         # Reset start time
         BLOCK_HEIGHT_DIFF_START_TIME=""
@@ -273,7 +298,7 @@ monitor_block_height_diff() {
         local local_health_display=$([ "$local_health" = "1" ] && echo "healthy" || echo "unhealthy")
         local mainnet_health_display=$([ "$mainnet_health" = "1" ] && echo "healthy" || echo "unhealthy")
         local data_loss_display=$([ "$data_loss" = "1" ] && echo "detected" || echo "none")
-        echo "[$timestamp] Local: $local_block_height, Mainnet: $mainnet_block_height, Diff: $block_height_diff, Local Health: $local_health_display, Mainnet Health: $mainnet_health_display, Data Loss: $data_loss_display"
+        echo "[$timestamp] Local: $local_block_height, Mainnet: $mainnet_block_height, Diff: $block_height_diff, Local Health: $local_health_display, Mainnet Health: $mainnet_health_display, Data Loss: $data_loss_display, Sync: $sync_status/$sync_mode"
     fi
     
     # Clean up old cache data
@@ -296,6 +321,11 @@ show_status() {
     local local_health=$(echo "$block_height_data" | jq -r '.local_health')
     local mainnet_health=$(echo "$block_height_data" | jq -r '.mainnet_health')
     local data_loss=$(echo "$block_height_data" | jq -r '.data_loss')
+    local sync_mode=$(echo "$block_height_data" | jq -r '.sync_mode // "absolute_gap"')
+    local sync_status=$(echo "$block_height_data" | jq -r '.sync_status // "unknown"')
+    local lag_value=$(echo "$block_height_data" | jq -r '.lag_value // "null"')
+    local lag_unit=$(echo "$block_height_data" | jq -r '.lag_unit // "null"')
+    local probe_error=$(echo "$block_height_data" | jq -r '.probe_error // "null"')
     
     # Convert numeric values to human-readable format
     local local_health_display=$([ "$local_health" = "1" ] && echo "healthy" || echo "unhealthy")
@@ -309,6 +339,10 @@ show_status() {
     echo "Local health: $local_health_display"
     echo "Mainnet health: $mainnet_health_display"
     echo "Data loss: $data_loss_display"
+    echo "Sync mode: $sync_mode"
+    echo "Sync status: $sync_status"
+    echo "Lag: $lag_value $lag_unit"
+    echo "Probe error: $probe_error"
     
     # Check if threshold exceeded
     if [[ "$block_height_diff" != "null" && $block_height_diff -gt $BLOCK_HEIGHT_DIFF_THRESHOLD ]]; then
@@ -364,7 +398,10 @@ stop_monitor() {
     fi
     
     # Clean up shared memory
-    rm -rf /dev/shm/blockchain-node-qps-test/ 2>/dev/null || true
+    if [[ -n "${MEMORY_SHARE_DIR:-}" && -d "$MEMORY_SHARE_DIR" ]]; then
+        rm -f "${BLOCK_HEIGHT_CACHE_FILE:-${MEMORY_SHARE_DIR}/block_height_monitor_cache.json}" 2>/dev/null || true
+        rm -f "${NODE_HEALTH_CACHE_DIR:-${MEMORY_SHARE_DIR}/node_health_cache}"/node_health_*.cache 2>/dev/null || true
+    fi
     
     echo "Block height monitor cleanup completed"
 }
@@ -386,7 +423,7 @@ start_monitoring() {
     fi
     
     # Write CSV header
-    echo "timestamp,local_block_height,mainnet_block_height,block_height_diff,local_health,mainnet_health,data_loss" > "$BLOCK_HEIGHT_DATA_FILE"
+    get_block_height_csv_header > "$BLOCK_HEIGHT_DATA_FILE"
     
     # Unified monitoring loop - follow framework lifecycle
     if [[ "$BACKGROUND" == "true" ]]; then

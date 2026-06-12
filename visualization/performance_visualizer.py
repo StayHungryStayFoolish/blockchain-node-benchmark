@@ -45,7 +45,7 @@ def format_summary_text(device_info, data_stats, accounts_stats=None):
 def add_text_summary(ax, summary_text, title):
     """Helper function: unified text summary style"""
     ax.axis('off')
-    ax.text(0.05, 0.95, summary_text, transform=ax.transAxes, 
+    ax.text(0.05, 0.95, summary_text, transform=ax.transAxes,
            fontsize=11, verticalalignment='top', fontfamily='monospace',
            bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
     ax.set_title(title)
@@ -56,16 +56,16 @@ def setup_font():
 def format_time_axis(ax, df_timestamp):
     """
     Format time axis display - automatically select format based on time span
-    
+
     Args:
         ax: matplotlib axis object
         df_timestamp: pandas datetime series
     """
     if len(df_timestamp) == 0:
         return
-    
+
     time_span = (df_timestamp.iloc[-1] - df_timestamp.iloc[0]).total_seconds()
-    
+
     if time_span < 300:  # Less than 5 minutes, display hour:minute:second
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
     elif time_span < 3600:  # Less than 1 hour, display hour:minute
@@ -74,7 +74,7 @@ def format_time_axis(ax, df_timestamp):
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
     else:  # Greater than 1 day, display month-day
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
-    
+
     ax.tick_params(axis='x', rotation=45)
     plt.setp(ax.xaxis.get_majorticklabels(), ha='right')
 
@@ -100,22 +100,22 @@ LABELS = {
 
 class PerformanceVisualizer(CSVDataProcessor):
     """Performance Visualizer - Based on unified CSV data processor"""
-    
+
     def __init__(self, data_file, overhead_file=None):
         super().__init__()  # Initialize CSV data processor
-        
+
         self.data_file = data_file
         self.overhead_file = overhead_file or self._find_monitoring_overhead_file() or os.getenv('MONITORING_OVERHEAD_LOG')
         self.output_dir = os.getenv('REPORTS_DIR', os.path.dirname(data_file))
-        
+
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
-        
+
         # Using English labels system directly
         self.font_manager = None
-        
+
         self._accounts_thresholds_added = False
-        
+
         # Read threshold configuration from environment variables - use unified framework
         temp_manager = DeviceManager(pd.DataFrame())  # Temporary instance to get configuration
         thresholds = temp_manager.get_visualization_thresholds()
@@ -124,7 +124,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             'warning': thresholds['warning'],     # Warning Threshold (%)
             'critical': thresholds['critical']    # Critical Threshold (%)
         }
-        
+
         # Initialize new tools
         try:
             self.unit_converter = UnitConverter()
@@ -135,7 +135,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             self.unit_converter = None
             self.correlation_analyzer = None
             self.chart_generator = None
-    
+
     def _find_monitoring_overhead_file(self):
         """Intelligently find monitoring overhead file - consistent with report_generator.py"""
         try:
@@ -145,7 +145,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 os.path.join(os.path.dirname(self.data_file), 'logs'),  # logs subdirectory
                 os.getenv('LOGS_DIR', os.path.join(os.path.dirname(self.data_file), 'current', 'logs')),  # Environment variable specified
             ]
-            
+
             for logs_dir in search_dirs:
                 if os.path.exists(logs_dir):
                     pattern = os.path.join(logs_dir, 'monitoring_overhead_*.csv')
@@ -155,7 +155,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                         latest_file = max(files, key=os.path.getctime)
                         print(f"✅ Found monitoring overhead file: {os.path.basename(latest_file)}")
                         return latest_file
-            
+
             return None
         except Exception as e:
             print(f"Warning: Failed to find monitoring overhead file: {e}")
@@ -167,7 +167,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             success = self.load_csv_data(self.data_file)
             if success:
                 self.clean_data()  # Clean data
-                
+
                 # Safe timestamp handling
                 if 'timestamp' in self.df.columns:
                     try:
@@ -180,16 +180,16 @@ class PerformanceVisualizer(CSVDataProcessor):
                 else:
                     print("⚠️  Timestamp field not found, creating default timestamp")
                     self.df['timestamp'] = pd.date_range(start='2024-01-01', periods=len(self.df), freq='1min')
-                
+
                 print(f"✅ Loaded {len(self.df)} performance data records")
                 print(f"📊 CSV columns: {len(self.df.columns)}")
 
             return success
-            
+
         except Exception as e:
             print(f"❌ Data loading failed: {e}")
             return False
-    
+
     def _analyze_threshold_violations(self, data_series, thresholds, metric_name):
         """Threshold violation analysis"""
         if data_series.empty:
@@ -204,7 +204,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 'metric_name': metric_name,
                 'error': 'Data is empty'
             }
-        
+
         valid_data = data_series.dropna()
         if len(valid_data) == 0:
             return {
@@ -218,13 +218,13 @@ class PerformanceVisualizer(CSVDataProcessor):
                 'metric_name': metric_name,
                 'error': 'All data is NaN'
             }
-        
+
         total_points = len(valid_data)
         violations = {
             'warning': len(valid_data[valid_data > thresholds['warning']]),
             'critical': len(valid_data[valid_data > thresholds['critical']])
         }
-        
+
         return {
             'total_points': total_points,
             'warning_violations': violations['warning'],
@@ -236,43 +236,43 @@ class PerformanceVisualizer(CSVDataProcessor):
             'metric_name': metric_name,
             'valid_data_ratio': len(valid_data) / len(data_series) * 100
         }
-    
+
     def create_performance_overview_chart(self):
         """✅ System Performance Overview Chart - Systematic Refactor"""
-        
+
         # Data check - ensure data is loaded
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 return None
-        
+
         # Load configuration
         load_framework_config()
-        
+
         accounts_configured = DeviceManager.is_accounts_configured(self.df)
-        
+
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
         fig.suptitle('System Performance Overview', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-        
+
         # ✅ Fix field name mapping
         cpu_usage_col = 'cpu_usage' if 'cpu_usage' in self.df.columns else None
         cpu_iowait_col = 'cpu_iowait' if 'cpu_iowait' in self.df.columns else None
         mem_usage_col = 'mem_usage' if 'mem_usage' in self.df.columns else None  # Fix field name
-        
+
         # Find device columns
         data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_total_iops')]
         data_throughput_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_total_throughput_mibs')]
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
-        
+
         accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_total_iops')] if accounts_configured else []
         accounts_throughput_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_total_throughput_mibs')] if accounts_configured else []
         accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
-        
+
         # 1. CPU Performance (Top Left)
         ax1 = axes[0, 0]
         if cpu_usage_col and cpu_iowait_col:
             cpu_usage_data = self.df[cpu_usage_col].dropna()
             cpu_iowait_data = self.df[cpu_iowait_col].dropna()
-            
+
             if len(cpu_usage_data) > 0 and len(cpu_iowait_data) > 0:
                 # Draw grid lines first (bottom layer)
                 ax1.grid(True, alpha=0.3, zorder=0)
@@ -288,7 +288,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         else:
             ax1.text(0.5, 0.5, 'CPU data not found', ha='center', va='center', transform=ax1.transAxes)
             ax1.set_title('CPU Performance (No Data)')
-        
+
         # 2. Memory Usage (Top Right)
         ax2 = axes[0, 1]
         if mem_usage_col:
@@ -305,26 +305,26 @@ class PerformanceVisualizer(CSVDataProcessor):
         else:
             ax2.text(0.5, 0.5, 'Memory data not found', ha='center', va='center', transform=ax2.transAxes)
             ax2.set_title('Memory Usage (No Data)')
-        
+
         # 3. Disk IOPS + Throughput (Bottom Left) - iostat raw data
         ax3 = axes[1, 0]
         if data_iops_cols and data_throughput_cols:
             # Dual Y-axis display IOPS and throughput
             ax3_twin = ax3.twinx()
-            
+
             # DATA device
-            ax3.plot(self.df['timestamp'], self.df[data_iops_cols[0]], 
+            ax3.plot(self.df['timestamp'], self.df[data_iops_cols[0]],
                     label='DATA IOPS (iostat)', linewidth=2, color='blue')
-            ax3_twin.plot(self.df['timestamp'], self.df[data_throughput_cols[0]], 
+            ax3_twin.plot(self.df['timestamp'], self.df[data_throughput_cols[0]],
                          label='DATA Throughput (iostat)', linewidth=2, color='lightblue', linestyle='--')
-            
+
             # ACCOUNTS device
             if accounts_configured and accounts_iops_cols and accounts_throughput_cols:
-                ax3.plot(self.df['timestamp'], self.df[accounts_iops_cols[0]], 
+                ax3.plot(self.df['timestamp'], self.df[accounts_iops_cols[0]],
                         label='ACCOUNTS IOPS (iostat)', linewidth=2, color='orange')
-                ax3_twin.plot(self.df['timestamp'], self.df[accounts_throughput_cols[0]], 
+                ax3_twin.plot(self.df['timestamp'], self.df[accounts_throughput_cols[0]],
                              label='ACCOUNTS Throughput (iostat)', linewidth=2, color='lightsalmon', linestyle='--')
-            
+
             ax3.set_title('Disk IOPS & Throughput (iostat data)')
             ax3.set_ylabel('IOPS')
             ax3_twin.set_ylabel('Throughput (MiB/s)')
@@ -334,17 +334,17 @@ class PerformanceVisualizer(CSVDataProcessor):
         else:
             ax3.text(0.5, 0.5, 'Disk IOPS/Throughput data not found', ha='center', va='center', transform=ax3.transAxes)
             ax3.set_title('Disk IOPS & Throughput (No Data)')
-        
+
         # 4. Disk Utilization (Bottom Right) - iostat raw data
         ax4 = axes[1, 1]
         if data_util_cols:
-            ax4.plot(self.df['timestamp'], self.df[data_util_cols[0]], 
+            ax4.plot(self.df['timestamp'], self.df[data_util_cols[0]],
                     label='DATA Utilization (iostat)', linewidth=2, color='blue')
-            
+
             if accounts_configured and accounts_util_cols:
-                ax4.plot(self.df['timestamp'], self.df[accounts_util_cols[0]], 
+                ax4.plot(self.df['timestamp'], self.df[accounts_util_cols[0]],
                         label='ACCOUNTS Utilization (iostat)', linewidth=2, color='orange')
-            
+
             ax4.set_title('Disk Utilization (iostat data)')
             ax4.set_ylabel('Utilization (%)')
             ax4.legend()
@@ -352,54 +352,54 @@ class PerformanceVisualizer(CSVDataProcessor):
         else:
             ax4.text(0.5, 0.5, 'Disk Utilization data not found', ha='center', va='center', transform=ax4.transAxes)
             ax4.set_title('Disk Utilization (No Data)')
-        
+
         # Format time axis
         for ax in axes.flat:
             ax.tick_params(axis='x', rotation=45)
-        
+
         UnifiedChartStyle.apply_layout('auto')
-        
+
         output_file = os.path.join(self.output_dir, 'performance_overview.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         plt.close()
-        
+
         print(f"📊 Performance Analysis overview saved: {output_file}")
         return output_file
 
     def create_correlation_visualization_chart(self):
         """CPU-Disk Performance Correlation Analysis - Dual Device Support"""
-        
+
         # Check data availability (consistent with other methods)
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for correlation analysis")
                 return None
-        
+
         # Device configuration detection
         data_configured = len([col for col in self.df.columns if col.startswith('data_')]) > 0
         accounts_configured = DeviceManager.is_accounts_configured(self.df)
-        
+
         if not data_configured:
             print("❌ DATA device data not found")
             return None
-        
+
         # Dynamic title
         title = 'CPU-Disk Performance Correlation Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'CPU-Disk Performance Correlation Analysis - DATA Device Only'
-        
+
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-        
+
         # Get CPU and device fields
         cpu_iowait_col = 'cpu_iowait' if 'cpu_iowait' in self.df.columns else None
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
         data_aqu_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_aqu_sz')]
-        
+
         # ACCOUNTS device fields
         accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
         accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_aqu_sz')] if accounts_configured else []
-        
+
         accounts_util_col = accounts_util_cols[0] if accounts_util_cols else None
         accounts_await_col = accounts_await_cols[0] if accounts_await_cols else None
 
@@ -409,67 +409,67 @@ class PerformanceVisualizer(CSVDataProcessor):
             missing_fields.append('cpu_iowait')
         if not data_util_cols:
             missing_fields.append('data_util')
-        
+
         if missing_fields:
             print(f"⚠️  Missing fields for correlation analysis: {', '.join(missing_fields)}")
             # Display error information in chart
             for i, ax in enumerate(axes.flat):
-                ax.text(0.5, 0.5, f'Missing required fields:\n{chr(10).join(missing_fields)}', 
+                ax.text(0.5, 0.5, f'Missing required fields:\n{chr(10).join(missing_fields)}',
                        ha='center', va='center', transform=ax.transAxes, fontsize=12)
                 ax.set_title(f'Correlation Analysis {i+1} - Data Unavailable')
-            
+
             output_file = os.path.join(self.output_dir, 'cpu_disk_correlation_visualization.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
             plt.close()
             return output_file
-        
+
         # 1. CPU I/O Wait vs DATA Device Utilization
         if cpu_iowait_col and data_util_cols:
             data_util_col = data_util_cols[0]
-            axes[0, 0].scatter(self.df[cpu_iowait_col], self.df[data_util_col], 
+            axes[0, 0].scatter(self.df[cpu_iowait_col], self.df[data_util_col],
                              alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'], label='DATA Device')
-            
+
             # Add ACCOUNTS device if configured
             if accounts_configured and accounts_util_cols:
                 accounts_util_col = accounts_util_cols[0]
-                axes[0, 0].scatter(self.df[cpu_iowait_col], self.df[accounts_util_col], 
+                axes[0, 0].scatter(self.df[cpu_iowait_col], self.df[accounts_util_col],
                                  alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['accounts_primary'], label='ACCOUNTS Device')
-            
+
             # Calculate and display correlation
             data_corr = self.df[cpu_iowait_col].corr(self.df[data_util_col])
             corr_text = f'DATA Correlation: {data_corr:.3f}'
-            
+
             if accounts_configured and accounts_util_cols:
                 accounts_corr = self.df[cpu_iowait_col].corr(self.df[accounts_util_col])
                 corr_text += f'\nACCOUNTS Correlation: {accounts_corr:.3f}'
-            
-            axes[0, 0].text(0.05, 0.95, corr_text, transform=axes[0, 0].transAxes, 
+
+            axes[0, 0].text(0.05, 0.95, corr_text, transform=axes[0, 0].transAxes,
                            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
             axes[0, 0].set_xlabel('CPU I/O Wait (%)')
             axes[0, 0].set_ylabel('Device Utilization (%)')
             axes[0, 0].set_title('CPU I/O Wait vs Device Utilization', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             axes[0, 0].legend()
             axes[0, 0].grid(True, alpha=0.3)
-        
+
         # 2. CPU I/O Wait vs Device Latency
         if cpu_iowait_col and data_await_cols:
             data_await_col = data_await_cols[0]
-            axes[0, 1].scatter(self.df[cpu_iowait_col], self.df[data_await_col], 
+            axes[0, 1].scatter(self.df[cpu_iowait_col], self.df[data_await_col],
                              alpha=0.6, s=20, color='green', label='DATA Device')
-            
+
             # Add ACCOUNTS device if configured
             if accounts_configured and accounts_await_col:
-                axes[0, 1].scatter(self.df[cpu_iowait_col], self.df[accounts_await_col], 
+                axes[0, 1].scatter(self.df[cpu_iowait_col], self.df[accounts_await_col],
                                  alpha=0.6, s=20, color='purple', label='ACCOUNTS Device')
-            
+
             # Calculate correlation
             data_corr = self.df[cpu_iowait_col].corr(self.df[data_await_col])
             corr_text = f'DATA Correlation: {data_corr:.3f}'
-            
+
             if accounts_configured and accounts_await_col:
                 accounts_corr = self.df[cpu_iowait_col].corr(self.df[accounts_await_col])
                 corr_text += f'\nACCOUNTS Correlation: {accounts_corr:.3f}'
-            
+
             axes[0, 1].text(0.05, 0.95, corr_text, transform=axes[0, 1].transAxes,
                            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
             axes[0, 1].set_xlabel('CPU I/O Wait (%)')
@@ -477,153 +477,153 @@ class PerformanceVisualizer(CSVDataProcessor):
             axes[0, 1].set_title('CPU I/O Wait vs Device Latency', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             axes[0, 1].legend()
             axes[0, 1].grid(True, alpha=0.3)
-        
+
         # 3. Device Utilization vs Queue Depth
         if data_util_cols and data_aqu_cols:
             data_util_col = data_util_cols[0]
             data_aqu_col = data_aqu_cols[0]
-            axes[1, 0].scatter(self.df[data_util_col], self.df[data_aqu_col], 
+            axes[1, 0].scatter(self.df[data_util_col], self.df[data_aqu_col],
                              alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['data_primary'], label='DATA Device')
-            
+
             # Add ACCOUNTS device if configured
             if accounts_configured and accounts_util_cols and accounts_aqu_cols:
                 accounts_util_col = accounts_util_cols[0]
                 accounts_aqu_col = accounts_aqu_cols[0]
-                axes[1, 0].scatter(self.df[accounts_util_col], self.df[accounts_aqu_col], 
+                axes[1, 0].scatter(self.df[accounts_util_col], self.df[accounts_aqu_col],
                                  alpha=0.6, s=20, color=UnifiedChartStyle.COLORS['accounts_primary'], label='ACCOUNTS Device')
-            
+
             axes[1, 0].set_xlabel('Device Utilization (%)')
             axes[1, 0].set_ylabel('Queue Depth')
             axes[1, 0].set_title('Device Utilization vs Queue Depth', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             axes[1, 0].legend()
             axes[1, 0].grid(True, alpha=0.3)
-        
+
         # 4. Correlation Summary
         summary_text = "CPU-Disk Correlation Summary:\n\n"
-        
+
         if cpu_iowait_col and data_util_cols:
             data_corr = self.df[cpu_iowait_col].corr(self.df[data_util_cols[0]])
             summary_text += f"DATA Device:\n"
             summary_text += f"  CPU I/O Wait vs Utilization: {data_corr:.3f}\n"
-            
+
             if data_await_cols:
                 data_await_corr = self.df[cpu_iowait_col].corr(self.df[data_await_cols[0]])
                 summary_text += f"  CPU I/O Wait vs Latency: {data_await_corr:.3f}\n\n"
-        
+
         if accounts_configured and cpu_iowait_col and accounts_util_cols:
             accounts_corr = self.df[cpu_iowait_col].corr(self.df[accounts_util_cols[0]])
             summary_text += f"ACCOUNTS Device:\n"
             summary_text += f"  CPU I/O Wait vs Utilization: {accounts_corr:.3f}\n"
-            
+
             if accounts_await_cols:
                 accounts_await_corr = self.df[cpu_iowait_col].corr(self.df[accounts_await_cols[0]])
                 summary_text += f"  CPU I/O Wait vs Latency: {accounts_await_corr:.3f}"
         elif not accounts_configured:
             summary_text += "ACCOUNTS Device: Not Configured\n"
             summary_text += "Configure ACCOUNTS_DEVICE for dual-device analysis"
-        
+
         UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Correlation Summary')
-        
+
         UnifiedChartStyle.apply_layout('auto')
-        
+
         output_file = os.path.join(self.output_dir, 'cpu_disk_correlation_visualization.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         plt.close()
-        
+
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
         print(f"✅ CPU-Disk correlation visualization saved: {output_file} ({device_info} devices)")
-        
+
         return output_file
 
     def create_util_threshold_analysis_chart(self):
         """Device Utilization Threshold Analysis Chart - Systematic Refactor"""
-        
+
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data")
                 return None, {}
-        
+
         accounts_configured = DeviceManager.is_accounts_configured(self.df)
         title = 'Device Utilization Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Device Utilization Threshold Analysis - DATA Device Only'
-        
+
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-        
+
         thresholds = get_visualization_thresholds()
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
-        
+
         if not data_util_cols:
             print("❌ DATA device utilization data not found")
-            return None
-        
+            return None, {}
+
         data_util_col = data_util_cols[0]
         accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')] if accounts_configured else []
         accounts_util_col = accounts_util_cols[0] if accounts_util_cols else None
-        
+
         # 1. Utilization Time Series
-        axes[0, 0].plot(self.df['timestamp'], self.df[data_util_col], 
+        axes[0, 0].plot(self.df['timestamp'], self.df[data_util_col],
                        label='DATA Device Utilization', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'])
-        
+
         if accounts_configured and accounts_util_cols:
             accounts_util_col = accounts_util_cols[0]
-            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_util_col], 
+            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_util_col],
                            label='ACCOUNTS Device Utilization', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'])
-        
-        axes[0, 0].axhline(y=thresholds['warning'], color=UnifiedChartStyle.COLORS['warning'], linestyle='--', alpha=0.7, 
+
+        axes[0, 0].axhline(y=thresholds['warning'], color=UnifiedChartStyle.COLORS['warning'], linestyle='--', alpha=0.7,
                           label=f'Warning: {thresholds["warning"]}%')
-        axes[0, 0].axhline(y=thresholds['critical'], color=UnifiedChartStyle.COLORS['critical'], linestyle='--', alpha=0.7, 
+        axes[0, 0].axhline(y=thresholds['critical'], color=UnifiedChartStyle.COLORS['critical'], linestyle='--', alpha=0.7,
                           label=f'Critical: {thresholds["critical"]}%')
-        
+
         axes[0, 0].set_title('Device Utilization vs Thresholds', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         axes[0, 0].set_ylabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
         axes[0, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         axes[0, 0].grid(True, alpha=0.3)
         UnifiedChartStyle.format_time_axis(axes[0, 0], self.df['timestamp'])
-        
+
         # 2. Utilization Distribution
-        axes[0, 1].hist(self.df[data_util_col], bins=15, alpha=0.8, color=UnifiedChartStyle.COLORS['data_primary'], 
+        axes[0, 1].hist(self.df[data_util_col], bins=15, alpha=0.8, color=UnifiedChartStyle.COLORS['data_primary'],
                        label='DATA Device Distribution')
-        
+
         if accounts_configured and accounts_util_cols:
-            axes[0, 1].hist(self.df[accounts_util_col], bins=15, alpha=0.6, color=UnifiedChartStyle.COLORS['accounts_primary'], 
+            axes[0, 1].hist(self.df[accounts_util_col], bins=15, alpha=0.6, color=UnifiedChartStyle.COLORS['accounts_primary'],
                            label='ACCOUNTS Device Distribution')
-        
+
         axes[0, 1].axvline(x=thresholds['warning'], color=UnifiedChartStyle.COLORS['warning'], linestyle='--', alpha=0.8, linewidth=2,
                           label=f'Warning: {thresholds["warning"]}%')
         axes[0, 1].axvline(x=thresholds['critical'], color=UnifiedChartStyle.COLORS['critical'], linestyle='--', alpha=0.8, linewidth=2,
                           label=f'Critical: {thresholds["critical"]}%')
-        
+
         axes[0, 1].set_title('Utilization Distribution', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         axes[0, 1].set_xlabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
         axes[0, 1].set_ylabel('Frequency', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
         axes[0, 1].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         axes[0, 1].grid(True, alpha=0.3)
-        
+
         # 3. Violation Timeline
         violation_data = self.df[data_util_col] > thresholds['critical']
         warning_data = (self.df[data_util_col] > thresholds['warning']) & (self.df[data_util_col] <= thresholds['critical'])
-        
-        axes[1, 0].plot(self.df['timestamp'], violation_data.astype(int), 
+
+        axes[1, 0].plot(self.df['timestamp'], violation_data.astype(int),
                        label='DATA Critical', linewidth=2, color=UnifiedChartStyle.COLORS['critical'], marker='o', markersize=2)
-        axes[1, 0].plot(self.df['timestamp'], warning_data.astype(int) * 0.5, 
+        axes[1, 0].plot(self.df['timestamp'], warning_data.astype(int) * 0.5,
                        label='DATA Warning', linewidth=2, color=UnifiedChartStyle.COLORS['warning'], marker='s', markersize=2)
-        
+
         if accounts_configured and accounts_util_cols:
             accounts_violation = self.df[accounts_util_col] > thresholds['critical']
             accounts_warning = (self.df[accounts_util_col] > thresholds['warning']) & (self.df[accounts_util_col] <= thresholds['critical'])
-            
-            axes[1, 0].plot(self.df['timestamp'], accounts_violation.astype(int) + 0.1, 
+
+            axes[1, 0].plot(self.df['timestamp'], accounts_violation.astype(int) + 0.1,
                            label='ACCOUNTS Critical', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'], marker='o', markersize=2)
-            axes[1, 0].plot(self.df['timestamp'], accounts_warning.astype(int) * 0.5 + 0.05, 
+            axes[1, 0].plot(self.df['timestamp'], accounts_warning.astype(int) * 0.5 + 0.05,
                            label='ACCOUNTS Warning', linewidth=2, color=UnifiedChartStyle.COLORS['success'], marker='s', markersize=2)
-        
+
         axes[1, 0].set_title('Violation Timeline', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         axes[1, 0].set_ylabel('Violation Status', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
         axes[1, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         axes[1, 0].grid(True, alpha=0.3)
         axes[1, 0].set_ylim(-0.1, 1.3)
         UnifiedChartStyle.format_time_axis(axes[1, 0], self.df['timestamp'])
-        
+
         # 4. Statistics Summary
         summary_lines = ["Utilization Statistics:", ""]
         summary_lines.extend([
@@ -633,7 +633,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             f"  Violations: {(self.df[data_util_col] > thresholds['critical']).sum()}",
             ""
         ])
-        
+
         if accounts_configured and accounts_util_cols:
             summary_lines.extend([
                 f"ACCOUNTS Device:",
@@ -641,17 +641,17 @@ class PerformanceVisualizer(CSVDataProcessor):
                 f"  Max: {self.df[accounts_util_col].max():.2f}%",
                 f"  Violations: {(self.df[accounts_util_col] > thresholds['critical']).sum()}"
             ])
-        
+
         UnifiedChartStyle.add_text_summary(axes[1, 1], "\n".join(summary_lines), "Statistics Summary")
-        
+
         plt.tight_layout()
-        
+
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
         output_file = os.path.join(self.output_dir, 'util_threshold_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         print(f"✅ Utilization threshold analysis chart saved: {output_file} ({device_info} devices)")
-        
+
         threshold_violations = {}
         if data_util_col:
             threshold_violations['data_util'] = self._analyze_threshold_violations(
@@ -661,37 +661,37 @@ class PerformanceVisualizer(CSVDataProcessor):
             threshold_violations['accounts_util'] = self._analyze_threshold_violations(
                 self.df[accounts_util_col], self.util_thresholds, 'accounts_util'
             )
-        
+
         return output_file, threshold_violations
 
     def create_await_threshold_analysis_chart(self):
         """Enhanced I/O Latency Threshold Analysis Chart"""
-        
+
         # Load data first, then check ACCOUNTS configuration
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for await threshold analysis")
-                return None
+                return None, {}
 
         accounts_configured = DeviceManager.is_accounts_configured(self.df)
         title = 'Enhanced I/O Await Threshold Analysis - DATA & ACCOUNTS Devices' if accounts_configured else 'Enhanced I/O Await Threshold Analysis - DATA Device Only'
-        
+
         fig, axes = plt.subplots(2, 2, figsize=(18, 14))
         fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-        
+
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
-        
+
         if not data_await_cols:
             print("❌ DATA device latency data not found")
-            return None
-        
+            return None, {}
+
         data_await_col = data_await_cols[0]
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
         accounts_await_col = accounts_await_cols[0] if accounts_await_cols else None
-        
+
         # Intelligent threshold setting - use configuration variables and unified calculation rules
         base_latency_threshold = int(os.getenv('BOTTLENECK_DISK_LATENCY_THRESHOLD', '50'))
-        
+
         # DATA device thresholds - use unified calculation rules
         data_thresholds = {
             'excellent': base_latency_threshold * 0.4,    # 40% of base threshold
@@ -700,7 +700,7 @@ class PerformanceVisualizer(CSVDataProcessor):
             'poor': base_latency_threshold * 1.0,         # 100% of base threshold
             'critical': base_latency_threshold * 1.2      # 120% of base threshold
         }
-        
+
         # ACCOUNTS device independent thresholds - use same configuration rules
         accounts_thresholds = data_thresholds  # Default to DATA thresholds
         if accounts_configured and accounts_await_col:
@@ -712,7 +712,7 @@ class PerformanceVisualizer(CSVDataProcessor):
                 'poor': base_latency_threshold * 1.0,
                 'critical': base_latency_threshold * 1.2
             }
-        
+
         # Unified thresholds for display (take maximum of both)
         enhanced_thresholds = data_thresholds
         if accounts_configured and accounts_await_col:
@@ -725,81 +725,81 @@ class PerformanceVisualizer(CSVDataProcessor):
             }
 
         # 1. Enhanced Time Series with Multiple Thresholds
-        axes[0, 0].plot(self.df['timestamp'], self.df[data_await_col], 
+        axes[0, 0].plot(self.df['timestamp'], self.df[data_await_col],
                        label='DATA Device Latency', linewidth=2.5, color=UnifiedChartStyle.COLORS['data_primary'])
-        
+
         if accounts_configured and accounts_await_col:
-            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_await_col], 
+            axes[0, 0].plot(self.df['timestamp'], self.df[accounts_await_col],
                            label='ACCOUNTS Device Latency', linewidth=2.5, color=UnifiedChartStyle.COLORS['accounts_primary'])
-        
+
         # Multiple threshold lines with better colors
-        axes[0, 0].axhline(y=enhanced_thresholds['excellent'], color=UnifiedChartStyle.COLORS['success'], 
+        axes[0, 0].axhline(y=enhanced_thresholds['excellent'], color=UnifiedChartStyle.COLORS['success'],
                           linestyle='-', alpha=0.8, linewidth=1, label=f'Excellent (<{enhanced_thresholds["excellent"]:.2f}ms)')
-        axes[0, 0].axhline(y=enhanced_thresholds['good'], color='limegreen', 
+        axes[0, 0].axhline(y=enhanced_thresholds['good'], color='limegreen',
                           linestyle='--', alpha=0.8, linewidth=1.5, label=f'Good (<{enhanced_thresholds["good"]:.2f}ms)')
-        axes[0, 0].axhline(y=enhanced_thresholds['warning'], color=UnifiedChartStyle.COLORS['warning'], 
+        axes[0, 0].axhline(y=enhanced_thresholds['warning'], color=UnifiedChartStyle.COLORS['warning'],
                           linestyle='--', alpha=0.8, linewidth=2, label=f'Warning (<{enhanced_thresholds["warning"]:.2f}ms)')
-        axes[0, 0].axhline(y=enhanced_thresholds['critical'], color=UnifiedChartStyle.COLORS['critical'], 
+        axes[0, 0].axhline(y=enhanced_thresholds['critical'], color=UnifiedChartStyle.COLORS['critical'],
                           linestyle='--', alpha=0.8, linewidth=2, label=f'Critical (<{enhanced_thresholds["critical"]:.2f}ms)')
-        
-        axes[0, 0].set_title('I/O Latency Timeline with Performance Thresholds', 
+
+        axes[0, 0].set_title('I/O Latency Timeline with Performance Thresholds',
                             fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         axes[0, 0].set_ylabel('Average Latency (ms)')
         axes[0, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], loc='upper left')
         axes[0, 0].grid(True, alpha=0.3)
         format_time_axis(axes[0, 0], self.df['timestamp'])
-        
+
         # 2. Enhanced Distribution Analysis
         bins = np.linspace(0, max(enhanced_thresholds['critical'] * 1.2, self.df[data_await_col].max() * 1.1), 25)
-        axes[0, 1].hist(self.df[data_await_col], bins=bins, alpha=0.7, color=UnifiedChartStyle.COLORS['data_primary'], 
+        axes[0, 1].hist(self.df[data_await_col], bins=bins, alpha=0.7, color=UnifiedChartStyle.COLORS['data_primary'],
                        edgecolor='black', linewidth=0.5, label='DATA Distribution')
-        
+
         if accounts_configured and accounts_await_col:
-            axes[0, 1].hist(self.df[accounts_await_col], bins=bins, alpha=0.6, color=UnifiedChartStyle.COLORS['accounts_primary'], 
+            axes[0, 1].hist(self.df[accounts_await_col], bins=bins, alpha=0.6, color=UnifiedChartStyle.COLORS['accounts_primary'],
                            edgecolor='black', linewidth=0.5, label='ACCOUNTS Distribution')
-        
+
         # Add threshold lines to histogram with labels
-        axes[0, 1].axvline(x=enhanced_thresholds['excellent'], color=UnifiedChartStyle.COLORS['success'], 
+        axes[0, 1].axvline(x=enhanced_thresholds['excellent'], color=UnifiedChartStyle.COLORS['success'],
                           linestyle='-', alpha=0.8, linewidth=1.5, label=f'Excellent ({enhanced_thresholds["excellent"]:.2f}ms)')
-        axes[0, 1].axvline(x=enhanced_thresholds['good'], color='limegreen', 
+        axes[0, 1].axvline(x=enhanced_thresholds['good'], color='limegreen',
                           linestyle='--', alpha=0.8, linewidth=1.5, label=f'Good ({enhanced_thresholds["good"]:.2f}ms)')
-        axes[0, 1].axvline(x=enhanced_thresholds['warning'], color=UnifiedChartStyle.COLORS['warning'], 
+        axes[0, 1].axvline(x=enhanced_thresholds['warning'], color=UnifiedChartStyle.COLORS['warning'],
                           linestyle='--', alpha=0.8, linewidth=1.5, label=f'Warning ({enhanced_thresholds["warning"]:.2f}ms)')
-        axes[0, 1].axvline(x=enhanced_thresholds['critical'], color=UnifiedChartStyle.COLORS['critical'], 
+        axes[0, 1].axvline(x=enhanced_thresholds['critical'], color=UnifiedChartStyle.COLORS['critical'],
                           linestyle='--', alpha=0.8, linewidth=1.5, label=f'Critical ({enhanced_thresholds["critical"]:.2f}ms)')
-        
+
         # Add statistics
         data_mean = self.df[data_await_col].mean()
-        axes[0, 1].axvline(x=data_mean, color=UnifiedChartStyle.COLORS['data_primary'], 
+        axes[0, 1].axvline(x=data_mean, color=UnifiedChartStyle.COLORS['data_primary'],
                           linestyle='-', alpha=0.9, linewidth=2, label=f'DATA Mean: {data_mean:.2f}ms')
-        
+
         if accounts_configured and accounts_await_col:
             accounts_mean = self.df[accounts_await_col].mean()
-            axes[0, 1].axvline(x=accounts_mean, color=UnifiedChartStyle.COLORS['accounts_primary'], 
+            axes[0, 1].axvline(x=accounts_mean, color=UnifiedChartStyle.COLORS['accounts_primary'],
                               linestyle='-', alpha=0.9, linewidth=2, label=f'ACCOUNTS Mean: {accounts_mean:.2f}ms')
-        
-        axes[0, 1].set_title('Latency Distribution with Performance Bands', 
+
+        axes[0, 1].set_title('Latency Distribution with Performance Bands',
                             fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         axes[0, 1].set_xlabel('Average Latency (ms)')
         axes[0, 1].set_ylabel('Frequency')
         axes[0, 1].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         axes[0, 1].grid(True, alpha=0.3)
-        
+
         # 3. Enhanced Violation Timeline - use respective thresholds
         data_violations = {
             'critical': self.df[data_await_col] > data_thresholds['critical'],
             'poor': (self.df[data_await_col] > data_thresholds['poor']) & (self.df[data_await_col] <= data_thresholds['critical']),
             'warning': (self.df[data_await_col] > data_thresholds['warning']) & (self.df[data_await_col] <= data_thresholds['poor'])
         }
-        
+
         # Plot violation timelines with clearly different colors
-        axes[1, 0].plot(self.df['timestamp'], data_violations['critical'].astype(int) * 3, 
+        axes[1, 0].plot(self.df['timestamp'], data_violations['critical'].astype(int) * 3,
                        label='DATA Critical', linewidth=3, color=UnifiedChartStyle.COLORS['critical'], marker='o', markersize=4)
-        axes[1, 0].plot(self.df['timestamp'], data_violations['poor'].astype(int) * 2, 
+        axes[1, 0].plot(self.df['timestamp'], data_violations['poor'].astype(int) * 2,
                        label='DATA Poor', linewidth=2.5, color='darkorange', marker='s', markersize=3)
-        axes[1, 0].plot(self.df['timestamp'], data_violations['warning'].astype(int) * 1, 
+        axes[1, 0].plot(self.df['timestamp'], data_violations['warning'].astype(int) * 1,
                        label='DATA Warning', linewidth=2, color=UnifiedChartStyle.COLORS['warning'], marker='^', markersize=3)
-        
+
         if accounts_configured and accounts_await_col:
             # ACCOUNTS uses its own thresholds
             accounts_violations = {
@@ -807,16 +807,16 @@ class PerformanceVisualizer(CSVDataProcessor):
                 'poor': (self.df[accounts_await_col] > accounts_thresholds['poor']) & (self.df[accounts_await_col] <= accounts_thresholds['critical']),
                 'warning': (self.df[accounts_await_col] > accounts_thresholds['warning']) & (self.df[accounts_await_col] <= accounts_thresholds['poor'])
             }
-            
+
             # ACCOUNTS violations with clearly different colors (purple series)
-            axes[1, 0].plot(self.df['timestamp'], accounts_violations['critical'].astype(int) * 3 + 0.1, 
+            axes[1, 0].plot(self.df['timestamp'], accounts_violations['critical'].astype(int) * 3 + 0.1,
                            label='ACCOUNTS Critical', linewidth=3, color='purple', marker='o', markersize=4, alpha=0.8)
-            axes[1, 0].plot(self.df['timestamp'], accounts_violations['poor'].astype(int) * 2 + 0.1, 
+            axes[1, 0].plot(self.df['timestamp'], accounts_violations['poor'].astype(int) * 2 + 0.1,
                            label='ACCOUNTS Poor', linewidth=2.5, color='mediumorchid', marker='s', markersize=3, alpha=0.8)
-            axes[1, 0].plot(self.df['timestamp'], accounts_violations['warning'].astype(int) * 1 + 0.1, 
+            axes[1, 0].plot(self.df['timestamp'], accounts_violations['warning'].astype(int) * 1 + 0.1,
                            label='ACCOUNTS Warning', linewidth=2, color='plum', marker='^', markersize=3, alpha=0.8)
-        
-        axes[1, 0].set_title('Threshold Violation Timeline Analysis', 
+
+        axes[1, 0].set_title('Threshold Violation Timeline Analysis',
                             fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         axes[1, 0].set_xlabel('Time')
         axes[1, 0].set_ylabel('Violation Severity Level')
@@ -824,7 +824,7 @@ class PerformanceVisualizer(CSVDataProcessor):
         axes[1, 0].legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], ncol=2)
         axes[1, 0].grid(True, alpha=0.3)
         format_time_axis(axes[1, 0], self.df['timestamp'])
-        
+
         # 4. Enhanced Statistics Summary
         # Calculate detailed statistics
         data_stats = {
@@ -834,22 +834,22 @@ class PerformanceVisualizer(CSVDataProcessor):
             'p99': self.df[data_await_col].quantile(0.99),
             'max': self.df[data_await_col].max()
         }
-        
+
         # Calculate violation percentages - use DATA's own thresholds
         total_points = len(self.df)
         data_violations_pct = {
             'excellent': (self.df[data_await_col] < data_thresholds['excellent']).sum() / total_points * 100,
-            'good': ((self.df[data_await_col] >= data_thresholds['excellent']) & 
+            'good': ((self.df[data_await_col] >= data_thresholds['excellent']) &
                      (self.df[data_await_col] < data_thresholds['good'])).sum() / total_points * 100,
-            'warning': ((self.df[data_await_col] >= data_thresholds['good']) & 
+            'warning': ((self.df[data_await_col] >= data_thresholds['good']) &
                         (self.df[data_await_col] < data_thresholds['warning'])).sum() / total_points * 100,
-            'poor': ((self.df[data_await_col] >= data_thresholds['warning']) & 
+            'poor': ((self.df[data_await_col] >= data_thresholds['warning']) &
                      (self.df[data_await_col] < data_thresholds['poor'])).sum() / total_points * 100,
             'critical': (self.df[data_await_col] >= data_thresholds['poor']).sum() / total_points * 100
         }
-        
+
         accounts_violations_pct = {}
-        
+
         summary_text = f"""DATA Device Performance:
   Mean: {data_stats['mean']:.2f}ms  |  P50: {data_stats['p50']:.2f}ms
   P95: {data_stats['p95']:.2f}ms   |  P99: {data_stats['p99']:.2f}ms
@@ -861,7 +861,7 @@ Performance Distribution (DATA):
   Warning ({data_thresholds['good']:.2f}-{data_thresholds['warning']:.2f}ms): {data_violations_pct['warning']:.1f}%
   Poor ({data_thresholds['warning']:.2f}-{data_thresholds['poor']:.2f}ms): {data_violations_pct['poor']:.1f}%
   Critical (>{data_thresholds['poor']:.2f}ms): {data_violations_pct['critical']:.1f}%"""
-        
+
         if accounts_configured and accounts_await_col:
             accounts_stats = {
                 'mean': self.df[accounts_await_col].mean(),
@@ -870,19 +870,19 @@ Performance Distribution (DATA):
                 'p99': self.df[accounts_await_col].quantile(0.99),
                 'max': self.df[accounts_await_col].max()
             }
-            
+
             # Calculate ACCOUNTS violation percentages - use ACCOUNTS' own thresholds
             accounts_violations_pct = {
                 'excellent': (self.df[accounts_await_col] < accounts_thresholds['excellent']).sum() / total_points * 100,
-                'good': ((self.df[accounts_await_col] >= accounts_thresholds['excellent']) & 
+                'good': ((self.df[accounts_await_col] >= accounts_thresholds['excellent']) &
                          (self.df[accounts_await_col] < accounts_thresholds['good'])).sum() / total_points * 100,
-                'warning': ((self.df[accounts_await_col] >= accounts_thresholds['good']) & 
+                'warning': ((self.df[accounts_await_col] >= accounts_thresholds['good']) &
                             (self.df[accounts_await_col] < accounts_thresholds['warning'])).sum() / total_points * 100,
-                'poor': ((self.df[accounts_await_col] >= accounts_thresholds['warning']) & 
+                'poor': ((self.df[accounts_await_col] >= accounts_thresholds['warning']) &
                          (self.df[accounts_await_col] < accounts_thresholds['poor'])).sum() / total_points * 100,
                 'critical': (self.df[accounts_await_col] >= accounts_thresholds['poor']).sum() / total_points * 100
             }
-            
+
             summary_text += f"""
 
 ACCOUNTS Device Performance:
@@ -903,17 +903,17 @@ Recommendations:
   • Target: Keep 95% of requests under P95 latency
   • Monitor: P99 latency trends for early warning
   • Alert: When performance degrades significantly"""
-        
+
         UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Performance Analysis Summary')
-        
+
         UnifiedChartStyle.apply_layout('auto')
         output_file = os.path.join(self.output_dir, 'await_threshold_analysis.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         plt.close()
-        
+
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
         print(f"✅ I/O latency threshold analysis chart saved: {output_file} ({device_info} devices)")
-        
+
         threshold_violations = {}
         if data_await_col:
             threshold_violations['data_avg_await'] = self._analyze_threshold_violations(
@@ -923,32 +923,31 @@ Recommendations:
             threshold_violations['accounts_avg_await'] = self._analyze_threshold_violations(
                 self.df[accounts_await_col], accounts_thresholds, 'accounts_avg_await'
             )
-        
+
         return output_file, threshold_violations
 
     def create_device_comparison_chart(self):
         """Device Performance Comparison Chart - 3x2 Layout"""
-        
+
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for device comparison")
                 return None
-        
+
         accounts_configured = DeviceManager.is_accounts_configured(self.df)
-        
+
         if not accounts_configured:
             print("⚠️ ACCOUNTS device not configured, creating DATA-only comparison")
-        
+
         fig, axes = plt.subplots(3, 2, figsize=(16, 18))
         title = 'Device Performance Comparison - DATA & ACCOUNTS' if accounts_configured else 'Device Performance Analysis - DATA Only'
-        fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], 
+        fig.suptitle(title, fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'],
                     fontweight='bold')
-        
+
         # Dynamically find fields
-        # 中立化(去 aws 倾向): 历史上物理名是 data_*_aws_standard_iops, 曾用 'aws' not in col
-        # 排除折算列. 现物理名已中立化为 normalized (ADR-0002), 折算列名 = *_normalized_iops/
-        # *_normalized_throughput_mibs, 与 *_total_iops/*_total_throughput_mibs 天然不同串,
-        # 'total_iops'/'total_throughput_mibs' 精确子串已足够区分, 不再需要 provider 倾向过滤.
+        # Provider-neutral fields replaced the historical data_*_aws_standard_iops names.
+        # The normalized_* conversion columns do not overlap with *_total_iops or
+        # *_total_throughput_mibs, so exact substring matching is sufficient here.
         data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col]
         data_tp_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_throughput_mibs' in col]
         data_aqu_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_aqu_sz')]
@@ -956,7 +955,7 @@ Recommendations:
         data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
         data_r_s_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_r_s')]
         data_w_s_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_w_s')]
-        
+
         accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_iops' in col] if accounts_configured else []
         accounts_tp_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_throughput_mibs' in col] if accounts_configured else []
         accounts_aqu_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_aqu_sz')] if accounts_configured else []
@@ -964,25 +963,25 @@ Recommendations:
         accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')] if accounts_configured else []
         accounts_r_s_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_r_s')] if accounts_configured else []
         accounts_w_s_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_w_s')] if accounts_configured else []
-        
+
         # Subplot 1: IOPS & Throughput (dual Y-axis)
         ax1 = axes[0, 0]
         ax1_twin = ax1.twinx()
-        
+
         if data_iops_cols:
-            ax1.plot(self.df['timestamp'], self.df[data_iops_cols[0]], 
+            ax1.plot(self.df['timestamp'], self.df[data_iops_cols[0]],
                     label='DATA IOPS', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'])
             if accounts_configured and accounts_iops_cols:
-                ax1.plot(self.df['timestamp'], self.df[accounts_iops_cols[0]], 
+                ax1.plot(self.df['timestamp'], self.df[accounts_iops_cols[0]],
                         label='ACCOUNTS IOPS', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'])
-        
+
         if data_tp_cols:
-            ax1_twin.plot(self.df['timestamp'], self.df[data_tp_cols[0]], 
+            ax1_twin.plot(self.df['timestamp'], self.df[data_tp_cols[0]],
                          label='DATA Throughput', linewidth=2, linestyle='--', color=UnifiedChartStyle.COLORS['success'])
             if accounts_configured and accounts_tp_cols:
-                ax1_twin.plot(self.df['timestamp'], self.df[accounts_tp_cols[0]], 
+                ax1_twin.plot(self.df['timestamp'], self.df[accounts_tp_cols[0]],
                              label='ACCOUNTS Throughput', linewidth=2, linestyle='--', color=UnifiedChartStyle.COLORS['critical'])
-        
+
         ax1.set_title('IOPS & Throughput Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         ax1.set_ylabel('IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
         ax1_twin.set_ylabel('Throughput (MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
@@ -990,81 +989,81 @@ Recommendations:
         ax1_twin.legend(loc='upper right', fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         ax1.grid(True, alpha=0.3)
         format_time_axis(ax1, self.df['timestamp'])
-        
+
         # Subplot 2: Queue Depth
         ax2 = axes[0, 1]
         if data_aqu_cols:
-            ax2.plot(self.df['timestamp'], self.df[data_aqu_cols[0]], 
+            ax2.plot(self.df['timestamp'], self.df[data_aqu_cols[0]],
                     label='DATA Queue Depth', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'])
             if accounts_configured and accounts_aqu_cols:
-                ax2.plot(self.df['timestamp'], self.df[accounts_aqu_cols[0]], 
+                ax2.plot(self.df['timestamp'], self.df[accounts_aqu_cols[0]],
                         label='ACCOUNTS Queue Depth', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'])
             ax2.axhline(y=2.0, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', alpha=0.7, label='Warning (2.0)')
-        
+
         ax2.set_title('Queue Depth Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         ax2.set_ylabel('Queue Depth', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
         ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         ax2.grid(True, alpha=0.3)
         format_time_axis(ax2, self.df['timestamp'])
-        
+
         # Subplot 3: Utilization
         ax3 = axes[1, 0]
         if data_util_cols:
-            ax3.plot(self.df['timestamp'], self.df[data_util_cols[0]], 
+            ax3.plot(self.df['timestamp'], self.df[data_util_cols[0]],
                     label='DATA Utilization', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'])
             if accounts_configured and accounts_util_cols:
-                ax3.plot(self.df['timestamp'], self.df[accounts_util_cols[0]], 
+                ax3.plot(self.df['timestamp'], self.df[accounts_util_cols[0]],
                         label='ACCOUNTS Utilization', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'])
             ax3.axhline(y=80, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', alpha=0.7, label='Warning (80%)')
-        
+
         ax3.set_title('Utilization Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         ax3.set_ylabel('Utilization (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
         ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         ax3.grid(True, alpha=0.3)
         format_time_axis(ax3, self.df['timestamp'])
-        
+
         # Subplot 4: Latency
         ax4 = axes[1, 1]
         if data_await_cols:
-            ax4.plot(self.df['timestamp'], self.df[data_await_cols[0]], 
+            ax4.plot(self.df['timestamp'], self.df[data_await_cols[0]],
                     label='DATA Latency', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'])
             if accounts_configured and accounts_await_cols:
-                ax4.plot(self.df['timestamp'], self.df[accounts_await_cols[0]], 
+                ax4.plot(self.df['timestamp'], self.df[accounts_await_cols[0]],
                         label='ACCOUNTS Latency', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'])
             ax4.axhline(y=10, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', alpha=0.7, label='Warning (10ms)')
-        
+
         ax4.set_title('Latency Comparison', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         ax4.set_ylabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
         ax4.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         ax4.grid(True, alpha=0.3)
         format_time_axis(ax4, self.df['timestamp'])
-        
+
         # Subplot 5: Read/Write IOPS
         ax5 = axes[2, 0]
         if data_r_s_cols and data_w_s_cols:
-            ax5.plot(self.df['timestamp'], self.df[data_r_s_cols[0]], 
+            ax5.plot(self.df['timestamp'], self.df[data_r_s_cols[0]],
                     label='DATA Read', linewidth=2, color=UnifiedChartStyle.COLORS['data_primary'], alpha=0.7)
-            ax5.plot(self.df['timestamp'], self.df[data_w_s_cols[0]], 
+            ax5.plot(self.df['timestamp'], self.df[data_w_s_cols[0]],
                     label='DATA Write', linewidth=2, color=UnifiedChartStyle.COLORS['critical'], alpha=0.7)
             if accounts_configured and accounts_r_s_cols and accounts_w_s_cols:
-                ax5.plot(self.df['timestamp'], self.df[accounts_r_s_cols[0]], 
+                ax5.plot(self.df['timestamp'], self.df[accounts_r_s_cols[0]],
                         label='ACCOUNTS Read', linewidth=2, color=UnifiedChartStyle.COLORS['accounts_primary'], alpha=0.7)
-                ax5.plot(self.df['timestamp'], self.df[accounts_w_s_cols[0]], 
+                ax5.plot(self.df['timestamp'], self.df[accounts_w_s_cols[0]],
                         label='ACCOUNTS Write', linewidth=2, color='purple', alpha=0.7)
-        
+
         ax5.set_title('Read/Write IOPS Breakdown', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         ax5.set_ylabel('IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
         ax5.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
         ax5.grid(True, alpha=0.3)
         format_time_axis(ax5, self.df['timestamp'])
-        
+
         # Subplot 6: Summary
         summary_lines = [
             "Device Performance Summary:",
             "(Based on iostat raw data)",
             ""
         ]
-        
+
         if data_iops_cols:
             data_iops_mean = self.df[data_iops_cols[0]].mean()
             summary_lines.append(f"DATA Device:")
@@ -1078,7 +1077,7 @@ Recommendations:
                 w_mean = self.df[data_w_s_cols[0]].mean()
                 ratio = r_mean / w_mean if w_mean > 0 else float('inf')
                 summary_lines.append(f"  Read/Write: {ratio:.2f}:1 ({'Read' if ratio > 1 else 'Write'} intensive)")
-        
+
         if accounts_configured and accounts_iops_cols:
             accounts_iops_mean = self.df[accounts_iops_cols[0]].mean()
             summary_lines.extend(["", "ACCOUNTS Device:"])
@@ -1092,7 +1091,7 @@ Recommendations:
                 w_mean = self.df[accounts_w_s_cols[0]].mean()
                 ratio = r_mean / w_mean if w_mean > 0 else float('inf')
                 summary_lines.append(f"  Read/Write: {ratio:.2f}:1 ({'Read' if ratio > 1 else 'Write'} intensive)")
-            
+
             if data_iops_cols:
                 data_iops_mean = self.df[data_iops_cols[0]].mean()
                 iops_ratio = data_iops_mean / accounts_iops_mean if accounts_iops_mean > 0 else 0
@@ -1100,124 +1099,124 @@ Recommendations:
                 summary_lines.append(f"Primary Workload: {'DATA' if iops_ratio > 2 else 'Balanced'}")
         else:
             summary_lines.append("\nACCOUNTS Device: Not Configured")
-        
+
         summary_text = "\n".join(summary_lines)
         UnifiedChartStyle.add_text_summary(axes[2, 1], summary_text, 'Performance Summary')
-        
+
         UnifiedChartStyle.apply_layout('auto')
-        
+
         output_file = os.path.join(self.output_dir, 'device_performance_comparison.png')
         plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
-        
+
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
         print(f"✅ Device performance comparison chart saved: {output_file} ({device_info} devices)")
-        
+
         return output_file
     def create_monitoring_overhead_analysis_chart(self):
         """Create monitoring overhead analysis chart"""
         if not self.overhead_file or not os.path.exists(self.overhead_file):
             print("⚠️ Monitoring overhead data file does not exist, skipping overhead analysis chart")
             return None, {}
-        
+
         try:
             # Load overhead data
             overhead_df = pd.read_csv(self.overhead_file)
             if 'timestamp' in overhead_df.columns:
                 overhead_df['timestamp'] = pd.to_datetime(overhead_df['timestamp'])
-            
+
             # Intelligent field mapping configuration
             field_mapping = {
                 'monitoring_cpu': ['monitoring_cpu_percent', 'monitoring_cpu', 'monitor_cpu'],
                 'monitoring_memory': ['monitoring_memory_mb', 'monitoring_mem_mb', 'monitor_memory_mb']
             }
-            
+
             # Find actual fields
             monitoring_cpu_field = None
             monitoring_mem_field = None
-            
+
             for field in field_mapping['monitoring_cpu']:
                 if field in overhead_df.columns:
                     monitoring_cpu_field = field
                     break
-                    
+
             for field in field_mapping['monitoring_memory']:
                 if field in overhead_df.columns:
                     monitoring_mem_field = field
                     break
-            
+
             # Create chart - use unified style
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle('Monitoring Overhead Analysis', 
+            fig.suptitle('Monitoring Overhead Analysis',
                         fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-            
+
             # 1. Resource consumption comparison
             ax1 = axes[0, 0]
             ax1.set_title('System Resource Consumption Comparison',
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-            
+
             if monitoring_cpu_field and monitoring_mem_field:
                 monitor_cpu = overhead_df[monitoring_cpu_field].mean()
                 monitor_mem_raw = overhead_df[monitoring_mem_field].mean()
-                
+
                 # If in MB units, convert to percentage
                 if 'mb' in monitoring_mem_field.lower():
                     system_memory_gb = overhead_df['system_memory_gb'].mean() if 'system_memory_gb' in overhead_df.columns else 739.70
                     monitor_mem = (monitor_mem_raw / 1024 / system_memory_gb * 100)
                 else:
                     monitor_mem = monitor_mem_raw
-                
+
                 # Detect if memory data is valid
                 mem_data_valid = monitor_mem > 0.001
-                
+
                 if mem_data_valid:
                     categories = ['CPU Usage (%)', 'Memory Usage (%)']
                     monitor_values = [monitor_cpu, monitor_mem]
                 else:
                     categories = ['CPU Usage (%)']
                     monitor_values = [monitor_cpu]
-                    ax1.text(0.7, 0.5, 'Memory data\nunavailable\n(all zeros)', 
+                    ax1.text(0.7, 0.5, 'Memory data\nunavailable\n(all zeros)',
                             transform=ax1.transAxes, ha='center', va='center',
                             fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'],
                             bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
-                
-                ax1.bar(categories, monitor_values, alpha=0.8, 
+
+                ax1.bar(categories, monitor_values, alpha=0.8,
                        color=[UnifiedChartStyle.COLORS['warning'], UnifiedChartStyle.COLORS['info']])
-                ax1.set_ylabel('Usage Percentage (%)', 
+                ax1.set_ylabel('Usage Percentage (%)',
                               fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax1.tick_params(axis='both', labelsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax1.grid(True, alpha=0.3)
-            
+
             # 2. Monitoring overhead trends
             ax2 = axes[0, 1]
             ax2.set_title('Monitoring Overhead Trends',
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-            
+
             if 'timestamp' in overhead_df.columns and monitoring_cpu_field:
-                ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_cpu_field], 
+                ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_cpu_field],
                         label='CPU Overhead', linewidth=2, color=UnifiedChartStyle.COLORS['critical'])
                 if monitoring_mem_field and overhead_df[monitoring_mem_field].mean() > 0:
-                    ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_mem_field], 
+                    ax2.plot(overhead_df['timestamp'], overhead_df[monitoring_mem_field],
                             label='Memory Overhead', linewidth=2, color=UnifiedChartStyle.COLORS['warning'])
                 else:
                     ax2.text(0.7, 0.9, 'Memory: N/A', transform=ax2.transAxes,
                             fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'],
                             bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
-                ax2.set_ylabel('Overhead (%)', 
+                ax2.set_ylabel('Overhead (%)',
                               fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
                 ax2.tick_params(axis='both', labelsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax2.grid(True, alpha=0.3)
-            
+
             # 3. Impact analysis - move to lower left
             ax3 = axes[1, 0]
             ax3.set_title('Impact Analysis',
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-            
+
             if monitoring_cpu_field and monitoring_mem_field:
                 cpu_impact = overhead_df[monitoring_cpu_field].mean()
                 mem_impact = overhead_df[monitoring_mem_field].mean()
-                
+
                 if mem_impact > 0:
                     impact_categories = ['CPU Impact', 'Memory Impact']
                     impact_values = [cpu_impact, mem_impact]
@@ -1228,14 +1227,14 @@ Recommendations:
                             ha='center', va='center',
                             fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'],
                             bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
-                
+
                 colors = [UnifiedChartStyle.COLORS['critical'] if x > 10 else UnifiedChartStyle.COLORS['warning'] if x > 5 else UnifiedChartStyle.COLORS['success'] for x in impact_values]
                 ax3.bar(impact_categories, impact_values, color=colors, alpha=0.7)
-                ax3.set_ylabel('Impact Percentage (%)', 
+                ax3.set_ylabel('Impact Percentage (%)',
                               fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax3.tick_params(axis='both', labelsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax3.grid(True, alpha=0.3)
-            
+
             # 4. Statistics summary - fix: move to lower right, use unified style
             if monitoring_cpu_field and monitoring_mem_field:
                 summary_text = f"""Monitoring Overhead Summary:
@@ -1249,16 +1248,16 @@ Recommendations:
   - Maximum: {overhead_df[monitoring_mem_field].max():.2f}%
 
 Data Points: {len(overhead_df)}"""
-                
+
                 UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Overhead Analysis Summary')
-            
+
             UnifiedChartStyle.apply_layout('auto')
             output_file = os.path.join(self.output_dir, 'monitoring_overhead_analysis.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
             plt.close()
-            
+
             print(f"📊 Monitoring overhead analysis chart saved: {output_file}")
-            
+
             # Return analysis results
             overhead_analysis = {}
             if monitoring_cpu_field and monitoring_mem_field:
@@ -1269,16 +1268,16 @@ Data Points: {len(overhead_df)}"""
                     'max_mem_overhead': overhead_df[monitoring_mem_field].max(),
                     'total_data_points': len(overhead_df)
                 }
-            
+
             return output_file, overhead_analysis
-            
+
         except Exception as e:
             print(f"❌ Monitoring overhead chart generation failed: {e}")
             return None, {}
 
     def generate_all_charts(self):
         print("🎨 Generating performance visualization charts...")
-        
+
         # Set global chart style
         plt.rcParams.update({
             'font.size': 10,
@@ -1290,13 +1289,13 @@ Data Points: {len(overhead_df)}"""
             'figure.titlesize': 14,
             'font.family': 'DejaVu Sans'  # Ensure cross-platform font compatibility
         })
-        
+
         if not self.load_data():
             return []
-        
+
         chart_files = []
         threshold_analysis_results = {}
-        
+
         try:
             # Use advanced chart generator
             if self.chart_generator is not None:
@@ -1304,101 +1303,101 @@ Data Points: {len(overhead_df)}"""
                 advanced_charts = self.chart_generator.generate_all_charts()
                 if advanced_charts:
                     chart_files.extend(advanced_charts)
-            
+
             # Generate Disk professional analysis charts (high priority)
             print("📊 Generating Disk professional analysis charts...")
             disk_charts = self.generate_all_disk_charts()
             if disk_charts:
                 chart_files.extend(disk_charts)
                 print(f"✅ Generated {len(disk_charts)} Disk professional charts")
-            
+
             # Generate blockchain node analysis charts
             print("Generating blockchain node analysis charts...")
             block_sync_chart = self.create_block_height_sync_chart()
             if block_sync_chart:
                 chart_files.append(block_sync_chart)
                 print("✅ Block height sync chart generated")
-            
+
             # Generate traditional charts as supplement
             overview_chart = self.create_performance_overview_chart()
             if overview_chart:
                 chart_files.append(overview_chart)
-                
+
             correlation_chart = self.create_correlation_visualization_chart()
             if correlation_chart:
                 chart_files.append(correlation_chart)
-                
+
             comparison_chart = self.create_device_comparison_chart()
             if comparison_chart:
                 chart_files.append(comparison_chart)
-            
+
             # New: Moving average trend charts
             smoothed_chart = self.create_smoothed_trend_chart()
             if smoothed_chart:
                 chart_files.append(smoothed_chart)
-            
+
             # Generate threshold analysis charts - integrated from await_util_analyzer
             print("📊 Generating threshold analysis charts...")
-            
+
             await_chart, await_violations = self.create_await_threshold_analysis_chart()
             if await_chart:
                 chart_files.append(await_chart)
                 threshold_analysis_results['await_violations'] = await_violations
-            
+
             # Generate QPS trend analysis charts
             print("📊 Generating QPS trend analysis charts...")
             qps_trend_chart = self.create_qps_trend_analysis_chart()
             if qps_trend_chart:
                 chart_files.append(qps_trend_chart)
-            
+
             # Generate resource efficiency analysis charts
             print("📊 Generating resource efficiency analysis charts...")
             efficiency_chart = self.create_resource_efficiency_analysis_chart()
             if efficiency_chart:
                 chart_files.append(efficiency_chart)
-            
+
             # Generate bottleneck identification analysis charts
             print("📊 Generating bottleneck identification analysis charts...")
             bottleneck_chart = self.create_bottleneck_identification_chart()
             if bottleneck_chart:
                 chart_files.append(bottleneck_chart)
-            
+
             util_chart, util_violations = self.create_util_threshold_analysis_chart()
             if util_chart:
                 chart_files.append(util_chart)
                 threshold_analysis_results['util_violations'] = util_violations
-            
+
             # Generate monitoring overhead analysis charts
             print("📊 Generating monitoring overhead analysis charts...")
-            
+
             overhead_chart, overhead_analysis = self.create_monitoring_overhead_analysis_chart()
             if overhead_chart:
                 chart_files.append(overhead_chart)
                 threshold_analysis_results['overhead_analysis'] = overhead_analysis
-            
+
             # Generate performance cliff analysis chart
             print("📊 Generating performance cliff analysis chart...")
             cliff_chart = self.create_performance_cliff_analysis_chart()
             if cliff_chart:
                 chart_files.append(cliff_chart)
-            
+
             # Print threshold analysis summary
             self._print_threshold_analysis_summary(threshold_analysis_results)
-            
+
             print(f"✅ Generated {len(chart_files)} charts")
             return chart_files, threshold_analysis_results
-            
+
         except Exception as e:
             print(f"❌ Chart generation failed: {e}")
             import traceback
             traceback.print_exc()
             return [], {}
-    
+
     def _print_threshold_analysis_summary(self, results):
         """Print threshold analysis summary - integrated from await_util_analyzer"""
         print("\n📊 Threshold Analysis Summary:")
         print("=" * 60)
-        
+
         if 'await_violations' in results:
             print("\n🕐 I/O Latency Threshold Analysis:")
             for device, violations in results['await_violations'].items():
@@ -1407,7 +1406,7 @@ Data Points: {len(overhead_df)}"""
                 print(f"    Maximum: {violations['max_value']:.2f}ms")
                 print(f"    Warning violations: {violations['warning_violations']}/{violations['total_points']} ({violations['warning_percentage']:.1f}%)")
                 print(f"    Critical violations: {violations['critical_violations']}/{violations['total_points']} ({violations['critical_percentage']:.1f}%)")
-        
+
         if 'util_violations' in results:
             print("\n📈 Device iostat %util Threshold Analysis:")
             for device, violations in results['util_violations'].items():
@@ -1416,7 +1415,7 @@ Data Points: {len(overhead_df)}"""
                 print(f"    Maximum: {violations['max_value']:.1f}%")
                 print(f"    Warning violations: {violations['warning_violations']}/{violations['total_points']} ({violations['warning_percentage']:.1f}%)")
                 print(f"    Critical violations: {violations['critical_violations']}/{violations['total_points']} ({violations['critical_percentage']:.1f}%)")
-        
+
         # New: Detailed monitoring overhead analysis summary
         if 'overhead_analysis' in results:
             print("\n💻 Monitoring Overhead Detailed Analysis:")
@@ -1429,7 +1428,7 @@ Data Points: {len(overhead_df)}"""
             print(f"    Peak Overhead: {overhead.get('max_mem_overhead', 0):.2f}%")
             print(f"  Monitoring efficiency:")
             print(f"    Data Points: {overhead.get('total_data_points', 0)}")
-            
+
             # Calculate resource efficiency ratio
             if self.df is not None and len(self.df) > 0:
                 if 'cpu_usage' in self.df.columns:
@@ -1438,14 +1437,14 @@ Data Points: {len(overhead_df)}"""
                     if total_cpu > 0:
                         cpu_efficiency = (1 - overhead_cpu / total_cpu) * 100
                         print(f"    CPU efficiency: {cpu_efficiency:.1f}% (actual node usage)")
-                
+
                 if 'mem_usage' in self.df.columns:
                     total_mem = self.df['mem_usage'].mean()
                     overhead_mem = overhead.get('avg_mem_overhead', 0)
                     if total_mem > 0:
                         mem_efficiency = (1 - overhead_mem / total_mem) * 100
                         print(f"    Memory efficiency: {mem_efficiency:.1f}% (actual node usage)")
-        
+
         print("=" * 60)
 
     def create_smoothed_trend_chart(self):
@@ -1454,70 +1453,70 @@ Data Points: {len(overhead_df)}"""
         Display comparison between original data and smoothed trend lines
         """
         print("📈 Generating moving average trend charts...")
-        
+
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data")
                 return None
-        
+
         try:
             fig, axes = plt.subplots(2, 2, figsize=(18, 12))
             fig.suptitle('Performance Metrics Moving Average Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-            
+
             # Moving average window size
             window_size = min(10, len(self.df) // 10)
             if window_size < 3:
                 window_size = 3
-            
+
             # 1. CPU Usage trends
             ax1 = axes[0, 0]
-            ax1.plot(self.df['timestamp'], self.df['cpu_usage'], 
+            ax1.plot(self.df['timestamp'], self.df['cpu_usage'],
                     color=UnifiedChartStyle.COLORS['data_primary'], linewidth=1, alpha=0.3, label='CPU Usage (Raw)')
-            
+
             cpu_smooth = self.df['cpu_usage'].rolling(window=window_size, center=True).mean()
-            ax1.plot(self.df['timestamp'], cpu_smooth, 
+            ax1.plot(self.df['timestamp'], cpu_smooth,
                     color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, label=f'CPU Usage({window_size}-point smoothed)')
-            
+
             ax1.set_title('CPU Usage Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             ax1.set_ylabel('Usage (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             ax1.grid(True, alpha=0.3)
             UnifiedChartStyle.format_time_axis(ax1, self.df['timestamp'])
-            
+
             # 2. Memory Usage trends
             ax2 = axes[0, 1]
-            ax2.plot(self.df['timestamp'], self.df['mem_usage'], 
+            ax2.plot(self.df['timestamp'], self.df['mem_usage'],
                     color=UnifiedChartStyle.COLORS['critical'], linewidth=1, alpha=0.3, label='Memory Usage (Raw)')
-            
+
             mem_smooth = self.df['mem_usage'].rolling(window=window_size, center=True).mean()
-            ax2.plot(self.df['timestamp'], mem_smooth, 
+            ax2.plot(self.df['timestamp'], mem_smooth,
                     color=UnifiedChartStyle.COLORS['critical'], linewidth=2, label=f'Memory Usage({window_size}-point smoothed)')
-            
+
             ax2.set_title('Memory Usage Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             ax2.set_ylabel('Usage (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             ax2.grid(True, alpha=0.3)
             UnifiedChartStyle.format_time_axis(ax2, self.df['timestamp'])
-            
+
             # 3. Disk Latency trends
             ax3 = axes[1, 0]
-            
+
             data_await_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_avg_await')]
             accounts_await_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_avg_await')]
-            
+
             if data_await_cols:
                 data_await_col = data_await_cols[0]
                 await_smooth = self.df[data_await_col].rolling(window=window_size, center=True).mean()
-                ax3.plot(self.df['timestamp'], await_smooth, 
+                ax3.plot(self.df['timestamp'], await_smooth,
                         color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, label=f'DATA Disk Latency ({window_size}-point avg)')
-                
+
                 accounts_configured = DeviceManager.is_accounts_configured(self.df)
                 if accounts_configured and accounts_await_cols:
                     accounts_await_col = accounts_await_cols[0]
                     accounts_await_smooth = self.df[accounts_await_col].rolling(window=window_size, center=True).mean()
                     ax3.plot(self.df['timestamp'], accounts_await_smooth,
                             color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, label=f'ACCOUNTS Disk Latency ({window_size}-point avg)')
-                
+
                 ax3.set_title('Disk Latency Trends (Smoothed)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax3.set_ylabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
@@ -1527,17 +1526,17 @@ Data Points: {len(overhead_df)}"""
                 ax3.text(0.5, 0.5, 'Disk Latency data not found', ha='center', va='center', transform=ax3.transAxes,
                         fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 ax3.set_title('Disk Latency Trends (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-            
+
             # 4. Network bandwidth trends
             if 'net_rx_mbps' in self.df.columns:
                 ax4 = axes[1, 1]
-                ax4.plot(self.df['timestamp'], self.df['net_rx_mbps'], 
+                ax4.plot(self.df['timestamp'], self.df['net_rx_mbps'],
                         color=UnifiedChartStyle.COLORS['warning'], linewidth=1, alpha=0.3, label='Network RX (Raw)')
-                
+
                 net_smooth = self.df['net_rx_mbps'].rolling(window=window_size, center=True).mean()
-                ax4.plot(self.df['timestamp'], net_smooth, 
+                ax4.plot(self.df['timestamp'], net_smooth,
                         color=UnifiedChartStyle.COLORS['warning'], linewidth=2, label=f'Network RX({window_size}-point smoothed)')
-                
+
                 ax4.set_title('Network Bandwidth Trends', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax4.set_ylabel('Bandwidth (Mbps)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax4.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
@@ -1547,17 +1546,17 @@ Data Points: {len(overhead_df)}"""
                 axes[1, 1].text(0.5, 0.5, 'Network bandwidth data not found', ha='center', va='center', transform=axes[1, 1].transAxes,
                                fontsize=UnifiedChartStyle.FONT_CONFIG['text_size'])
                 axes[1, 1].set_title('Network Bandwidth Trends (No Data)', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-            
+
             plt.tight_layout()
-            
+
             # Save chart
             output_file = os.path.join(self.output_dir, 'smoothed_trend_analysis.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
             plt.close()
-            
+
             print(f"  ✅ Moving average trend chart: {os.path.basename(output_file)}")
             return output_file
-            
+
         except Exception as e:
             print(f"❌ Moving average trend chart generation failed: {e}")
             return None
@@ -1565,17 +1564,17 @@ Data Points: {len(overhead_df)}"""
     def create_qps_trend_analysis_chart(self):
         """QPS trend analysis chart"""
         print("📊 Generating QPS trend analysis charts...")
-        
+
         # Check if data is loaded
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for QPS analysis")
                 return None
-        
+
         try:
             fig, axes = plt.subplots(2, 2, figsize=(16, 12))
             fig.suptitle('QPS Performance Trend Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-            
+
             # Find numeric QPS fields
             qps_cols = []
             for col in self.df.columns:
@@ -1586,26 +1585,26 @@ Data Points: {len(overhead_df)}"""
                             qps_cols.append(col)
                     except (ValueError, TypeError, AttributeError):
                         continue
-            
+
             if not qps_cols:
                 print("⚠️  No numeric QPS fields found")
                 plt.close()
                 return None
-            
+
             # 1. QPS time series
             ax1 = axes[0, 0]
             for qps_col in qps_cols[:3]:
                 qps_data = pd.to_numeric(self.df[qps_col], errors='coerce')
                 valid_mask = ~qps_data.isna()
                 if valid_mask.any():
-                    ax1.plot(self.df.loc[valid_mask, 'timestamp'], 
-                            qps_data[valid_mask], 
+                    ax1.plot(self.df.loc[valid_mask, 'timestamp'],
+                            qps_data[valid_mask],
                             label=qps_col, linewidth=2)
             ax1.set_title('QPS Time Series', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             ax1.set_ylabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             ax1.grid(True, alpha=0.3)
-            
+
             # 2. QPS distribution histogram
             ax2 = axes[0, 1]
             for qps_col in qps_cols[:2]:
@@ -1618,13 +1617,13 @@ Data Points: {len(overhead_df)}"""
             ax2.set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax2.set_ylabel('Frequency', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
-            
+
             # 3. QPS vs CPU correlation
             ax3 = axes[1, 0]
             if 'cpu_usage' in self.df.columns and qps_cols:
                 qps_data = pd.to_numeric(self.df[qps_cols[0]], errors='coerce')
                 cpu_data = pd.to_numeric(self.df['cpu_usage'], errors='coerce')
-                
+
                 valid_mask = ~(qps_data.isna() | cpu_data.isna())
                 if valid_mask.any():
                     ax3.scatter(cpu_data[valid_mask], qps_data[valid_mask], alpha=0.6, color=UnifiedChartStyle.COLORS['data_primary'])
@@ -1632,7 +1631,7 @@ Data Points: {len(overhead_df)}"""
                     ax3.set_xlabel('CPU Usage (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                     ax3.set_ylabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                     ax3.grid(True, alpha=0.3)
-            
+
             # 4. QPS statistics summary
             ax4 = axes[1, 1]
             stats_lines = ["QPS Statistics Summary:", ""]
@@ -1647,7 +1646,7 @@ Data Points: {len(overhead_df)}"""
                         f"  Valid samples: {len(qps_data)}",
                         ""
                     ])
-            
+
             if 'qps_data_available' in self.df.columns:
                 qps_available = self.df['qps_data_available']
                 if qps_available.notna().any():
@@ -1660,19 +1659,19 @@ Data Points: {len(overhead_df)}"""
                     "QPS Data Availability:",
                     f"  Available: {true_count}/{total_count} ({true_count/total_count*100:.1f}%)"
                 ])
-            
+
             UnifiedChartStyle.add_text_summary(ax4, "\n".join(stats_lines), "QPS Summary")
-            
+
             plt.tight_layout()
-            
+
             # Save chart
             output_file = os.path.join(self.output_dir, 'qps_trend_analysis.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
             plt.close()
-            
+
             print(f"  ✅ QPS trend analysis chart: {os.path.basename(output_file)}")
             return output_file, {}
-            
+
         except Exception as e:
             print(f"❌ QPS trend analysis chart generation failed: {e}")
             return None
@@ -1680,17 +1679,17 @@ Data Points: {len(overhead_df)}"""
     def create_resource_efficiency_analysis_chart(self):
         """Resource efficiency analysis chart - reference refactored framework implementation"""
         print("📊 Generating resource efficiency analysis charts...")
-        
+
         # Check if data is loaded
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for resource efficiency analysis")
                 return None
-        
+
         try:
             fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
             fig.suptitle('Resource Efficiency Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-            
+
             # 1. CPU Efficiency (QPS per CPU%)
             if 'current_qps' in self.df.columns and 'cpu_usage' in self.df.columns:
                 cpu_efficiency = self.df['current_qps'] / (self.df['cpu_usage'] + 0.1)  # Avoid division by zero
@@ -1699,7 +1698,7 @@ Data Points: {len(overhead_df)}"""
                 ax1.set_ylabel('QPS/CPU%', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax1.grid(True, alpha=0.3)
                 UnifiedChartStyle.format_time_axis(ax1, self.df['timestamp'])
-            
+
             # 2. Memory Efficiency (QPS per Memory%)
             if 'current_qps' in self.df.columns and 'mem_usage' in self.df.columns:
                 mem_efficiency = self.df['current_qps'] / (self.df['mem_usage'] + 0.1)
@@ -1708,79 +1707,79 @@ Data Points: {len(overhead_df)}"""
                 ax2.set_ylabel('QPS/Memory%', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax2.grid(True, alpha=0.3)
                 UnifiedChartStyle.format_time_axis(ax2, self.df['timestamp'])
-            
+
             # 3. IOPS & Throughput Efficiency - distinguish DATA and ACCOUNTS devices
             if 'current_qps' in self.df.columns:
                 accounts_configured = DeviceManager.is_accounts_configured(self.df)
-                
+
                 # DATA device IOPS
                 data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col]
                 if data_iops_cols:
                     data_iops = self.df[data_iops_cols[0]]
                     data_iops_efficiency = self.df['current_qps'] / (data_iops + 1)
-                    ax3.plot(self.df['timestamp'], data_iops_efficiency, 
+                    ax3.plot(self.df['timestamp'], data_iops_efficiency,
                             color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, label='DATA IOPS Efficiency')
-                
+
                 # ACCOUNTS device IOPS
                 if accounts_configured:
                     accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_iops' in col]
                     if accounts_iops_cols:
                         accounts_iops = self.df[accounts_iops_cols[0]]
                         accounts_iops_efficiency = self.df['current_qps'] / (accounts_iops + 1)
-                        ax3.plot(self.df['timestamp'], accounts_iops_efficiency, 
+                        ax3.plot(self.df['timestamp'], accounts_iops_efficiency,
                                 color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, label='ACCOUNTS IOPS Efficiency')
-                
-                ax3.set_title('IOPS & Throughput Efficiency (QPS per IOPS/Throughput)', 
+
+                ax3.set_title('IOPS & Throughput Efficiency (QPS per IOPS/Throughput)',
                              fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax3.set_xlabel('Time', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax3.set_ylabel('QPS/IOPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax3.legend(loc='upper left', fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
                 ax3.grid(True, alpha=0.3)
                 UnifiedChartStyle.format_time_axis(ax3, self.df['timestamp'])
-                
+
                 # Add right Y-axis to display Throughput Efficiency
                 ax3_right = ax3.twinx()
-                
+
                 # DATA device Throughput
                 data_throughput_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_throughput' in col]
                 if data_throughput_cols:
                     data_throughput = self.df[data_throughput_cols[0]]
                     data_throughput_efficiency = self.df['current_qps'] / (data_throughput + 0.1)
-                    ax3_right.plot(self.df['timestamp'], data_throughput_efficiency, 
-                                  color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
+                    ax3_right.plot(self.df['timestamp'], data_throughput_efficiency,
+                                  color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2,
                                   linestyle='--', alpha=0.7, label='DATA Throughput Eff')
-                
+
                 # ACCOUNTS device Throughput
                 if accounts_configured:
                     accounts_throughput_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_throughput' in col]
                     if accounts_throughput_cols:
                         accounts_throughput = self.df[accounts_throughput_cols[0]]
                         accounts_throughput_efficiency = self.df['current_qps'] / (accounts_throughput + 0.1)
-                        ax3_right.plot(self.df['timestamp'], accounts_throughput_efficiency, 
-                                      color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2, 
+                        ax3_right.plot(self.df['timestamp'], accounts_throughput_efficiency,
+                                      color=UnifiedChartStyle.COLORS['accounts_primary'], linewidth=2,
                                       linestyle='--', alpha=0.7, label='ACCOUNTS Throughput Eff')
-                
+
                 ax3_right.set_ylabel('QPS/Throughput(MiB/s)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax3_right.legend(loc='upper right', fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
-            
+
             # 4. Efficiency Summary
             summary_lines = ["Resource Efficiency Analysis:", ""]
-            
+
             if 'current_qps' in self.df.columns and 'cpu_usage' in self.df.columns:
                 cpu_eff = (self.df['current_qps'] / (self.df['cpu_usage'] + 0.1)).mean()
                 summary_lines.append(f"CPU Efficiency:")
                 summary_lines.append(f"  Avg: {cpu_eff:.1f} QPS/CPU%")
                 summary_lines.append("")
-            
+
             if 'current_qps' in self.df.columns and 'mem_usage' in self.df.columns:
                 mem_eff = (self.df['current_qps'] / (self.df['mem_usage'] + 0.1)).mean()
                 summary_lines.append(f"Memory Efficiency:")
                 summary_lines.append(f"  Avg: {mem_eff:.1f} QPS/Memory%")
                 summary_lines.append("")
-            
+
             if 'current_qps' in self.df.columns:
                 accounts_configured = DeviceManager.is_accounts_configured(self.df)
-                
+
                 # DATA device efficiency
                 data_iops_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_iops' in col]
                 if data_iops_cols:
@@ -1788,14 +1787,14 @@ Data Points: {len(overhead_df)}"""
                     data_iops_eff = (self.df['current_qps'] / (data_iops + 1)).mean()
                     summary_lines.append(f"DATA IOPS Efficiency:")
                     summary_lines.append(f"  Avg: {data_iops_eff:.3f} QPS/IOPS")
-                
+
                 data_throughput_cols = [col for col in self.df.columns if col.startswith('data_') and 'total_throughput' in col]
                 if data_throughput_cols:
                     data_throughput = self.df[data_throughput_cols[0]]
                     data_throughput_eff = (self.df['current_qps'] / (data_throughput + 0.1)).mean()
                     summary_lines.append(f"  Throughput: {data_throughput_eff:.3f} QPS/MiB/s")
                     summary_lines.append("")
-                
+
                 # ACCOUNTS device efficiency
                 if accounts_configured:
                     accounts_iops_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_iops' in col]
@@ -1804,14 +1803,14 @@ Data Points: {len(overhead_df)}"""
                         accounts_iops_eff = (self.df['current_qps'] / (accounts_iops + 1)).mean()
                         summary_lines.append(f"ACCOUNTS IOPS Efficiency:")
                         summary_lines.append(f"  Avg: {accounts_iops_eff:.3f} QPS/IOPS")
-                    
+
                     accounts_throughput_cols = [col for col in self.df.columns if col.startswith('accounts_') and 'total_throughput' in col]
                     if accounts_throughput_cols:
                         accounts_throughput = self.df[accounts_throughput_cols[0]]
                         accounts_throughput_eff = (self.df['current_qps'] / (accounts_throughput + 0.1)).mean()
                         summary_lines.append(f"  Throughput: {accounts_throughput_eff:.3f} QPS/MiB/s")
                         summary_lines.append("")
-            
+
             summary_lines.append("Efficiency Assessment:")
             if 'current_qps' in self.df.columns and 'cpu_usage' in self.df.columns:
                 avg_qps = self.df['current_qps'].mean()
@@ -1826,67 +1825,67 @@ Data Points: {len(overhead_df)}"""
                         summary_lines.append("MODERATE: Average efficiency")
                     else:
                         summary_lines.append("LOW: Poor efficiency")
-            
+
             summary_lines.append("")
             summary_lines.append("Note on IOPS/Throughput Efficiency:")
             summary_lines.append("- Higher = More QPS per IOPS/MiB/s")
             summary_lines.append("- Spikes = Low IOPS/Throughput usage")
             summary_lines.append("- See Disk charts for detailed analysis")
-            
+
             UnifiedChartStyle.add_text_summary(ax4, "\n".join(summary_lines), "Efficiency Summary")
-            
+
             plt.tight_layout()
             output_file = os.path.join(self.output_dir, 'resource_efficiency_analysis.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
             plt.close()
-            
+
             print(f"  ✅ Resource efficiency analysis chart: {os.path.basename(output_file)}")
             return output_file
-            
+
         except Exception as e:
             print(f"❌ Resource efficiency analysis chart generation failed: {e}")
             return None
-    
+
     def create_performance_cliff_analysis_chart(self):
         """Performance Cliff Analysis Chart"""
         print("📊 Generating performance cliff analysis chart...")
-        
+
         if not hasattr(self, 'df') or self.df is None:
             if not self.load_data():
                 print("❌ Failed to load data for cliff analysis")
                 return None
-        
+
         try:
             if 'current_qps' not in self.df.columns or 'rpc_latency_ms' not in self.df.columns:
                 print("⚠️ QPS or latency data not found")
                 return None
-            
+
             fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
             fig.suptitle('Performance Cliff Analysis', fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-            
+
             qps_data = self.df['current_qps']
             latency_data = self.df['rpc_latency_ms']
-            
+
             # 1. QPS vs Latency scatter plot
             ax1.scatter(qps_data, latency_data, alpha=0.6, color=UnifiedChartStyle.COLORS['data_primary'])
             ax1.set_title('QPS vs Latency - Cliff Detection', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             ax1.set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax1.set_ylabel('Latency (ms)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
             ax1.grid(True, alpha=0.3)
-            
+
             # 2. CPU Usage vs QPS
             if 'cpu_usage' in self.df.columns:
                 cpu_data = self.df['cpu_usage']
                 thresholds = get_visualization_thresholds()
                 ax2.plot(qps_data, cpu_data, 'o-', alpha=0.7, color=UnifiedChartStyle.COLORS['success'])
-                ax2.axhline(y=thresholds['warning'], color=UnifiedChartStyle.COLORS['critical'], linestyle='--', alpha=0.7, 
+                ax2.axhline(y=thresholds['warning'], color=UnifiedChartStyle.COLORS['critical'], linestyle='--', alpha=0.7,
                            label=f'Warning ({thresholds["warning"]}%)')
                 ax2.set_title('CPU Usage vs QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
                 ax2.set_xlabel('QPS', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax2.set_ylabel('CPU Usage (%)', fontsize=UnifiedChartStyle.FONT_CONFIG['label_size'])
                 ax2.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
                 ax2.grid(True, alpha=0.3)
-            
+
             # 3. Performance Timeline
             ax3.plot(self.df['timestamp'], latency_data, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, label='Latency')
             ax3.set_title('Performance Timeline', fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
@@ -1895,7 +1894,7 @@ Data Points: {len(overhead_df)}"""
             ax3.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
             ax3.grid(True, alpha=0.3)
             UnifiedChartStyle.format_time_axis(ax3, self.df['timestamp'])
-            
+
             # 4. Analysis Summary
             summary_lines = [
                 "Performance Analysis:",
@@ -1906,17 +1905,17 @@ Data Points: {len(overhead_df)}"""
                 "",
                 f"Data Points: {len(self.df)}"
             ]
-            
+
             UnifiedChartStyle.add_text_summary(ax4, "\n".join(summary_lines), "Analysis Summary")
-            
+
             plt.tight_layout()
             output_file = os.path.join(self.output_dir, 'performance_cliff_analysis.png')
             plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
             plt.close()
-            
+
             print(f"  ✅ Performance cliff analysis chart: {os.path.basename(output_file)}")
             return output_file
-            
+
         except Exception as e:
             print(f"❌ Performance cliff analysis failed: {e}")
             return None
@@ -1930,37 +1929,37 @@ Data Points: {len(overhead_df)}"""
             if not self.load_data():
                 print("❌ Failed to load data for system bottleneck analysis")
                 return None
-        
+
         # Device configuration detection
         accounts_configured = DeviceManager.is_accounts_configured(self.df)
-        
+
         # Create professional figure layout
         fig, axes = plt.subplots(2, 2, figsize=(18, 14))
         fig.suptitle('System Bottleneck Identification Analysis',
                     fontsize=UnifiedChartStyle.FONT_CONFIG['title_size'], fontweight='bold')
-        
+
         # === System resource data collection ===
         system_resources = {}
-        
+
         # CPU data
         if 'cpu_usage' in self.df.columns:
             system_resources['CPU'] = self.df['cpu_usage']
-        
+
         # Memory data
         if 'mem_usage' in self.df.columns:
             system_resources['Memory'] = self.df['mem_usage']
-        
+
         # Disk I/O data - DATA device
         data_util_cols = [col for col in self.df.columns if col.startswith('data_') and col.endswith('_util')]
         if data_util_cols:
             system_resources['DATA_IO'] = self.df[data_util_cols[0]]
-        
+
         # Disk I/O data - ACCOUNTS device
         if accounts_configured:
             accounts_util_cols = [col for col in self.df.columns if col.startswith('accounts_') and col.endswith('_util')]
             if accounts_util_cols:
                 system_resources['ACCOUNTS_IO'] = self.df[accounts_util_cols[0]]
-        
+
         # Professional bottleneck threshold definition - use configuration variables
         bottleneck_thresholds = {
             'CPU': int(os.getenv('BOTTLENECK_CPU_THRESHOLD', '85')),
@@ -1968,7 +1967,7 @@ Data Points: {len(overhead_df)}"""
             'DATA_IO': int(os.getenv('BOTTLENECK_DISK_UTIL_THRESHOLD', '90')),
             'ACCOUNTS_IO': int(os.getenv('BOTTLENECK_DISK_UTIL_THRESHOLD', '90'))
         }
-        
+
         # System bottleneck detection function
         def detect_system_bottlenecks(row_idx):
             bottlenecks = {}
@@ -1977,63 +1976,63 @@ Data Points: {len(overhead_df)}"""
                     value = system_resources[resource].iloc[row_idx] if row_idx < len(system_resources[resource]) else 0
                     bottlenecks[resource] = value > threshold
             return bottlenecks
-        
+
         # === 1. System resource bottleneck timeline (top left) ===
         ax1 = axes[0, 0]
-        
+
         # Plot system resource utilization
         if 'CPU' in system_resources:
-            ax1.plot(self.df['timestamp'], system_resources['CPU'], 
-                    label='CPU Usage', linewidth=2.5, 
+            ax1.plot(self.df['timestamp'], system_resources['CPU'],
+                    label='CPU Usage', linewidth=2.5,
                     color=UnifiedChartStyle.COLORS['data_primary'], alpha=0.8)
-            ax1.axhline(y=bottleneck_thresholds['CPU'], color=UnifiedChartStyle.COLORS['critical'], 
+            ax1.axhline(y=bottleneck_thresholds['CPU'], color=UnifiedChartStyle.COLORS['critical'],
                        linestyle='--', alpha=0.8, linewidth=2, label=f'CPU Bottleneck ({bottleneck_thresholds["CPU"]}%)')
-        
+
         if 'Memory' in system_resources:
-            ax1.plot(self.df['timestamp'], system_resources['Memory'], 
-                    label='Memory Usage', linewidth=2.5, 
+            ax1.plot(self.df['timestamp'], system_resources['Memory'],
+                    label='Memory Usage', linewidth=2.5,
                     color=UnifiedChartStyle.COLORS['purple'], alpha=0.8)
-            ax1.axhline(y=bottleneck_thresholds['Memory'], color=UnifiedChartStyle.COLORS['warning'], 
+            ax1.axhline(y=bottleneck_thresholds['Memory'], color=UnifiedChartStyle.COLORS['warning'],
                        linestyle='--', alpha=0.8, linewidth=2, label=f'Memory Bottleneck ({bottleneck_thresholds["Memory"]}%)')
-        
+
         if 'DATA_IO' in system_resources:
-            ax1.plot(self.df['timestamp'], system_resources['DATA_IO'], 
-                    label='DATA I/O Utilization', linewidth=2.5, 
+            ax1.plot(self.df['timestamp'], system_resources['DATA_IO'],
+                    label='DATA I/O Utilization', linewidth=2.5,
                     color='#2E86AB', alpha=0.8)
-            ax1.axhline(y=bottleneck_thresholds['DATA_IO'], color='#E74C3C', 
+            ax1.axhline(y=bottleneck_thresholds['DATA_IO'], color='#E74C3C',
                        linestyle=':', alpha=0.8, linewidth=2, label=f'DATA I/O Bottleneck ({bottleneck_thresholds["DATA_IO"]}%)')
-        
+
         if 'ACCOUNTS_IO' in system_resources:
-            ax1.plot(self.df['timestamp'], system_resources['ACCOUNTS_IO'], 
-                    label='ACCOUNTS I/O Utilization', linewidth=2.5, 
+            ax1.plot(self.df['timestamp'], system_resources['ACCOUNTS_IO'],
+                    label='ACCOUNTS I/O Utilization', linewidth=2.5,
                     color='#F39C12', alpha=0.8)
-            ax1.axhline(y=bottleneck_thresholds['ACCOUNTS_IO'], color='#8B4513', 
+            ax1.axhline(y=bottleneck_thresholds['ACCOUNTS_IO'], color='#8B4513',
                        linestyle=':', alpha=0.8, linewidth=2, label=f'ACCOUNTS I/O Bottleneck ({bottleneck_thresholds["ACCOUNTS_IO"]}%)')
-        
+
         # Calculate comprehensive bottleneck score
         bottleneck_scores = []
         for i in range(len(self.df)):
             bottlenecks = detect_system_bottlenecks(i)
             score = sum(bottlenecks.values()) * 25  # Each bottleneck 25 points, max 100 points
             bottleneck_scores.append(score)
-        
+
         # Plot comprehensive bottleneck score (right Y-axis)
         ax1_twin = ax1.twinx()
-        ax1_twin.fill_between(self.df['timestamp'], bottleneck_scores, alpha=0.3, 
+        ax1_twin.fill_between(self.df['timestamp'], bottleneck_scores, alpha=0.3,
                              color='red', label='Bottleneck Score')
         ax1_twin.set_ylabel('Bottleneck Score', color='red')
         ax1_twin.set_ylim(0, 100)
-        
-        ax1.set_title('System Resource Bottleneck Timeline', 
+
+        ax1.set_title('System Resource Bottleneck Timeline',
                      fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         ax1.set_ylabel('Resource Utilization (%)')
         ax1.legend(fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'], loc='upper left')
         ax1.grid(True, alpha=0.3)
         ax1.tick_params(axis='x', rotation=45)
-        
+
         # === 2. Bottleneck type distribution and severity (top right) ===
         ax2 = axes[0, 1]
-        
+
         # Count bottleneck events by type
         bottleneck_stats = {}
         for resource in system_resources.keys():
@@ -2041,17 +2040,17 @@ Data Points: {len(overhead_df)}"""
                 threshold = bottleneck_thresholds[resource]
                 bottleneck_count = (system_resources[resource] > threshold).sum()
                 bottleneck_stats[resource] = bottleneck_count
-        
+
         # Calculate compound bottlenecks (multiple resources bottlenecked simultaneously)
         compound_bottlenecks = 0
         for i in range(len(self.df)):
             bottlenecks = detect_system_bottlenecks(i)
             if sum(bottlenecks.values()) > 1:
                 compound_bottlenecks += 1
-        
+
         if compound_bottlenecks > 0:
             bottleneck_stats['Compound'] = compound_bottlenecks
-        
+
         # Plot bottleneck type distribution pie chart
         if bottleneck_stats and sum(bottleneck_stats.values()) > 0:
             # Define professional colors
@@ -2062,45 +2061,45 @@ Data Points: {len(overhead_df)}"""
                 'ACCOUNTS_IO': '#F39C12',
                 'Compound': UnifiedChartStyle.COLORS['critical']
             }
-            
+
             labels = []
             values = []
             pie_colors = []
-            
+
             for resource, count in bottleneck_stats.items():
                 if count > 0:
                     labels.append(f'{resource}\n({count} events)')
                     values.append(count)
                     pie_colors.append(colors.get(resource, 'gray'))
-            
+
             if values:
                 ax2.pie(values, labels=labels, colors=pie_colors,
                        autopct='%1.1f%%', startangle=90,
                        textprops={'fontsize': UnifiedChartStyle.FONT_CONFIG['legend_size']})
-                
-                ax2.set_title('Bottleneck Type Distribution', 
+
+                ax2.set_title('Bottleneck Type Distribution',
                              fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
             else:
                 ax2.text(0.5, 0.5, 'No Bottlenecks\nDetected', ha='center', va='center',
-                        transform=ax2.transAxes, 
+                        transform=ax2.transAxes,
                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'],
                         color=UnifiedChartStyle.COLORS['success'])
-                ax2.set_title('System Status: Healthy', 
+                ax2.set_title('System Status: Healthy',
                              fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         else:
             ax2.text(0.5, 0.5, 'System Running\nOptimally', ha='center', va='center',
-                    transform=ax2.transAxes, 
+                    transform=ax2.transAxes,
                     fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'],
                     color=UnifiedChartStyle.COLORS['success'])
-            ax2.set_title('System Status: Optimal', 
+            ax2.set_title('System Status: Optimal',
                          fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-        
+
         # === 3. System resource utilization correlation analysis (bottom left) ===
         ax3 = axes[1, 0]
-        
+
         # Create resource correlation scatter plot
         available_resources = list(system_resources.keys())
-        
+
         if len(available_resources) >= 2:
             # Select the two most important resources for correlation analysis
             primary_resources = []
@@ -2112,10 +2111,10 @@ Data Points: {len(overhead_df)}"""
                 primary_resources.append('DATA_IO')
             if 'ACCOUNTS_IO' in available_resources and len(primary_resources) < 2:
                 primary_resources.append('ACCOUNTS_IO')
-            
+
             if len(primary_resources) >= 2:
                 resource1, resource2 = primary_resources[0], primary_resources[1]
-                
+
                 # Create scatter plot, color indicates bottleneck status
                 colors = []
                 for i in range(len(self.df)):
@@ -2126,25 +2125,25 @@ Data Points: {len(overhead_df)}"""
                         colors.append(UnifiedChartStyle.COLORS['warning'])   # Single bottleneck
                     else:
                         colors.append(UnifiedChartStyle.COLORS['success'])   # Normal
-                
-                ax3.scatter(system_resources[resource1], system_resources[resource2], 
+
+                ax3.scatter(system_resources[resource1], system_resources[resource2],
                            c=colors, alpha=0.6, s=30)
-                
+
                 # Add bottleneck threshold lines
-                ax3.axvline(x=bottleneck_thresholds[resource1], color=UnifiedChartStyle.COLORS['critical'], 
+                ax3.axvline(x=bottleneck_thresholds[resource1], color=UnifiedChartStyle.COLORS['critical'],
                            linestyle='--', alpha=0.7, linewidth=2)
-                ax3.axhline(y=bottleneck_thresholds[resource2], color=UnifiedChartStyle.COLORS['critical'], 
+                ax3.axhline(y=bottleneck_thresholds[resource2], color=UnifiedChartStyle.COLORS['critical'],
                            linestyle='--', alpha=0.7, linewidth=2)
-                
+
                 # Mark bottleneck regions
                 ax3.axvspan(bottleneck_thresholds[resource1], 100, alpha=0.1, color='red')
                 ax3.axhspan(bottleneck_thresholds[resource2], 100, alpha=0.1, color='red')
-                
+
                 ax3.set_xlabel(f'{resource1} Utilization (%)')
                 ax3.set_ylabel(f'{resource2} Utilization (%)')
-                ax3.set_title(f'{resource1} vs {resource2} Correlation Analysis', 
+                ax3.set_title(f'{resource1} vs {resource2} Correlation Analysis',
                              fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-                
+
                 legend_elements = [
                     Patch(facecolor=UnifiedChartStyle.COLORS['success'], label='Normal'),
                     Patch(facecolor=UnifiedChartStyle.COLORS['warning'], label='Single Bottleneck'),
@@ -2153,29 +2152,29 @@ Data Points: {len(overhead_df)}"""
                 ax3.legend(handles=legend_elements, fontsize=UnifiedChartStyle.FONT_CONFIG['legend_size'])
                 ax3.grid(True, alpha=0.3)
             else:
-                ax3.text(0.5, 0.5, 'Insufficient Resources\nfor Correlation Analysis', 
-                        ha='center', va='center', transform=ax3.transAxes, 
+                ax3.text(0.5, 0.5, 'Insufficient Resources\nfor Correlation Analysis',
+                        ha='center', va='center', transform=ax3.transAxes,
                         fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
         else:
-            ax3.text(0.5, 0.5, 'Insufficient Data\nfor Resource Analysis', 
-                    ha='center', va='center', transform=ax3.transAxes, 
+            ax3.text(0.5, 0.5, 'Insufficient Data\nfor Resource Analysis',
+                    ha='center', va='center', transform=ax3.transAxes,
                     fontsize=UnifiedChartStyle.FONT_CONFIG['subtitle_size'])
-        
+
         # === 4. System bottleneck diagnostic report (bottom right) ===
         ax4 = axes[1, 1]
-        
+
         # Calculate overall system statistics
         total_samples = len(self.df)
         total_bottleneck_events = sum(bottleneck_stats.values()) if bottleneck_stats else 0
-        
+
         # Identify primary bottleneck resource
         primary_bottleneck = 'None'
         if bottleneck_stats:
             primary_bottleneck = max(bottleneck_stats, key=bottleneck_stats.get) if bottleneck_stats else 'None'
-        
+
         # Calculate system health rating
         overall_bottleneck_rate = (total_bottleneck_events / total_samples * 100) if total_samples > 0 else 0
-        
+
         if overall_bottleneck_rate == 0:
             health_status = "[EXCELLENT]"
             health_desc = "No bottlenecks detected"
@@ -2196,7 +2195,7 @@ Data Points: {len(overhead_df)}"""
             health_status = "[CRITICAL]"
             health_desc = "Persistent bottlenecks"
             recommendations = [f"Critical: Immediate {primary_bottleneck} scaling", "Emergency capacity increase"]
-        
+
         # Generate professional diagnostic report
         summary_lines = [
             f"System Bottleneck Diagnostic Report:",
@@ -2207,7 +2206,7 @@ Data Points: {len(overhead_df)}"""
             "",
             "Resource Analysis:"
         ]
-        
+
         # Detailed analysis for each resource
         for resource in system_resources.keys():
             if resource in bottleneck_thresholds:
@@ -2215,24 +2214,24 @@ Data Points: {len(overhead_df)}"""
                 avg_util = system_resources[resource].mean()
                 bottleneck_count = bottleneck_stats.get(resource, 0)
                 bottleneck_rate = (bottleneck_count / total_samples * 100) if total_samples > 0 else 0
-                
+
                 status_icon = "[HIGH]" if bottleneck_rate > 10 else "[MED]" if bottleneck_rate > 5 else "[LOW]"
-                
+
                 summary_lines.extend([
                     f"  {status_icon} {resource}:",
                     f"    Max: {max_util:.1f}% | Avg: {avg_util:.1f}%",
                     f"    Bottlenecks: {bottleneck_count} ({bottleneck_rate:.1f}%)"
                 ])
-        
+
         # Add optimization recommendations
         summary_lines.extend([
             "",
             "Optimization Recommendations:"
         ])
-        
+
         for i, rec in enumerate(recommendations, 1):
             summary_lines.append(f"  {i}. {rec}")
-        
+
         # Add compound bottleneck warning
         if compound_bottlenecks > 0:
             compound_rate = (compound_bottlenecks / total_samples * 100)
@@ -2241,27 +2240,27 @@ Data Points: {len(overhead_df)}"""
                 f"WARNING: Compound Bottlenecks: {compound_bottlenecks} ({compound_rate:.1f}%)",
                 "   Multiple resources bottlenecked simultaneously"
             ])
-        
+
         summary_text = "\n".join(summary_lines)
-        
+
         # Use unified style
         UnifiedChartStyle.add_text_summary(ax4, summary_text, 'System Bottleneck Diagnostic Report')
-        
+
         # Apply unified layout
         UnifiedChartStyle.apply_layout('auto')
-        
+
         # Save file
         output_file = os.path.join(self.output_dir, 'bottleneck_identification.png')
-        plt.savefig(output_file, dpi=300, bbox_inches='tight', 
+        plt.savefig(output_file, dpi=300, bbox_inches='tight',
                    facecolor='white', edgecolor='none')
         plt.close()
-        
+
         device_info = "DATA+ACCOUNTS" if accounts_configured else "DATA"
         print(f"✅ System Bottleneck Identification Analysis saved: {output_file}")
         print(f"   Device configuration: {device_info}")
         print(f"   System health: {health_status} - {health_desc}")
         print(f"   Primary bottleneck: {primary_bottleneck}")
-        
+
         return output_file
 
     # Disk delegation methods - delegate to Disk specialized module
@@ -2273,7 +2272,7 @@ Data Points: {len(overhead_df)}"""
         except Exception as e:
             print(f"⚠️ Disk bottleneck analysis failed: {e}")
             return None
-    
+
     def generate_disk_time_series(self):
         """Delegate to Disk specialized module"""
         try:
@@ -2282,31 +2281,37 @@ Data Points: {len(overhead_df)}"""
         except Exception as e:
             print(f"⚠️ Disk time series analysis failed: {e}")
             return None
-    
+
     def create_block_height_sync_chart(self):
         """Generate comprehensive block height synchronization analysis chart - Enhanced 4-subplot layout"""
         print("📊 Generating enhanced block height synchronization analysis...")
-        
+
         if not self.load_data():
             return None
-        
+
         try:
             # Check required fields
-            required_fields = ['timestamp', 'block_height_diff', 'data_loss']
+            required_fields = ['timestamp', 'data_loss']
             if not all(field in self.df.columns for field in required_fields):
                 print("⚠️ Block height fields not found, skipping chart generation")
                 return None
-            
+
             # Data preprocessing
             df_clean = self.df.dropna(subset=required_fields)
             if df_clean.empty:
                 print("⚠️ No valid block height data found")
                 return None
-                
+
             timestamps = pd.to_datetime(df_clean['timestamp'])
-            height_diff = pd.to_numeric(df_clean['block_height_diff'], errors='coerce')
+            if 'block_height_diff' in df_clean.columns:
+                height_diff = pd.to_numeric(df_clean['block_height_diff'], errors='coerce')
+            else:
+                height_diff = pd.Series([np.nan] * len(df_clean), index=df_clean.index)
             data_loss = pd.to_numeric(df_clean['data_loss'], errors='coerce')
-            
+            sync_status = df_clean['sync_status'] if 'sync_status' in df_clean.columns else None
+            sync_mode = df_clean['sync_mode'] if 'sync_mode' in df_clean.columns else None
+            has_height_diff = height_diff.notna().any()
+
             # Check optional fields
             local_height = None
             mainnet_height = None
@@ -2314,18 +2319,18 @@ Data Points: {len(overhead_df)}"""
             if all(field in df_clean.columns for field in optional_fields):
                 local_height = pd.to_numeric(df_clean['local_block_height'], errors='coerce')
                 mainnet_height = pd.to_numeric(df_clean['mainnet_block_height'], errors='coerce')
-            
+
             # Create 2x2 layout - use unified style
             fig, axes, layout = UnifiedChartStyle.setup_subplot_layout('2x2')
-            fig.suptitle('Block Height Synchronization Analysis', 
+            fig.suptitle('Block Height Synchronization Analysis',
                         fontsize=layout['title_fontsize'], fontweight='bold')
-            
+
             # === Subplot 1: Block height comparison (top left) ===
             ax1 = axes[0, 0]
-            if local_height is not None and mainnet_height is not None:
-                ax1.plot(timestamps, local_height, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
+            if local_height is not None and mainnet_height is not None and local_height.notna().any() and mainnet_height.notna().any():
+                ax1.plot(timestamps, local_height, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2,
                         label='Local Height', alpha=0.8)
-                ax1.plot(timestamps, mainnet_height, color=UnifiedChartStyle.COLORS['critical'], linewidth=2, 
+                ax1.plot(timestamps, mainnet_height, color=UnifiedChartStyle.COLORS['critical'], linewidth=2,
                         label='Mainnet Height', alpha=0.8)
                 ax1.set_title('Block Height Comparison', fontsize=layout['subtitle_fontsize'])
                 ax1.set_ylabel('Block Height')
@@ -2333,54 +2338,71 @@ Data Points: {len(overhead_df)}"""
                 # Force decimal format display with comma separator
                 ax1.ticklabel_format(style='plain', axis='y', useOffset=False)
                 ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
-            else:
-                ax1.plot(timestamps, height_diff, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
+            elif has_height_diff:
+                ax1.plot(timestamps, height_diff, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2,
                         label='Height Difference', alpha=0.8)
                 ax1.axhline(y=0, color=UnifiedChartStyle.COLORS['success'], linestyle='-', alpha=0.5, label='Perfect Sync')
                 ax1.set_title('Block Height Difference Timeline', fontsize=layout['subtitle_fontsize'])
                 ax1.set_ylabel('Height Difference')
                 ax1.legend()
-            
+            else:
+                status_codes = self._status_series_to_codes(sync_status, data_loss)
+                ax1.step(timestamps, status_codes, where='post', color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2,
+                        label='Sync Health')
+                ax1.set_title('Sync Health Timeline', fontsize=layout['subtitle_fontsize'])
+                ax1.set_ylabel('Health State')
+                ax1.set_yticks([0, 1, 2])
+                ax1.set_yticklabels(['Unhealthy', 'Warning', 'Healthy'])
+                ax1.legend()
+
             ax1.grid(True, alpha=0.3)
             ax1.tick_params(axis='x', rotation=45)
-            
+
             # === Subplot 2: Height difference detailed analysis (top right) ===
             ax2 = axes[0, 1]
-            
-            ax2.plot(timestamps, height_diff, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2, 
-                    label='Height Difference', alpha=0.8)
-            
+
+            if has_height_diff:
+                ax2.plot(timestamps, height_diff, color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2,
+                        label='Height Difference', alpha=0.8)
+            else:
+                status_codes = self._status_series_to_codes(sync_status, data_loss)
+                ax2.step(timestamps, status_codes, where='post', color=UnifiedChartStyle.COLORS['data_primary'], linewidth=2,
+                        label='Sync Health')
+
             # Threshold lines - use configuration variables
             threshold = int(os.getenv('BLOCK_HEIGHT_DIFF_THRESHOLD', '50'))
-            ax2.axhline(y=threshold, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', 
+            ax2.axhline(y=threshold, color=UnifiedChartStyle.COLORS['warning'], linestyle='--',
                        linewidth=2, alpha=0.7, label=f'Warning (+{threshold})')
-            ax2.axhline(y=-threshold, color=UnifiedChartStyle.COLORS['warning'], linestyle='--', 
+            ax2.axhline(y=-threshold, color=UnifiedChartStyle.COLORS['warning'], linestyle='--',
                        linewidth=2, alpha=0.7, label=f'Warning (-{threshold})')
             ax2.axhline(y=0, color=UnifiedChartStyle.COLORS['success'], linestyle='-', alpha=0.5, label='Perfect Sync')
-            
+
             # Mark anomaly regions
             anomaly_mask = data_loss > 0
             if anomaly_mask.any():
                 anomaly_periods = self._identify_anomaly_periods(timestamps, anomaly_mask)
                 for i, (start_time, end_time) in enumerate(anomaly_periods):
-                    ax2.axvspan(start_time, end_time, alpha=0.25, color=UnifiedChartStyle.COLORS['critical'], 
+                    ax2.axvspan(start_time, end_time, alpha=0.25, color=UnifiedChartStyle.COLORS['critical'],
                                label='Data Loss Period' if i == 0 else "")
-            
-            ax2.set_title('Block Height Difference (Local - Mainnet)', fontsize=layout['subtitle_fontsize'])
-            ax2.set_ylabel('Height Difference')
+
+            ax2.set_title('Block Height Difference / Sync Health', fontsize=layout['subtitle_fontsize'])
+            ax2.set_ylabel('Height Difference' if has_height_diff else 'Health State')
+            if not has_height_diff:
+                ax2.set_yticks([0, 1, 2])
+                ax2.set_yticklabels(['Unhealthy', 'Warning', 'Healthy'])
             ax2.legend()
             ax2.grid(True, alpha=0.3)
             ax2.tick_params(axis='x', rotation=45)
-            
+
             # === Subplot 3: Synchronization status distribution (bottom left) ===
             ax3 = axes[1, 0]
-            
-            sync_stats = self._calculate_sync_distribution(height_diff, threshold)
-            
+
+            sync_stats = self._calculate_sync_distribution(height_diff, threshold, sync_status, data_loss)
+
             if sync_stats['values']:
                 colors = [UnifiedChartStyle.COLORS['success'], UnifiedChartStyle.COLORS['warning'], UnifiedChartStyle.COLORS['critical']]
                 ax3.pie(
-                    sync_stats['values'], 
+                    sync_stats['values'],
                     labels=sync_stats['labels'],
                     colors=colors[:len(sync_stats['values'])],
                     autopct='%1.1f%%',
@@ -2392,29 +2414,29 @@ Data Points: {len(overhead_df)}"""
                 ax3.text(0.5, 0.5, 'No Data Available', ha='center', va='center',
                         transform=ax3.transAxes, fontsize=12)
                 ax3.set_title('Synchronization Status Distribution (No Data)', fontsize=layout['subtitle_fontsize'])
-            
+
             # === Subplot 4: Analysis summary (bottom right) ===
             if local_height is not None and mainnet_height is not None:
                 summary_text = self._generate_comprehensive_summary(
-                    height_diff, data_loss, sync_stats, timestamps, local_height, mainnet_height
+                    height_diff, data_loss, sync_stats, timestamps, local_height, mainnet_height, sync_mode
                 )
             else:
-                summary_text = self._generate_sync_stats_text(height_diff, data_loss)
-            
+                summary_text = self._generate_sync_stats_text(height_diff, data_loss, sync_stats, sync_mode)
+
             UnifiedChartStyle.add_text_summary(axes[1, 1], summary_text, 'Synchronization Analysis Summary')
-            
+
             # Layout adjustment
             UnifiedChartStyle.apply_layout('auto')
-            
+
             # Save file
             output_file = os.path.join(self.output_dir, 'block_height_sync_chart.png')
-            plt.savefig(output_file, dpi=300, bbox_inches='tight', 
+            plt.savefig(output_file, dpi=300, bbox_inches='tight',
                        facecolor='white', edgecolor='none')
             plt.close()
-            
+
             print(f"✅ Enhanced block height sync chart saved: {output_file}")
             return output_file
-            
+
         except Exception as e:
             print(f"❌ Error generating block height sync chart: {e}")
             return None
@@ -2423,79 +2445,149 @@ Data Points: {len(overhead_df)}"""
         """Identify data loss time periods"""
         periods = []
         start_time = None
-        
+
         for i, (ts, loss) in enumerate(zip(timestamps, data_loss)):
             if loss == 1 and start_time is None:
                 start_time = ts
             elif loss == 0 and start_time is not None:
                 periods.append((start_time, ts))
                 start_time = None
-        
+
         # Handle trailing anomalies
         if start_time is not None and len(timestamps) > 0:
             periods.append((start_time, timestamps.iloc[-1]))
-        
+
         return periods
 
-    def _generate_sync_stats_text(self, height_diff, data_loss):
+    def _status_series_to_codes(self, sync_status, data_loss):
+        """Map sync status strings to numeric health states for plotting."""
+        if sync_status is None:
+            return pd.Series(np.where(data_loss > 0, 0, 2), index=data_loss.index)
+
+        mapping = {
+            'healthy': 2,
+            'synced': 2,
+            'ok': 2,
+            'behind': 1,
+            'warning': 1,
+            'unknown': 1,
+            'unhealthy': 0,
+            'failed': 0,
+            'unreachable': 0,
+        }
+        return sync_status.astype(str).str.lower().map(mapping).fillna(1)
+
+    def _generate_sync_stats_text(self, height_diff, data_loss, sync_stats=None, sync_mode=None):
         """Generate synchronization statistics text"""
         total_samples = len(height_diff)
         anomaly_samples = int(data_loss.sum())
-        avg_diff = height_diff.mean()
-        max_diff = height_diff.max()
-        min_diff = height_diff.min()
-        
+        valid_diff = height_diff.dropna()
+        mode_text = sync_mode.dropna().iloc[-1] if sync_mode is not None and sync_mode.dropna().size > 0 else 'unknown'
+
+        if valid_diff.empty:
+            healthy_pct = sync_stats.get('healthy_pct', 0) if sync_stats else 0
+            warning_pct = sync_stats.get('warning_pct', 0) if sync_stats else 0
+            unhealthy_pct = sync_stats.get('unhealthy_pct', 0) if sync_stats else 0
+            return f"""Sync Health Statistics:
+• Total Samples: {total_samples}
+• Sync Mode: {mode_text}
+• Healthy: {healthy_pct:.1f}%
+• Warning/Unknown: {warning_pct:.1f}%
+• Unhealthy: {unhealthy_pct:.1f}%
+• Anomaly Samples: {anomaly_samples} ({anomaly_samples/total_samples*100:.1f}%)"""
+
+        avg_diff = valid_diff.mean()
+        max_diff = valid_diff.max()
+        min_diff = valid_diff.min()
+
         return f"""Sync Statistics:
 • Total Samples: {total_samples}
+• Sync Mode: {mode_text}
 • Anomaly Samples: {anomaly_samples} ({anomaly_samples/total_samples*100:.1f}%)
 • Avg Difference: {avg_diff:.1f} blocks
 • Max Difference: {max_diff:.0f} blocks
 • Min Difference: {min_diff:.0f} blocks"""
 
-    def _calculate_sync_distribution(self, height_diff, threshold):
+    def _calculate_sync_distribution(self, height_diff, threshold, sync_status=None, data_loss=None):
         """Calculate synchronization status distribution"""
-        perfect_sync = (height_diff == 0).sum()
-        good_sync = ((height_diff.abs() > 0) & (height_diff.abs() <= threshold)).sum()
-        poor_sync = (height_diff.abs() > threshold).sum()
-        
-        total = len(height_diff)
-        
+        valid_diff = height_diff.dropna()
+
+        if valid_diff.empty and sync_status is not None:
+            codes = self._status_series_to_codes(sync_status, data_loss if data_loss is not None else pd.Series([0] * len(sync_status)))
+            healthy = (codes == 2).sum()
+            warning = (codes == 1).sum()
+            unhealthy = (codes == 0).sum()
+            total = len(codes)
+
+            labels = []
+            values = []
+            if healthy > 0:
+                labels.append('Healthy')
+                values.append(healthy)
+            if warning > 0:
+                labels.append('Warning/Unknown')
+                values.append(warning)
+            if unhealthy > 0:
+                labels.append('Unhealthy')
+                values.append(unhealthy)
+
+            return {
+                'labels': labels,
+                'values': values,
+                'perfect_sync_pct': (healthy / total) * 100 if total else 0,
+                'good_sync_pct': (warning / total) * 100 if total else 0,
+                'poor_sync_pct': (unhealthy / total) * 100 if total else 0,
+                'healthy_pct': (healthy / total) * 100 if total else 0,
+                'warning_pct': (warning / total) * 100 if total else 0,
+                'unhealthy_pct': (unhealthy / total) * 100 if total else 0,
+            }
+
+        perfect_sync = (valid_diff == 0).sum()
+        good_sync = ((valid_diff.abs() > 0) & (valid_diff.abs() <= threshold)).sum()
+        poor_sync = (valid_diff.abs() > threshold).sum()
+
+        total = len(valid_diff)
+
         labels = []
         values = []
-        
+
         if perfect_sync > 0:
             labels.append('Perfect Sync')
             values.append(perfect_sync)
-        
+
         if good_sync > 0:
             labels.append('Good Sync')
             values.append(good_sync)
-        
+
         if poor_sync > 0:
             labels.append('Poor Sync')
             values.append(poor_sync)
-        
+
         return {
             'labels': labels,
             'values': values,
-            'perfect_sync_pct': (perfect_sync / total) * 100,
-            'good_sync_pct': (good_sync / total) * 100,
-            'poor_sync_pct': (poor_sync / total) * 100
+            'perfect_sync_pct': (perfect_sync / total) * 100 if total else 0,
+            'good_sync_pct': (good_sync / total) * 100 if total else 0,
+            'poor_sync_pct': (poor_sync / total) * 100 if total else 0
         }
 
-    def _generate_comprehensive_summary(self, height_diff, data_loss, sync_stats, 
-                                      timestamps, local_height, mainnet_height):
+    def _generate_comprehensive_summary(self, height_diff, data_loss, sync_stats,
+                                      timestamps, local_height, mainnet_height, sync_mode=None):
         """Generate comprehensive analysis summary"""
-        max_diff = height_diff.abs().max()
-        avg_diff = height_diff.abs().mean()
+        valid_diff = height_diff.dropna()
+        max_diff = valid_diff.abs().max() if not valid_diff.empty else 0
+        avg_diff = valid_diff.abs().mean() if not valid_diff.empty else 0
         data_loss_events = (data_loss > 0).sum()
         total_data_loss = data_loss.sum()
-        
+        mode_text = sync_mode.dropna().iloc[-1] if sync_mode is not None and sync_mode.dropna().size > 0 else 'unknown'
+
         duration = timestamps.iloc[-1] - timestamps.iloc[0]
         duration_minutes = duration.total_seconds() / 60
-        
+
         summary_lines = [
             "Block Height Sync Analysis:",
+            "",
+            f"Sync Mode: {mode_text}",
             "",
             "Block Heights:",
             f"  Local Start: {local_height.iloc[0]:,}",
@@ -2516,7 +2608,7 @@ Data Points: {len(overhead_df)}"""
             "Sync Quality:",
             f"  Duration: {duration_minutes:.1f}min",
         ]
-        
+
         if sync_stats['perfect_sync_pct'] > 90:
             quality = "EXCELLENT"
         elif sync_stats['perfect_sync_pct'] > 70:
@@ -2525,13 +2617,13 @@ Data Points: {len(overhead_df)}"""
             quality = "FAIR"
         else:
             quality = "POOR"
-        
+
         summary_lines.extend([
             f"  Overall: {quality}",
             "",
             f"✓ Node well synchronized" if sync_stats['perfect_sync_pct'] > 50 else "⚠ Sync issues detected"
         ])
-        
+
         return "\n".join(summary_lines)
 
     def generate_all_disk_charts(self):
@@ -2546,23 +2638,23 @@ Data Points: {len(overhead_df)}"""
 def main():
     parser = argparse.ArgumentParser(description='Performance Visualizer')
     parser.add_argument('data_file', help='System performance monitoring CSV file')
-    
+
     args = parser.parse_args()
-    
+
     if not os.path.exists(args.data_file):
         print(f"❌ Data file does not exist: {args.data_file}")
         return 1
-    
+
     visualizer = PerformanceVisualizer(args.data_file)
-    
+
     result = visualizer.generate_all_charts()
-    
+
     if result:
         print("🎉 Performance visualization completed!")
         return 0
     else:
         print("❌ Performance visualization failed")
         return 1
-    
+
 if __name__ == "__main__":
     exit(main())

@@ -8,17 +8,17 @@
 check_deployment() {
     local current_path="$(pwd)"
     local script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    
+
     echo "🔍 Verifying deployment environment..." >&2
     echo "   Current location: $script_path" >&2
-    
+
     # Basic permission check
     if [[ ! -r "$script_path" ]]; then
         echo "❌ Error: Cannot read framework directory" >&2
         echo "💡 Solution: Check directory permissions" >&2
         return 1
     fi
-    
+
     echo "✅ Deployment environment verification passed" >&2
 }
 
@@ -65,27 +65,60 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config/config_loader.sh"
 source "${SCRIPT_DIR}/utils/error_handler.sh"
 source "${SCRIPT_DIR}/core/common_functions.sh"
-# W2 RPC proxy lifecycle helpers (Phase 2.5 / Phase 4.5)
+# RPC proxy lifecycle helpers
 if [[ -f "${SCRIPT_DIR}/lib/proxy_lifecycle.sh" ]]; then
     source "${SCRIPT_DIR}/lib/proxy_lifecycle.sh"
 fi
 
-# Clean or create memory sharing directory
-if [[ -d "$MEMORY_SHARE_DIR" ]]; then
-    echo "🧹 Cleaning old cached data in memory sharing directory..." >&2
-    # Clean all possible residual files
-    rm -f "$MEMORY_SHARE_DIR"/*.json 2>/dev/null || true
-    rm -f "$MEMORY_SHARE_DIR"/sample_count 2>/dev/null || true
-    rm -f "$MEMORY_SHARE_DIR"/*cache* 2>/dev/null || true
-    rm -f "$MEMORY_SHARE_DIR"/*.pid 2>/dev/null || true
-    rm -f "$MEMORY_SHARE_DIR"/*.lock 2>/dev/null || true
-else
-    echo "📁 Creating memory sharing directory..." >&2
+cleanup_memory_share_state() {
+    if [[ -z "${MEMORY_SHARE_DIR:-}" ]]; then
+        return 0
+    fi
+
     mkdir -p "$MEMORY_SHARE_DIR" 2>/dev/null || true
     chmod 755 "$MEMORY_SHARE_DIR" 2>/dev/null || true
-fi
 
-echo "✅ Memory sharing directory prepared" >&2
+    rm -f "${LATEST_METRICS_FILE:-${MEMORY_SHARE_DIR}/latest_metrics.json}" 2>/dev/null || true
+    rm -f "${UNIFIED_METRICS_FILE:-${MEMORY_SHARE_DIR}/unified_metrics.json}" 2>/dev/null || true
+    rm -f "${QPS_STATUS_FILE:-${MEMORY_SHARE_DIR}/qps_status.json}" 2>/dev/null || true
+    rm -f "${BOTTLENECK_STATUS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_status.json}" 2>/dev/null || true
+    rm -f "${BOTTLENECK_COUNTERS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_counters.json}" 2>/dev/null || true
+    rm -f "${UNIFIED_EVENTS_FILE:-${MEMORY_SHARE_DIR}/unified_events.json}" 2>/dev/null || true
+    rm -f "${EVENT_MANAGER_LOCK_FILE:-${MEMORY_SHARE_DIR}/event_manager.lock}" 2>/dev/null || true
+    rm -f "${EVENT_NOTIFICATION_FILE:-${MEMORY_SHARE_DIR}/event_notification.json}" 2>/dev/null || true
+    rm -f "${BLOCK_HEIGHT_CACHE_FILE:-${MEMORY_SHARE_DIR}/block_height_monitor_cache.json}" 2>/dev/null || true
+    rm -f "${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag" 2>/dev/null || true
+    rm -f "${MEMORY_SHARE_DIR}/data_loss_stats.json" 2>/dev/null || true
+    rm -f "${MEMORY_SHARE_DIR}/sample_count" 2>/dev/null || true
+    rm -f "${MEMORY_SHARE_DIR}"/*.pid "${MEMORY_SHARE_DIR}"/*.lock "${MEMORY_SHARE_DIR}"/*.flag 2>/dev/null || true
+
+    if [[ -n "${NODE_HEALTH_CACHE_DIR:-}" ]]; then
+        mkdir -p "$NODE_HEALTH_CACHE_DIR" 2>/dev/null || true
+        rm -f "$NODE_HEALTH_CACHE_DIR"/node_health_*.cache 2>/dev/null || true
+    fi
+}
+
+cleanup_reused_runtime_files() {
+    rm -f "${TMP_DIR}/qps_test_status" "${TMP_DIR}/qps_test_status.tmp" 2>/dev/null || true
+    rm -f "${TMP_DIR}/monitor_pids.txt" "${TMP_DIR}/monitoring_status.json" 2>/dev/null || true
+    rm -f "${TMP_DIR}/block_height_monitor.pid" "${TMP_DIR}/network_monitor.pid" 2>/dev/null || true
+    rm -f "${TMP_DIR}"/iostat_*.pid "${TMP_DIR}"/iostat_*.data 2>/dev/null || true
+
+    rm -f "${PERFORMANCE_LATEST_CSV:-${LOGS_DIR}/performance_latest.csv}" 2>/dev/null || true
+    rm -f "${PROXY_METHOD_CSV:-${LOGS_DIR}/proxy_method.csv}" 2>/dev/null || true
+    rm -f "${PROXY_SELF_CSV:-${LOGS_DIR}/proxy_self.csv}" 2>/dev/null || true
+    rm -f "${RPC_PROXY_LOG:-${LOGS_DIR}/rpc_proxy.log}" 2>/dev/null || true
+    rm -f "${BLOCK_HEIGHT_DATA_FILE}.buffer" 2>/dev/null || true
+}
+
+prepare_clean_runtime_state() {
+    echo "🧹 Preparing clean runtime state..." >&2
+    cleanup_memory_share_state
+    cleanup_reused_runtime_files
+    echo "✅ Runtime state prepared" >&2
+}
+
+prepare_clean_runtime_state
 
 # Set up error handling
 setup_error_handling "$(basename "$0")" "Blockchain Node Benchmark Framework"
@@ -100,12 +133,12 @@ BOTTLENECK_INFO=""
 # Cleanup function
 cleanup_framework() {
     echo "🧹 Executing framework cleanup..."
-    
+
     # Stop RPC proxy (no-op if Phase 2.5 didn't run)
     if declare -F stop_rpc_proxy >/dev/null 2>&1; then
         stop_rpc_proxy || true
     fi
-    
+
     # Stop fake-node if started (--fake-node mode). Merged here instead of a
     # separate `trap` so it does NOT override this cleanup (bash trap replaces,
     # not appends — a separate fake-node trap was silently dropping the proxy +
@@ -114,13 +147,13 @@ cleanup_framework() {
         echo "🧹 Stopping fake-node (pid=${FAKE_NODE_PID})"
         kill "${FAKE_NODE_PID}" 2>/dev/null || true
     fi
-    
+
     # Stop monitoring system
-    stop_monitoring_system
-    
+    stop_monitoring_system || true
+
     # Clean up temporary files
     cleanup_temp_files
-    
+
     echo "✅ Framework cleanup completed"
 }
 
@@ -130,7 +163,7 @@ trap cleanup_framework EXIT INT TERM
 # Prepare Benchmark data
 prepare_benchmark_data() {
     echo "📊 Preparing Benchmark data..."
-    
+
     # Check if account file exists
     if [[ ! -f "$ACCOUNTS_OUTPUT_FILE" ]]; then
         echo "🔍 Fetching active accounts..."
@@ -154,7 +187,7 @@ prepare_benchmark_data() {
     else
         echo "✅ Account file already exists: $(wc -l < "$ACCOUNTS_OUTPUT_FILE") accounts"
     fi
-    
+
     # Generate vegeta target files
     echo "🎯 Generating Vegeta target files (RPC mode: $RPC_MODE)..."
     if [[ -f "${SCRIPT_DIR}/tools/target_generator.sh" ]]; then
@@ -164,7 +197,7 @@ prepare_benchmark_data() {
             --rpc-mode "$RPC_MODE" \
             --output-single "$SINGLE_METHOD_TARGETS_FILE" \
             --output-mixed "$MIXED_METHOD_TARGETS_FILE"
-        
+
         if [[ $? -eq 0 ]]; then
             echo "✅ Vegeta target file generation successful (RPC mode: $RPC_MODE)"
             if [[ "$RPC_MODE" == "mixed" ]]; then
@@ -180,26 +213,26 @@ prepare_benchmark_data() {
         echo "❌ Target generation script does not exist: tools/target_generator.sh"
         return 1
     fi
-    
+
     return 0
 }
 
 # Start monitoring system
 start_monitoring_system() {
     echo "📊 Starting monitoring system..."
-    
+
     # Clean up block height continuous exceeded flag file from last test
     rm -f "${MEMORY_SHARE_DIR}/block_height_time_exceeded.flag" 2>/dev/null || true
-    
+
     # Create framework running status file before starting monitoring
     echo "running" > "$TMP_DIR/qps_test_status.tmp"
     mv "$TMP_DIR/qps_test_status.tmp" "$TMP_DIR/qps_test_status"
     echo "[STATUS] Framework lifecycle marker created: $TMP_DIR/qps_test_status"
-    
+
     # Export monitoring PID file path for subprocess use
     export MONITOR_PIDS_FILE="${TMP_DIR}/monitor_pids.txt"
     export MONITOR_STATUS_FILE="${TMP_DIR}/monitoring_status.json"
-    
+
     # Start monitoring coordinator
     if [[ -f "${SCRIPT_DIR}/monitoring/monitoring_coordinator.sh" ]]; then
         echo "🚀 Starting monitoring coordinator..."
@@ -207,10 +240,10 @@ start_monitoring_system() {
         local coordinator_pid=$!
         MONITORING_PIDS+=($coordinator_pid)
         echo "✅ Monitoring coordinator started (PID: $coordinator_pid)"
-        
+
         # Wait for monitoring system initialization
         sleep 5
-        
+
         # Verify monitoring system status
         if kill -0 $coordinator_pid 2>/dev/null; then
             echo "✅ Monitoring system running normally"
@@ -228,18 +261,20 @@ start_monitoring_system() {
 # Stop monitoring system
 stop_monitoring_system() {
     echo "🛑 Stopping monitoring system..."
-    
+
     # Check if there are monitoring processes to stop
     if [[ ${#MONITORING_PIDS[@]} -eq 0 ]]; then
         echo "ℹ️  No monitoring processes to stop"
         return 0
     fi
-    
+
     # Stop monitoring coordinator
     if [[ -f "${SCRIPT_DIR}/monitoring/monitoring_coordinator.sh" ]]; then
-        "${SCRIPT_DIR}/monitoring/monitoring_coordinator.sh" stop
+        if ! "${SCRIPT_DIR}/monitoring/monitoring_coordinator.sh" stop; then
+            echo "⚠️ Monitoring coordinator stop reported a non-zero status; continuing cleanup"
+        fi
     fi
-    
+
     # Stop all monitoring processes
     for pid in "${MONITORING_PIDS[@]}"; do
         if kill -0 $pid 2>/dev/null; then
@@ -251,25 +286,26 @@ stop_monitoring_system() {
             fi
         fi
     done
-    
+
     MONITORING_PIDS=()
     echo "✅ Monitoring system stopped"
+    return 0
 }
 
 # Execute core QPS test
 execute_core_qps_test() {
     echo "[START] Executing core QPS test (RPC mode: $RPC_MODE)..."
-    
+
     # 🔧 Verify framework status file exists (created when monitoring started)
     if [[ ! -f "$TMP_DIR/qps_test_status" ]]; then
         echo "[ERROR] Framework status file not found. Monitoring system may not be running."
         return 1
     fi
     echo "[STATUS] Framework lifecycle marker verified: $TMP_DIR/qps_test_status"
-    
+
     # Build parameter array, filter out RPC mode parameters as we will add them separately
     local executor_args=()
-    
+
     # Add non-RPC mode parameters
     for arg in "$@"; do
         case $arg in
@@ -281,18 +317,18 @@ execute_core_qps_test() {
                 ;;
         esac
     done
-    
+
     # Add correct RPC mode parameter based on RPC_MODE variable
     executor_args+=("--$RPC_MODE")
-    
+
     # Call master_qps_executor.sh
     "${SCRIPT_DIR}/core/master_qps_executor.sh" "${executor_args[@]}"
     local test_result=$?
-    
+
     # Wait for monitoring system to collect final data, ensure data integrity
     echo "[STATUS] QPS test completed, waiting for monitoring data collection..."
     sleep 3
-    
+
     # Delete QPS test status marker file - safe deletion
     if [[ -f "$TMP_DIR/qps_test_status" ]]; then
         rm -f "$TMP_DIR/qps_test_status"
@@ -300,23 +336,23 @@ execute_core_qps_test() {
     else
         echo "[WARN] QPS test status marker file does not exist, may have been deleted"
     fi
-    
+
     # Check if bottleneck detected - intelligently merge multiple bottleneck data sources
     local bottleneck_sources=(
         "${QPS_STATUS_FILE}"                              # Prioritize bottlenecks during QPS test
-        "${MEMORY_SHARE_DIR}/bottleneck_status.json"      # Then bottlenecks during monitoring
+        "${BOTTLENECK_STATUS_FILE:-${MEMORY_SHARE_DIR}/bottleneck_status.json}"      # Then bottlenecks during monitoring
     )
-    
+
     local bottleneck_found=false
     local all_bottleneck_info=""
-    
+
     for bottleneck_file in "${bottleneck_sources[@]}"; do
         if [[ -f "$bottleneck_file" ]]; then
             local status_data=$(cat "$bottleneck_file" 2>/dev/null)
             if [[ -n "$status_data" ]] && echo "$status_data" | grep -q "bottleneck_detected.*true"; then
                 local source_info=$(echo "$status_data" | jq -r '.bottleneck_summary // "Unknown bottleneck"' 2>/dev/null || echo "Unknown bottleneck")
                 local source_name=$(basename "$bottleneck_file")
-                
+
                 if [[ "$bottleneck_found" == "false" ]]; then
                     BOTTLENECK_DETECTED=true
                     BOTTLENECK_INFO="$source_info"
@@ -325,26 +361,26 @@ execute_core_qps_test() {
                 else
                     all_bottleneck_info="$all_bottleneck_info; $source_name: $source_info"
                 fi
-                
+
                 echo "🚨 Performance bottleneck detected: $source_info (source: $source_name)"
             fi
         fi
     done
-    
+
     # If multiple bottleneck sources found, record complete information
     if [[ "$bottleneck_found" == "true" ]]; then
         echo "[INFO] Complete bottleneck information: $all_bottleneck_info"
     fi
-    
+
     return $test_result
 }
 
 # Process test results
 process_test_results() {
     echo "🔄 Processing test results..."
-    
-    # AWS baseline conversion
-    echo "📊 Executing AWS baseline conversion..."
+
+    # Provider-aware disk baseline conversion
+    echo "📊 Executing provider-aware disk baseline conversion..."
     if [[ -f "${SCRIPT_DIR}/utils/disk_converter.sh" ]]; then
         # Note: disk_converter.sh is a function library, does not support direct parameter execution
         # Actual Disk conversion is implemented through source call in iostat_collector.sh
@@ -352,7 +388,7 @@ process_test_results() {
     else
         echo "⚠️ Disk conversion script does not exist, skipping conversion"
     fi
-    
+
     # Unit conversion
     if [[ -f "${SCRIPT_DIR}/utils/unit_converter.py" ]]; then
         python3 "${SCRIPT_DIR}/utils/unit_converter.py" --auto-process
@@ -360,7 +396,7 @@ process_test_results() {
     else
         echo "⚠️ Unit conversion script does not exist, skipping conversion"
     fi
-    
+
     return 0
 }
 
@@ -378,7 +414,7 @@ generate_degraded_report() {
 # Execute data analysis
 execute_data_analysis() {
     echo "🔍 Executing data analysis..."
-    
+
     # Parse benchmark_mode parameter
     local benchmark_mode=""
     for arg in "$@"; do
@@ -388,21 +424,21 @@ execute_data_analysis() {
             --intensive) benchmark_mode="intensive" ;;
         esac
     done
-    
+
     if [[ -z "$benchmark_mode" ]]; then
         benchmark_mode="quick"
     fi
-    
+
     # Use symlink to get latest performance data file
-    local latest_csv="${LOGS_DIR}/performance_latest.csv"
-    
+    local latest_csv="${PERFORMANCE_LATEST_CSV:-${LOGS_DIR}/performance_latest.csv}"
+
     if [[ ! -f "$latest_csv" ]]; then
         echo "[WARN] Performance data file not found: $latest_csv"
         echo "[WARN] Falling back to DEGRADED analysis mode."
         export ANALYSIS_DEGRADED=1
         generate_degraded_report && return 0 || return 1
     fi
-    
+
     # Verify file integrity and symlink target
     if [[ -L "$latest_csv" ]]; then
         local target_file=$(readlink "$latest_csv")
@@ -413,14 +449,14 @@ execute_data_analysis() {
         fi
         echo "[INFO] Using symlinked file: $target_file"
     fi
-    
+
     local line_count=$(wc -l < "$latest_csv")
     if [[ $line_count -lt 2 ]]; then
         echo "[WARN] Performance data file empty/header-only ($line_count lines) — DEGRADED mode."
         export ANALYSIS_DEGRADED=1
         generate_degraded_report && return 0 || return 1
     fi
-    
+
     # Verify CSV header integrity and required fields
     local header=$(head -1 "$latest_csv")
     local field_count=$(echo "$header" | tr ',' '\n' | wc -l)
@@ -428,56 +464,56 @@ execute_data_analysis() {
         echo "[ERROR] CSV header appears incomplete: only $field_count fields"
         return 1
     fi
-    
+
     # Verify critical fields exist
     local required_fields=("timestamp" "cpu_usage" "mem_usage")
     local missing_fields=()
-    
+
     for field in "${required_fields[@]}"; do
         if ! echo "$header" | grep -q "$field"; then
             missing_fields+=("$field")
         fi
     done
-    
+
     if [[ ${#missing_fields[@]} -gt 0 ]]; then
         echo "[ERROR] Required fields missing from CSV: ${missing_fields[*]}"
         echo "[DEBUG] Available fields: $header"
         return 1
     fi
-    
+
     # Check existence of device-related fields (for analysis script compatibility)
     local has_data_device=false
     local has_accounts_device=false
     local has_ena_fields=false
-    
+
     if echo "$header" | grep -q "data_.*_util"; then
         has_data_device=true
         echo "[INFO] DATA device fields detected"
     fi
-    
+
     if echo "$header" | grep -q "accounts_.*_util"; then
         has_accounts_device=true
         echo "[INFO] ACCOUNTS device fields detected"
     fi
-    
+
     if echo "$header" | grep -q "ena_"; then
         has_ena_fields=true
-        echo "[INFO] ENA fields detected (AWS environment)"
+        echo "[INFO] AWS ENA fields detected"
     fi
-    
+
     # Warning: If no device fields, some analysis may be limited
     if [[ "$has_data_device" == "false" && "$has_accounts_device" == "false" ]]; then
         echo "[WARN] No Disk device fields detected - storage analysis may be limited"
     fi
-    
+
     echo "[INFO] Using monitoring data file: $(basename "$latest_csv")"
     echo "[INFO] File size: $line_count lines, $field_count fields"
     echo "[INFO] Required fields verified: ${required_fields[*]}"
-    
+
     # If bottleneck detected, execute bottleneck-specific analysis
     if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
         echo "🚨 Executing bottleneck-specific analysis..."
-        
+
         # Read bottleneck detailed information
         local bottleneck_details=""
         if [[ -f "$QPS_STATUS_FILE" ]]; then
@@ -485,22 +521,22 @@ execute_data_analysis() {
             local bottleneck_qps=$(echo "$bottleneck_details" | jq -r '.bottleneck_qps // 0')
             local max_qps=$(echo "$bottleneck_details" | jq -r '.max_successful_qps // 0')
             local severity=$(echo "$bottleneck_details" | jq -r '.severity // "medium"')
-            
+
             echo "📊 Bottleneck details: QPS=$bottleneck_qps, Max successful QPS=$max_qps, Severity=$severity"
         fi
-        
+
         # Disk bottleneck-specific analysis completed through real-time monitoring
         # disk_bottleneck_detector.sh runs in real-time through monitoring_coordinator.sh during testing
         # Bottleneck detection results recorded in disk_analyzer.log, no need to call again
         echo "💾 Disk bottleneck detection completed through real-time monitoring"
-        
+
         # Bottleneck time window analysis
         execute_bottleneck_window_analysis "$latest_csv" "$bottleneck_details"
-        
+
         # Performance cliff analysis
         execute_performance_cliff_analysis "$latest_csv" "$bottleneck_details"
     fi
-    
+
     # Execute Disk performance analysis (generate disk_analyzer.log)
     if [[ -f "${SCRIPT_DIR}/tools/disk_analyzer.sh" ]]; then
         echo "🔍 Executing Disk performance analysis: disk_analyzer.sh"
@@ -510,7 +546,7 @@ execute_data_analysis() {
     else
         echo "⚠️ Disk analysis script does not exist: tools/disk_analyzer.sh"
     fi
-    
+
     # Execute all standard analysis scripts
     local analysis_scripts=(
         "analysis/comprehensive_analysis.py"
@@ -518,11 +554,11 @@ execute_data_analysis() {
         "analysis/qps_analyzer.py"
         "analysis/rpc_deep_analyzer.py"
     )
-    
+
     for script in "${analysis_scripts[@]}"; do
         if [[ -f "${SCRIPT_DIR}/$script" ]]; then
             local script_name=$(basename "$script")
-            
+
             # If bottleneck detected, some scripts already handled by specific analysis, skip to avoid duplication
             if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
                 case "$script_name" in
@@ -536,9 +572,9 @@ execute_data_analysis() {
                         ;;
                 esac
             fi
-            
+
             echo "🔍 Executing analysis: $script_name"
-            
+
             # If bottleneck detected, pass bottleneck mode parameter
             if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
                 if ! python3 "${SCRIPT_DIR}/$script" "$latest_csv" --benchmark-mode "$benchmark_mode" --bottleneck-mode --output-dir "$BASE_DATA_DIR"; then
@@ -554,7 +590,7 @@ execute_data_analysis() {
             echo "⚠️ Analysis script does not exist: $script"
         fi
     done
-    
+
     echo "✅ Data analysis completed"
     return 0
 }
@@ -563,22 +599,22 @@ execute_data_analysis() {
 execute_bottleneck_window_analysis() {
     local csv_file="$1"
     local bottleneck_info="$2"
-    
+
     echo "🕐 Executing bottleneck time window analysis..."
-    
+
     if [[ -z "$bottleneck_info" ]]; then
         echo "⚠️ No bottleneck information, skipping time window analysis"
         return
     fi
-    
+
     # Extract bottleneck time information
     local bottleneck_time=$(echo "$bottleneck_info" | jq -r '.detection_time // ""')
     local window_start=$(echo "$bottleneck_info" | jq -r '.analysis_window.start_time // ""')
     local window_end=$(echo "$bottleneck_info" | jq -r '.analysis_window.end_time // ""')
-    
+
     if [[ -n "$bottleneck_time" ]]; then
         echo "📊 Bottleneck time window: $window_start to $window_end"
-        
+
         # Call time window analysis tool
         if [[ -f "${SCRIPT_DIR}/analysis/comprehensive_analysis.py" ]]; then
             python3 "${SCRIPT_DIR}/analysis/comprehensive_analysis.py" \
@@ -597,20 +633,20 @@ execute_bottleneck_window_analysis() {
 execute_performance_cliff_analysis() {
     local csv_file="$1"
     local bottleneck_info="$2"
-    
+
     echo "📉 Executing performance cliff analysis..."
-    
+
     # Call performance cliff analysis tool - execute basic analysis even without bottleneck information
     if [[ -f "${SCRIPT_DIR}/analysis/qps_analyzer.py" ]]; then
         if [[ -n "$bottleneck_info" ]]; then
             # Complete analysis when bottleneck information available
             local max_qps=$(echo "$bottleneck_info" | jq -r '.max_successful_qps // 0')
             local bottleneck_qps=$(echo "$bottleneck_info" | jq -r '.bottleneck_qps // 0')
-            
+
             if [[ $max_qps -gt 0 && $bottleneck_qps -gt 0 ]]; then
                 local performance_drop=$(awk "BEGIN {printf \"%.2f\", ($bottleneck_qps - $max_qps) * 100 / $max_qps}")
                 echo "📊 Performance cliff: from ${max_qps} QPS to ${bottleneck_qps} QPS (${performance_drop}%)"
-                
+
                 python3 "${SCRIPT_DIR}/analysis/qps_analyzer.py" \
                     "$csv_file" \
                     --benchmark-mode "$benchmark_mode" \
@@ -638,7 +674,7 @@ execute_performance_cliff_analysis() {
 # Archive test results
 archive_test_results() {
     echo "📦 Archiving test results..."
-    
+
     # Determine benchmark mode - parse from passed parameters
     local benchmark_mode=""
     for arg in "$@"; do
@@ -648,27 +684,27 @@ archive_test_results() {
             --intensive) benchmark_mode="intensive" ;;
         esac
     done
-    
+
     # If no mode parameter found, use default value
     if [[ -z "$benchmark_mode" ]]; then
         benchmark_mode="quick"  # Default mode, consistent with master_qps_executor.sh
         echo "⚠️ Benchmark mode parameter not detected, using default mode: $benchmark_mode"
     fi
-    
+
     echo "🔍 Detected benchmark mode: $benchmark_mode"
-    
+
     # Read maximum QPS from QPS status file
     local max_qps=0
     if [[ -f "$QPS_STATUS_FILE" ]]; then
         max_qps=$(jq -r '.max_successful_qps // 0' "$QPS_STATUS_FILE" 2>/dev/null)
     fi
-    
+
     # Call professional archiving tool
     if [[ -f "${SCRIPT_DIR}/tools/benchmark_archiver.sh" ]]; then
         "${SCRIPT_DIR}/tools/benchmark_archiver.sh" --archive \
             --benchmark-mode "$benchmark_mode" \
             --max-qps "$max_qps"
-        
+
         if [[ $? -eq 0 ]]; then
             echo "✅ Test results archiving completed"
         else
@@ -682,34 +718,34 @@ archive_test_results() {
 # Generate final reports
 generate_final_reports() {
     echo "📊 Generating final reports..."
-    
+
     # Use symlink to get latest performance data file
-    local latest_csv="${LOGS_DIR}/performance_latest.csv"
-    
+    local latest_csv="${PERFORMANCE_LATEST_CSV:-${LOGS_DIR}/performance_latest.csv}"
+
     if [[ ! -f "$latest_csv" ]]; then
         echo "⚠️ Warning: Performance data file not found: $latest_csv"
         return 1
     fi
-    
+
     # Prepare report generation parameters
     local report_params=("$latest_csv")
-    
+
     # If bottleneck detected, add bottleneck mode parameter
     if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
         report_params+=("--bottleneck-mode")
-        
+
         # Add bottleneck information file
         if [[ -f "$QPS_STATUS_FILE" ]]; then
             report_params+=("--bottleneck-info" "$QPS_STATUS_FILE")
         fi
-        
+
         echo "🚨 Bottleneck mode report generation"
     fi
-    
+
     # Generate HTML report (bilingual: English and Chinese)
     if [[ -f "${SCRIPT_DIR}/visualization/report_generator.py" ]]; then
         echo "📄 Generating HTML report (bilingual)..."
-        
+
         # Generate English report
         echo "  📝 Generating English report..."
         if ! python3 "${SCRIPT_DIR}/visualization/report_generator.py" "${report_params[@]}" --language en; then
@@ -717,7 +753,7 @@ generate_final_reports() {
             return 1
         fi
         echo "  ✅ English report generated"
-        
+
         # Generate Chinese report
         echo "  📝 Generating Chinese report..."
         if ! python3 "${SCRIPT_DIR}/visualization/report_generator.py" "${report_params[@]}" --language zh; then
@@ -725,7 +761,7 @@ generate_final_reports() {
             return 1
         fi
         echo "  ✅ Chinese report generated"
-        
+
         echo "✅ Bilingual HTML report generated"
     else
         echo "⚠️ HTML report generator does not exist"
@@ -742,33 +778,33 @@ generate_final_reports() {
     else
         echo "⚠️ Advanced chart generator does not exist"
     fi
-    
+
     # Generate bottleneck-specific report
     if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
         generate_bottleneck_summary_report
     fi
-    
+
     # Display report location and summary
     display_final_report_summary
-    
+
     # Archive test results - execute after all analysis and report generation completed
     archive_test_results "$@"
-    
+
     return 0
 }
 
 # Generate bottleneck summary report
 generate_bottleneck_summary_report() {
     echo "🚨 Generating bottleneck summary report..."
-    
+
     local bottleneck_summary_file="${REPORTS_DIR}/bottleneck_summary_${SESSION_TIMESTAMP}.md"
-    
+
     # Read bottleneck information
     local bottleneck_info=""
     if [[ -f "$QPS_STATUS_FILE" ]]; then
         bottleneck_info=$(cat "$QPS_STATUS_FILE")
     fi
-    
+
     # Generate Markdown format bottleneck summary
     cat > "$bottleneck_summary_file" << EOF
 # 🚨 Performance Bottleneck Detection Report
@@ -782,14 +818,14 @@ generate_bottleneck_summary_report() {
 ## 🎯 Bottleneck Details
 
 EOF
-    
+
     if [[ -n "$bottleneck_info" ]]; then
         local max_qps=$(echo "$bottleneck_info" | jq -r '.max_successful_qps // 0')
         local bottleneck_qps=$(echo "$bottleneck_info" | jq -r '.bottleneck_qps // 0')
         local severity=$(echo "$bottleneck_info" | jq -r '.severity // "unknown"')
         local reasons=$(echo "$bottleneck_info" | jq -r '.bottleneck_reasons // "Unknown"')
         local detection_time=$(echo "$bottleneck_info" | jq -r '.detection_time // "Unknown"')
-        
+
         cat >> "$bottleneck_summary_file" << EOF
 - **Maximum successful QPS**: $max_qps
 - **Bottleneck trigger QPS**: $bottleneck_qps
@@ -800,7 +836,7 @@ EOF
 ## 🔍 System Recommendations
 
 EOF
-        
+
         # Add recommendations
         local recommendations=$(echo "$bottleneck_info" | jq -r '.recommendations[]?' 2>/dev/null)
         if [[ -n "$recommendations" ]]; then
@@ -811,7 +847,7 @@ EOF
             echo "- Please refer to detailed analysis report for optimization recommendations" >> "$bottleneck_summary_file"
         fi
     fi
-    
+
     cat >> "$bottleneck_summary_file" << EOF
 
 ## 📋 Related Files
@@ -830,7 +866,7 @@ EOF
 ---
 *Report generation time: $(date)*
 EOF
-    
+
     echo "📄 Bottleneck summary report: $(basename "$bottleneck_summary_file")"
 }
 
@@ -840,35 +876,35 @@ display_final_report_summary() {
     echo "🎉 Test completed! Report summary:"
     echo "================================"
     echo "📁 Report directory: $REPORTS_DIR"
-    
+
     # HTML report
     local html_report=$(find "$REPORTS_DIR" -name "*.html" -type f | head -1)
     if [[ -n "$html_report" ]]; then
         echo "📄 HTML report: $(basename "$html_report")"
     fi
-    
+
     # Chart files
     local chart_count=$(find "$REPORTS_DIR" -name "*.png" -type f | wc -l)
     echo "📊 Chart files: $chart_count PNG files"
-    
+
     # Bottleneck-related reports
     if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
         echo ""
         echo "🚨 Bottleneck detection results:"
-        
+
         if [[ -f "$QPS_STATUS_FILE" ]]; then
             local max_qps=$(jq -r '.max_successful_qps // 0' "$QPS_STATUS_FILE" 2>/dev/null)
             local bottleneck_qps=$(jq -r '.bottleneck_qps // 0' "$QPS_STATUS_FILE" 2>/dev/null)
             echo "🏆 Maximum successful QPS: $max_qps"
             echo "🚨 Bottleneck trigger QPS: $bottleneck_qps"
         fi
-        
+
         local bottleneck_summary=$(find "$REPORTS_DIR" -name "bottleneck_summary_*.md" -type f | head -1)
         if [[ -n "$bottleneck_summary" ]]; then
             echo "📋 Bottleneck summary: $(basename "$bottleneck_summary")"
         fi
     fi
-    
+
     echo ""
     echo "🎯 Recommended next steps:"
     echo "1. Open HTML report to view detailed analysis"
@@ -884,26 +920,15 @@ display_final_report_summary() {
 # Clean up temporary files
 cleanup_temp_files() {
     echo "🧹 Cleaning up temporary files..."
-    
+
     # Clean up session temporary directory
     if [[ -d "$TEST_SESSION_DIR" ]]; then
         rm -rf "$TEST_SESSION_DIR"
     fi
-    
-    # Clean up temporary files in memory sharing directory
-    if [[ -d "$MEMORY_SHARE_DIR" ]]; then
-        rm -f "$MEMORY_SHARE_DIR"/*.json 2>/dev/null || true
-        rm -f "$MEMORY_SHARE_DIR"/sample_count 2>/dev/null || true
-        rm -f "$MEMORY_SHARE_DIR"/*cache* 2>/dev/null || true
-        rm -f "$MEMORY_SHARE_DIR"/*.pid 2>/dev/null || true
-        rm -f "$MEMORY_SHARE_DIR"/*.lock 2>/dev/null || true
-        rm -f "$MEMORY_SHARE_DIR"/*.flag 2>/dev/null || true
-    fi
-    
-    # Do not delete qps_status.json, keep for archiving
-    # if [[ -f "$QPS_STATUS_FILE" ]]; then
-    #     rm -f "$QPS_STATUS_FILE"
-    # fi
+
+    cleanup_memory_share_state
+
+    # qps_status.json is archived before final cleanup when archiving succeeds.
 }
 
 # Parse RPC mode parameters
@@ -923,9 +948,10 @@ parse_rpc_mode_args() {
                 shift
                 ;;
             --fake-node)
-                # CP-1 C: 可选本地 fake-node 测试模式(默认关).
-                # 自动编译+启动 tools/fake-node,把 LOCAL_RPC_URL 指向它,跑完自动清理.
-                # 用途: 无真实节点时快速验证框架端到端链路 / 新增链快速冒烟.
+                # Optional local fake-node test mode (disabled by default).
+                # Builds and starts tools/fake-node, points LOCAL_RPC_URL to it,
+                # and cleans it up automatically at exit.
+                # Purpose: quick end-to-end framework validation without a real node.
                 export FAKE_NODE_MODE=1
                 shift
                 ;;
@@ -937,50 +963,51 @@ parse_rpc_mode_args() {
     done
 }
 
-# CP-1 C: 启动本地 fake-node 用于框架端到端测试 (仅 --fake-node 模式触发).
-# 设计原则:
-#   - 默认关 (FAKE_NODE_MODE!=1 直接返回,零影响现流程)
-#   - 编译+后台启动 fake-node,把 LOCAL_RPC_URL 指向它
-#   - 注册 trap 在脚本退出时自动 kill,不残留进程
-#   - 失败 fail-fast (编译/启动失败直接 exit,不静默继续打真节点)
-# 用途: 无真实节点时验证整框架链路;新增链快速冒烟.
+# Start local fake-node for end-to-end framework tests (only with --fake-node).
+# Design:
+#   - disabled by default (FAKE_NODE_MODE!=1 returns immediately)
+#   - build and start fake-node in the background, then point LOCAL_RPC_URL at it
+#   - reuse the main cleanup path so no process is left behind
+#   - fail fast on build/startup errors instead of silently testing a real node
+# Purpose: validate the full framework path without a real node.
 start_fake_node_for_testing() {
     [[ "${FAKE_NODE_MODE:-0}" != "1" ]] && return 0
 
     local fake_node_root="${SCRIPT_DIR}/tools/fake-node"
-    local fake_node_bin="${FAKE_NODE_BIN:-/tmp/fake-node-framework}"
+    local fake_node_bin="${FAKE_NODE_BIN:-${TMP_DIR}/fake-node-framework}"
     local chain="${BLOCKCHAIN_NODE:-solana}"
     local port="${FAKE_NODE_PORT:-8899}"
+    local fake_node_log="${LOGS_DIR}/fake-node-framework-${chain}.log"
 
     if [[ ! -d "$fake_node_root" ]]; then
-        echo "❌ --fake-node: tools/fake-node 目录不存在: $fake_node_root" >&2
+        echo "❌ --fake-node: tools/fake-node directory does not exist: $fake_node_root" >&2
         exit 1
     fi
     if ! command -v go >/dev/null 2>&1; then
-        echo "❌ --fake-node: 需要 go 工具链编译 fake-node,未找到 go" >&2
+        echo "❌ --fake-node: Go toolchain is required to build fake-node, but go was not found" >&2
         exit 1
     fi
 
-    echo "🧪 --fake-node: 编译 fake-node -> $fake_node_bin"
+    echo "🧪 --fake-node: building fake-node -> $fake_node_bin"
     if ! (cd "$fake_node_root" && go build -o "$fake_node_bin" .); then
-        echo "❌ --fake-node: fake-node 编译失败" >&2
+        echo "❌ --fake-node: fake-node build failed" >&2
         exit 1
     fi
 
-    echo "🧪 --fake-node: 启动 fake-node (chain=$chain port=$port)"
+    echo "🧪 --fake-node: starting fake-node (chain=$chain port=$port)"
     BLOCKCHAIN_NODE="$chain" "$fake_node_bin" \
         -chains-dir "${SCRIPT_DIR}/config/chains" \
         -configs-dir "${fake_node_root}/configs" \
         -fixtures-dir "${fake_node_root}/fixtures" \
         -port "$port" \
-        > "/tmp/fake-node-framework-${chain}.log" 2>&1 &
+        > "$fake_node_log" 2>&1 &
     FAKE_NODE_PID=$!
 
-    # fake-node 清理已合并进主 cleanup_framework()(读全局 FAKE_NODE_PID),
-    # 不再单独 trap — bash trap 是覆盖式, 独立 trap 会顶掉 cleanup_framework
-    # 导致 proxy + monitoring 清理被跳过, proxy 残留占端口(已根治的 zombie bug)。
+    # fake-node cleanup is handled by cleanup_framework() via FAKE_NODE_PID.
+    # Do not register a separate trap here; bash traps overwrite each other and
+    # would skip proxy/monitoring cleanup, leaving ports occupied.
 
-    # 等待就绪 (最多 5s)
+    # Wait up to 5 seconds for readiness.
     local ready=0
     for _ in 1 2 3 4 5; do
         sleep 1
@@ -990,19 +1017,20 @@ start_fake_node_for_testing() {
         fi
     done
     if [[ "$ready" != "1" ]]; then
-        echo "❌ --fake-node: fake-node 5s 内未就绪,日志:" >&2
-        cat "/tmp/fake-node-framework-${chain}.log" >&2 || true
+        echo "❌ --fake-node: fake-node was not ready within 5s; log follows:" >&2
+        cat "$fake_node_log" >&2 || true
         kill "${FAKE_NODE_PID}" 2>/dev/null || true
         exit 1
     fi
 
-    # 把框架 RPC 目标指向 fake-node
+    # Point the framework RPC target at fake-node.
     export LOCAL_RPC_URL="http://127.0.0.1:${port}"
-    echo "✅ --fake-node: 就绪,LOCAL_RPC_URL=$LOCAL_RPC_URL (pid=$FAKE_NODE_PID)"
+    echo "✅ --fake-node: ready, LOCAL_RPC_URL=$LOCAL_RPC_URL (pid=$FAKE_NODE_PID)"
 }
 
 # Install vegeta v12.13.0 binary (--install-vegeta)
-# 选择安装目录:优先 /usr/local/bin(可写或有 sudo -n),否则 ~/.local/bin,否则 ./bin
+# Choose install directory: /usr/local/bin if writable or sudo is available,
+# otherwise ~/.local/bin, otherwise ./bin.
 install_vegeta() {
     local version="v12.13.0"
     local tarball="vegeta_12.13.0_linux_amd64.tar.gz"
@@ -1049,8 +1077,8 @@ install_vegeta() {
     "${install_dir}/vegeta" --version 2>&1 | head -1 || true
     case ":$PATH:" in
         *":${install_dir}:"*) : ;;
-        *) echo "⚠️  ${install_dir} 不在 PATH 中,请添加:"
-           echo "    export PATH=\"${install_dir}:\$PATH\"   # 写入 ~/.bashrc 永久生效" ;;
+        *) echo "⚠️  ${install_dir} is not in PATH; add it with:"
+           echo "    export PATH=\"${install_dir}:\$PATH\"   # add this to ~/.bashrc to make it permanent" ;;
     esac
     return 0
 }
@@ -1067,72 +1095,73 @@ main() {
 
     # Save original parameters for subsequent passing
     local original_args=("$@")
-    
+
     # Parse RPC mode parameters
     parse_rpc_mode_args "$@"
 
-    # CP-1 C: 可选 fake-node 测试模式 (默认关,仅 --fake-node 触发).
-    # 必须在 check_deployment 之前: 它会把 LOCAL_RPC_URL 指向本地 fake-node.
+    # Optional fake-node test mode (disabled by default; enabled only with --fake-node).
+    # Must run before check_deployment because it points LOCAL_RPC_URL to local fake-node.
     start_fake_node_for_testing
 
     echo "🚀 Starting Blockchain Node Performance Benchmark Framework"
     echo "   RPC mode: $RPC_MODE"
     echo "   Test session ID: $TEST_SESSION_ID"
     echo ""
-    
+
     # Display framework information
     show_framework_info
-    
+
     # Check deployment environment
     if ! check_deployment; then
         exit 1
     fi
-    
+
     # Note: Directory initialization completed in config.sh, no need to repeat
-    
-    # Phase 1: Prepare Benchmark data
-    echo "📋 Phase 1: Prepare Benchmark data"
+
+    # Phase 1: Start RPC proxy before target generation so Vegeta targets
+    # contain the proxy URL instead of the raw upstream URL.
+    echo "📋 Phase 1: Start RPC proxy"
+    if declare -F start_rpc_proxy >/dev/null 2>&1; then
+        start_rpc_proxy || true
+    else
+        echo "⚠️  proxy_lifecycle.sh not loaded — skipping Phase 1"
+    fi
+
+    # Phase 2: Prepare Benchmark data
+    echo "📋 Phase 2: Prepare Benchmark data"
     if ! prepare_benchmark_data; then
         echo "❌ Benchmark data preparation failed"
         exit 1
     fi
-    
-    # Phase 2: Start monitoring system
-    echo "📋 Phase 2: Start monitoring system"
+
+    # Phase 3: Start monitoring system
+    echo "📋 Phase 3: Start monitoring system"
     if ! start_monitoring_system; then
         echo "❌ Monitoring system startup failed"
         exit 1
     fi
-    
-    # Phase 2.5: Start RPC proxy (per-method attribution, optional/non-fatal)
-    echo "📋 Phase 2.5: Start RPC proxy"
-    if declare -F start_rpc_proxy >/dev/null 2>&1; then
-        start_rpc_proxy || true
-    else
-        echo "⚠️  proxy_lifecycle.sh not loaded — skipping Phase 2.5"
-    fi
-    
-    # Phase 3: Execute core QPS test
-    echo "📋 Phase 3: Execute core QPS test"
+
+    # Phase 4: Execute core QPS test
+    echo "📋 Phase 4: Execute core QPS test"
     if ! execute_core_qps_test "${original_args[@]}"; then
         echo "❌ QPS test execution failed"
         exit 1
     fi
-    
-    # Phase 4: Stop monitoring system
-    echo "📋 Phase 4: Stop monitoring system"
-    stop_monitoring_system
-    
-    # Phase 4.5: Stop RPC proxy & restore LOCAL_RPC_URL
-    echo "📋 Phase 4.5: Stop RPC proxy"
+
+    # Phase 5: Stop monitoring system
+    echo "📋 Phase 5: Stop monitoring system"
+    stop_monitoring_system || true
+
+    # Phase 5.5: Stop RPC proxy & restore LOCAL_RPC_URL
+    echo "📋 Phase 5.5: Stop RPC proxy"
     if declare -F stop_rpc_proxy >/dev/null 2>&1; then
         stop_rpc_proxy || true
     fi
-    
+
     # Phase 5: Process test results
     echo "📋 Phase 5: Process test results"
     process_test_results "${original_args[@]}"
-    
+
     # Phase 6: Execute data analysis
     echo "📋 Phase 6: Execute data analysis"
     if ! execute_data_analysis "${original_args[@]}"; then
@@ -1142,22 +1171,22 @@ main() {
             exit 1
         fi
     fi
-    
+
     # Phase 7: Generate final reports
     echo "📋 Phase 7: Generate final reports"
     if ! generate_final_reports "${original_args[@]}"; then
         echo "❌ Report generation failed, test terminated"
         exit 1
     fi
-    
+
     echo ""
     echo "🎉 Blockchain Node Performance Benchmark completed!"
-    
+
     if [[ "$BOTTLENECK_DETECTED" == "true" ]]; then
         echo "🚨 Performance bottleneck detected: $BOTTLENECK_INFO"
         echo "📊 Bottleneck-specific analysis report generated"
     fi
-    
+
     return 0
 }
 

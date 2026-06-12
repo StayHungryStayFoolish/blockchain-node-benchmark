@@ -1,5 +1,5 @@
-// Package config 读 chain template JSON 的 proxy_extraction 字段,
-// 实例化 extractor.Chain。schema 见 spec §1.7。
+// Package config reads proxy_extraction from chain template JSON and builds an
+// extractor.Chain. See spec §1.7 for schema details.
 package config
 
 import (
@@ -10,7 +10,7 @@ import (
 	"proxy/internal/extractor"
 )
 
-// proxyExtraction 对应 spec §1.7 顶层。
+// proxyExtraction mirrors the spec §1.7 top-level object.
 type proxyExtraction struct {
 	Extractors []rawExtractor `json:"extractors"`
 }
@@ -30,7 +30,7 @@ type chainTemplate struct {
 	ProxyExtraction proxyExtraction `json:"proxy_extraction"`
 }
 
-// LoadChain 从 chain template JSON 文件读出 extractor chain。
+// LoadChain reads an extractor chain from a chain template JSON file.
 func LoadChain(path string) (*extractor.Chain, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

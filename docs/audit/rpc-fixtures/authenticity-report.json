@@ -1,0 +1,2422 @@
+[
+  {
+    "chain": "acala",
+    "family": "substrate",
+    "method": "chain_getHeader",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "acala/chain_getHeader.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/acala/chain_getHeader"
+  },
+  {
+    "chain": "acala",
+    "family": "substrate",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "acala/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/acala/eth_blockNumber"
+  },
+  {
+    "chain": "acala",
+    "family": "substrate",
+    "method": "eth_chainId",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "acala/eth_chainId.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/acala/eth_chainId"
+  },
+  {
+    "chain": "acala",
+    "family": "substrate",
+    "method": "eth_getBalance",
+    "modes": [
+      "single"
+    ],
+    "fixture": "acala/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/acala/eth_getBalance"
+  },
+  {
+    "chain": "acala",
+    "family": "substrate",
+    "method": "state_getRuntimeVersion",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "acala/state_getRuntimeVersion.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/acala/state_getRuntimeVersion"
+  },
+  {
+    "chain": "acala",
+    "family": "substrate",
+    "method": "system_chain",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "acala/system_chain.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/acala/system_chain"
+  },
+  {
+    "chain": "algorand",
+    "family": "rest",
+    "method": "GET /v2/accounts/{address}",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "algorand/GET__v2_accounts__address.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/algorand/GET__v2_accounts__address"
+  },
+  {
+    "chain": "algorand",
+    "family": "rest",
+    "method": "GET /v2/accounts/{address}/transactions",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "algorand/GET__v2_accounts__address__transactions.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/algorand/GET__v2_accounts__address__transactions"
+  },
+  {
+    "chain": "algorand",
+    "family": "rest",
+    "method": "GET /v2/assets/{asset_id}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "algorand/GET__v2_assets__asset_id.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/algorand/GET__v2_assets__asset_id"
+  },
+  {
+    "chain": "algorand",
+    "family": "rest",
+    "method": "GET /v2/blocks/{round}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "algorand/GET__v2_blocks__round.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/algorand/GET__v2_blocks__round"
+  },
+  {
+    "chain": "algorand",
+    "family": "rest",
+    "method": "GET /v2/transactions/{txid}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "algorand/GET__v2_transactions__txid.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/algorand/GET__v2_transactions__txid"
+  },
+  {
+    "chain": "aptos",
+    "family": "rest",
+    "method": "GET /v1",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "aptos/GET__v1.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/aptos/GET__v1"
+  },
+  {
+    "chain": "aptos",
+    "family": "rest",
+    "method": "GET /v1/accounts/{addr}",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "aptos/GET__v1_accounts__addr.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/aptos/GET__v1_accounts__addr"
+  },
+  {
+    "chain": "aptos",
+    "family": "rest",
+    "method": "GET /v1/accounts/{addr}/resources",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "aptos/GET__v1_accounts__addr__resources.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/aptos/GET__v1_accounts__addr__resources"
+  },
+  {
+    "chain": "aptos",
+    "family": "rest",
+    "method": "GET /v1/transactions/by_hash/{hash}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "aptos/GET__v1_transactions_by_hash__hash.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/aptos/GET__v1_transactions_by_hash__hash"
+  },
+  {
+    "chain": "aptos",
+    "family": "rest",
+    "method": "POST /v1/view",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "aptos/POST__v1_view.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/aptos/POST__v1_view"
+  },
+  {
+    "chain": "arbitrum",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "arbitrum/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/arbitrum/eth_blockNumber"
+  },
+  {
+    "chain": "arbitrum",
+    "family": "jsonrpc",
+    "method": "eth_call",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "arbitrum/eth_call.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/arbitrum/eth_call"
+  },
+  {
+    "chain": "arbitrum",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "arbitrum/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/arbitrum/eth_getBalance"
+  },
+  {
+    "chain": "arbitrum",
+    "family": "jsonrpc",
+    "method": "eth_getBlockByNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "arbitrum/eth_getBlockByNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/arbitrum/eth_getBlockByNumber"
+  },
+  {
+    "chain": "arbitrum",
+    "family": "jsonrpc",
+    "method": "eth_getTransactionReceipt",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "arbitrum/eth_getTransactionReceipt.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/arbitrum/eth_getTransactionReceipt"
+  },
+  {
+    "chain": "astar",
+    "family": "substrate",
+    "method": "chain_getHeader",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "astar/chain_getHeader.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/astar/chain_getHeader"
+  },
+  {
+    "chain": "astar",
+    "family": "substrate",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "astar/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/astar/eth_blockNumber"
+  },
+  {
+    "chain": "astar",
+    "family": "substrate",
+    "method": "eth_chainId",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "astar/eth_chainId.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/astar/eth_chainId"
+  },
+  {
+    "chain": "astar",
+    "family": "substrate",
+    "method": "eth_getBalance",
+    "modes": [
+      "single"
+    ],
+    "fixture": "astar/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/astar/eth_getBalance"
+  },
+  {
+    "chain": "astar",
+    "family": "substrate",
+    "method": "state_getRuntimeVersion",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "astar/state_getRuntimeVersion.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/astar/state_getRuntimeVersion"
+  },
+  {
+    "chain": "astar",
+    "family": "substrate",
+    "method": "system_chain",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "astar/system_chain.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/astar/system_chain"
+  },
+  {
+    "chain": "avalanche-c",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "avalanche-c/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-c/eth_blockNumber"
+  },
+  {
+    "chain": "avalanche-c",
+    "family": "jsonrpc",
+    "method": "eth_call",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "avalanche-c/eth_call.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-c/eth_call"
+  },
+  {
+    "chain": "avalanche-c",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "avalanche-c/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-c/eth_getBalance"
+  },
+  {
+    "chain": "avalanche-c",
+    "family": "jsonrpc",
+    "method": "eth_getBlockByNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "avalanche-c/eth_getBlockByNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-c/eth_getBlockByNumber"
+  },
+  {
+    "chain": "avalanche-c",
+    "family": "jsonrpc",
+    "method": "eth_getTransactionByHash",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "avalanche-c/eth_getTransactionByHash.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-c/eth_getTransactionByHash"
+  },
+  {
+    "chain": "avalanche-x",
+    "family": "jsonrpc",
+    "method": "avm.getAllBalances",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "avalanche-x/avm.getAllBalances.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-x/avm.getAllBalances"
+  },
+  {
+    "chain": "avalanche-x",
+    "family": "jsonrpc",
+    "method": "avm.getBlockByHeight",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "avalanche-x/avm.getBlockByHeight.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-x/avm.getBlockByHeight"
+  },
+  {
+    "chain": "avalanche-x",
+    "family": "jsonrpc",
+    "method": "avm.getHeight",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "avalanche-x/avm.getHeight.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-x/avm.getHeight"
+  },
+  {
+    "chain": "avalanche-x",
+    "family": "jsonrpc",
+    "method": "avm.getTx",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "avalanche-x/avm.getTx.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-x/avm.getTx"
+  },
+  {
+    "chain": "avalanche-x",
+    "family": "jsonrpc",
+    "method": "avm.getUTXOs",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "avalanche-x/avm.getUTXOs.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/avalanche-x/avm.getUTXOs"
+  },
+  {
+    "chain": "base",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "base/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/base/eth_blockNumber"
+  },
+  {
+    "chain": "base",
+    "family": "jsonrpc",
+    "method": "eth_gasPrice",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "base/eth_gasPrice.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/base/eth_gasPrice"
+  },
+  {
+    "chain": "base",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "base/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/base/eth_getBalance"
+  },
+  {
+    "chain": "base",
+    "family": "jsonrpc",
+    "method": "eth_getTransactionCount",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "base/eth_getTransactionCount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/base/eth_getTransactionCount"
+  },
+  {
+    "chain": "bch",
+    "family": "bitcoin_jsonrpc",
+    "method": "GET /transaction/address/{address}",
+    "modes": [
+      "single"
+    ],
+    "fixture": "bch/GET__transaction_address__address.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bch/GET__transaction_address__address"
+  },
+  {
+    "chain": "bch",
+    "family": "bitcoin_jsonrpc",
+    "method": "getblock",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bch/getblock.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bch/getblock"
+  },
+  {
+    "chain": "bch",
+    "family": "bitcoin_jsonrpc",
+    "method": "getblockcount",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bch/getblockcount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bch/getblockcount"
+  },
+  {
+    "chain": "bch",
+    "family": "bitcoin_jsonrpc",
+    "method": "getmempoolinfo",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bch/getmempoolinfo.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bch/getmempoolinfo"
+  },
+  {
+    "chain": "bch",
+    "family": "bitcoin_jsonrpc",
+    "method": "getnetworkinfo",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bch/getnetworkinfo.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bch/getnetworkinfo"
+  },
+  {
+    "chain": "bch",
+    "family": "bitcoin_jsonrpc",
+    "method": "getrawtransaction",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bch/getrawtransaction.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bch/getrawtransaction"
+  },
+  {
+    "chain": "bitcoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "GET /address/{address}",
+    "modes": [
+      "single"
+    ],
+    "fixture": "bitcoin/GET__address__address.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bitcoin/GET__address__address"
+  },
+  {
+    "chain": "bitcoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "estimatesmartfee",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bitcoin/estimatesmartfee.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bitcoin/estimatesmartfee"
+  },
+  {
+    "chain": "bitcoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getblock",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bitcoin/getblock.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bitcoin/getblock"
+  },
+  {
+    "chain": "bitcoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getblockcount",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bitcoin/getblockcount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bitcoin/getblockcount"
+  },
+  {
+    "chain": "bitcoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getrawmempool",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bitcoin/getrawmempool.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bitcoin/getrawmempool"
+  },
+  {
+    "chain": "bitcoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getrawtransaction",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bitcoin/getrawtransaction.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bitcoin/getrawtransaction"
+  },
+  {
+    "chain": "bsc",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bsc/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bsc/eth_blockNumber"
+  },
+  {
+    "chain": "bsc",
+    "family": "jsonrpc",
+    "method": "eth_gasPrice",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bsc/eth_gasPrice.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bsc/eth_gasPrice"
+  },
+  {
+    "chain": "bsc",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "bsc/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bsc/eth_getBalance"
+  },
+  {
+    "chain": "bsc",
+    "family": "jsonrpc",
+    "method": "eth_getTransactionCount",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "bsc/eth_getTransactionCount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/bsc/eth_getTransactionCount"
+  },
+  {
+    "chain": "cardano",
+    "family": "rest",
+    "method": "GET_BLOCKS",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cardano/blocks.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cardano/GET_BLOCKS"
+  },
+  {
+    "chain": "cardano",
+    "family": "rest",
+    "method": "GET_EPOCH_INFO",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cardano/epoch_info.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cardano/GET_EPOCH_INFO"
+  },
+  {
+    "chain": "cardano",
+    "family": "rest",
+    "method": "GET_TIP",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cardano/tip.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cardano/GET_TIP"
+  },
+  {
+    "chain": "cardano",
+    "family": "rest",
+    "method": "POST_ADDRESS_INFO",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "cardano/address_info.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cardano/POST_ADDRESS_INFO"
+  },
+  {
+    "chain": "cardano",
+    "family": "rest",
+    "method": "POST_ASSET_INFO",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cardano/asset_info.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cardano/POST_ASSET_INFO"
+  },
+  {
+    "chain": "cardano",
+    "family": "rest",
+    "method": "POST_BLOCK_TXS",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cardano/block_txs.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cardano/POST_BLOCK_TXS"
+  },
+  {
+    "chain": "cardano",
+    "family": "rest",
+    "method": "POST_TX_INFO",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cardano/tx_info.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cardano/POST_TX_INFO"
+  },
+  {
+    "chain": "celestia",
+    "family": "tendermint",
+    "method": "/block",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "celestia/block.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/celestia/block"
+  },
+  {
+    "chain": "celestia",
+    "family": "tendermint",
+    "method": "/cosmos/bank/v1beta1/balances/{address}",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "celestia/cosmos_bank_v1beta1_balances__address.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/celestia/cosmos_bank_v1beta1_balances__address"
+  },
+  {
+    "chain": "celestia",
+    "family": "tendermint",
+    "method": "/cosmos/base/tendermint/v1beta1/blocks/latest",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "celestia/cosmos_base_tendermint_v1beta1_blocks_latest.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/celestia/cosmos_base_tendermint_v1beta1_blocks_latest"
+  },
+  {
+    "chain": "celestia",
+    "family": "tendermint",
+    "method": "/cosmos/base/tendermint/v1beta1/node_info",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "celestia/cosmos_base_tendermint_v1beta1_node_info.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/celestia/cosmos_base_tendermint_v1beta1_node_info"
+  },
+  {
+    "chain": "celestia",
+    "family": "tendermint",
+    "method": "/status",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "celestia/status.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/celestia/status"
+  },
+  {
+    "chain": "cosmos-hub",
+    "family": "tendermint",
+    "method": "GET /cosmos/bank/v1beta1/balances/{addr}",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "cosmos-hub/GET__cosmos_bank_v1beta1_balances__addr.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cosmos-hub/GET__cosmos_bank_v1beta1_balances__addr"
+  },
+  {
+    "chain": "cosmos-hub",
+    "family": "tendermint",
+    "method": "GET /cosmos/base/tendermint/v1beta1/blocks/latest",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cosmos-hub/GET__cosmos_base_tendermint_v1beta1_blocks_latest.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cosmos-hub/GET__cosmos_base_tendermint_v1beta1_blocks_latest"
+  },
+  {
+    "chain": "cosmos-hub",
+    "family": "tendermint",
+    "method": "GET /cosmos/base/tendermint/v1beta1/blocks/{height}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cosmos-hub/GET__cosmos_base_tendermint_v1beta1_blocks__height.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cosmos-hub/GET__cosmos_base_tendermint_v1beta1_blocks__height"
+  },
+  {
+    "chain": "cosmos-hub",
+    "family": "tendermint",
+    "method": "GET /cosmos/staking/v1beta1/validators",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cosmos-hub/GET__cosmos_staking_v1beta1_validators.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cosmos-hub/GET__cosmos_staking_v1beta1_validators"
+  },
+  {
+    "chain": "cosmos-hub",
+    "family": "tendermint",
+    "method": "GET /cosmos/tx/v1beta1/txs/{hash}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "cosmos-hub/GET__cosmos_tx_v1beta1_txs__hash.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/cosmos-hub/GET__cosmos_tx_v1beta1_txs__hash"
+  },
+  {
+    "chain": "dogecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "GET /address/{address}/balance",
+    "modes": [
+      "single"
+    ],
+    "fixture": "dogecoin/GET__address__address_balance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/dogecoin/GET__address__address__balance"
+  },
+  {
+    "chain": "dogecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getbestblockhash",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "dogecoin/getbestblockhash.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/dogecoin/getbestblockhash"
+  },
+  {
+    "chain": "dogecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getblock",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "dogecoin/getblock.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/dogecoin/getblock"
+  },
+  {
+    "chain": "dogecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getblockcount",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "dogecoin/getblockcount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/dogecoin/getblockcount"
+  },
+  {
+    "chain": "dogecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getmempoolinfo",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "dogecoin/getmempoolinfo.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/dogecoin/getmempoolinfo"
+  },
+  {
+    "chain": "dogecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getrawtransaction",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "dogecoin/getrawtransaction.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/dogecoin/getrawtransaction"
+  },
+  {
+    "chain": "ethereum",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "ethereum/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/ethereum/eth_blockNumber"
+  },
+  {
+    "chain": "ethereum",
+    "family": "jsonrpc",
+    "method": "eth_gasPrice",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "ethereum/eth_gasPrice.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/ethereum/eth_gasPrice"
+  },
+  {
+    "chain": "ethereum",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "ethereum/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/ethereum/eth_getBalance"
+  },
+  {
+    "chain": "ethereum",
+    "family": "jsonrpc",
+    "method": "eth_getTransactionCount",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "ethereum/eth_getTransactionCount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/ethereum/eth_getTransactionCount"
+  },
+  {
+    "chain": "hedera",
+    "family": "hedera_dual",
+    "method": "GET /api/v1/accounts/{addr}",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "hedera/GET__api_v1_accounts__addr.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/hedera/GET__api_v1_accounts__addr"
+  },
+  {
+    "chain": "hedera",
+    "family": "hedera_dual",
+    "method": "GET /api/v1/balances?account.id={addr}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "hedera/GET__api_v1_balances_account.id_addr.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/hedera/GET__api_v1_balances_account.id_addr"
+  },
+  {
+    "chain": "hedera",
+    "family": "hedera_dual",
+    "method": "GET /api/v1/transactions/{addr}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "hedera/GET__api_v1_transactions__addr.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/hedera/GET__api_v1_transactions__addr"
+  },
+  {
+    "chain": "hedera",
+    "family": "hedera_dual",
+    "method": "eth_call",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "hedera/eth_call.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/hedera/eth_call"
+  },
+  {
+    "chain": "hedera",
+    "family": "hedera_dual",
+    "method": "eth_getBalance",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "hedera/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/hedera/eth_getBalance"
+  },
+  {
+    "chain": "injective",
+    "family": "tendermint",
+    "method": "/cosmos/bank/v1beta1/balances/{address}",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "injective/cosmos_bank_v1beta1_balances__address.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/injective/cosmos_bank_v1beta1_balances__address"
+  },
+  {
+    "chain": "injective",
+    "family": "tendermint",
+    "method": "/injective/exchange/v1beta1/derivative/markets",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "injective/injective_exchange_v1beta1_derivative_markets.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/injective/injective_exchange_v1beta1_derivative_markets"
+  },
+  {
+    "chain": "injective",
+    "family": "tendermint",
+    "method": "/injective/exchange/v1beta1/spot/markets",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "injective/injective_exchange_v1beta1_spot_markets.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/injective/injective_exchange_v1beta1_spot_markets"
+  },
+  {
+    "chain": "injective",
+    "family": "tendermint",
+    "method": "/injective/oracle/v1beta1/params",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "injective/injective_oracle_v1beta1_params.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/injective/injective_oracle_v1beta1_params"
+  },
+  {
+    "chain": "injective",
+    "family": "tendermint",
+    "method": "/status",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "injective/status.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/injective/status"
+  },
+  {
+    "chain": "kusama",
+    "family": "substrate",
+    "method": "chain_getBlockHash",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "kusama/chain_getBlockHash.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/kusama/chain_getBlockHash"
+  },
+  {
+    "chain": "kusama",
+    "family": "substrate",
+    "method": "chain_getFinalizedHead",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "kusama/chain_getFinalizedHead.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/kusama/chain_getFinalizedHead"
+  },
+  {
+    "chain": "kusama",
+    "family": "substrate",
+    "method": "chain_getHeader",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "kusama/chain_getHeader.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/kusama/chain_getHeader"
+  },
+  {
+    "chain": "kusama",
+    "family": "substrate",
+    "method": "system_account",
+    "modes": [
+      "single"
+    ],
+    "fixture": "kusama/system_account.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/kusama/system_account"
+  },
+  {
+    "chain": "kusama",
+    "family": "substrate",
+    "method": "system_health",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "kusama/system_health.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/kusama/system_health"
+  },
+  {
+    "chain": "kusama",
+    "family": "substrate",
+    "method": "system_properties",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "kusama/system_properties.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/kusama/system_properties"
+  },
+  {
+    "chain": "linea",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "linea/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/linea/eth_blockNumber"
+  },
+  {
+    "chain": "linea",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "linea/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/linea/eth_getBalance"
+  },
+  {
+    "chain": "linea",
+    "family": "jsonrpc",
+    "method": "eth_getBlockByNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "linea/eth_getBlockByNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/linea/eth_getBlockByNumber"
+  },
+  {
+    "chain": "linea",
+    "family": "jsonrpc",
+    "method": "eth_getTransactionByHash",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "linea/eth_getTransactionByHash.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/linea/eth_getTransactionByHash"
+  },
+  {
+    "chain": "linea",
+    "family": "jsonrpc",
+    "method": "linea_estimateGas",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "linea/linea_estimateGas.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/linea/linea_estimateGas"
+  },
+  {
+    "chain": "litecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "GET /address/{address}/balance",
+    "modes": [
+      "single"
+    ],
+    "fixture": "litecoin/GET__address__address_balance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/litecoin/GET__address__address__balance"
+  },
+  {
+    "chain": "litecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getbestblockhash",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "litecoin/getbestblockhash.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/litecoin/getbestblockhash"
+  },
+  {
+    "chain": "litecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getblock",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "litecoin/getblock.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/litecoin/getblock"
+  },
+  {
+    "chain": "litecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getblockcount",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "litecoin/getblockcount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/litecoin/getblockcount"
+  },
+  {
+    "chain": "litecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getmempoolinfo",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "litecoin/getmempoolinfo.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/litecoin/getmempoolinfo"
+  },
+  {
+    "chain": "litecoin",
+    "family": "bitcoin_jsonrpc",
+    "method": "getrawtransaction",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "litecoin/getrawtransaction.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/litecoin/getrawtransaction"
+  },
+  {
+    "chain": "moonbeam",
+    "family": "substrate",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "moonbeam/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/moonbeam/eth_blockNumber"
+  },
+  {
+    "chain": "moonbeam",
+    "family": "substrate",
+    "method": "eth_chainId",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "moonbeam/eth_chainId.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/moonbeam/eth_chainId"
+  },
+  {
+    "chain": "moonbeam",
+    "family": "substrate",
+    "method": "eth_gasPrice",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "moonbeam/eth_gasPrice.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/moonbeam/eth_gasPrice"
+  },
+  {
+    "chain": "moonbeam",
+    "family": "substrate",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "moonbeam/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/moonbeam/eth_getBalance"
+  },
+  {
+    "chain": "moonbeam",
+    "family": "substrate",
+    "method": "system_health",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "moonbeam/system_health.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/moonbeam/system_health"
+  },
+  {
+    "chain": "near",
+    "family": "jsonrpc",
+    "method": "block",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "near/block.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/near/block"
+  },
+  {
+    "chain": "near",
+    "family": "jsonrpc",
+    "method": "gas_price",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "near/gas_price.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/near/gas_price"
+  },
+  {
+    "chain": "near",
+    "family": "jsonrpc",
+    "method": "query",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "near/query.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/near/query"
+  },
+  {
+    "chain": "near",
+    "family": "jsonrpc",
+    "method": "tx",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "near/tx.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/near/tx"
+  },
+  {
+    "chain": "near",
+    "family": "jsonrpc",
+    "method": "validators",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "near/validators.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/near/validators"
+  },
+  {
+    "chain": "optimism",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "optimism/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/optimism/eth_blockNumber"
+  },
+  {
+    "chain": "optimism",
+    "family": "jsonrpc",
+    "method": "eth_call",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "optimism/eth_call.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/optimism/eth_call"
+  },
+  {
+    "chain": "optimism",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "optimism/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/optimism/eth_getBalance"
+  },
+  {
+    "chain": "optimism",
+    "family": "jsonrpc",
+    "method": "eth_getBlockByNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "optimism/eth_getBlockByNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/optimism/eth_getBlockByNumber"
+  },
+  {
+    "chain": "optimism",
+    "family": "jsonrpc",
+    "method": "eth_getTransactionReceipt",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "optimism/eth_getTransactionReceipt.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/optimism/eth_getTransactionReceipt"
+  },
+  {
+    "chain": "osmosis",
+    "family": "tendermint",
+    "method": "/cosmos/bank/v1beta1/balances/{address}",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "osmosis/cosmos_bank_v1beta1_balances__address.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/osmosis/cosmos_bank_v1beta1_balances__address"
+  },
+  {
+    "chain": "osmosis",
+    "family": "tendermint",
+    "method": "/osmosis/gamm/v1beta1/pools/{pool_id}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "osmosis/osmosis_gamm_v1beta1_pools__pool_id.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/osmosis/osmosis_gamm_v1beta1_pools__pool_id"
+  },
+  {
+    "chain": "osmosis",
+    "family": "tendermint",
+    "method": "/osmosis/poolmanager/v1beta1/num_pools",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "osmosis/osmosis_poolmanager_v1beta1_num_pools.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/osmosis/osmosis_poolmanager_v1beta1_num_pools"
+  },
+  {
+    "chain": "osmosis",
+    "family": "tendermint",
+    "method": "/osmosis/twap/v1beta1/ArithmeticTwapToNow",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "osmosis/osmosis_twap_v1beta1_ArithmeticTwapToNow.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/osmosis/osmosis_twap_v1beta1_ArithmeticTwapToNow"
+  },
+  {
+    "chain": "osmosis",
+    "family": "tendermint",
+    "method": "/status",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "osmosis/status.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/osmosis/status"
+  },
+  {
+    "chain": "polkadot",
+    "family": "substrate",
+    "method": "GET /accounts/{addr}/balance-info",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "polkadot/GET__accounts__addr__balance-info.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polkadot/GET__accounts__addr__balance-info"
+  },
+  {
+    "chain": "polkadot",
+    "family": "substrate",
+    "method": "GET /blocks/{n}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "polkadot/GET__blocks__n.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polkadot/GET__blocks__n"
+  },
+  {
+    "chain": "polkadot",
+    "family": "substrate",
+    "method": "GET /runtime/spec",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "polkadot/GET__runtime_spec.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polkadot/GET__runtime_spec"
+  },
+  {
+    "chain": "polkadot",
+    "family": "substrate",
+    "method": "account_nextIndex",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "polkadot/account_nextIndex.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polkadot/account_nextIndex"
+  },
+  {
+    "chain": "polkadot",
+    "family": "substrate",
+    "method": "chain_getHeader",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "polkadot/chain_getHeader.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polkadot/chain_getHeader"
+  },
+  {
+    "chain": "polkadot",
+    "family": "substrate",
+    "method": "system_account",
+    "modes": [
+      "single"
+    ],
+    "fixture": "polkadot/system_account.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polkadot/system_account"
+  },
+  {
+    "chain": "polygon",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "polygon/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polygon/eth_blockNumber"
+  },
+  {
+    "chain": "polygon",
+    "family": "jsonrpc",
+    "method": "eth_gasPrice",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "polygon/eth_gasPrice.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polygon/eth_gasPrice"
+  },
+  {
+    "chain": "polygon",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "polygon/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polygon/eth_getBalance"
+  },
+  {
+    "chain": "polygon",
+    "family": "jsonrpc",
+    "method": "eth_getTransactionCount",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "polygon/eth_getTransactionCount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/polygon/eth_getTransactionCount"
+  },
+  {
+    "chain": "scroll",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "scroll/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/scroll/eth_blockNumber"
+  },
+  {
+    "chain": "scroll",
+    "family": "jsonrpc",
+    "method": "eth_gasPrice",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "scroll/eth_gasPrice.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/scroll/eth_gasPrice"
+  },
+  {
+    "chain": "scroll",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "scroll/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/scroll/eth_getBalance"
+  },
+  {
+    "chain": "scroll",
+    "family": "jsonrpc",
+    "method": "eth_getTransactionCount",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "scroll/eth_getTransactionCount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/scroll/eth_getTransactionCount"
+  },
+  {
+    "chain": "sei",
+    "family": "tendermint",
+    "method": "/status",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "sei/status.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sei/status"
+  },
+  {
+    "chain": "sei",
+    "family": "tendermint",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "sei/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sei/eth_blockNumber"
+  },
+  {
+    "chain": "sei",
+    "family": "tendermint",
+    "method": "eth_call",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "sei/eth_call.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sei/eth_call"
+  },
+  {
+    "chain": "sei",
+    "family": "tendermint",
+    "method": "eth_chainId",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "sei/eth_chainId.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sei/eth_chainId"
+  },
+  {
+    "chain": "sei",
+    "family": "tendermint",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "sei/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sei/eth_getBalance"
+  },
+  {
+    "chain": "solana",
+    "family": "jsonrpc",
+    "method": "getAccountInfo",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "solana/getAccountInfo.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/solana/getAccountInfo"
+  },
+  {
+    "chain": "solana",
+    "family": "jsonrpc",
+    "method": "getBalance",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "solana/getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/solana/getBalance"
+  },
+  {
+    "chain": "solana",
+    "family": "jsonrpc",
+    "method": "getBlockHeight",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "solana/getBlockHeight.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/solana/getBlockHeight"
+  },
+  {
+    "chain": "solana",
+    "family": "jsonrpc",
+    "method": "getLatestBlockhash",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "solana/getLatestBlockhash.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/solana/getLatestBlockhash"
+  },
+  {
+    "chain": "solana",
+    "family": "jsonrpc",
+    "method": "getTokenAccountBalance",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "solana/getTokenAccountBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/solana/getTokenAccountBalance"
+  },
+  {
+    "chain": "starknet",
+    "family": "jsonrpc",
+    "method": "starknet_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "starknet/starknet_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/starknet/starknet_blockNumber"
+  },
+  {
+    "chain": "starknet",
+    "family": "jsonrpc",
+    "method": "starknet_getClassAt",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "starknet/starknet_getClassAt.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/starknet/starknet_getClassAt"
+  },
+  {
+    "chain": "starknet",
+    "family": "jsonrpc",
+    "method": "starknet_getNonce",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "starknet/starknet_getNonce.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/starknet/starknet_getNonce"
+  },
+  {
+    "chain": "starknet",
+    "family": "jsonrpc",
+    "method": "starknet_getStorageAt",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "starknet/starknet_getStorageAt.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/starknet/starknet_getStorageAt"
+  },
+  {
+    "chain": "sui",
+    "family": "jsonrpc",
+    "method": "sui_getChainIdentifier",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "sui/sui_getChainIdentifier.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sui/sui_getChainIdentifier"
+  },
+  {
+    "chain": "sui",
+    "family": "jsonrpc",
+    "method": "sui_getLatestCheckpointSequenceNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "sui/sui_getLatestCheckpointSequenceNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sui/sui_getLatestCheckpointSequenceNumber"
+  },
+  {
+    "chain": "sui",
+    "family": "jsonrpc",
+    "method": "sui_getObject",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "sui/sui_getObject.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sui/sui_getObject"
+  },
+  {
+    "chain": "sui",
+    "family": "jsonrpc",
+    "method": "sui_getTotalTransactionBlocks",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "sui/sui_getTotalTransactionBlocks.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sui/sui_getTotalTransactionBlocks"
+  },
+  {
+    "chain": "sui",
+    "family": "jsonrpc",
+    "method": "suix_getReferenceGasPrice",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "sui/suix_getReferenceGasPrice.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/sui/suix_getReferenceGasPrice"
+  },
+  {
+    "chain": "tezos",
+    "family": "rest",
+    "method": "GET /chains/main/blocks/head/context/contracts/{addr}/balance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "tezos/GET__chains_main_blocks_head_context_contracts__addr__balance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tezos/GET__chains_main_blocks_head_context_contracts__addr__balance"
+  },
+  {
+    "chain": "tezos",
+    "family": "rest",
+    "method": "GET /chains/main/blocks/head/header",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "tezos/GET__chains_main_blocks_head_header.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tezos/GET__chains_main_blocks_head_header"
+  },
+  {
+    "chain": "tezos",
+    "family": "rest",
+    "method": "GET /chains/main/blocks/head/protocols",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "tezos/GET__chains_main_blocks_head_protocols.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tezos/GET__chains_main_blocks_head_protocols"
+  },
+  {
+    "chain": "tezos",
+    "family": "rest",
+    "method": "GET /chains/main/blocks/head/votes/current_period",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "tezos/GET__chains_main_blocks_head_votes_current_period.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tezos/GET__chains_main_blocks_head_votes_current_period"
+  },
+  {
+    "chain": "tezos",
+    "family": "rest",
+    "method": "GET /chains/main/blocks/{block}/operations/{vp}",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "tezos/GET__chains_main_blocks__block__operations__vp.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tezos/GET__chains_main_blocks__block__operations__vp"
+  },
+  {
+    "chain": "ton",
+    "family": "rest",
+    "method": "getAddressBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "ton/getAddressBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/ton/getAddressBalance"
+  },
+  {
+    "chain": "ton",
+    "family": "rest",
+    "method": "getAddressInformation",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "ton/getAddressInformation.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/ton/getAddressInformation"
+  },
+  {
+    "chain": "ton",
+    "family": "rest",
+    "method": "getTransactions",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "ton/getTransactions.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/ton/getTransactions"
+  },
+  {
+    "chain": "ton",
+    "family": "rest",
+    "method": "lookupBlock",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "ton/lookupBlock.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/ton/lookupBlock"
+  },
+  {
+    "chain": "ton",
+    "family": "rest",
+    "method": "runGetMethod",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "ton/runGetMethod.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/ton/runGetMethod"
+  },
+  {
+    "chain": "tron",
+    "family": "jsonrpc",
+    "method": "/wallet/getaccount",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "tron/wallet_getaccount.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tron/wallet_getaccount"
+  },
+  {
+    "chain": "tron",
+    "family": "jsonrpc",
+    "method": "/wallet/getnowblock",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "tron/wallet_getnowblock.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tron/wallet_getnowblock"
+  },
+  {
+    "chain": "tron",
+    "family": "jsonrpc",
+    "method": "/wallet/gettransactionbyid",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "tron/wallet_gettransactionbyid.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tron/wallet_gettransactionbyid"
+  },
+  {
+    "chain": "tron",
+    "family": "jsonrpc",
+    "method": "/wallet/triggerconstantcontract",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "tron/wallet_triggerconstantcontract.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tron/wallet_triggerconstantcontract"
+  },
+  {
+    "chain": "tron",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "tron/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/tron/eth_blockNumber"
+  },
+  {
+    "chain": "zksync-era",
+    "family": "jsonrpc",
+    "method": "eth_blockNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "zksync-era/eth_blockNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/zksync-era/eth_blockNumber"
+  },
+  {
+    "chain": "zksync-era",
+    "family": "jsonrpc",
+    "method": "eth_getBalance",
+    "modes": [
+      "single",
+      "mixed"
+    ],
+    "fixture": "zksync-era/eth_getBalance.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/zksync-era/eth_getBalance"
+  },
+  {
+    "chain": "zksync-era",
+    "family": "jsonrpc",
+    "method": "eth_getBlockByNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "zksync-era/eth_getBlockByNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/zksync-era/eth_getBlockByNumber"
+  },
+  {
+    "chain": "zksync-era",
+    "family": "jsonrpc",
+    "method": "zks_L1BatchNumber",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "zksync-era/zks_L1BatchNumber.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/zksync-era/zks_L1BatchNumber"
+  },
+  {
+    "chain": "zksync-era",
+    "family": "jsonrpc",
+    "method": "zks_getBlockDetails",
+    "modes": [
+      "mixed"
+    ],
+    "fixture": "zksync-era/zks_getBlockDetails.json",
+    "status": "missing-evidence",
+    "reason": "request-response-meta-required",
+    "http_status": null,
+    "evidence_dir": "docs/audit/rpc-fixtures/zksync-era/zks_getBlockDetails"
+  }
+]

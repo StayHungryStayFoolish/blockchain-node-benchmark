@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # .githooks/pre-commit
-# v1.4.5 Step 6: parallel-entry trap guard runs before every commit.
+# Monitoring entry guard runs before relevant commits.
 #
 # Install:  git config core.hooksPath .githooks
 # Bypass:   git commit --no-verify  (use only when fixing the hook itself)
@@ -27,7 +27,7 @@ echo "[pre-commit] running ci/check_parallel_entry.sh..."
 if ! bash ci/check_parallel_entry.sh; then
     echo "" >&2
     echo "═══════════════════════════════════════════════════════════════════════" >&2
-    echo "  pre-commit BLOCKED: parallel-entry trap detected" >&2
+    echo "  pre-commit BLOCKED: monitoring entry guard failed" >&2
     echo "═══════════════════════════════════════════════════════════════════════" >&2
     echo "  Fix the violations above, OR update PARALLEL_ENTRY_RULES if the" >&2
     echo "  dependency genuinely changed. Bypass with --no-verify only when" >&2

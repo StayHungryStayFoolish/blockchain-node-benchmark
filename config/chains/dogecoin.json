@@ -1,45 +1,46 @@
 {
   "chain_type": "dogecoin",
-  "methods": {},
   "param_formats": {
     "getblockcount": "no_params",
     "getbestblockhash": "no_params",
     "getblock": "block_hash",
     "getrawtransaction": "transaction_hash",
     "getmempoolinfo": "no_params",
-    "getreceivedbyaddress": "single_address"
+    "GET /address/{address}/balance": "path_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "D7Y55r6Yoc1G8EECxkQ6SuSjTGGJqHGTaC",
-    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+    "target_address": "${TARGET_ADDRESS:-D8AXXiGEZeZnMKTKnC9AWB3YUU4jfMAmYU}",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "target_block_hash": "${TARGET_BLOCK_HASH:-30107c8992bb48c4ee25b9b86f79964b7bca07a639c9faf904f732fa4644fda0}",
+    "target_txid": "${TARGET_TXID:-defbc5a1ef031b74f1c6880fe14df0916f8bd737148b68d5ddeb3bfc39b2fa24}"
   },
   "rpc_methods": {
-    "single": "getreceivedbyaddress",
+    "single": "GET /address/{address}/balance",
     "mixed": "getblockcount,getbestblockhash,getblock,getrawtransaction,getmempoolinfo",
     "mixed_weighted": [
       {
         "method": "getblockcount",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getbestblockhash",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getblock",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getrawtransaction",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getmempoolinfo",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -47,32 +48,61 @@
   "system_addresses": [],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/20-dogecoin.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.938322+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "rest",
     "original_public_endpoints": [
       {
-        "url": "https://api.blockcypher.com/v1/doge/main",
-        "auth": false,
+        "url": "${DOGECOIN_PUBLIC_GATEWAY_URL:-}",
+        "auth": true,
+        "auth_type": "x-api-key",
+        "api_key": "${RPC_API_KEY}",
         "verified": "E2",
-        "notes": "REST 主实证 fallback"
-      },
-      {
-        "url": "https://api.blockchair.com/dogecoin/stats",
-        "auth": false,
-        "verified": "E2",
-        "notes": "REST 交叉校验"
+        "notes": "API endpoint with x-api-key header"
       }
     ],
-    "original_notes": "BTC/LTC 两层 fork; 100% 复用 BitcoinAdapter family=utxo-btc; 60s 出块; AuxPoW 与 LTC 合并挖矿; 无 SegWit/Taproot; scantxoutset 不支持; 公链 JSON-RPC 几乎不可用",
+    "original_notes": "BTC/LTC-derived fork; reuses BitcoinAdapter family=utxo-btc; about 60s/block; AuxPoW merged mining with LTC; no SegWit/Taproot; scantxoutset unsupported; public JSON-RPC is generally unavailable.",
     "adapter_required": true,
     "adapter_family": "bitcoin_jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "rest_paths": {
+      "GET /address/{address}/balance": {
+        "method": "GET",
+        "base_url": "${DOGECOIN_REST_BASE_URL:-}",
+        "path": "/address/balance/{address}"
+      }
+    },
+    "replaced_unavailable_methods": [
+      {
+        "from": "getreceivedbyaddress",
+        "to": "GET /address/{address}/balance",
+        "reason": "Some public gateway JSON-RPC endpoints do not expose wallet RPC getreceivedbyaddress; use a configured REST address-balance endpoint when JSON-RPC wallet methods are unavailable."
+      }
+    ],
+    "health_probe": {
+      "method": "getblockchaininfo",
+      "params": [],
+      "parse_jq": ".result.blocks",
+      "local_sync_fields": {
+        "local_height": ".result.blocks",
+        "known_network_height": ".result.headers",
+        "initial_block_download": ".result.initialblockdownload"
+      }
+    },
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Use getblockchaininfo.blocks as the comparable height cursor; getblockchaininfo.headers and initialblockdownload remain available for future local-only sync enrichment."
+    }
   },
   "proxy_extraction": {
     "extractors": [

@@ -97,7 +97,7 @@ class DockerfileStructure(unittest.TestCase):
         ignore = REPO / '.dockerignore'
         self.assertTrue(ignore.exists(), ".dockerignore missing — image bloat risk")
         text = ignore.read_text()
-        for must_ignore in ('.git', '__pycache__', 'analysis-notes/'):
+        for must_ignore in ('.git', '__pycache__', 'blockchain-node-benchmark-result/'):
             self.assertIn(must_ignore, text,
                           f".dockerignore must exclude {must_ignore}")
 

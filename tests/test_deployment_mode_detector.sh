@@ -1,6 +1,6 @@
 #!/bin/bash
 # Unit test for deployment_mode_detector.sh — mock all 6 modes via env override
-# v2: 用 standalone direct-exec 模式（避免 bash -c "..." 嵌套转义 bug）
+# Use standalone direct-exec mode to avoid nested bash -c quoting issues.
 set -u
 
 cd "$(dirname "$0")/.." || exit 1
@@ -13,7 +13,7 @@ test_mode() {
     local expected="$1"
     local desc="$2"
     local out
-    # 直接 exec detector，env-prefix；用 tail 取 "DEPLOYMENT_MODE=xxx" 行
+    # Execute detector directly with an env prefix; tail selects DEPLOYMENT_MODE.
     out=$(DEPLOYMENT_MODE="$expected" bash "$DETECTOR" 2>&1 | grep "^  DEPLOYMENT_MODE=" | head -1)
     if [[ "$out" == "  DEPLOYMENT_MODE=$expected" ]]; then
         echo "  ✅ PASS: $desc → $out"
@@ -53,23 +53,31 @@ test_source_chain() {
     fi
 }
 
-test_auto_cloudtop() {
-    # auto 模式不带 env，应走 step 5 (default) → vm_bare
+test_auto_environment() {
+    # auto mode should detect Docker when the test runs in the Docker harness,
+    # otherwise it should take the default bare-VM branch.
+    local expected_mode="vm_bare"
+    local expected_source="default"
+    if [[ -f /.dockerenv ]]; then
+        expected_mode="docker"
+        expected_source="dockerenv"
+    fi
+
     local out
     out=$(bash "$DETECTOR" 2>&1 | grep "^  DEPLOYMENT_MODE=" | head -1)
-    if [[ "$out" == "  DEPLOYMENT_MODE=vm_bare" ]]; then
-        echo "  ✅ PASS: auto-detect on cloudtop → $out"
+    if [[ "$out" == "  DEPLOYMENT_MODE=$expected_mode" ]]; then
+        echo "  ✅ PASS: auto-detect current environment → $out"
         PASS=$((PASS+1))
     else
-        echo "  ❌ FAIL: auto-detect on cloudtop — expected vm_bare, got: '$out'"
+        echo "  ❌ FAIL: auto-detect current environment — expected $expected_mode, got: '$out'"
         FAIL=$((FAIL+1))
     fi
     out=$(bash "$DETECTOR" 2>&1 | grep "^  DEPLOYMENT_MODE_SOURCE=" | head -1)
-    if [[ "$out" == "  DEPLOYMENT_MODE_SOURCE=default" ]]; then
-        echo "  ✅ PASS: auto-detect source → default"
+    if [[ "$out" == "  DEPLOYMENT_MODE_SOURCE=$expected_source" ]]; then
+        echo "  ✅ PASS: auto-detect source → $expected_source"
         PASS=$((PASS+1))
     else
-        echo "  ❌ FAIL: auto-detect source — expected default, got: '$out'"
+        echo "  ❌ FAIL: auto-detect source — expected $expected_source, got: '$out'"
         FAIL=$((FAIL+1))
     fi
 }
@@ -95,8 +103,8 @@ test_source_chain "docker"      "env" "docker  → source=env"
 test_source_chain "k8s_eks"     "env" "k8s_eks → source=env"
 
 echo
-echo "=== Test 4: Auto-detect on current host (cloudtop) ==="
-test_auto_cloudtop
+echo "=== Test 4: Auto-detect on current environment ==="
+test_auto_environment
 
 echo
 echo "=== Summary ==="

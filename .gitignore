@@ -5,8 +5,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
-# Hermes Agent runtime state
+# Local agent runtime state
 .hermes/
+.hermes-handoff-*.md
 
 # Editor
 .vscode/
@@ -18,7 +19,14 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Local secrets and environment overrides
+.env
+.env.*
+*.pem
+*.key
+
 # analysis-notes/ process artifacts (one-shot intermediates, not for repo)
+analysis-notes/
 analysis-notes/autopilot-logs/
 analysis-notes/file-notes/
 analysis-notes/docs-notes/
@@ -30,3 +38,12 @@ analysis-notes/*.sh
 analysis-notes/*.py
 analysis-notes/worker-prompt-*.md
 analysis-notes/COVERAGE_AUDIT.json
+
+# Benchmark runtime outputs
+blockchain-node-benchmark-result/
+
+# Local/generated audit artifacts
+docs/audit/latest-fake-node-e2e/
+docs/audit/disk-visualization-synthetic/
+docs/audit/rpc-fixtures/*/
+docs/audit/rpc-fixtures/manifest.json

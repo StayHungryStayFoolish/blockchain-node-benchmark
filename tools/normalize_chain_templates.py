@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
-S0.7-norm: normalize all 27 chain templates from research-format to baseline 7-key format.
+Legacy migration helper: normalize older chain templates to the baseline
+chain-template format.
 
-Input:  config/chains/<chain>.json  (research format from S0-inv subagent extraction)
-Output: config/chains/<chain>.json  (baseline 7-key format with _meta provenance)
+Input:  config/chains/<chain>.json  (older research-oriented format)
+Output: config/chains/<chain>.json  (chain-template format with _meta provenance)
 
 IDEMPOTENT: re-running on already-normalized file = no-op (detected via _meta.normalized_at).
 
 Field mapping (research → baseline):
     chain_type           → chain_type            (kept)
-    rpc_url              ← "LOCAL_RPC_URL"       (constant; baseline 8 chains all use this)
+    rpc_url              ← "LOCAL_RPC_URL"       (constant placeholder for local node endpoints)
     rpc_methods.single   ← single_method         (string)
     rpc_methods.mixed    ← ",".join(mixed_methods)
-    methods              ← {}                    (framework alias dict; new chains empty,
-                                                  fill in S3 if used)
     param_formats        → param_formats         (kept)
     params               ← {
         account_count, max_signatures, output_file,
@@ -26,8 +25,8 @@ Research-only fields (DROPPED but preserved in _meta.original):
     rpc_protocol / target_address / notes
 
 Non-JSON-RPC chains: `_meta.adapter_required = true` if rpc_protocol in {rest, mixed}.
-These chains are normalized to baseline shape but mock route won't work for HTTP-path
-methods — caller must wire up an adapter in S3.
+These chains are normalized to baseline shape, but HTTP-path methods require a
+family adapter before they can be exercised by fake-node or target generation.
 
 Usage:
     python3 tools/normalize_chain_templates.py [--dry-run]
@@ -45,7 +44,7 @@ CHAINS_DIR = REPO_ROOT / "config" / "chains"
 # baseline chain names (already in baseline format, MUST NOT be touched)
 BASELINE_8 = {"solana", "ethereum", "bsc", "base", "scroll", "polygon", "starknet", "sui"}
 
-# baseline params dict template (verified against tests/snapshots/baseline_8chains/ethereum.json)
+# Baseline params template used by normalized chain configs in config/chains/.
 BASELINE_PARAMS_TEMPLATE = {
     "account_count": "ACCOUNT_COUNT",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
@@ -55,9 +54,9 @@ BASELINE_PARAMS_TEMPLATE = {
     "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
 }
 
-# Required baseline keys (loader will reject if any missing — see config_loader.sh)
+# Required baseline keys.
 BASELINE_REQUIRED_KEYS = {
-    "chain_type", "methods", "param_formats", "params",
+    "chain_type", "param_formats", "params",
     "rpc_methods", "rpc_url", "system_addresses",
 }
 
@@ -96,7 +95,7 @@ def normalize_one(chain_name: str, tpl: dict) -> dict:
     new_meta = {
         **old_meta,
         "normalized_at": datetime.datetime.now(datetime.UTC).isoformat(),
-        "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+        "normalized_by": "tools/normalize_chain_templates.py",
         "original_rpc_protocol": rpc_protocol,
         "original_public_endpoints": public_endpoints,
         "original_notes": notes,
@@ -105,7 +104,6 @@ def normalize_one(chain_name: str, tpl: dict) -> dict:
 
     return {
         "chain_type": chain_type,
-        "methods": {},  # framework alias dict; new chains start empty
         "param_formats": param_formats,
         "params": params,
         "rpc_methods": {

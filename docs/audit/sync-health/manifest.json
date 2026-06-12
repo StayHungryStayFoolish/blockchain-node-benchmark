@@ -1,0 +1,701 @@
+{
+  "summary": {
+    "total_chains": 36,
+    "current_modes": {
+      "absolute_gap": 24,
+      "conditional_gap": 10,
+      "freshness_only": 1,
+      "reported_lag": 1
+    },
+    "calibration_status": {
+      "implemented": 36
+    },
+    "errors": 0
+  },
+  "chains": [
+    {
+      "chain": "acala",
+      "adapter_family": "substrate",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.number",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"chain_getHeader\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Adapter compares chain_getHeader.number as the Substrate height cursor documented in local chain evidence. system_syncState remains a future conditional_gap enhancement only after per-chain fixture verification.",
+      "errors": []
+    },
+    {
+      "chain": "algorand",
+      "adapter_family": "rest",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "round",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/v2/status",
+        "parse_jq": ".[\"last-round\"]",
+        "body": "",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "aptos",
+      "adapter_family": "rest",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/v1",
+        "parse_jq": ".block_height",
+        "body": "",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "arbitrum",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "astar",
+      "adapter_family": "substrate",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.number",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"chain_getHeader\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Adapter compares chain_getHeader.number as the Substrate height cursor documented in local chain evidence. system_syncState remains a future conditional_gap enhancement only after per-chain fixture verification.",
+      "errors": []
+    },
+    {
+      "chain": "avalanche-c",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "avalanche-x",
+      "adapter_family": "jsonrpc",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.height",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"avm.getHeight\",\"params\":{}}",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "base",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "bch",
+      "adapter_family": "bitcoin_jsonrpc",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "unknown",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.blocks",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getblockchaininfo\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses getblockchaininfo.blocks as the comparable cursor; headers and initialblockdownload remain available for future local-only sync enrichment.",
+      "errors": []
+    },
+    {
+      "chain": "bitcoin",
+      "adapter_family": "bitcoin_jsonrpc",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "unknown",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.blocks",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getblockchaininfo\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses getblockchaininfo.blocks as the comparable cursor; headers and initialblockdownload remain available for future local-only sync enrichment.",
+      "errors": []
+    },
+    {
+      "chain": "bsc",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "cardano",
+      "adapter_family": "rest",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/tip",
+        "parse_jq": ".[0].block_height",
+        "body": "",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "celestia",
+      "adapter_family": "tendermint",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/cosmos/base/tendermint/v1beta1/blocks/latest",
+        "parse_jq": ".block.header.height",
+        "body": "",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "cosmos-hub",
+      "adapter_family": "tendermint",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/cosmos/base/tendermint/v1beta1/blocks/latest",
+        "parse_jq": ".block.header.height",
+        "body": "",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "dogecoin",
+      "adapter_family": "bitcoin_jsonrpc",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "unknown",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.blocks",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getblockchaininfo\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses getblockchaininfo.blocks as the comparable cursor; headers and initialblockdownload remain available for future local-only sync enrichment.",
+      "errors": []
+    },
+    {
+      "chain": "ethereum",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "hedera",
+      "adapter_family": "hedera_dual",
+      "current_mode": "freshness_only",
+      "recommended_mode": "freshness_only",
+      "calibration_status": "implemented",
+      "threshold_unit": "timestamp_seconds",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "monotonic_timestamp",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/api/v1/accounts/0.0.2",
+        "parse_jq": ".balance.timestamp",
+        "body": "",
+        "error": null
+      },
+      "notes": "Hedera Mirror probe returns a consensus timestamp cursor, not canonical block height.",
+      "errors": []
+    },
+    {
+      "chain": "injective",
+      "adapter_family": "tendermint",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/status",
+        "parse_jq": ".result.sync_info.latest_block_height // .sync_info.latest_block_height",
+        "body": "",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "kusama",
+      "adapter_family": "substrate",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.number",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"chain_getHeader\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Adapter compares chain_getHeader.number as the Substrate height cursor documented in local chain evidence. system_syncState remains a future conditional_gap enhancement only after per-chain fixture verification.",
+      "errors": []
+    },
+    {
+      "chain": "linea",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "litecoin",
+      "adapter_family": "bitcoin_jsonrpc",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "unknown",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.blocks",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getblockchaininfo\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses getblockchaininfo.blocks as the comparable cursor; headers and initialblockdownload remain available for future local-only sync enrichment.",
+      "errors": []
+    },
+    {
+      "chain": "moonbeam",
+      "adapter_family": "substrate",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_blockNumber\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Adapter compares chain_getHeader.number as the Substrate height cursor documented in local chain evidence. system_syncState remains a future conditional_gap enhancement only after per-chain fixture verification.",
+      "errors": []
+    },
+    {
+      "chain": "near",
+      "adapter_family": "jsonrpc",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.header.height",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"block\",\"params\":{\"finality\":\"final\"}}",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "optimism",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "osmosis",
+      "adapter_family": "tendermint",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/status",
+        "parse_jq": ".result.sync_info.latest_block_height // .sync_info.latest_block_height",
+        "body": "",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "polkadot",
+      "adapter_family": "substrate",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.number",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"chain_getHeader\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Adapter compares chain_getHeader.number as the Substrate height cursor documented in local chain evidence. system_syncState remains a future conditional_gap enhancement only after per-chain fixture verification.",
+      "errors": []
+    },
+    {
+      "chain": "polygon",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "scroll",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "sei",
+      "adapter_family": "tendermint",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_blockNumber\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "solana",
+      "adapter_family": "jsonrpc",
+      "current_mode": "reported_lag",
+      "recommended_mode": "reported_lag",
+      "calibration_status": "implemented",
+      "threshold_unit": "slot",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "boolean_or_reported_health",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".error.data.numSlotsBehind // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getHealth\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses Solana getHealth. A healthy result maps to lag 0; unhealthy responses with numSlotsBehind map to slot lag and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    },
+    {
+      "chain": "starknet",
+      "adapter_family": "jsonrpc",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"starknet_blockNumber\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "sui",
+      "adapter_family": "jsonrpc",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"sui_getTotalTransactionBlocks\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "tezos",
+      "adapter_family": "rest",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/chains/main/blocks/head/header",
+        "parse_jq": ".level",
+        "body": "",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "ton",
+      "adapter_family": "rest",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "GET",
+        "url": "http://127.0.0.1:1/lookupBlock?workchain=-1&shard=-9223372036854775808&seqno=72033975",
+        "parse_jq": ".result.seqno",
+        "body": "",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "tron",
+      "adapter_family": "jsonrpc",
+      "current_mode": "absolute_gap",
+      "recommended_mode": "absolute_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "numeric_height",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_blockNumber\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Adapter health probe returns a numeric height/cursor that can be compared across local and target endpoints.",
+      "errors": []
+    },
+    {
+      "chain": "zksync-era",
+      "adapter_family": "jsonrpc",
+      "current_mode": "conditional_gap",
+      "recommended_mode": "conditional_gap",
+      "calibration_status": "implemented",
+      "threshold_unit": "block",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "probe_kind": "conditional_sync_state",
+      "health_probe": {
+        "method": "POST",
+        "url": "http://127.0.0.1:1",
+        "parse_jq": ".result.highestBlock - .result.currentBlock // 0",
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_syncing\",\"params\":[]}",
+        "error": null
+      },
+      "notes": "Health probe uses local eth_syncing. false maps to lag 0; syncing objects map to highestBlock-currentBlock and reuse BLOCK_HEIGHT_DIFF_THRESHOLD.",
+      "errors": []
+    }
+  ]
+}

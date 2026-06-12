@@ -23,7 +23,7 @@ class RBACEndpointsTest(unittest.TestCase):
         self.assertIn('ClusterRoleBinding', kinds)
 
     def test_endpoints_resource_present(self):
-        """v1.4.5 round-05 P2: list_namespaced_endpoints needs 'endpoints' verb."""
+        """list_namespaced_endpoints needs 'endpoints' verb."""
         resources = self.cr['rules'][0]['resources']
         self.assertIn('endpoints', resources)
 

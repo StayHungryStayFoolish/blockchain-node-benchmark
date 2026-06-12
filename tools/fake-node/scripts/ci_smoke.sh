@@ -1,7 +1,7 @@
 #!/bin/bash
 # ci_smoke.sh — fake-node v2 end-to-end smoke (multi-chain, multi-family).
 #
-# ADR-0005 (2026-05-28): Extended to validate 6 protocol families:
+# Extended to validate 6 protocol families:
 #   jsonrpc / bitcoin_jsonrpc / rest / substrate / tendermint / hedera_dual
 #
 # Validates:
@@ -11,8 +11,7 @@
 #   4. /stats counters report activity
 #   5. IO worker active
 #
-# Exit 0 on full pass. ALL 36 chains MUST startup-pass (parallel-entry-trap
-# rule: NotImplemented family registration was a defer trap and is now removed).
+# Exit 0 on full pass. ALL 36 chains must pass startup validation.
 #
 # Run: bash tools/fake-node/scripts/ci_smoke.sh
 
@@ -93,13 +92,13 @@ http_code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:191
 [[ "$http_code" == "404" ]] && ok "ethereum 404 on solana method (chain isolation)" \
     || ko "ethereum returned $http_code on getSlot (expected 404)"
 
-# --- 4. cardano (rest family — ADR-0005) ---
-note "step 4: cardano (rest family — ADR-0005)"
+# --- 4. cardano (rest family) ---
+note "step 4: cardano (rest family)"
 CAR_PID=$(start_chain cardano 19103 /tmp/fake-node-io-rest) || { ko "cardano start failed"; exit 1; }
 PIDS="$PIDS $CAR_PID"
 ok "cardano startup (rest family)"
 grep -q "adapter_family=rest" "/tmp/fake-node-smoke-cardano.log" \
-    && ok "cardano → adapter_family=rest (ADR-0005 ogmios → rest correction live)" \
+    && ok "cardano → adapter_family=rest (ogmios → rest correction live)" \
     || ko "cardano adapter_family=rest log missing"
 
 # Real RPC: path-based dispatch on /tip
@@ -107,7 +106,7 @@ http_code=$(curl -s -o /tmp/smoke-cardano-tip.json -w '%{http_code}' "http://127
 [[ "$http_code" == "200" ]] && ok "cardano GET /tip → HTTP 200 (real fixture)" \
     || ko "cardano GET /tip → HTTP $http_code"
 
-# Real RPC: POST body — must read _meta.rest_paths[POST_ADDRESS_INFO].body (ADR-0005 fix)
+# Real RPC: POST body — must read _meta.rest_paths[POST_ADDRESS_INFO].body (fix)
 http_code=$(curl -s -o /tmp/smoke-cardano-addr.json -w '%{http_code}' \
     -X POST -H 'Content-Type: application/json' \
     -d '{"_addresses":["addr1qxxx"]}' \
@@ -161,7 +160,7 @@ sleep 1
 # --- 8. 36-chain startup smoke ---
 # Every chain template in config/chains/*.json must startup-pass (no panic, family resolved).
 # Each chain uses port 19200+i (avoid collision with earlier chains).
-note "step 8: 36-chain startup smoke (parallel-entry-trap rule: zero ungoverned families)"
+note "step 8: 36-chain startup smoke"
 chains=$(ls "$CHAINS_DIR"/*.json | xargs -n1 basename | sed 's/.json$//')
 i=0
 startup_pass=0
@@ -192,5 +191,5 @@ echo "  36-chain startup: pass=$startup_pass fail=$startup_fail (total chains di
 
 # --- summary ---
 echo ""
-echo "[smoke v2 ADR-0005] PASS=$pass FAIL=$fail"
+echo "[fake-node smoke] PASS=$pass FAIL=$fail"
 [[ $fail -eq 0 ]] && exit 0 || exit 1

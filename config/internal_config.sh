@@ -11,15 +11,15 @@
 
 # ----- Bottleneck Detection Configuration -----
 # Bottleneck detection thresholds (for extreme testing)
-BOTTLENECK_CPU_THRESHOLD=85               # CPU usage exceeding 85% is considered a bottleneck
-BOTTLENECK_MEMORY_THRESHOLD=90            # Memory usage exceeding 90% is considered a bottleneck
+BOTTLENECK_CPU_THRESHOLD=85                               # CPU usage exceeding 85% is considered a bottleneck
+BOTTLENECK_MEMORY_THRESHOLD=90                            # Memory usage exceeding 90% is considered a bottleneck
 # Disk bottleneck detection thresholds (for bottleneck detection system)
-BOTTLENECK_DISK_UTIL_THRESHOLD=90          # Disk utilization exceeding 90% is considered a bottleneck
-BOTTLENECK_DISK_LATENCY_THRESHOLD=50       # Disk latency exceeding 50ms is considered a bottleneck
-BOTTLENECK_NETWORK_THRESHOLD=80           # Network utilization exceeding 80% is considered a bottleneck
-BOTTLENECK_ERROR_RATE_THRESHOLD=5         # Error rate exceeding 5% is considered a bottleneck
-BOTTLENECK_DISK_IOPS_THRESHOLD=90          # Disk IOPS utilization exceeding 90% is considered a bottleneck
-BOTTLENECK_DISK_THROUGHPUT_THRESHOLD=90    # Disk Throughput utilization exceeding 90% is considered a bottleneck
+BOTTLENECK_DISK_UTIL_THRESHOLD=90                         # Disk utilization exceeding 90% is considered a bottleneck
+BOTTLENECK_DISK_LATENCY_THRESHOLD=50                      # Disk latency exceeding 50ms is considered a bottleneck
+BOTTLENECK_NETWORK_THRESHOLD=80                           # Network utilization exceeding 80% is considered a bottleneck
+BOTTLENECK_ERROR_RATE_THRESHOLD=5                         # Error rate exceeding 5% is considered a bottleneck
+BOTTLENECK_DISK_IOPS_THRESHOLD=90                         # Disk IOPS utilization exceeding 90% is considered a bottleneck
+BOTTLENECK_DISK_THROUGHPUT_THRESHOLD=90                   # Disk Throughput utilization exceeding 90% is considered a bottleneck
 
 # Multi-level monitoring threshold explanation:
 # - disk_bottleneck_detector.sh (real-time bottleneck detection):
@@ -35,24 +35,24 @@ BOTTLENECK_DISK_THROUGHPUT_THRESHOLD=90    # Disk Throughput utilization exceedi
 
 
 # Bottleneck detection consecutive count (avoid sporadic fluctuations)
-BOTTLENECK_CONSECUTIVE_COUNT=3      # Stop only after detecting bottleneck 3 consecutive times
+BOTTLENECK_CONSECUTIVE_COUNT=3                            # Stop only after detecting bottleneck 3 consecutive times
 
 # Bottleneck analysis time window configuration
-BOTTLENECK_ANALYSIS_WINDOW=30       # Analysis window before and after bottleneck time point (seconds)
+BOTTLENECK_ANALYSIS_WINDOW=30                             # Analysis window before and after bottleneck time point (seconds)
 
 # ----- Performance Monitoring Configuration -----
 # Performance monitoring switch (true/false) - When enabled, monitors the performance impact of the monitoring system itself
 PERFORMANCE_MONITORING_ENABLED=${PERFORMANCE_MONITORING_ENABLED:-true}
 
 # Performance threshold configuration
-MAX_COLLECTION_TIME_MS=${MAX_COLLECTION_TIME_MS:-1000}     # Maximum data collection time (milliseconds)
+MAX_COLLECTION_TIME_MS=${MAX_COLLECTION_TIME_MS:-1000}    # Maximum data collection time (milliseconds)
 
 # Error handling threshold
-MAX_CONSECUTIVE_ERRORS=${MAX_CONSECUTIVE_ERRORS:-5}        # Maximum consecutive error count
+MAX_CONSECUTIVE_ERRORS=${MAX_CONSECUTIVE_ERRORS:-5}       # Maximum consecutive error count
 
 # QPS test success rate and latency thresholds
-SUCCESS_RATE_THRESHOLD=95    # Success rate threshold (%)
-MAX_LATENCY_THRESHOLD=1000   # Maximum latency threshold (ms)
+SUCCESS_RATE_THRESHOLD=95                                 # Success rate threshold (%)
+MAX_LATENCY_THRESHOLD=1000                                # Maximum latency threshold (ms)
 
 # ----- Block Node Height Monitoring Configuration -----
 # Block height difference threshold, triggers warning
@@ -63,8 +63,8 @@ BLOCK_HEIGHT_TIME_THRESHOLD=300
 BLOCK_HEIGHT_MONITOR_RATE=1
 
 # ----- Log Output Configuration -----
-LOG_CONSOLE=${LOG_CONSOLE:-true}       # Console output
-LOG_FILE=${LOG_FILE:-true}             # File output
+LOG_CONSOLE=${LOG_CONSOLE:-true}                          # Console output
+LOG_FILE=${LOG_FILE:-true}                                # File output
 
 # Export internal configuration variables
 export BOTTLENECK_CPU_THRESHOLD BOTTLENECK_MEMORY_THRESHOLD BOTTLENECK_DISK_UTIL_THRESHOLD

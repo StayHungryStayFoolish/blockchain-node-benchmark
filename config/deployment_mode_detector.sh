@@ -3,19 +3,19 @@
 # Blockchain Node Benchmark Framework - Deployment Mode Detector
 # =====================================================================
 # Purpose: Detect runtime environment (VM / Docker / K8s), orthogonal to
-#          DEPLOYMENT_PLATFORM (cloud provider: aws / gcp / other).
+#          DEPLOYMENT_PLATFORM (cloud provider: gcp / aws / other).
 #
 # Output: DEPLOYMENT_MODE env var ∈ {vm_bare, vm_systemd, docker,
 #         k8s_eks, k8s_gke, k8s_other}
 #
-# Detection waterfall (per v1.3 plan §3.3):
+# Detection order:
 #   1. Explicit DEPLOYMENT_MODE env (user override)  → trust it
 #   2. /proc/1/cgroup contains "kubepods"            → k8s_*
 #      2a. /etc/eks-release exists                   → k8s_eks
 #      2b. /etc/gke-* exists OR GCE metadata "gke"   → k8s_gke
 #      2c. else                                      → k8s_other
 #   3. /.dockerenv exists                            → docker
-#   4. systemctl available AND business unit found   → vm_systemd
+#   4. systemctl available AND known node unit found → vm_systemd
 #   5. default                                       → vm_bare
 #
 # Side effects (env vars exported):
@@ -28,35 +28,22 @@
 # Companion to baseline detect_deployment_platform() in config_loader.sh.
 # That function answers "which cloud?"; this one answers "which runtime?".
 # Together they form a (platform, mode) matrix used by cloud_variants/ and
-# k8s_paths.sh.
+# runtime_paths.sh.
 # =====================================================================
 
 # Default: auto-detect unless user override
 DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-"auto"}
 
-# Business systemd units we recognize (v1.4.2: real 8-chain truth from
-# config/config_loader.sh:660 supported_blockchains array, NOT v1.3 wrong list)
-# True 8 chains: solana / ethereum / bsc / base / scroll / polygon / starknet / sui
-# (Bitcoin/Aptos removed — never in baseline, see plan §A.5.6)
-DEPLOYMENT_MODE_BUSINESS_UNITS=(
-    # Solana
-    "solana-validator"
-    "agave-validator"        # Solana post-Agave fork
-    # EVM family (5 chains share clients: ethereum/bsc/base/scroll/polygon)
-    "geth"                   # Ethereum / Base / generic EVM
-    "reth"                   # Ethereum / Scroll (Rust client)
-    "erigon"                 # Ethereum archive
-    "bsc-geth"               # BSC official fork
-    "bor"                    # Polygon execution layer
-    "heimdall"               # Polygon consensus layer
-    "scroll-geth"            # Scroll legacy l2geth fork
-    # Starknet (Pathfinder / Juno)
-    "pathfinder"
-    "juno"
-    "starknet-node"          # generic
-    # Sui
-    "sui-node"
-)
+# Blockchain process names are also used as systemd unit-name prefixes during
+# deployment-mode auto-detection. In most real deployments the process binary
+# and unit prefix overlap, for example `agave-validator.service` ->
+# `agave-validator` or `geth.service` -> `geth`.
+#
+# Keep this fallback so deployment_mode_detector.sh still works in standalone
+# tests and direct sourcing.
+if ! declare -p BLOCKCHAIN_PROCESS_NAMES >/dev/null 2>&1; then
+    BLOCKCHAIN_PROCESS_NAMES=()
+fi
 
 detect_deployment_mode() {
     # Idempotency guard
@@ -105,9 +92,9 @@ detect_deployment_mode() {
         return 0
     fi
 
-    # Step 4: VM with systemd (look for business units we care about)
+    # Step 4: VM with systemd (look for node units we care about)
     #
-    # Regex anatomy (v1.4.3, was v1.3 fc07f8b):
+    # Regex anatomy:
     #   ^\s*${unit}([-@]|\.service)
     #
     #   ^\s*           — systemctl list-units indents each row with 2 spaces
@@ -124,23 +111,28 @@ detect_deployment_mode() {
     #   their own array entries). See tests/test_deployment_mode_detector.sh
     #   for the full 19-case matrix.
     #
-    # Known limitation (Issue #2, plan §S6.5 deferred):
+    # Known limitation:
     #   This step only detects systemd-managed binaries. Raw process
     #   invocation (`./solana-validator &`) falls through to vm_bare. Users
     #   running unmanaged processes must manually `export DEPLOYMENT_MODE=vm_systemd`.
-    #   Downstream impact is zero (k8s_paths.sh treats vm_bare and vm_systemd
+    #   Downstream impact is zero (runtime_paths.sh treats vm_bare and vm_systemd
     #   identically — both resolve to /proc and /sys), only telemetry label.
     if command -v systemctl >/dev/null 2>&1; then
-        for unit in "${DEPLOYMENT_MODE_BUSINESS_UNITS[@]}"; do
+        local unit
+        local unit_prefix
+        for unit in "${BLOCKCHAIN_PROCESS_NAMES[@]}"; do
+            [[ -n "$unit" ]] || continue
+            unit_prefix="${unit%.service}"
+            [[ -n "$unit_prefix" ]] || continue
             # systemctl list-units exits 0 even when no match; check output
             # Prefix tolerance: systemd marks failed/not-loaded units with ● (U+25CF),
             # × (U+00D7), ↻ (U+21BB) etc. Plain \s does NOT match these UTF-8 glyphs,
-            # so we accept any leading non-alphanumeric run. See v1.4.5 round-05 P1.
+            # so we accept any leading non-alphanumeric run.
             if systemctl list-units --all --no-legend --no-pager 2>/dev/null \
-                    | grep -qE "^[^a-zA-Z0-9]*${unit}([-@]|\.service)" ; then
+                    | grep -qE "^[^a-zA-Z0-9]*${unit_prefix}([-@]|\.service)" ; then
                 DEPLOYMENT_MODE="vm_systemd"
-                DEPLOYMENT_MODE_SOURCE="systemd:${unit}"
-                echo "✅ VM + systemd environment detected (unit=$unit)" >&2
+                DEPLOYMENT_MODE_SOURCE="systemd:${unit_prefix}"
+                echo "✅ VM + systemd environment detected (unit=$unit_prefix)" >&2
                 _deployment_mode_export
                 return 0
             fi

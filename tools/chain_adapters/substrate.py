@@ -14,25 +14,72 @@ Health probe = `chain_getHeader` (no params) → .result.number is 0x-hex.
 """
 from __future__ import annotations
 import json
+import os
+from pathlib import Path
 from typing import Optional
 
-from .base import ChainAdapter, register, _vegeta_post_json, _try_int
+from .base import ChainAdapter, register, _vegeta_get, _vegeta_post_json, _try_int
+from .jsonrpc import JsonRpcAdapter
+from .rest import _is_fake_node_url
+from .url_overrides import first_url, resolve_param
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_CHAINS_DIR = _REPO_ROOT / "config" / "chains"
 
 
 @register("substrate")
 class SubstrateAdapter(ChainAdapter):
 
+    def __init__(self):
+        self._chain_cache: dict[str, dict] = {}
+        self._jsonrpc = JsonRpcAdapter()
+
+    def _load_chain(self, chain_name: str) -> dict:
+        if chain_name not in self._chain_cache:
+            with open(_CHAINS_DIR / f"{chain_name}.json") as f:
+                self._chain_cache[chain_name] = json.load(f)
+        return self._chain_cache[chain_name]
+
     def build_vegeta_target(
         self, method: str, address: str, rpc_url: str, param_format: str = "",
     ) -> dict:
-        params = self._build_params(param_format, address)
+        chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
+        tpl = self._load_chain(chain_name) if chain_name else {}
+        rest_paths = tpl.get("_meta", {}).get("rest_paths", {}) if isinstance(tpl, dict) else {}
+        if method.startswith("GET ") or (method in rest_paths and not _is_fake_node_url(rpc_url)):
+            if not chain_name:
+                raise RuntimeError("SubstrateAdapter REST sidecar method requires BLOCKCHAIN_NODE env var")
+            spec = rest_paths.get(method)
+            if not spec:
+                raise ValueError(f"substrate chain {chain_name}: method {method!r} not in _meta.rest_paths")
+            base = (
+                rpc_url if _is_fake_node_url(rpc_url)
+                else first_url("CHAIN_SIDECAR_URL", tpl.get("_meta", {}).get("sidecar_url"), rpc_url)
+            )
+            path = spec["path"].replace("{address}", address).replace("{addr}", address)
+            target_height = resolve_param(tpl.get("params", {}), "target_height", 1)
+            path = path.replace("{height}", str(target_height))
+            path = path.replace("{n}", str(target_height))
+            return _vegeta_get(base.rstrip("/") + path)
+        if method.startswith("eth_") and tpl.get("_meta", {}).get("evm_rpc_url"):
+            return self._jsonrpc.build_vegeta_target(
+                method,
+                address,
+                rpc_url if _is_fake_node_url(rpc_url)
+                else first_url("CHAIN_EVM_RPC_URL", tpl["_meta"]["evm_rpc_url"]),
+                param_format,
+            )
+        params = self._build_params(param_format, address, tpl)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
 
     @staticmethod
-    def _build_params(param_format: str, address: str) -> list:
+    def _build_params(param_format: str, address: str, tpl: dict | None = None) -> list:
+        cfg_params = tpl.get("params", {}) if isinstance(tpl, dict) else {}
         if param_format in ("no_params", ""):
             return []
+        if param_format in ("[block_number]", "block_number"):
+            return [int(resolve_param(cfg_params, "target_height", 1))]
         if param_format == "single_address":
             return [address]
         if param_format == "storage_key":
@@ -45,7 +92,12 @@ class SubstrateAdapter(ChainAdapter):
         return [address]
 
     def health_check_request(self, rpc_url: str) -> dict:
-        """Substrate health = `chain_getHeader` (no params) → result.number is 0x-hex."""
+        """Substrate health = chain header, or EVM block number for EVM-only templates."""
+        chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
+        tpl = self._load_chain(chain_name) if chain_name else {}
+        mixed = str(tpl.get("rpc_methods", {}).get("mixed", ""))
+        if "chain_getHeader" not in mixed and "eth_blockNumber" in mixed:
+            return self._jsonrpc.health_check_request(rpc_url)
         body = {"jsonrpc": "2.0", "id": 1, "method": "chain_getHeader", "params": []}
         return {
             "method": "POST",
@@ -66,4 +118,5 @@ class SubstrateAdapter(ChainAdapter):
             number = obj["result"]["number"]
             return _try_int(number)
         except (KeyError, TypeError):
-            return None
+            pass
+        return self._jsonrpc.parse_block_height(response_text)

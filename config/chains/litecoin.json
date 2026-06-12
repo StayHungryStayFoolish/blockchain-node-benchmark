@@ -1,45 +1,46 @@
 {
   "chain_type": "litecoin",
-  "methods": {},
   "param_formats": {
     "getblockcount": "no_params",
     "getbestblockhash": "no_params",
     "getblock": "block_hash",
     "getrawtransaction": "transaction_hash",
     "getmempoolinfo": "no_params",
-    "getreceivedbyaddress": "single_address"
+    "GET /address/{address}/balance": "path_address"
   },
   "params": {
     "account_count": "ACCOUNT_COUNT",
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "",
-    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+    "target_address": "${TARGET_ADDRESS:-LfdYLbP9F9CpmCX6atZnHZb8KkS8T6x4DK}",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "target_block_hash": "${TARGET_BLOCK_HASH:-50bf6a5c4e040601b1e1808b014b74b2b90492a94887a6cbcf07073f49c8ccdf}",
+    "target_txid": "${TARGET_TXID:-38326bca3124d74d4e361107737c7b1146a7afb4a0e925ca7534110ede6d96cc}"
   },
   "rpc_methods": {
-    "single": "getreceivedbyaddress",
+    "single": "GET /address/{address}/balance",
     "mixed": "getblockcount,getbestblockhash,getblock,getrawtransaction,getmempoolinfo",
     "mixed_weighted": [
       {
         "method": "getblockcount",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getbestblockhash",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getblock",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getrawtransaction",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "getmempoolinfo",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -47,32 +48,61 @@
   "system_addresses": [],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/19-litecoin.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.940590+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "rest",
     "original_public_endpoints": [
       {
-        "url": "https://litecoinspace.org/api",
-        "auth": false,
+        "url": "${LITECOIN_PUBLIC_GATEWAY_URL:-}",
+        "auth": true,
+        "auth_type": "x-api-key",
+        "api_key": "${RPC_API_KEY}",
         "verified": "E2",
-        "notes": "Esplora REST(非 JSON-RPC),mempool.space 兼容"
-      },
-      {
-        "url": "https://api.blockchair.com/litecoin",
-        "auth": false,
-        "verified": "E2",
-        "notes": "REST 备用,字段命名不同"
+        "notes": "API endpoint with x-api-key header"
       }
     ],
-    "original_notes": "BTC fork; 100% 复用 BitcoinAdapter family=utxo-btc; 150s 出块; 公链无匿名 JSON-RPC,benchmark 需 self-host 9332; MWEB 激活但 schema 兼容",
+    "original_notes": "BTC fork; reuses BitcoinAdapter family=utxo-btc; about 150s/block; anonymous public JSON-RPC is unavailable, so production benchmarks should self-host port 9332; MWEB is active but schema-compatible.",
     "adapter_required": true,
     "adapter_family": "bitcoin_jsonrpc",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "rest_paths": {
+      "GET /address/{address}/balance": {
+        "method": "GET",
+        "base_url": "https://api.blockcypher.com/v1/ltc/main",
+        "path": "/addrs/{address}/balance"
+      }
+    },
+    "replaced_unavailable_methods": [
+      {
+        "from": "getreceivedbyaddress",
+        "to": "GET /address/{address}/balance",
+        "reason": "Some public gateway JSON-RPC endpoints do not expose wallet RPC getreceivedbyaddress; use a configured REST address-balance endpoint when JSON-RPC wallet methods are unavailable."
+      }
+    ],
+    "health_probe": {
+      "method": "getblockchaininfo",
+      "params": [],
+      "parse_jq": ".result.blocks",
+      "local_sync_fields": {
+        "local_height": ".result.blocks",
+        "known_network_height": ".result.headers",
+        "initial_block_download": ".result.initialblockdownload"
+      }
+    },
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Use getblockchaininfo.blocks as the comparable height cursor; getblockchaininfo.headers and initialblockdownload remain available for future local-only sync enrichment."
+    }
   },
   "proxy_extraction": {
     "extractors": [

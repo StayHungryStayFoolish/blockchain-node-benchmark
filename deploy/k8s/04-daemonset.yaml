@@ -1,6 +1,6 @@
 # Blockchain Node Benchmark — DaemonSet (1 collector pod per node)
 # ====================================================================
-# v1.3 plan §S4: runs monitoring/cgroup_collector.py on every node.
+# Runs monitoring/cgroup_collector.py on every node.
 # Mounts host /proc /sys /dev under /host/* (node_exporter convention).
 #
 # Design notes:
@@ -60,7 +60,7 @@ spec:
       # /opt/blockchain-bench. Replace the tag in your environment.
       containers:
         - name: cgroup-collector
-          image: blockchain-node-benchmark/collector:v1.4
+          image: blockchain-node-benchmark/collector:latest
           imagePullPolicy: IfNotPresent
           # If container crashes during startup, capture last 80 lines of
           # stderr in PodStatus so `kubectl get pod -o yaml` shows the
@@ -71,7 +71,7 @@ spec:
             - -c
             - |
               set -e
-              # Source S2 detector/path layer first (sets HOST_PROC/CGROUP_*)
+              # Source deployment detector and path layer first (sets HOST_PROC/CGROUP_*)
               source /opt/blockchain-bench/config/config_loader.sh
               # Loop forever; framework's main pipeline can later pipe these
               # CSV rows to its unified data store. For now stdout is fine.

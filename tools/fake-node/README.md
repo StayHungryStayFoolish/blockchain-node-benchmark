@@ -1,158 +1,247 @@
 # fake-node — long-lived test fixture for the blockchain-node-benchmark framework
 
-**Purpose**: framework 集成测试夹具 (NOT a PoC, NOT a benchmark target). 每次 framework 改动 (monitor / proxy / analyzer / reporter / chain adapter) 都跑一次 framework → fake-node 全链路, 验闭环.
+**Purpose**: integration-test fixture for the framework, not a PoC and not a benchmark target. Run the framework-to-fake-node path after framework changes in monitoring, proxying, analysis, reporting, or chain adapters to verify the local closed loop.
 
 **What it provides**:
-- JSON-RPC over HTTP, 按 method 返回对应 fixture (byte-correct, 真节点录的)
-- 非固定频率磁盘 IO worker (随机大小, 随机间隔), 让 monitor 有真 IO 可观察
-- **多协议族 handler 架构** (v2): `BLOCKCHAIN_NODE` env → chain template → `_meta.adapter_family` → handler dispatch
-- 单二进制 + per-family YAML + per-chain fixtures = 36 链覆盖能力
+- JSON-RPC over HTTP, returning method-specific fixtures recorded from real nodes.
+- A non-fixed-rate disk I/O worker with randomized sizes and intervals, so monitoring has observable I/O.
+- Multi-family handler architecture: `BLOCKCHAIN_NODE` env -> chain template -> `_meta.adapter_family` -> handler dispatch.
+- One binary plus per-family YAML plus per-chain fixtures for 36-chain coverage.
 
-**What it does NOT solve**:
-- weight 数值精度 (等真节点)
-- 真节点性能极限 (等真节点)
+**What it does not solve**:
+- Exact workload-weight behavior of real nodes.
+- Real-node performance limits.
 
----
-
-## v2 范式纠正 (2026-05-27)
-
-v1 实现错误: 单文件 + per-chain YAML + 声称"零代码加链", 与 framework 既有 `BLOCKCHAIN_NODE` env + `_meta.adapter_family` switch 约定不一致。 用户质问: *"BLOCKCHAIN_NODE 变量存在,fake-node 难道不能 switch case? 36 链本身就不是完全相同,怎么可能一个 fake-node 复用?"*
-
-v2 改为镜像 framework `tools/chain_adapters/` 架构:
-- `handlers/base.go` → `Handler` interface + `_REGISTRY` (镜像 `chain_adapters/base.py:107`)
-- `handlers/<family>.go` → per-protocol-family 实现 (1 handler = 1 family = N chains)
-- 入口同 framework: 读 `BLOCKCHAIN_NODE` env → load `config/chains/<chain>.json` → 取 `_meta.adapter_family` → dispatch
+Full local closed-loop testing flow:
+- [Chinese: Local closed-loop testing and fake-node guide](../../docs/zh/local-closed-loop-testing.md)
+- [English: Local closed-loop testing and fake-node guide](../../docs/en/local-closed-loop-testing.md)
 
 ---
 
-## 加链工作量诚实矩阵 (取代 v1 的"零代码加链"绝对声明)
+## Adapter-Family Handler Model
 
-| 场景                                  | Go 改动                       | 配置改动                              | 工作量等级       |
-|---------------------------------------|-------------------------------|---------------------------------------|------------------|
-| 已实现协议族新成员 (如新 EVM 链)     | **0 行**                      | +1 chain template (framework 共用)    | < 30 分钟        |
-| 协议族内特殊调优 (tier/IO 档位)      | 0 行                          | +1 family yaml field                  | < 10 分钟        |
-| **全新协议族** (5/7 仍 stub)         | **+1 handler.go ~150-300 行** | +1 family yaml + per-chain fixtures   | 1-2 工时         |
+The fake-node mirrors the framework adapter-family dispatch model instead of using a single monolithic handler.
 
-工作量与 framework `tools/chain_adapters/<family>.py` 对称 (1 协议族 = 1 adapter 模块)。
-
----
-
-## 36 链 → 7 协议族归并 (源: `config/chains/*.json:_meta.adapter_family`)
-
-| Family            | Chains | Coverage | Handler 状态                                    |
-|-------------------|-------:|----------|-------------------------------------------------|
-| `jsonrpc`         | 16     | solana, ethereum, bsc, base, polygon, scroll, arbitrum, optimism, linea, avalanche-c, avalanche-x, zksync-era, near, tron, sui, starknet | ✅ **implemented** |
-| `bitcoin_jsonrpc` | 4      | bitcoin, bch, dogecoin, litecoin                | ✅ **implemented** (无 smoke 覆盖, P2) |
-| `substrate`       | 5      | polkadot, kusama, acala, astar, moonbeam        | ⚠️ stub (OQ-X)   |
-| `tendermint`      | 5      | cosmos-hub, osmosis, celestia, injective, sei   | ⚠️ stub (OQ-X)   |
-| `rest`            | 4      | algorand, aptos, tezos, ton                     | ⚠️ stub (OQ-X)   |
-| `ogmios`          | 1      | cardano                                         | ⚠️ stub (OQ-X)   |
-| `hedera_dual`     | 1      | hedera                                          | ⚠️ stub (OQ-X)   |
-| **TOTAL**         | **36** | -        | **20/36 RPC-ready, 16/36 startup-ready 仅**     |
-
-**Stub 行为**: 已注册到 registry, startup OK, 但 RPC 请求返回明确 error (HTTP 404 "method not declared" 或 500 "family not yet implemented") — **不静默通过, 不假装 healthy**.
-
-5 个 stub 已入账 `docs/architecture/OPEN-QUESTIONS.md` (OQ-X), 不算 `no-deferred-bugs` defer (这是 R1 阶段范围切分, 不是 P0 bug 推后).
+Current implementation mirrors the framework `tools/chain_adapters/` architecture:
+- `handlers/base.go` -> `Handler` interface + registry, mirroring `chain_adapters/base.py`.
+- `handlers/<family>.go` -> per-protocol-family implementation. One handler can serve many chains in the same family.
+- Entry path matches the framework: read `BLOCKCHAIN_NODE`, load `config/chains/<chain>.json`, read `_meta.adapter_family`, then dispatch.
 
 ---
 
-## 用法
+## Chain-Addition Effort Matrix
+
+| Scenario | Go change | Config change | Typical effort |
+|----------|-----------|---------------|----------------|
+| New chain in an implemented family, such as another EVM-like chain | **0 lines** | +1 chain template + fixture recording | < 30 minutes |
+| New method inside an implemented family | 0 lines or small adapter extension | +1 family YAML method + fixture recording | 10-60 minutes |
+| Brand-new protocol family | **+1 handler.go, usually ~150-300 lines** | +1 family YAML + per-chain fixtures | 1-2 engineering hours |
+
+The effort mirrors the framework `tools/chain_adapters/<family>.py` model: one protocol family maps to one adapter module.
+
+---
+
+## 36 Chains -> 6 Protocol Families
+
+Source of truth: `config/chains/*.json:_meta.adapter_family`.
+
+Family assignment is based on RPC request envelope, parameter structure, endpoint routing, authentication/header requirements, response envelope, and block-height parsing. It is not based on brand, token, or ecosystem.
+
+| Family | Chains | Coverage | Handler status |
+|--------|-------:|----------|----------------|
+| `jsonrpc` | 16 | solana, ethereum, bsc, base, polygon, scroll, arbitrum, optimism, linea, avalanche-c, avalanche-x, zksync-era, near, tron, sui, starknet | implemented |
+| `bitcoin_jsonrpc` | 4 | bitcoin, bch, dogecoin, litecoin | implemented |
+| `substrate` | 5 | polkadot, kusama, acala, astar, moonbeam | implemented |
+| `tendermint` | 5 | cosmos-hub, osmosis, celestia, injective, sei | implemented |
+| `rest` | 5 | algorand, aptos, cardano, tezos, ton | implemented |
+| `hedera_dual` | 1 | hedera | implemented |
+| **TOTAL** | **36** | 184 configured single/mixed RPC methods | **184/184 committed fixture coverage** |
+
+Committed fixture coverage:
+
+```bash
+python3 tools/fake-node/check_fixture_coverage.py
+```
+
+---
+
+## Usage
 
 ```bash
 # Build
 cd tools/fake-node && go build -o /tmp/fake-node-v2 .
 
-# Run for a specific chain (env var, framework 一致方式)
+# Run for a specific chain using the same env style as the framework
 BLOCKCHAIN_NODE=solana   /tmp/fake-node-v2 -port 19101
 BLOCKCHAIN_NODE=ethereum /tmp/fake-node-v2 -port 19102
 BLOCKCHAIN_NODE=bitcoin  /tmp/fake-node-v2 -port 19103
 
-# Or via flag (overrides env)
+# Or via flag, which overrides the env var
 /tmp/fake-node-v2 -chain solana -port 19101
 
-# Smoke (3 chains: solana + ethereum + cardano stub)
+# Smoke and fixture coverage verification
 bash tools/fake-node/scripts/ci_smoke.sh
+python3 tools/fake-node/check_fixture_coverage.py
 ```
 
 CLI flags:
-- `-chain`: chain name; overrides `BLOCKCHAIN_NODE` env; default `solana`
-- `-chains-dir`: directory of framework chain templates (default `../../config/chains`)
-- `-configs-dir`: directory of per-family fake-node YAML (default `configs`)
-- `-fixtures-dir`: fixtures root (per-chain subdirs) (default `./fixtures`)
-- `-port`: listen port (default `19000`)
+- `-chain`: chain name; overrides `BLOCKCHAIN_NODE`; default `solana`.
+- `-chains-dir`: directory of framework chain templates; default `../../config/chains`.
+- `-configs-dir`: directory of per-family fake-node YAML; default `configs`.
+- `-fixtures-dir`: fixtures root with per-chain subdirectories; default `./fixtures`.
+- `-port`: listen port; default `19000`.
 
-`BLOCKCHAIN_NODE` env handling matches framework `config/config_loader.sh:17,20`: default `solana`, lowercased.
+`BLOCKCHAIN_NODE` env handling matches the framework: default `solana`, lowercased.
 
 ---
 
-## 目录结构
+## Directory Structure
 
-```
+```text
 tools/fake-node/
-├── fake_node.go              # main: env → template → family → handler
+├── fake_node.go              # main: env -> template -> family -> handler
 ├── handlers/
-│   ├── base.go               # Handler interface + _REGISTRY + NotImplementedHandler
-│   ├── jsonrpc.go            # 16-chain handler (byte-passthrough)
-│   ├── bitcoin_jsonrpc.go    # 4-chain handler (byte-passthrough)
-│   └── stubs.go              # 5 stub registrations (substrate/tendermint/rest/ogmios/hedera_dual)
+│   ├── base.go               # Handler interface + registry + NotImplementedHandler
+│   ├── jsonrpc.go            # JSON-RPC family replay
+│   ├── bitcoin_jsonrpc.go    # UTXO / Bitcoin-style replay
+│   ├── rest.go               # REST family replay
+│   ├── substrate.go          # Substrate / sidecar replay
+│   ├── tendermint.go         # Tendermint / Cosmos REST-RPC replay
+│   └── hedera_dual.go        # Hedera Mirror REST + JSON-RPC replay
 ├── configs/
-│   ├── jsonrpc.yaml          # method list (union) + tiers + IO
+│   ├── jsonrpc.yaml          # method list, tiers, and I/O config
 │   ├── bitcoin_jsonrpc.yaml
-│   ├── substrate.yaml        # stub (empty methods)
-│   ├── tendermint.yaml       # stub
-│   ├── rest.yaml             # stub
-│   ├── ogmios.yaml           # stub
-│   └── hedera_dual.yaml      # stub
+│   ├── substrate.yaml
+│   ├── tendermint.yaml
+│   ├── rest.yaml
+│   └── hedera_dual.yaml
 ├── fixtures/
-│   ├── solana/               # 5 real recorded fixtures
-│   │   ├── getSlot.json
-│   │   ├── getBalance.json
-│   │   ├── getLatestBlockhash.json
-│   │   ├── getBlock.json
-│   │   └── getTransaction.json
-│   ├── ethereum/             # 6 stub fixtures (minimal valid JSON-RPC)
-│   │   ├── eth_blockNumber.json
-│   │   ├── eth_gasPrice.json
-│   │   ├── eth_getBalance.json
-│   │   ├── eth_getTransactionCount.json
-│   │   ├── eth_getBlockByNumber.json
-│   │   └── eth_getTransactionByHash.json
-│   └── <other-chains>/       # populated on demand
+│   ├── solana/
+│   ├── ethereum/
+│   ├── cosmos-hub/
+│   └── <36 chain dirs>/      # 184 committed fake-node fixtures total
 └── scripts/
-    ├── ci_smoke.sh           # 3-chain smoke (15 checks)
-    └── record_solana_fixtures.sh  # recorder (reusable per-chain via mainnet RPC)
+    └── ci_smoke.sh
 ```
 
 ---
 
-## 录制 fixture (per-chain)
+## Recording Fixtures
 
 ```bash
-# Solana (already done, fixtures committed)
-bash tools/fake-node/scripts/record_solana_fixtures.sh
+# Record all 36 chains using the same adapter path as Vegeta target generation.
+tools/fake-node/record_rpc_fixtures.sh all
 
-# Ethereum (using stub fixtures currently; replace with real mainnet recording)
-# TODO: scripts/record_evm_fixtures.sh — needs an EVM endpoint
+# Record one chain or a comma-separated chain list.
+tools/fake-node/record_rpc_fixtures.sh solana
+tools/fake-node/record_rpc_fixtures.sh solana,ethereum,bitcoin
+
+# Committed coverage check.
+python3 tools/fake-node/check_fixture_coverage.py
+
+# Optional local authenticity check after recording request/response evidence.
+python3 tools/fake-node/validate_fixture_authenticity.py --json
+python3 tools/fake-node/check_fixture_coverage.py --strict
 ```
 
-Recording uses the same approach as `tools/proxy/poc-min/scripts/record_fixtures.sh` — `curl` mainnet, save response verbatim.
+Recording uses `tools/chain_adapters/` to build the exact request envelope that the benchmark sends through Vegeta. The saved fixture is therefore matched to the production path, not to a separate ad-hoc curl script.
 
 ---
 
-## smoke 覆盖范围
+## Method-To-Fixture Matching
 
-`scripts/ci_smoke.sh` 当前 15 个检查:
-1. binary builds
-2. solana startup + 路由 `adapter_family=jsonrpc` 正确
-3. solana getSlot / getBalance byte-correct
-4. ethereum startup + 复用 jsonrpc handler (证 family 抽象)
-5. ethereum eth_blockNumber / eth_getBalance byte-correct
-6. ethereum 在 solana method 上 404 (证 chain 隔离)
-7. cardano stub startup OK + RPC 失败有响
-8. /stats 计数对
-9. IO worker 活跃
+fake-node does not infer response structure from parameter names. Matching is scoped to:
 
-**未覆盖** (P2, 进 OQ):
-- substrate / tendermint / rest / hedera_dual 真 fixture + handler 实现
-- 4 个 EVM 兄弟链 (bsc/base/polygon/...) smoke
-- bitcoin_jsonrpc 真 fixture (handler 已实现, fixtures 待录)
+```text
+BLOCKCHAIN_NODE + request method + family YAML mapping -> fixtures/<chain>/<fixture>.json
+```
+
+This matters because two RPC methods may both accept `tx_hash` or `address` while returning completely different response structures. For example:
+
+- `eth_getTransactionByHash(tx_hash)` returns an EVM transaction object.
+- `GET /cosmos/tx/v1beta1/txs/{hash}` returns a Cosmos tx envelope.
+- `avm.getTx(txID)` returns an Avalanche X-Chain transaction shape.
+
+When adding a method, record that method's own `chain + method` fixture. Do not reuse a response just because the parameters look similar.
+
+### Example 1: Add a Method to an Existing JSON-RPC Family
+
+1. Declare the method and parameter format in the chain template:
+
+```json
+{
+  "param_formats": {
+    "eth_getTransactionReceipt": "transaction_hash"
+  },
+  "rpc_methods": {
+    "mixed_weighted": [
+      {"method": "eth_getTransactionReceipt", "weight": 10}
+    ]
+  },
+  "params": {
+    "target_tx_hash": "0x..."
+  }
+}
+```
+
+2. Add the method mapping in `tools/fake-node/configs/jsonrpc.yaml`:
+
+```yaml
+methods:
+  eth_getTransactionReceipt:
+    fixture: eth_getTransactionReceipt.json
+    tier: expensive
+```
+
+3. Record and verify:
+
+```bash
+RPC_FIXTURE_MODES=mixed tools/fake-node/record_rpc_fixtures.sh <chain>
+python3 tools/fake-node/check_fixture_coverage.py
+
+# Optional local evidence audit:
+python3 tools/fake-node/validate_fixture_authenticity.py --json
+python3 tools/fake-node/check_fixture_coverage.py --strict
+```
+
+### Example 2: Add a Method to a REST Chain
+
+1. Declare the logical method and HTTP path in the chain template:
+
+```json
+{
+  "param_formats": {
+    "GET /v1/accounts/{addr}/transactions": "path_addr"
+  },
+  "_meta": {
+    "adapter_family": "rest",
+    "rest_paths": {
+      "GET /v1/accounts/{addr}/transactions": {
+        "method": "GET",
+        "path": "/v1/accounts/{address}/transactions"
+      }
+    }
+  }
+}
+```
+
+2. Add the fixture filename in the family YAML:
+
+```yaml
+methods:
+  GET /v1/accounts/{addr}/transactions:
+    fixture: GET__v1_accounts__addr__transactions.json
+    tier: mid
+```
+
+3. Record the real response. If the request needs samples such as `tx_hash`, `block_hash`, `asset_id`, or `height`, add real queryable values to `params` first.
+
+### When a New Family Is Required
+
+If a new chain or method needs behavior that existing adapters cannot express, it is not only a configuration change. Extend code when you need:
+
+- A new request envelope, such as a protocol that is neither JSON-RPC nor REST path/body.
+- New authentication or header rules.
+- Multiple protocol endpoints inside one chain where the existing family cannot route by method.
+- A new block-height parsing mode.
+- Chain-specific parameter encoding that cannot be represented by `param_formats` or `_meta.rest_paths`.

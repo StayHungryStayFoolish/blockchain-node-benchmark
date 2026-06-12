@@ -1,7 +1,7 @@
-# fake-node v2 config — rest family (ADR-0005).
+# fake-node v2 config — rest family.
 #
 # Covers 5 chains under _meta.adapter_family=rest:
-#   cardano (ADR-0005 corrected from ogmios), algorand, aptos, tezos, ton.
+#   cardano (corrected from ogmios), algorand, aptos, tezos, ton.
 #
 # method NAME → fixture file mapping.
 # Fixtures stored per-chain under fixtures/<chain>/<fixture-name>.json.

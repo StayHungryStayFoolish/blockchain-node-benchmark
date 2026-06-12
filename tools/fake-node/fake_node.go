@@ -1,27 +1,25 @@
 // fake-node v2 — long-lived test fixture standing in for a real blockchain node.
 //
-// v2 改动 (2026-05-27, R1 — 范式纠正):
-//   v1 范式 (单文件单链, configs/<chain>.yaml 全配, 自创"零代码加链"声明)
-//     与 framework 既有 chain_type/_meta.adapter_family switch 约定不一致。
-//     用户质问: "BLOCKCHAIN_NODE 变量存在, fake-node 难道不能 switch case?
-//                36 链本身就不是完全相同, 怎么可能一个 fake-node 复用?"
-//   v2 范式: BLOCKCHAIN_NODE env → config/chains/<x>.json → _meta.adapter_family
-//            → handlers/<family>.go (switch-case via registry),
-//            与 framework chain_adapters/get_adapter() 同构。
+// Implementation model:
+//   Deprecated model: single-file, per-chain YAML implementation
+//     The handler model mirrors the framework adapter-family dispatch.
 //
-// GREP-EVIDENCE (per parallel-entry-trap skill, loaded-but-violated gate):
-//   - config/config_loader.sh:17     BLOCKCHAIN_NODE env (default solana, lowercased)
+//   Current model: BLOCKCHAIN_NODE env -> config/chains/<x>.json -> _meta.adapter_family
+//            → handlers/<family>.go (switch-case via registry),
+//            matching framework chain_adapters/get_adapter().
+//
+// Related framework entry points:
+//   - config/config_loader.sh       BLOCKCHAIN_NODE env (default solana, lowercased)
 //   - tools/chain_adapters/base.py:107 _REGISTRY: dict[family → AdapterClass]
 //   - tools/chain_adapters/base.py:126 family = tpl["_meta"]["adapter_family"]
 //   - config/chains/*.json _meta.adapter_family 7 families covering 36 chains
 //
-// 加链工作量诚实矩阵 (取代 v1 的"零代码加链"绝对声明):
-//   | 场景                                 | Go 改动            | 配置改动             |
-//   |--------------------------------------|--------------------|----------------------|
-//   | 已实现协议族新成员 (如 + 新 EVM 链) | 0                  | +1 config/chains JSON|
-//   | 协议族内特殊调优                     | 0                  | +1 fake-node YAML    |
-//   | 全新协议族 (5/7 仍 stub)             | +1 handler ~200 行 | +1 family YAML       |
-//   与 framework chain_adapters/<family>.py 工作量对称.
+// Extension model:
+//   | Scenario                         | Go change          | Config change          |
+//   |----------------------------------|--------------------|------------------------|
+//   | New chain in an existing family  | none               | +1 config/chains JSON  |
+//   | Family-specific tuning           | none               | +1 fake-node YAML      |
+//   | New protocol family              | +1 handler         | +1 family YAML         |
 
 package main
 
@@ -69,7 +67,7 @@ type Config struct {
 	IO      IOSpec                `yaml:"io"`
 }
 
-// ---- Chain template (config/chains/<chain>.json — framework's source of truth) ----
+// ---- Chain template (config/chains/<chain>.json) ----
 
 type chainTemplate map[string]any
 
@@ -122,6 +120,169 @@ func loadConfig(path string) (*Config, error) {
 		cfg.IO.MaxIntervalMs = 500
 	}
 	return &cfg, nil
+}
+
+func safeFixtureName(method string) string {
+	method = strings.ReplaceAll(method, "/", "_")
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range method {
+		keep := (r >= 'A' && r <= 'Z') ||
+			(r >= 'a' && r <= 'z') ||
+			(r >= '0' && r <= '9') ||
+			r == '_' || r == '.' || r == '-'
+		if keep {
+			b.WriteRune(r)
+			lastUnderscore = false
+			continue
+		}
+		if !lastUnderscore {
+			b.WriteRune('_')
+			lastUnderscore = true
+		}
+	}
+	name := strings.Trim(b.String(), "_")
+	if name == "" {
+		name = "method"
+	}
+	return name + ".json"
+}
+
+func splitCSVMethods(value any) []string {
+	switch v := value.(type) {
+	case string:
+		parts := strings.Split(v, ",")
+		out := make([]string, 0, len(parts))
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				out = append(out, part)
+			}
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, strings.TrimSpace(s))
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func templateMethods(tpl chainTemplate) []string {
+	rpcMethods, ok := tpl["rpc_methods"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []string{}
+	add := func(method string) {
+		method = strings.TrimSpace(method)
+		if method == "" || seen[method] {
+			return
+		}
+		seen[method] = true
+		out = append(out, method)
+	}
+
+	if single, ok := rpcMethods["single"].(string); ok {
+		add(single)
+	}
+	if weighted, ok := rpcMethods["mixed_weighted"].([]any); ok {
+		for _, raw := range weighted {
+			item, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if method, ok := item["method"].(string); ok {
+				add(method)
+			}
+		}
+	}
+	for _, method := range splitCSVMethods(rpcMethods["mixed"]) {
+		add(method)
+	}
+	if meta, ok := tpl["_meta"].(map[string]any); ok {
+		if probe, ok := meta["health_probe"].(map[string]any); ok {
+			method, _ := probe["method"].(string)
+			rpcMethod, _ := probe["rpc_method"].(string)
+			path, _ := probe["path"].(string)
+			if method == "" {
+				method = "GET"
+			}
+			if rpcMethod != "" {
+				add(rpcMethod)
+			} else if path == "" && method != "GET" && method != "POST" {
+				add(method)
+			} else {
+				covered := false
+				urlPath := strings.ToLower(strings.TrimPrefix(strings.SplitN(strings.TrimSpace(path), "?", 2)[0], "/"))
+				for _, existing := range out {
+					if pathTemplateMatches(method, urlPath, existing) || pathOnlyTemplateMatches(urlPath, existing) {
+						covered = true
+						break
+					}
+				}
+				if path != "" && !covered {
+					add(strings.ToUpper(method) + " " + path)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func mergeTemplateMethods(cfg *Config, tpl chainTemplate) {
+	if cfg.Methods == nil {
+		cfg.Methods = map[string]MethodSpec{}
+	}
+	added := 0
+	for _, method := range templateMethods(tpl) {
+		if _, exists := cfg.Methods[method]; exists {
+			continue
+		}
+		cfg.Methods[method] = MethodSpec{
+			Fixture: safeFixtureName(method),
+			Tier:    "cheap",
+		}
+		added++
+	}
+	if added > 0 {
+		log.Printf("method wiring: added %d chain-template methods with default fixture names", added)
+	}
+	addedAliases := 0
+	meta, _ := tpl["_meta"].(map[string]any)
+	restPaths, _ := meta["rest_paths"].(map[string]any)
+	for method, rawSpec := range restPaths {
+		existing, ok := cfg.Methods[method]
+		if !ok {
+			continue
+		}
+		spec, ok := rawSpec.(map[string]any)
+		if !ok {
+			continue
+		}
+		path, ok := spec["path"].(string)
+		if !ok || strings.TrimSpace(path) == "" {
+			continue
+		}
+		alias := strings.SplitN(strings.TrimSpace(path), "?", 2)[0]
+		if alias == "" || alias == "/" || alias == method {
+			continue
+		}
+		if _, exists := cfg.Methods[alias]; exists {
+			continue
+		}
+		cfg.Methods[alias] = existing
+		addedAliases++
+	}
+	if addedAliases > 0 {
+		log.Printf("method wiring: added %d rest path aliases from chain template", addedAliases)
+	}
 }
 
 // loadFixtures loads fixture bytes per method. The family yaml lists the UNION
@@ -240,7 +401,7 @@ func handleRPC(handler handlers.Handler, fixtures map[string][]byte, tiers map[s
 		//      (or first segment) is the method NAME, used by rest / tendermint(GET) /
 		//      hedera_dual(REST/Mirror side, paths under /api/v1/...).
 		//
-		// ADR-0005 (2026-05-28): Path-based mode was added to support 4 new
+		// Path-based mode was added to support 4 new
 		// adapter families (rest/substrate/tendermint/hedera_dual). Without it,
 		// fake-node v2 could only serve jsonrpc envelope traffic, which made
 		// ~20/36 chains unreachable.
@@ -249,13 +410,6 @@ func handleRPC(handler handlers.Handler, fixtures map[string][]byte, tiers map[s
 		var params json.RawMessage
 
 		if isPathBasedRequest(r) {
-			m, ok := resolvePathMethod(r, methods)
-			if !ok {
-				http.Error(w, fmt.Sprintf("path-based dispatch: no method matches URL %q (declared methods: %d)", r.URL.Path, len(methods)), 404)
-				totalErrors.Add(1)
-				return
-			}
-			method = m
 			// Read body (may be empty for GET, may be JSON for POST) — passed
 			// to handler.Handle() opaquely.
 			body, err := io.ReadAll(r.Body)
@@ -266,6 +420,23 @@ func handleRPC(handler handlers.Handler, fixtures map[string][]byte, tiers map[s
 			}
 			defer r.Body.Close()
 			params = json.RawMessage(body)
+			m, ok := resolvePathMethod(r, methods)
+			if !ok && len(body) > 0 {
+				var req rpcReq
+				if err := json.Unmarshal(body, &req); err == nil && req.Method != "" {
+					if _, exists := methods[req.Method]; exists {
+						m = req.Method
+						ok = true
+						params = req.Params
+					}
+				}
+			}
+			if !ok {
+				http.Error(w, fmt.Sprintf("path-based dispatch: no method matches URL %q (declared methods: %d)", r.URL.Path, len(methods)), 404)
+				totalErrors.Add(1)
+				return
+			}
+			method = m
 		} else {
 			// JSON-RPC envelope mode
 			body, err := io.ReadAll(r.Body)
@@ -329,9 +500,9 @@ func isPathBasedRequest(r *http.Request) bool {
 
 // resolvePathMethod maps the request URL to a declared method NAME.
 // Strategy (cheapest first):
-//   1. Exact match: r.URL.Path == declared method's path component
-//   2. Substring match: any declared method whose path-fragment appears in URL
-//   3. Verb+path match for METHOD-style names (e.g. "GET_TIP" matches GET /tip)
+//  1. Exact match: r.URL.Path == declared method's path component
+//  2. Substring match: any declared method whose path-fragment appears in URL
+//  3. Verb+path match for METHOD-style names (e.g. "GET_TIP" matches GET /tip)
 //
 // For path-based REST families we expect each method NAME in configs/<family>.yaml
 // to be either:
@@ -347,9 +518,22 @@ func resolvePathMethod(r *http.Request, methods map[string]MethodSpec) (string, 
 	if i := strings.Index(urlPath, "?"); i >= 0 {
 		urlPath = urlPath[:i]
 	}
-	// Try exact match against method names that ARE paths (e.g. "status", "abci_info").
+	// Try exact match against method names that ARE paths (e.g. "/wallet/getaccount").
 	for m := range methods {
-		if strings.EqualFold(m, urlPath) {
+		methodPath := strings.ToLower(strings.TrimPrefix(m, "/"))
+		if strings.EqualFold(methodPath, urlPath) {
+			return m, true
+		}
+	}
+	// Try verb + path-template method names such as "GET /v2/accounts/{address}".
+	for m := range methods {
+		if pathTemplateMatches(r.Method, urlPath, m) {
+			return m, true
+		}
+	}
+	// Try path-only templates such as "/cosmos/bank/v1beta1/balances/{address}".
+	for m := range methods {
+		if pathOnlyTemplateMatches(urlPath, m) {
 			return m, true
 		}
 	}
@@ -378,6 +562,81 @@ func resolvePathMethod(r *http.Request, methods map[string]MethodSpec) (string, 
 	return "", false
 }
 
+func pathTemplateMatches(requestVerb, urlPath, methodName string) bool {
+	parts := strings.SplitN(strings.TrimSpace(methodName), " ", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	verb := strings.ToUpper(strings.TrimSpace(parts[0]))
+	if verb != strings.ToUpper(requestVerb) {
+		return false
+	}
+	template := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(parts[1]), "/"))
+	if i := strings.Index(template, "?"); i >= 0 {
+		template = template[:i]
+	}
+	if template == "" {
+		return urlPath == ""
+	}
+	tplSegments := strings.Split(template, "/")
+	urlSegments := strings.Split(urlPath, "/")
+	if len(tplSegments) != len(urlSegments) {
+		return false
+	}
+	for i := range tplSegments {
+		tpl := tplSegments[i]
+		if strings.HasPrefix(tpl, "{") && strings.HasSuffix(tpl, "}") {
+			if urlSegments[i] == "" {
+				return false
+			}
+			continue
+		}
+		if tpl != urlSegments[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func pathOnlyTemplateMatches(urlPath, methodName string) bool {
+	methodName = strings.TrimSpace(methodName)
+	if !strings.Contains(methodName, "/") {
+		return false
+	}
+	if strings.Contains(methodName, " ") {
+		return false
+	}
+	return templatePathMatches(urlPath, methodName)
+}
+
+func templatePathMatches(urlPath, template string) bool {
+	template = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(template), "/"))
+	if i := strings.Index(template, "?"); i >= 0 {
+		template = template[:i]
+	}
+	if template == "" {
+		return urlPath == ""
+	}
+	tplSegments := strings.Split(template, "/")
+	urlSegments := strings.Split(urlPath, "/")
+	if len(tplSegments) != len(urlSegments) {
+		return false
+	}
+	for i := range tplSegments {
+		tpl := tplSegments[i]
+		if strings.HasPrefix(tpl, "{") && strings.HasSuffix(tpl, "}") {
+			if urlSegments[i] == "" {
+				return false
+			}
+			continue
+		}
+		if tpl != urlSegments[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func handleStats(w http.ResponseWriter, _ *http.Request) {
 	stats := map[string]int64{
 		"total_requests": totalRequests.Load(),
@@ -404,24 +663,17 @@ func resolveChain(flagChain string) string {
 
 // ---- default path resolution (binary-location-aware) ----
 //
-// 默认 flag 值需要满足两类用例:
-//   (a) 从源目录 (tools/fake-node/) `go run` 或 `./fake-node` — 历史用法,
-//       相对路径 "../../config/chains" / "configs" / "./fixtures" 即可工作。
-//   (b) Binary 被 cp 或 build -o 到任意目录 (如 /tmp/fake-node-v2) 后启动 —
-//       cwd 不再是源目录,相对路径会 fail。
+// Default flag values need to support two modes:
+//   (a) running from tools/fake-node with go run or ./fake-node;
+//   (b) running a copied or packaged binary from another directory.
 //
-// 解决策略 (优先级从高到低):
-//   1. runtime.Caller(0) — go 编译时把源文件绝对路径嵌入 binary。只要源仓库
-//      还在原位,无论 binary 跑哪儿都能找到资源。对 (b) 用例是主路径。
-//   2. os.Executable() — binary 自身位置,适用于"binary 和资源同目录部署"
-//      场景 (e.g. 容器/打包发行)。检测到资源相对 binary dir 存在则用之。
-//   3. 相对路径 fallback — 兼容 (a) 用例 + `go run` (临时 build dir 下
-//      runtime.Caller 仍返回源路径,但保险起见保留)。
-//
-// 任一 helper 失败 (e.g. runtime.Caller 不可用),自动降级到下一级。
+// Resolution order:
+//   1. runtime.Caller(0): source directory embedded by the Go compiler;
+//   2. os.Executable(): binary directory for packaged deployments;
+//   3. fallback relative paths for source-tree execution.
 
-// sourceDir 返回 fake_node.go 所在目录的绝对路径 (编译时嵌入)。
-// 若 runtime.Caller 失败或路径不再存在,返回空串。
+// sourceDir returns the absolute directory containing fake_node.go.
+// It returns an empty string when runtime.Caller fails or the directory no longer exists.
 func sourceDir() string {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok || file == "" {
@@ -429,13 +681,12 @@ func sourceDir() string {
 	}
 	dir := filepath.Dir(file)
 	if _, err := os.Stat(dir); err != nil {
-		return "" // 源目录已移动/删除
+		return ""
 	}
 	return dir
 }
 
-// executableDir 返回当前 binary 所在目录的绝对路径。
-// 失败返回空串。
+// executableDir returns the absolute directory containing the current binary.
 func executableDir() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -448,10 +699,10 @@ func executableDir() string {
 	return filepath.Dir(resolved)
 }
 
-// resolveDefaultPath 按 (sourceDir, executableDir, fallback) 优先级解析路径。
-// relFromSource: 相对 tools/fake-node/ 的路径 (e.g. "../../config/chains")
-// relFromExe:    相对 binary 目录的路径 (e.g. "config/chains"),用于打包部署
-// fallback:      纯相对路径,最后兜底 (向后兼容 `go run` from source dir)
+// resolveDefaultPath resolves paths in source-dir, executable-dir, then fallback order.
+// relFromSource is relative to tools/fake-node.
+// relFromExe is relative to the binary directory for packaged deployments.
+// fallback is the final relative-path fallback.
 func resolveDefaultPath(relFromSource, relFromExe, fallback string) string {
 	if src := sourceDir(); src != "" {
 		p := filepath.Clean(filepath.Join(src, relFromSource))
@@ -520,6 +771,7 @@ func main() {
 	if cfg.Family != "" && cfg.Family != family {
 		log.Fatalf("config family mismatch: yaml says %q but chain dispatches %q", cfg.Family, family)
 	}
+	mergeTemplateMethods(cfg, tpl)
 	log.Printf("config %s: %d methods, family=%s", cfgPath, len(cfg.Methods), family)
 
 	fixtures, err := loadFixtures(cfg, *fixturesDir, chain)

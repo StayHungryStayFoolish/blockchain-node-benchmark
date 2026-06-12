@@ -25,7 +25,7 @@ def load_framework_config(force_reload=False):
     
     This is the only correct approach because:
     1. Configuration files contain complex Shell syntax (functions, arrays, arithmetic operations)
-    2. Requires dynamic calculations (io2 throughput, AWS environment detection, etc.)
+    2. Requires dynamic calculations (disk throughput, provider detection, etc.)
     3. Ensures complete consistency with production environment (Shell calling Python)
     
     Intelligent detection:

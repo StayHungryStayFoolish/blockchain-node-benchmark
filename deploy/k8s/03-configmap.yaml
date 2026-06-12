@@ -1,8 +1,7 @@
 # Blockchain Node Benchmark — ConfigMap (collector settings + env)
 # ====================================================================
-# v1.3 plan §S4.3: env defaults + non-secret configuration shipped to
-# every DaemonSet pod. Real chain credentials (if any) belong in a
-# separate Secret, not here.
+# Environment defaults and non-secret configuration shipped to every DaemonSet
+# pod. Real chain credentials (if any) belong in a separate Secret, not here.
 #
 # The DaemonSet sources HOST_PROC/HOST_SYS from this map; user can
 # override per-environment by patching this ConfigMap rather than

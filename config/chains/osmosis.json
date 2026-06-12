@@ -1,6 +1,5 @@
 {
   "chain_type": "osmosis",
-  "methods": {},
   "param_formats": {
     "/status": "no_params",
     "/cosmos/bank/v1beta1/balances/{address}": "path_address",
@@ -13,8 +12,9 @@
     "max_signatures": "ACCOUNT_MAX_SIGNATURES",
     "output_file": "ACCOUNTS_OUTPUT_FILE",
     "semaphore_limit": "ACCOUNT_SEMAPHORE_LIMIT",
-    "target_address": "osmo1jv65s3grqf6v6jl3dp4t6c9t9rk99cd80yhvld",
-    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE"
+    "target_address": "${TARGET_ADDRESS:-osmo1jv65s3grqf6v6jl3dp4t6c9t9rk99cd80yhvld}",
+    "tx_batch_size": "ACCOUNT_TX_BATCH_SIZE",
+    "target_pool_id": "${TARGET_POOL_ID:-1}"
   },
   "rpc_methods": {
     "single": "/cosmos/bank/v1beta1/balances/{address}",
@@ -22,23 +22,23 @@
     "mixed_weighted": [
       {
         "method": "/status",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "/cosmos/bank/v1beta1/balances/{address}",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "/osmosis/poolmanager/v1beta1/num_pools",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "/osmosis/gamm/v1beta1/pools/{pool_id}",
-        "weight": 1
+        "weight": 20
       },
       {
         "method": "/osmosis/twap/v1beta1/ArithmeticTwapToNow",
-        "weight": 1
+        "weight": 20
       }
     ]
   },
@@ -46,13 +46,12 @@
   "system_addresses": [],
   "_meta": {
     "source": "research-md",
-    "research_doc": "docs/zh/chains/22-osmosis.md",
     "extracted_at": "2026-05-24T00:26:38Z",
-    "extracted_by": "subagent_batch_S0-inv",
+    "extracted_by": "chain-template-migration",
     "baseline_sha": "ffbeeee",
-    "note": "Extracted from research-md by subagent. param_formats may need normalization in S1 alignment with adapters.",
+    "note": "Chain template normalized for adapter-driven request generation and fake-node fixture coverage.",
     "normalized_at": "2026-05-24T04:43:09.942117+00:00",
-    "normalized_by": "tools/normalize_chain_templates.py (S0.7-norm)",
+    "normalized_by": "tools/normalize_chain_templates.py",
     "original_rpc_protocol": "mixed",
     "original_public_endpoints": [
       {
@@ -71,13 +70,31 @@
         "url": "https://lcd.osmosis.zone",
         "auth": false,
         "verified": "E2",
-        "notes": "官方 LCD"
+        "notes": "Official LCD"
       }
     ],
-    "original_notes": "CometBFT JSON-RPC + Cosmos REST 双协议;独有 module gamm/CL/poolmanager 全公链可达",
+    "original_notes": "CometBFT JSON-RPC + Cosmos REST dual protocol; chain-specific modules gamm/CL/poolmanager are publicly reachable.",
     "adapter_required": true,
     "adapter_family": "tendermint",
-    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z"
+    "adapter_family_assigned_at": "2026-05-24T05:24:00.591042Z",
+    "rest_url": "https://osmosis-rest.publicnode.com",
+    "twap_verified_at": "2026-06-08",
+    "rest_paths": {
+      "/osmosis/twap/v1beta1/ArithmeticTwapToNow": {
+        "method": "GET",
+        "path": "/osmosis/twap/v1beta1/ArithmeticTwapToNow?pool_id=1&base_asset=ibc%2F27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2&quote_asset=uosmo&start_time=2026-06-08T00:00:00Z"
+      }
+    },
+    "sync_health": {
+      "mode": "absolute_gap",
+      "local_probe": "adapter.health_check_request(local_rpc_url)",
+      "target_probe": "adapter.health_check_request(mainnet_rpc_url)",
+      "comparison": "target_minus_local",
+      "threshold_env": "BLOCK_HEIGHT_DIFF_THRESHOLD",
+      "time_threshold_env": "BLOCK_HEIGHT_TIME_THRESHOLD",
+      "threshold_unit": "block",
+      "notes": "Compare numeric cursors returned by the same adapter health probe against local and target RPC endpoints."
+    }
   },
   "proxy_extraction": {
     "extractors": [

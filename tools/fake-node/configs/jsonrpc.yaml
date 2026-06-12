@@ -12,8 +12,8 @@
 #
 # The method list below is the UNION of methods used across the family —
 # any single chain only needs the subset its template references.
-# (R1: Solana + Ethereum smoke covers a subset; full method coverage tracked
-#  in docs/architecture/OPEN-QUESTIONS.md.)
+# Smoke tests cover a representative subset; fixture coverage is checked by
+# tools/fake-node/check_fixture_coverage.py.
 
 family: jsonrpc
 

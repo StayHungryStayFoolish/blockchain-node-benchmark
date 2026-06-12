@@ -78,6 +78,34 @@ generate_rpc_json() {
         --rpc-url "$rpc_url"
 }
 
+summarize_methods() {
+    local methods=()
+    local counts=()
+    local method i found
+    for method in "$@"; do
+        found=false
+        for ((i = 0; i < ${#methods[@]}; i++)); do
+            if [[ "${methods[$i]}" == "$method" ]]; then
+                counts[$i]=$((counts[$i] + 1))
+                found=true
+                break
+            fi
+        done
+        if [[ "$found" == "false" ]]; then
+            methods+=("$method")
+            counts+=(1)
+        fi
+    done
+    local summary=""
+    for ((i = 0; i < ${#methods[@]}; i++)); do
+        if [[ -n "$summary" ]]; then
+            summary+=", "
+        fi
+        summary+="${methods[$i]}=${counts[$i]}"
+    done
+    echo "$summary"
+}
+
 # Parameter parsing
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -188,6 +216,93 @@ check_required_variables() {
     return 0
 }
 
+load_mixed_weighted_methods() {
+    if [[ "${RPC_MODE:-single}" != "mixed" ]]; then
+        return 0
+    fi
+    if [[ -z "${CHAIN_CONFIG:-}" || "$CHAIN_CONFIG" == "null" ]]; then
+        return 0
+    fi
+
+    local weighted_rows
+    weighted_rows=$(echo "$CHAIN_CONFIG" | jq -r '
+        (.rpc_methods.mixed_weighted // [])[]?
+        | select(.method != null)
+        | [.method, (.weight // 1)]
+        | @tsv
+    ' 2>/dev/null)
+
+    if [[ -z "$weighted_rows" ]]; then
+        return 0
+    fi
+
+    local methods=()
+    local weights=()
+    local total_weight=0
+    local method weight
+    while IFS=$'\t' read -r method weight; do
+        [[ -z "$method" ]] && continue
+        if ! [[ "$weight" =~ ^[0-9]+$ ]]; then
+            weight=1
+        fi
+        if (( weight < 1 )); then
+            weight=1
+        fi
+        methods+=("$method")
+        weights+=("$weight")
+        total_weight=$((total_weight + weight))
+    done <<< "$weighted_rows"
+
+    if [[ ${#methods[@]} -eq 0 || "$total_weight" -le 0 ]]; then
+        return 0
+    fi
+
+    # Build a smooth weighted sequence instead of grouped expansion.
+    # Grouped [A A A ... B B B ...] is technically weighted, but short runs can
+    # hammer only the first method. Smooth weighted round-robin keeps every
+    # prefix closer to the configured ratio.
+    local sequence=()
+    local remaining=()
+    local scores=()
+    local idx pick best_score i
+    for ((i = 0; i < ${#methods[@]}; i++)); do
+        remaining+=("${weights[$i]}")
+        scores+=(0)
+    done
+
+    for ((idx = 0; idx < total_weight; idx++)); do
+        pick=-1
+        best_score=-1
+        for ((i = 0; i < ${#methods[@]}; i++)); do
+            if (( remaining[$i] <= 0 )); then
+                continue
+            fi
+            scores[$i]=$((scores[$i] + weights[$i]))
+            if (( pick < 0 || scores[$i] > best_score )); then
+                pick=$i
+                best_score=${scores[$i]}
+            fi
+        done
+        if (( pick < 0 )); then
+            break
+        fi
+        sequence+=("${methods[$pick]}")
+        remaining[$pick]=$((remaining[$pick] - 1))
+        scores[$pick]=$((scores[$pick] - total_weight))
+    done
+
+    CURRENT_RPC_METHODS_ARRAY=("${sequence[@]}")
+    local joined=""
+    for method in "${sequence[@]}"; do
+        if [[ -n "$joined" ]]; then
+            joined+=","
+        fi
+        joined+="$method"
+    done
+    CURRENT_RPC_METHODS_STRING="$joined"
+    MIXED_WEIGHT_TOTAL="$total_weight"
+}
+
 # Check input file
 check_input_file() {
     if [[ ! -f "$ACCOUNTS_OUTPUT_FILE" ]]; then
@@ -251,9 +366,15 @@ generate_targets() {
                  > "$CURRENT_OUTPUT_FILE"
     else
         # Mixed method mode
+        load_mixed_weighted_methods
         local method_count=${#CURRENT_RPC_METHODS_ARRAY[@]}
+        if [[ "$method_count" -eq 0 ]]; then
+            echo "❌ Error: No mixed RPC methods configured" >&2
+            return 1
+        fi
 
-        echo "📝 Using mixed methods: ${CURRENT_RPC_METHODS_ARRAY[*]}" >&2
+        echo "📝 Using mixed weighted methods: $(summarize_methods "${CURRENT_RPC_METHODS_ARRAY[@]}")" >&2
+        echo "📝 Mixed weighted sequence length: $method_count" >&2
 
         local account_index=0
         for address in "${accounts[@]}"; do

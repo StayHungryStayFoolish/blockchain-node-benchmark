@@ -1,0 +1,2244 @@
+{
+  "rows": [
+    {
+      "chain": "acala",
+      "family": "substrate",
+      "fixture": "acala/chain_getHeader.json",
+      "mapping_source": "chain-template-default",
+      "method": "chain_getHeader",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "acala",
+      "family": "substrate",
+      "fixture": "acala/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "acala",
+      "family": "substrate",
+      "fixture": "acala/eth_chainId.json",
+      "mapping_source": "yaml",
+      "method": "eth_chainId",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "acala",
+      "family": "substrate",
+      "fixture": "acala/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "acala",
+      "family": "substrate",
+      "fixture": "acala/state_getRuntimeVersion.json",
+      "mapping_source": "yaml",
+      "method": "state_getRuntimeVersion",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "acala",
+      "family": "substrate",
+      "fixture": "acala/system_chain.json",
+      "mapping_source": "yaml",
+      "method": "system_chain",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "algorand",
+      "family": "rest",
+      "fixture": "algorand/GET__v2_accounts__address.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /v2/accounts/{address}",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "algorand",
+      "family": "rest",
+      "fixture": "algorand/GET__v2_accounts__address__transactions.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /v2/accounts/{address}/transactions",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "algorand",
+      "family": "rest",
+      "fixture": "algorand/GET__v2_assets__asset_id.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /v2/assets/{asset_id}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "algorand",
+      "family": "rest",
+      "fixture": "algorand/GET__v2_blocks__round.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /v2/blocks/{round}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "algorand",
+      "family": "rest",
+      "fixture": "algorand/GET__v2_transactions__txid.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /v2/transactions/{txid}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "aptos",
+      "family": "rest",
+      "fixture": "aptos/GET__v1.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /v1",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "aptos",
+      "family": "rest",
+      "fixture": "aptos/GET__v1_accounts__addr.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /v1/accounts/{addr}",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "aptos",
+      "family": "rest",
+      "fixture": "aptos/GET__v1_accounts__addr__resources.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /v1/accounts/{addr}/resources",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "aptos",
+      "family": "rest",
+      "fixture": "aptos/GET__v1_transactions_by_hash__hash.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /v1/transactions/by_hash/{hash}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "aptos",
+      "family": "rest",
+      "fixture": "aptos/POST__v1_view.json",
+      "mapping_source": "chain-template-default",
+      "method": "POST /v1/view",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "arbitrum",
+      "family": "jsonrpc",
+      "fixture": "arbitrum/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "arbitrum",
+      "family": "jsonrpc",
+      "fixture": "arbitrum/eth_call.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_call",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "arbitrum",
+      "family": "jsonrpc",
+      "fixture": "arbitrum/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "arbitrum",
+      "family": "jsonrpc",
+      "fixture": "arbitrum/eth_getBlockByNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBlockByNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "arbitrum",
+      "family": "jsonrpc",
+      "fixture": "arbitrum/eth_getTransactionReceipt.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_getTransactionReceipt",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "astar",
+      "family": "substrate",
+      "fixture": "astar/chain_getHeader.json",
+      "mapping_source": "chain-template-default",
+      "method": "chain_getHeader",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "astar",
+      "family": "substrate",
+      "fixture": "astar/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "astar",
+      "family": "substrate",
+      "fixture": "astar/eth_chainId.json",
+      "mapping_source": "yaml",
+      "method": "eth_chainId",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "astar",
+      "family": "substrate",
+      "fixture": "astar/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "astar",
+      "family": "substrate",
+      "fixture": "astar/state_getRuntimeVersion.json",
+      "mapping_source": "yaml",
+      "method": "state_getRuntimeVersion",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "astar",
+      "family": "substrate",
+      "fixture": "astar/system_chain.json",
+      "mapping_source": "yaml",
+      "method": "system_chain",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-c",
+      "family": "jsonrpc",
+      "fixture": "avalanche-c/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-c",
+      "family": "jsonrpc",
+      "fixture": "avalanche-c/eth_call.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_call",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-c",
+      "family": "jsonrpc",
+      "fixture": "avalanche-c/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-c",
+      "family": "jsonrpc",
+      "fixture": "avalanche-c/eth_getBlockByNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBlockByNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-c",
+      "family": "jsonrpc",
+      "fixture": "avalanche-c/eth_getTransactionByHash.json",
+      "mapping_source": "yaml",
+      "method": "eth_getTransactionByHash",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-x",
+      "family": "jsonrpc",
+      "fixture": "avalanche-x/avm.getAllBalances.json",
+      "mapping_source": "chain-template-default",
+      "method": "avm.getAllBalances",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-x",
+      "family": "jsonrpc",
+      "fixture": "avalanche-x/avm.getBlockByHeight.json",
+      "mapping_source": "chain-template-default",
+      "method": "avm.getBlockByHeight",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-x",
+      "family": "jsonrpc",
+      "fixture": "avalanche-x/avm.getHeight.json",
+      "mapping_source": "chain-template-default",
+      "method": "avm.getHeight",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-x",
+      "family": "jsonrpc",
+      "fixture": "avalanche-x/avm.getTx.json",
+      "mapping_source": "chain-template-default",
+      "method": "avm.getTx",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "avalanche-x",
+      "family": "jsonrpc",
+      "fixture": "avalanche-x/avm.getUTXOs.json",
+      "mapping_source": "chain-template-default",
+      "method": "avm.getUTXOs",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "base",
+      "family": "jsonrpc",
+      "fixture": "base/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "base",
+      "family": "jsonrpc",
+      "fixture": "base/eth_gasPrice.json",
+      "mapping_source": "yaml",
+      "method": "eth_gasPrice",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "base",
+      "family": "jsonrpc",
+      "fixture": "base/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "base",
+      "family": "jsonrpc",
+      "fixture": "base/eth_getTransactionCount.json",
+      "mapping_source": "yaml",
+      "method": "eth_getTransactionCount",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bch",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bch/GET__transaction_address__address.json",
+      "mapping_source": "yaml",
+      "method": "GET /transaction/address/{address}",
+      "modes": [
+        "single"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bch",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bch/getblock.json",
+      "mapping_source": "yaml",
+      "method": "getblock",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bch",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bch/getblockcount.json",
+      "mapping_source": "yaml",
+      "method": "getblockcount",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bch",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bch/getmempoolinfo.json",
+      "mapping_source": "yaml",
+      "method": "getmempoolinfo",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bch",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bch/getnetworkinfo.json",
+      "mapping_source": "yaml",
+      "method": "getnetworkinfo",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bch",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bch/getrawtransaction.json",
+      "mapping_source": "yaml",
+      "method": "getrawtransaction",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bitcoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bitcoin/GET__address__address.json",
+      "mapping_source": "yaml",
+      "method": "GET /address/{address}",
+      "modes": [
+        "single"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bitcoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bitcoin/estimatesmartfee.json",
+      "mapping_source": "yaml",
+      "method": "estimatesmartfee",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bitcoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bitcoin/getblock.json",
+      "mapping_source": "yaml",
+      "method": "getblock",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bitcoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bitcoin/getblockcount.json",
+      "mapping_source": "yaml",
+      "method": "getblockcount",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bitcoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bitcoin/getrawmempool.json",
+      "mapping_source": "chain-template-default",
+      "method": "getrawmempool",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bitcoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "bitcoin/getrawtransaction.json",
+      "mapping_source": "yaml",
+      "method": "getrawtransaction",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bsc",
+      "family": "jsonrpc",
+      "fixture": "bsc/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bsc",
+      "family": "jsonrpc",
+      "fixture": "bsc/eth_gasPrice.json",
+      "mapping_source": "yaml",
+      "method": "eth_gasPrice",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bsc",
+      "family": "jsonrpc",
+      "fixture": "bsc/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "bsc",
+      "family": "jsonrpc",
+      "fixture": "bsc/eth_getTransactionCount.json",
+      "mapping_source": "yaml",
+      "method": "eth_getTransactionCount",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cardano",
+      "family": "rest",
+      "fixture": "cardano/blocks.json",
+      "mapping_source": "yaml",
+      "method": "GET_BLOCKS",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cardano",
+      "family": "rest",
+      "fixture": "cardano/epoch_info.json",
+      "mapping_source": "yaml",
+      "method": "GET_EPOCH_INFO",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cardano",
+      "family": "rest",
+      "fixture": "cardano/tip.json",
+      "mapping_source": "yaml",
+      "method": "GET_TIP",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cardano",
+      "family": "rest",
+      "fixture": "cardano/address_info.json",
+      "mapping_source": "yaml",
+      "method": "POST_ADDRESS_INFO",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cardano",
+      "family": "rest",
+      "fixture": "cardano/asset_info.json",
+      "mapping_source": "yaml",
+      "method": "POST_ASSET_INFO",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cardano",
+      "family": "rest",
+      "fixture": "cardano/block_txs.json",
+      "mapping_source": "yaml",
+      "method": "POST_BLOCK_TXS",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cardano",
+      "family": "rest",
+      "fixture": "cardano/tx_info.json",
+      "mapping_source": "yaml",
+      "method": "POST_TX_INFO",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "celestia",
+      "family": "tendermint",
+      "fixture": "celestia/block.json",
+      "mapping_source": "chain-template-default",
+      "method": "/block",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "celestia",
+      "family": "tendermint",
+      "fixture": "celestia/cosmos_bank_v1beta1_balances__address.json",
+      "mapping_source": "chain-template-default",
+      "method": "/cosmos/bank/v1beta1/balances/{address}",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "celestia",
+      "family": "tendermint",
+      "fixture": "celestia/cosmos_base_tendermint_v1beta1_blocks_latest.json",
+      "mapping_source": "chain-template-default",
+      "method": "/cosmos/base/tendermint/v1beta1/blocks/latest",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "celestia",
+      "family": "tendermint",
+      "fixture": "celestia/cosmos_base_tendermint_v1beta1_node_info.json",
+      "mapping_source": "chain-template-default",
+      "method": "/cosmos/base/tendermint/v1beta1/node_info",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "celestia",
+      "family": "tendermint",
+      "fixture": "celestia/status.json",
+      "mapping_source": "chain-template-default",
+      "method": "/status",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cosmos-hub",
+      "family": "tendermint",
+      "fixture": "cosmos-hub/GET__cosmos_bank_v1beta1_balances__addr.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /cosmos/bank/v1beta1/balances/{addr}",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cosmos-hub",
+      "family": "tendermint",
+      "fixture": "cosmos-hub/GET__cosmos_base_tendermint_v1beta1_blocks_latest.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /cosmos/base/tendermint/v1beta1/blocks/latest",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cosmos-hub",
+      "family": "tendermint",
+      "fixture": "cosmos-hub/GET__cosmos_base_tendermint_v1beta1_blocks__height.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /cosmos/base/tendermint/v1beta1/blocks/{height}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cosmos-hub",
+      "family": "tendermint",
+      "fixture": "cosmos-hub/GET__cosmos_staking_v1beta1_validators.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /cosmos/staking/v1beta1/validators",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "cosmos-hub",
+      "family": "tendermint",
+      "fixture": "cosmos-hub/GET__cosmos_tx_v1beta1_txs__hash.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /cosmos/tx/v1beta1/txs/{hash}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "dogecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "dogecoin/GET__address__address_balance.json",
+      "mapping_source": "yaml",
+      "method": "GET /address/{address}/balance",
+      "modes": [
+        "single"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "dogecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "dogecoin/getbestblockhash.json",
+      "mapping_source": "yaml",
+      "method": "getbestblockhash",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "dogecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "dogecoin/getblock.json",
+      "mapping_source": "yaml",
+      "method": "getblock",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "dogecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "dogecoin/getblockcount.json",
+      "mapping_source": "yaml",
+      "method": "getblockcount",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "dogecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "dogecoin/getmempoolinfo.json",
+      "mapping_source": "yaml",
+      "method": "getmempoolinfo",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "dogecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "dogecoin/getrawtransaction.json",
+      "mapping_source": "yaml",
+      "method": "getrawtransaction",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "ethereum",
+      "family": "jsonrpc",
+      "fixture": "ethereum/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "ethereum",
+      "family": "jsonrpc",
+      "fixture": "ethereum/eth_gasPrice.json",
+      "mapping_source": "yaml",
+      "method": "eth_gasPrice",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "ethereum",
+      "family": "jsonrpc",
+      "fixture": "ethereum/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "ethereum",
+      "family": "jsonrpc",
+      "fixture": "ethereum/eth_getTransactionCount.json",
+      "mapping_source": "yaml",
+      "method": "eth_getTransactionCount",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "hedera",
+      "family": "hedera_dual",
+      "fixture": "hedera/GET__api_v1_accounts__addr.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /api/v1/accounts/{addr}",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "hedera",
+      "family": "hedera_dual",
+      "fixture": "hedera/GET__api_v1_balances_account.id_addr.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /api/v1/balances?account.id={addr}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "hedera",
+      "family": "hedera_dual",
+      "fixture": "hedera/GET__api_v1_transactions__addr.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /api/v1/transactions/{addr}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "hedera",
+      "family": "hedera_dual",
+      "fixture": "hedera/eth_call.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_call",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "hedera",
+      "family": "hedera_dual",
+      "fixture": "hedera/eth_getBalance.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_getBalance",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "injective",
+      "family": "tendermint",
+      "fixture": "injective/cosmos_bank_v1beta1_balances__address.json",
+      "mapping_source": "chain-template-default",
+      "method": "/cosmos/bank/v1beta1/balances/{address}",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "injective",
+      "family": "tendermint",
+      "fixture": "injective/injective_exchange_v1beta1_derivative_markets.json",
+      "mapping_source": "chain-template-default",
+      "method": "/injective/exchange/v1beta1/derivative/markets",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "injective",
+      "family": "tendermint",
+      "fixture": "injective/injective_exchange_v1beta1_spot_markets.json",
+      "mapping_source": "chain-template-default",
+      "method": "/injective/exchange/v1beta1/spot/markets",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "injective",
+      "family": "tendermint",
+      "fixture": "injective/injective_oracle_v1beta1_params.json",
+      "mapping_source": "chain-template-default",
+      "method": "/injective/oracle/v1beta1/params",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "injective",
+      "family": "tendermint",
+      "fixture": "injective/status.json",
+      "mapping_source": "chain-template-default",
+      "method": "/status",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "kusama",
+      "family": "substrate",
+      "fixture": "kusama/chain_getBlockHash.json",
+      "mapping_source": "yaml",
+      "method": "chain_getBlockHash",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "kusama",
+      "family": "substrate",
+      "fixture": "kusama/chain_getFinalizedHead.json",
+      "mapping_source": "yaml",
+      "method": "chain_getFinalizedHead",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "kusama",
+      "family": "substrate",
+      "fixture": "kusama/chain_getHeader.json",
+      "mapping_source": "chain-template-default",
+      "method": "chain_getHeader",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "kusama",
+      "family": "substrate",
+      "fixture": "kusama/system_account.json",
+      "mapping_source": "chain-template-default",
+      "method": "system_account",
+      "modes": [
+        "single"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "kusama",
+      "family": "substrate",
+      "fixture": "kusama/system_health.json",
+      "mapping_source": "yaml",
+      "method": "system_health",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "kusama",
+      "family": "substrate",
+      "fixture": "kusama/system_properties.json",
+      "mapping_source": "chain-template-default",
+      "method": "system_properties",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "linea",
+      "family": "jsonrpc",
+      "fixture": "linea/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "linea",
+      "family": "jsonrpc",
+      "fixture": "linea/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "linea",
+      "family": "jsonrpc",
+      "fixture": "linea/eth_getBlockByNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBlockByNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "linea",
+      "family": "jsonrpc",
+      "fixture": "linea/eth_getTransactionByHash.json",
+      "mapping_source": "yaml",
+      "method": "eth_getTransactionByHash",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "linea",
+      "family": "jsonrpc",
+      "fixture": "linea/linea_estimateGas.json",
+      "mapping_source": "chain-template-default",
+      "method": "linea_estimateGas",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "litecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "litecoin/GET__address__address_balance.json",
+      "mapping_source": "yaml",
+      "method": "GET /address/{address}/balance",
+      "modes": [
+        "single"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "litecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "litecoin/getbestblockhash.json",
+      "mapping_source": "yaml",
+      "method": "getbestblockhash",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "litecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "litecoin/getblock.json",
+      "mapping_source": "yaml",
+      "method": "getblock",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "litecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "litecoin/getblockcount.json",
+      "mapping_source": "yaml",
+      "method": "getblockcount",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "litecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "litecoin/getmempoolinfo.json",
+      "mapping_source": "yaml",
+      "method": "getmempoolinfo",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "litecoin",
+      "family": "bitcoin_jsonrpc",
+      "fixture": "litecoin/getrawtransaction.json",
+      "mapping_source": "yaml",
+      "method": "getrawtransaction",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "moonbeam",
+      "family": "substrate",
+      "fixture": "moonbeam/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "moonbeam",
+      "family": "substrate",
+      "fixture": "moonbeam/eth_chainId.json",
+      "mapping_source": "yaml",
+      "method": "eth_chainId",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "moonbeam",
+      "family": "substrate",
+      "fixture": "moonbeam/eth_gasPrice.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_gasPrice",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "moonbeam",
+      "family": "substrate",
+      "fixture": "moonbeam/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "moonbeam",
+      "family": "substrate",
+      "fixture": "moonbeam/system_health.json",
+      "mapping_source": "yaml",
+      "method": "system_health",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "near",
+      "family": "jsonrpc",
+      "fixture": "near/block.json",
+      "mapping_source": "chain-template-default",
+      "method": "block",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "near",
+      "family": "jsonrpc",
+      "fixture": "near/gas_price.json",
+      "mapping_source": "chain-template-default",
+      "method": "gas_price",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "near",
+      "family": "jsonrpc",
+      "fixture": "near/query.json",
+      "mapping_source": "chain-template-default",
+      "method": "query",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "near",
+      "family": "jsonrpc",
+      "fixture": "near/tx.json",
+      "mapping_source": "chain-template-default",
+      "method": "tx",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "near",
+      "family": "jsonrpc",
+      "fixture": "near/validators.json",
+      "mapping_source": "chain-template-default",
+      "method": "validators",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "optimism",
+      "family": "jsonrpc",
+      "fixture": "optimism/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "optimism",
+      "family": "jsonrpc",
+      "fixture": "optimism/eth_call.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_call",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "optimism",
+      "family": "jsonrpc",
+      "fixture": "optimism/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "optimism",
+      "family": "jsonrpc",
+      "fixture": "optimism/eth_getBlockByNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBlockByNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "optimism",
+      "family": "jsonrpc",
+      "fixture": "optimism/eth_getTransactionReceipt.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_getTransactionReceipt",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "osmosis",
+      "family": "tendermint",
+      "fixture": "osmosis/cosmos_bank_v1beta1_balances__address.json",
+      "mapping_source": "chain-template-default",
+      "method": "/cosmos/bank/v1beta1/balances/{address}",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "osmosis",
+      "family": "tendermint",
+      "fixture": "osmosis/osmosis_gamm_v1beta1_pools__pool_id.json",
+      "mapping_source": "chain-template-default",
+      "method": "/osmosis/gamm/v1beta1/pools/{pool_id}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "osmosis",
+      "family": "tendermint",
+      "fixture": "osmosis/osmosis_poolmanager_v1beta1_num_pools.json",
+      "mapping_source": "chain-template-default",
+      "method": "/osmosis/poolmanager/v1beta1/num_pools",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "osmosis",
+      "family": "tendermint",
+      "fixture": "osmosis/osmosis_twap_v1beta1_ArithmeticTwapToNow.json",
+      "mapping_source": "chain-template-default",
+      "method": "/osmosis/twap/v1beta1/ArithmeticTwapToNow",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "osmosis",
+      "family": "tendermint",
+      "fixture": "osmosis/status.json",
+      "mapping_source": "chain-template-default",
+      "method": "/status",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polkadot",
+      "family": "substrate",
+      "fixture": "polkadot/GET__accounts__addr__balance-info.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /accounts/{addr}/balance-info",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polkadot",
+      "family": "substrate",
+      "fixture": "polkadot/GET__blocks__n.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /blocks/{n}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polkadot",
+      "family": "substrate",
+      "fixture": "polkadot/GET__runtime_spec.json",
+      "mapping_source": "yaml",
+      "method": "GET /runtime/spec",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polkadot",
+      "family": "substrate",
+      "fixture": "polkadot/account_nextIndex.json",
+      "mapping_source": "chain-template-default",
+      "method": "account_nextIndex",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polkadot",
+      "family": "substrate",
+      "fixture": "polkadot/chain_getHeader.json",
+      "mapping_source": "chain-template-default",
+      "method": "chain_getHeader",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polkadot",
+      "family": "substrate",
+      "fixture": "polkadot/system_account.json",
+      "mapping_source": "chain-template-default",
+      "method": "system_account",
+      "modes": [
+        "single"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polygon",
+      "family": "jsonrpc",
+      "fixture": "polygon/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polygon",
+      "family": "jsonrpc",
+      "fixture": "polygon/eth_gasPrice.json",
+      "mapping_source": "yaml",
+      "method": "eth_gasPrice",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polygon",
+      "family": "jsonrpc",
+      "fixture": "polygon/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "polygon",
+      "family": "jsonrpc",
+      "fixture": "polygon/eth_getTransactionCount.json",
+      "mapping_source": "yaml",
+      "method": "eth_getTransactionCount",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "scroll",
+      "family": "jsonrpc",
+      "fixture": "scroll/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "scroll",
+      "family": "jsonrpc",
+      "fixture": "scroll/eth_gasPrice.json",
+      "mapping_source": "yaml",
+      "method": "eth_gasPrice",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "scroll",
+      "family": "jsonrpc",
+      "fixture": "scroll/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "scroll",
+      "family": "jsonrpc",
+      "fixture": "scroll/eth_getTransactionCount.json",
+      "mapping_source": "yaml",
+      "method": "eth_getTransactionCount",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sei",
+      "family": "tendermint",
+      "fixture": "sei/status.json",
+      "mapping_source": "chain-template-default",
+      "method": "/status",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sei",
+      "family": "tendermint",
+      "fixture": "sei/eth_blockNumber.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sei",
+      "family": "tendermint",
+      "fixture": "sei/eth_call.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_call",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sei",
+      "family": "tendermint",
+      "fixture": "sei/eth_chainId.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_chainId",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sei",
+      "family": "tendermint",
+      "fixture": "sei/eth_getBalance.json",
+      "mapping_source": "chain-template-default",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "solana",
+      "family": "jsonrpc",
+      "fixture": "solana/getAccountInfo.json",
+      "mapping_source": "yaml",
+      "method": "getAccountInfo",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "solana",
+      "family": "jsonrpc",
+      "fixture": "solana/getBalance.json",
+      "mapping_source": "yaml",
+      "method": "getBalance",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "solana",
+      "family": "jsonrpc",
+      "fixture": "solana/getBlockHeight.json",
+      "mapping_source": "yaml",
+      "method": "getBlockHeight",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "solana",
+      "family": "jsonrpc",
+      "fixture": "solana/getLatestBlockhash.json",
+      "mapping_source": "yaml",
+      "method": "getLatestBlockhash",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "solana",
+      "family": "jsonrpc",
+      "fixture": "solana/getTokenAccountBalance.json",
+      "mapping_source": "yaml",
+      "method": "getTokenAccountBalance",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "starknet",
+      "family": "jsonrpc",
+      "fixture": "starknet/starknet_blockNumber.json",
+      "mapping_source": "chain-template-default",
+      "method": "starknet_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "starknet",
+      "family": "jsonrpc",
+      "fixture": "starknet/starknet_getClassAt.json",
+      "mapping_source": "chain-template-default",
+      "method": "starknet_getClassAt",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "starknet",
+      "family": "jsonrpc",
+      "fixture": "starknet/starknet_getNonce.json",
+      "mapping_source": "chain-template-default",
+      "method": "starknet_getNonce",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "starknet",
+      "family": "jsonrpc",
+      "fixture": "starknet/starknet_getStorageAt.json",
+      "mapping_source": "chain-template-default",
+      "method": "starknet_getStorageAt",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sui",
+      "family": "jsonrpc",
+      "fixture": "sui/sui_getChainIdentifier.json",
+      "mapping_source": "chain-template-default",
+      "method": "sui_getChainIdentifier",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sui",
+      "family": "jsonrpc",
+      "fixture": "sui/sui_getLatestCheckpointSequenceNumber.json",
+      "mapping_source": "chain-template-default",
+      "method": "sui_getLatestCheckpointSequenceNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sui",
+      "family": "jsonrpc",
+      "fixture": "sui/sui_getObject.json",
+      "mapping_source": "chain-template-default",
+      "method": "sui_getObject",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sui",
+      "family": "jsonrpc",
+      "fixture": "sui/sui_getTotalTransactionBlocks.json",
+      "mapping_source": "chain-template-default",
+      "method": "sui_getTotalTransactionBlocks",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "sui",
+      "family": "jsonrpc",
+      "fixture": "sui/suix_getReferenceGasPrice.json",
+      "mapping_source": "chain-template-default",
+      "method": "suix_getReferenceGasPrice",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tezos",
+      "family": "rest",
+      "fixture": "tezos/GET__chains_main_blocks_head_context_contracts__addr__balance.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /chains/main/blocks/head/context/contracts/{addr}/balance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tezos",
+      "family": "rest",
+      "fixture": "tezos/GET__chains_main_blocks_head_header.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /chains/main/blocks/head/header",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tezos",
+      "family": "rest",
+      "fixture": "tezos/GET__chains_main_blocks_head_protocols.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /chains/main/blocks/head/protocols",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tezos",
+      "family": "rest",
+      "fixture": "tezos/GET__chains_main_blocks_head_votes_current_period.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /chains/main/blocks/head/votes/current_period",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tezos",
+      "family": "rest",
+      "fixture": "tezos/GET__chains_main_blocks__block__operations__vp.json",
+      "mapping_source": "chain-template-default",
+      "method": "GET /chains/main/blocks/{block}/operations/{vp}",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "ton",
+      "family": "rest",
+      "fixture": "ton/getAddressBalance.json",
+      "mapping_source": "chain-template-default",
+      "method": "getAddressBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "ton",
+      "family": "rest",
+      "fixture": "ton/getAddressInformation.json",
+      "mapping_source": "chain-template-default",
+      "method": "getAddressInformation",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "ton",
+      "family": "rest",
+      "fixture": "ton/getTransactions.json",
+      "mapping_source": "chain-template-default",
+      "method": "getTransactions",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "ton",
+      "family": "rest",
+      "fixture": "ton/lookupBlock.json",
+      "mapping_source": "chain-template-default",
+      "method": "lookupBlock",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "ton",
+      "family": "rest",
+      "fixture": "ton/runGetMethod.json",
+      "mapping_source": "chain-template-default",
+      "method": "runGetMethod",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tron",
+      "family": "jsonrpc",
+      "fixture": "tron/wallet_getaccount.json",
+      "mapping_source": "chain-template-default",
+      "method": "/wallet/getaccount",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tron",
+      "family": "jsonrpc",
+      "fixture": "tron/wallet_getnowblock.json",
+      "mapping_source": "chain-template-default",
+      "method": "/wallet/getnowblock",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tron",
+      "family": "jsonrpc",
+      "fixture": "tron/wallet_gettransactionbyid.json",
+      "mapping_source": "chain-template-default",
+      "method": "/wallet/gettransactionbyid",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tron",
+      "family": "jsonrpc",
+      "fixture": "tron/wallet_triggerconstantcontract.json",
+      "mapping_source": "chain-template-default",
+      "method": "/wallet/triggerconstantcontract",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "tron",
+      "family": "jsonrpc",
+      "fixture": "tron/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "zksync-era",
+      "family": "jsonrpc",
+      "fixture": "zksync-era/eth_blockNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_blockNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "zksync-era",
+      "family": "jsonrpc",
+      "fixture": "zksync-era/eth_getBalance.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBalance",
+      "modes": [
+        "single",
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "zksync-era",
+      "family": "jsonrpc",
+      "fixture": "zksync-era/eth_getBlockByNumber.json",
+      "mapping_source": "yaml",
+      "method": "eth_getBlockByNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "zksync-era",
+      "family": "jsonrpc",
+      "fixture": "zksync-era/zks_L1BatchNumber.json",
+      "mapping_source": "chain-template-default",
+      "method": "zks_L1BatchNumber",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    },
+    {
+      "chain": "zksync-era",
+      "family": "jsonrpc",
+      "fixture": "zksync-era/zks_getBlockDetails.json",
+      "mapping_source": "chain-template-default",
+      "method": "zks_getBlockDetails",
+      "modes": [
+        "mixed"
+      ],
+      "reason": "",
+      "status": "ok"
+    }
+  ],
+  "statuses": {
+    "ok": 184
+  },
+  "total": 184
+}

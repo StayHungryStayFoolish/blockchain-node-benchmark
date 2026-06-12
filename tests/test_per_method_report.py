@@ -1,9 +1,9 @@
-"""单测: per-method HTML 报告章节 + 双语 (S4.2 W3.4 + W3.5).
+"""Unit tests for per-method HTML report sections and bilingual output.
 
-加 W3.6 e2e mock 跑通完整 pipeline:
-fixture CSV → 归因 → 图表 → HTML 章节 → 落盘可在浏览器查看.
+Includes an end-to-end mock pipeline:
+fixture CSV -> attribution -> charts -> HTML section -> browser-viewable output.
 
-跑法: python3 tests/test_per_method_report.py
+Run: python3 tests/test_per_method_report.py
 """
 
 import csv
@@ -31,6 +31,7 @@ from visualization.per_method_report import (  # noqa: E402
     get_chart_titles_for_language,
     render_per_method_section,
 )
+from visualization.report_generator import ReportGenerator  # noqa: E402
 
 
 class TestI18n(unittest.TestCase):
@@ -55,7 +56,7 @@ class TestComputeSummary(unittest.TestCase):
     def test_basic_summary(self):
         qps_rows = [
             PerMethodQpsRow(100, "a", 5, 1, 2.0, 8.0),
-            PerMethodQpsRow(100, "a", 3, 0, 3.0, 9.0),  # 同 method 不同秒
+            PerMethodQpsRow(100, "a", 3, 0, 3.0, 9.0),  # same method, different second
             PerMethodQpsRow(100, "b", 1, 0, 5.0, 5.0),
         ]
         res_rows = [
@@ -64,9 +65,10 @@ class TestComputeSummary(unittest.TestCase):
             PerMethodResourceRow(100, "b", 0.2, 20, 200),
         ]
         summary = compute_summary(qps_rows, res_rows)
-        # a 总请求 8, b 总请求 1
+        # a has 8 total requests; b has 1.
         self.assertEqual(summary[0]["method"], "a")
         self.assertEqual(summary[0]["total_requests"], 8)
+        self.assertEqual(summary[0]["success_count"], 7)
         self.assertEqual(summary[0]["error_count"], 1)
         self.assertAlmostEqual(summary[0]["error_rate"], 1/8)
         self.assertAlmostEqual(summary[0]["avg_p99_ms"], 8.5)  # (8+9)/2
@@ -97,7 +99,8 @@ class TestRenderHtml(unittest.TestCase):
         summary = compute_summary(qps_rows, res_rows)
         html = render_per_method_section(
             "en", "solana",
-            {"qps": "a.svg", "latency": "b.svg", "error_rate": "c.svg", "resource": "d.svg"},
+            {"qps": "a.svg", "latency": "b.svg", "error_rate": "c.svg",
+             "success_failure": "e.svg", "resource": "d.svg"},
             summary,
         )
         self.assertIn('<div class="section"', html)
@@ -107,35 +110,36 @@ class TestRenderHtml(unittest.TestCase):
         self.assertIn("getBlock", html)
         self.assertIn('<img src="a.svg"', html)
         self.assertIn('<img src="d.svg"', html)
-        # 包含 4 张图 (qps/latency/error_rate/resource)
-        self.assertEqual(html.count("<img"), 4)
+        # Includes 5 charts: qps, latency, error_rate, success_failure, resource.
+        self.assertEqual(html.count("<img"), 5)
 
     def test_render_zh(self):
         qps_rows, res_rows = self._fixture()
         summary = compute_summary(qps_rows, res_rows)
         html = render_per_method_section(
             "zh", "solana",
-            {"qps": "a.svg", "latency": "b.svg", "error_rate": "c.svg", "resource": "d.svg"},
+            {"qps": "a.svg", "latency": "b.svg", "error_rate": "c.svg",
+             "success_failure": "e.svg", "resource": "d.svg"},
             summary,
         )
-        self.assertIn("Per-Method 性能归因", html)
-        self.assertIn("每方法 QPS", html)
-        self.assertIn("方法", html)  # 表头
+        self.assertIn("Per-Method \u6027\u80fd\u5f52\u56e0", html)
+        self.assertIn("\u6bcf\u65b9\u6cd5 QPS", html)
+        self.assertIn("\u65b9\u6cd5", html)  # table header
 
     def test_empty_summary_shows_no_data(self):
         html = render_per_method_section(
             "en", "chain",
-            {"qps": "", "latency": "", "error_rate": "", "resource": ""},
+            {"qps": "", "latency": "", "error_rate": "", "success_failure": "", "resource": ""},
             [],
         )
         self.assertIn("No per-method data", html)
 
     def test_html_escape_chain_name(self):
-        # chain_name 注入 <script> 不该执行
+        # chain_name should be escaped and must not execute injected script tags.
         summary = []
         html = render_per_method_section(
             "en", "<script>alert(1)</script>",
-            {"qps": "", "latency": "", "error_rate": "", "resource": ""},
+            {"qps": "", "latency": "", "error_rate": "", "success_failure": "", "resource": ""},
             summary,
         )
         self.assertNotIn("<script>alert(1)</script>", html)
@@ -144,7 +148,7 @@ class TestRenderHtml(unittest.TestCase):
     def test_get_chart_titles_for_language(self):
         en = get_chart_titles_for_language("en")
         zh = get_chart_titles_for_language("zh")
-        self.assertEqual(set(en.keys()), {"qps", "latency", "error_rate", "resource"})
+        self.assertEqual(set(en.keys()), {"qps", "latency", "error_rate", "success_failure", "resource"})
         self.assertNotEqual(en["qps"], zh["qps"])
 
 
@@ -152,8 +156,8 @@ def _ns(s, ms=0):
     return s * 1_000_000_000 + ms * 1_000_000
 
 
-class TestW36E2E(unittest.TestCase):
-    """W3.6 验收: fixture CSV → 归因 → 图 → HTML, 浏览器可看."""
+class TestPerMethodE2E(unittest.TestCase):
+    """Fixture CSV -> attribution -> charts -> HTML."""
 
     def test_e2e_full_pipeline_en(self):
         self._run_lang("en")
@@ -167,7 +171,7 @@ class TestW36E2E(unittest.TestCase):
             proxy_path = Path(tmpdir) / "proxy.csv"
             monitor_path = Path(tmpdir) / "monitor.csv"
 
-            # 写 fixture: 60 秒, 3 method 混合 + 1 个 error spike
+            # Write fixture data: 60 seconds, mixed 3-method workload, one error spike.
             with open(proxy_path, "w", newline="") as f:
                 w = csv.writer(f)
                 w.writerow(["timestamp_ns", "method_name", "protocol", "request_id",
@@ -190,7 +194,7 @@ class TestW36E2E(unittest.TestCase):
                     cpu = 40 + (20 if t == 30 else 0)  # t=30 spike to 60
                     w.writerow([str(1700000000 + t), str(cpu), "4096"])
 
-            # 跑 pipeline
+            # Run the pipeline.
             proxy_recs = list(read_proxy_csv(proxy_path))
             qps_rows = compute_per_method_qps(proxy_recs)
             monitor_recs = list(read_monitor_csv(monitor_path))
@@ -198,11 +202,11 @@ class TestW36E2E(unittest.TestCase):
                 list(read_proxy_csv(proxy_path)), monitor_recs
             )
 
-            # 60s × 2 method = 120 row
+            # 60s x 2 methods = 120 rows.
             self.assertEqual(len(qps_rows), 120)
             self.assertEqual(len(res_rows), 120)
 
-            # 图
+            # Charts.
             chart_dir = Path(tmpdir) / "charts"
             titles = get_chart_titles_for_language(language)
             paths = generate_all_charts(
@@ -212,15 +216,15 @@ class TestW36E2E(unittest.TestCase):
                 self.assertTrue(p.exists())
                 self.assertGreater(p.stat().st_size, 500)
 
-            # HTML 章节
+            # HTML section.
             summary = compute_summary(qps_rows, res_rows)
             section_html = render_per_method_section(
                 language, "solana",
-                {k: p.name for k, p in paths.items()},  # 用相对路径方便浏览器
+                {k: p.name for k, p in paths.items()},  # relative paths are browser-friendly
                 summary,
             )
 
-            # 嵌入完整 HTML 页面写盘 — 用户/CI 可手动打开浏览器看
+            # Embed in a complete HTML file for optional browser/CI inspection.
             full_html = f'''<!DOCTYPE html>
 <html lang="{language}">
 <head><meta charset="UTF-8"><title>per-method test ({language})</title></head>
@@ -230,18 +234,150 @@ class TestW36E2E(unittest.TestCase):
             out_html = chart_dir / f"report_{language}.html"
             out_html.write_text(full_html, encoding="utf-8")
 
-            # 验报告内容
+            # Verify report content.
             content = out_html.read_text()
             self.assertIn("getSlot", content)
             self.assertIn("getBlock", content)
-            self.assertEqual(content.count("<img"), 4)
-            # 错误率非 0 (t=30 spike)
+            self.assertEqual(content.count("<img"), 5)
+            # Error count is non-zero because t=30 contains the spike.
             self.assertGreater(summary[0]["error_count"], 0)
 
             print(f"\n  [e2e-{language}] report written: {out_html}")
         finally:
             import shutil
             shutil.rmtree(tmpdir)
+
+
+class TestReportGeneratorRuntimePaths(unittest.TestCase):
+    def test_report_marks_missing_chart_and_source_data(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            logs_dir = root / "logs"
+            reports_dir = root / "reports"
+            logs_dir.mkdir()
+            reports_dir.mkdir()
+
+            perf_csv = logs_dir / "performance_latest.csv"
+            with open(perf_csv, "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow([
+                    "timestamp",
+                    "cpu_usage",
+                    "cpu_usr",
+                    "cpu_sys",
+                    "mem_usage",
+                    "current_qps",
+                    "qps_data_available",
+                    "cloud_provider",
+                ])
+                w.writerow(["2026-06-11 12:00:00", "10", "5", "3", "20", "0", "false", "aws"])
+
+            old_env = dict(os.environ)
+            try:
+                os.environ["LOGS_DIR"] = str(logs_dir)
+                os.environ["REPORTS_DIR"] = str(reports_dir)
+                os.environ["SESSION_TIMESTAMP"] = "20260611_120000"
+                os.environ["BLOCKCHAIN_NODE"] = "solana"
+                os.environ.pop("PROXY_METHOD_CSV", None)
+
+                generator = ReportGenerator(str(perf_csv), language="en")
+                report_path = generator.generate_html_report()
+            finally:
+                os.environ.clear()
+                os.environ.update(old_env)
+
+            self.assertIsNotNone(report_path)
+            content = Path(report_path).read_text(encoding="utf-8")
+            self.assertIn("Data Quality Summary", content)
+            self.assertIn("Monitor Samples", content)
+            self.assertIn("Valid Disk Samples", content)
+            self.assertIn("No charts found.", content)
+            self.assertIn("Correlation Analysis Data Not Available", content)
+            self.assertIn("Per-method attribution counts only RPC methods configured", content)
+
+    def test_proxy_count_uses_logs_dir_before_reports_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            logs_dir = root / "logs"
+            reports_dir = root / "reports"
+            logs_dir.mkdir()
+            reports_dir.mkdir()
+
+            perf_csv = logs_dir / "performance_latest.csv"
+            with open(perf_csv, "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["timestamp", "cpu_usage", "mem_usage", "cloud_provider"])
+                w.writerow(["1700000000", "10", "20", "aws"])
+
+            proxy_csv = logs_dir / "proxy_method.csv"
+            with open(proxy_csv, "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["timestamp_ns", "method_name", "protocol", "request_id",
+                            "batch_idx", "status_code", "latency_ms", "upstream", "client_addr"])
+                w.writerow([_ns(1700000000), "getBalance", "json_rpc", "r1", "0", "200", "2", "u", "c"])
+
+            old_env = dict(os.environ)
+            try:
+                os.environ["LOGS_DIR"] = str(logs_dir)
+                os.environ["REPORTS_DIR"] = str(reports_dir)
+                os.environ["BLOCKCHAIN_NODE"] = "solana"
+                os.environ.pop("PROXY_METHOD_CSV", None)
+                generator = ReportGenerator(str(perf_csv), language="en")
+                raw_count, workload_count, excluded_count = generator._read_proxy_record_count()
+            finally:
+                os.environ.clear()
+                os.environ.update(old_env)
+
+            self.assertEqual(raw_count, 1)
+            self.assertEqual(workload_count, 1)
+            self.assertEqual(excluded_count, 0)
+
+    def test_proxy_count_excludes_sync_health_probe_records(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            logs_dir = root / "logs"
+            reports_dir = root / "reports"
+            logs_dir.mkdir()
+            reports_dir.mkdir()
+
+            perf_csv = logs_dir / "performance_latest.csv"
+            with open(perf_csv, "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["timestamp", "cpu_usage", "mem_used", "cloud_provider"])
+                w.writerow(["1700000000", "10", "20", "aws"])
+
+            proxy_csv = logs_dir / "proxy_method.csv"
+            with open(proxy_csv, "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["timestamp_ns", "method_name", "protocol", "request_id",
+                            "batch_idx", "status_code", "latency_ms", "upstream", "client_addr"])
+                w.writerow([_ns(1700000000), "getBalance", "json_rpc", "r1", "0", "200", "2", "u", "c"])
+                w.writerow([_ns(1700000000), "getAccountInfo", "json_rpc", "r2", "0", "200", "3", "u", "c"])
+                w.writerow([_ns(1700000000), "getHealth", "json_rpc", "probe", "0", "200", "1", "u", "c"])
+
+            old_env = dict(os.environ)
+            try:
+                os.environ["LOGS_DIR"] = str(logs_dir)
+                os.environ["REPORTS_DIR"] = str(reports_dir)
+                os.environ["SESSION_TIMESTAMP"] = "20260611_120000"
+                os.environ["BLOCKCHAIN_NODE"] = "solana"
+                os.environ.pop("PROXY_METHOD_CSV", None)
+                generator = ReportGenerator(str(perf_csv), language="en")
+                raw_count, workload_count, excluded_count = generator._read_proxy_record_count()
+                report_path = generator.generate_html_report()
+            finally:
+                os.environ.clear()
+                os.environ.update(old_env)
+
+            self.assertEqual(raw_count, 3)
+            self.assertEqual(workload_count, 2)
+            self.assertEqual(excluded_count, 1)
+
+            content = Path(report_path).read_text(encoding="utf-8")
+            self.assertIn("getBalance", content)
+            self.assertIn("getAccountInfo", content)
+            self.assertNotIn("getHealth", content)
+            self.assertIn("Excluded Probe Records", content)
 
 
 if __name__ == "__main__":

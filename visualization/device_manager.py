@@ -13,8 +13,9 @@ from utils.csv_schema_registry import CSVSchemaRegistry
 class DeviceManager:
     """Unified device manager - supports field mapping and device detection for 32 charts"""
 
-    # provider_aware disk 逻辑名 (物理列名随 cloud_provider 变, reader 只认逻辑名).
-    # 经 CSVSchemaRegistry 解析为物理列后缀, 不在本文件硬编码任何 aws_standard 字面量.
+    # Provider-aware disk logical names. Physical column names vary by cloud_provider.
+    # CSVSchemaRegistry resolves these to physical suffixes, so this file avoids
+    # hardcoded provider-specific column literals.
     _DISK_IOPS_LOGICAL = 'disk_iops_provider_adjusted'
     _DISK_THROUGHPUT_LOGICAL = 'disk_throughput_provider_adjusted'
 
@@ -23,15 +24,13 @@ class DeviceManager:
         self._device_cache = {}
         self._field_cache = {}
 
-        # 铁律: provider 从 CSV cloud_provider 列取 (不猜不硬编码、不读环境变量).
-        # 用于经 CSVSchemaRegistry 解析 provider_aware disk 物理列后缀.
+        # Provider comes from the CSV cloud_provider column; do not guess, hardcode, or read env vars.
+        # Used by CSVSchemaRegistry to resolve provider-aware disk physical suffixes.
         self.cloud_provider = self._read_cloud_provider_from_csv()
 
-        # 经 registry 解析出的 provider_aware disk 物理列后缀 (如 '_standard_iops').
-        # 注意: 这是 CSV 字段名 (物理列), 区别于 get_threshold_values() 里的
-        #       *_provisioned_iops / *_provisioned_throughput —— 那些是业务配置变量 (磁盘额定能力上限,
-        #       来自卷规格环境变量 DATA_VOL_MAX_*, 利用率公式分母; ADR-0002 层3 定名 provisioned),
-        #       不是 CSV 列名, 不经 registry 解析.
+        # Provider-aware disk physical column suffixes resolved by the registry.
+        # These are CSV field suffixes, distinct from the provisioned capacity
+        # config variables used as utilization denominators.
         self._disk_iops_suffix = self._resolve_disk_suffix(self._DISK_IOPS_LOGICAL)
         self._disk_throughput_suffix = self._resolve_disk_suffix(self._DISK_THROUGHPUT_LOGICAL)
 
@@ -42,8 +41,8 @@ class DeviceManager:
             'data_util': r'data_.*_util',
             'data_avg_await': r'data_.*_avg_await',
             'data_aqu_sz': r'data_.*_aqu_sz',
-            # provider_aware disk 列: 物理后缀由 CSVSchemaRegistry 解析 (随 cloud_provider 变),
-            # 逻辑键名用三云中立 *_normalized_* (调用方按此名取数), 不再硬编码物理后缀, 不带厂商烙印.
+            # Provider-aware disk columns: physical suffixes are resolved by
+            # CSVSchemaRegistry, while callers use provider-neutral normalized_* keys.
             'data_normalized_iops': rf'data_.*{re.escape(self._disk_iops_suffix)}',
             'data_normalized_throughput_mibs': rf'data_.*{re.escape(self._disk_throughput_suffix)}',
             'data_total_throughput_mibs': r'data_.*_total_throughput_mibs',
@@ -59,7 +58,7 @@ class DeviceManager:
             'accounts_util': r'accounts_.*_util',
             'accounts_avg_await': r'accounts_.*_avg_await',
             'accounts_aqu_sz': r'accounts_.*_aqu_sz',
-            # provider_aware disk 列 (ACCOUNTS): 物理后缀由 CSVSchemaRegistry 解析.
+            # Provider-aware ACCOUNTS disk columns.
             'accounts_normalized_iops': rf'accounts_.*{re.escape(self._disk_iops_suffix)}',
             'accounts_normalized_throughput_mibs': rf'accounts_.*{re.escape(self._disk_throughput_suffix)}',
             'accounts_total_throughput_mibs': r'accounts_.*_total_throughput_mibs',
@@ -150,10 +149,10 @@ class DeviceManager:
         }
     
     def _read_cloud_provider_from_csv(self):
-        """从 CSV cloud_provider 列读取 provider (aws|gcp|other).
+        """Read provider (aws|gcp|other) from the CSV cloud_provider column.
 
-        铁律: provider 来源是 CSV 数据本身, 不运行时探测、不读环境变量.
-        缺列或空值时回退 'other' (中立兜底, registry 三云同名, 不影响物理列名).
+        Provider comes from CSV data itself; do not re-detect or read environment variables.
+        Missing or empty values fall back to "other".
         """
         if self.df is not None and 'cloud_provider' in self.df.columns:
             series = self.df['cloud_provider'].dropna()
@@ -164,26 +163,25 @@ class DeviceManager:
         return 'other'
 
     def _resolve_disk_suffix(self, logical_name):
-        """经 CSV Schema Registry 解析 provider_aware disk 逻辑名 -> 物理列后缀.
+        """Resolve a provider-aware disk logical name to a physical column suffix.
 
-        registry.resolve(logical_name, provider, '') 把模板 {prefix} 替换为空,
-        产出形如 '_standard_iops' / '_standard_throughput_mibs' 的物理后缀
-        (随 cloud_provider 变). 真实 CSV 列名含运行时设备名
-        (如 'data_nvme1n1_standard_iops'), 故只取后缀供正则匹配, 不保留任何裸字面量.
+        registry.resolve(logical_name, provider, '') replaces {prefix} with an
+        empty string and returns suffixes such as '_standard_iops'. Real CSV
+        columns include runtime device names, so callers match by suffix.
         """
         return CSVSchemaRegistry.resolve(logical_name, self.cloud_provider, '')
 
     def _resolve_disk_field(self, logical_name, device_prefix):
-        """经 CSV Schema Registry 解析 provider_aware disk 字段 -> 实际 CSV 列名.
+        """Resolve a provider-aware disk field to an actual CSV column name.
 
-        logical_name: 'disk_iops_provider_adjusted' 或 'disk_throughput_provider_adjusted'.
-        device_prefix: 逻辑设备前缀 'data' 或 'accounts'.
-        返回匹配的真实列名 (含运行时设备名); 无匹配返回 None.
+        logical_name: 'disk_iops_provider_adjusted' or 'disk_throughput_provider_adjusted'.
+        device_prefix: logical device prefix, either 'data' or 'accounts'.
+        Returns the matching real column name, or None if no column matches.
         """
         if self.df is None:
             return None
         suffix = self._resolve_disk_suffix(logical_name)
-        physical = f'{device_prefix}{suffix}'  # 无运行时设备名拆分时的直接命中
+        physical = f'{device_prefix}{suffix}'  # direct match when no runtime device segment exists
         if physical in self.df.columns:
             return physical
         pattern = re.compile(rf'^{re.escape(device_prefix)}_.*{re.escape(suffix)}$')
@@ -304,11 +302,9 @@ class DeviceManager:
     def get_threshold_values(self):
         """Get threshold configuration from config file"""
         # Base threshold configuration
-        # 注意 (区分业务变量与字段名):
-        #   *_provisioned_iops / *_provisioned_throughput 是【业务配置变量】(磁盘额定能力上限),
-        #   来自卷规格环境变量 (DATA_VOL_MAX_IOPS 等), 利用率公式的分母 (ADR-0002 层3 定名 provisioned).
-        #   它们与 CSV 物理列 *_<dfp>_iops (provider_aware, 经 CSVSchemaRegistry 解析) 是
-        #   两类不同概念, 不是 CSV 字段名, 故不经 registry.
+        # Provisioned IOPS/throughput are business config variables, used as
+        # utilization denominators. They are not CSV field names and are not
+        # resolved through CSVSchemaRegistry.
         base_thresholds = {
             'data_provisioned_iops': int(float(os.getenv('DATA_VOL_MAX_IOPS', '20000'))),
             'data_provisioned_throughput': int(float(os.getenv('DATA_VOL_MAX_THROUGHPUT', '700'))),
@@ -397,8 +393,8 @@ class DeviceManager:
         mapping = {}
         
         # Complete field suffix list - based on actual CSV data structure.
-        # 注意: provider_aware 的 IOPS/吞吐物理后缀不在此硬编码 (随云变),
-        #       由下方 _provider_aware_suffix_map 经 CSVSchemaRegistry 解析后单独并入.
+        # Provider-aware IOPS/throughput suffixes vary by cloud and are resolved
+        # below through CSVSchemaRegistry.
         all_suffixes = [
             # base fields
             'util', 'aqu_sz',
@@ -410,8 +406,8 @@ class DeviceManager:
             'read_throughput_mibs', 'write_throughput_mibs', 'total_throughput_mibs'
         ]
 
-        # provider_aware disk 字段: 业务别名(逻辑键) -> 物理后缀(经 registry 解析, 随云变).
-        # 区分: 左侧是业务变量名(调用方按此名取数), 右侧是 registry 给出的 CSV 物理列后缀.
+        # Provider-aware disk fields: business alias -> registry-resolved
+        # physical suffix.
         provider_aware_suffix_map = {
             'normalized_iops': self._disk_iops_suffix.lstrip('_'),
             'normalized_throughput_mibs': self._disk_throughput_suffix.lstrip('_'),
@@ -437,7 +433,8 @@ class DeviceManager:
                 actual_field = self.find_field_by_pattern(f'{device}_.*_{suffix}')
                 if actual_field:  # Only map actually existing fields
                     mapping[expected_field] = actual_field
-            # provider_aware 字段: 业务别名键固定, 物理后缀经 registry 解析后匹配真实列名
+            # Provider-aware fields: aliases stay stable; physical suffixes
+            # are registry-resolved before matching real columns.
             for alias, phys_suffix in provider_aware_suffix_map.items():
                 expected_field = f'{device}_{alias}'
                 actual_field = self.find_field_by_pattern(f'{device}_.*_{phys_suffix}')
@@ -485,8 +482,8 @@ class DeviceManager:
             'accounts': 'ACCOUNTS Device'
         }
         
-        # 业务层 metric_type -> 显示标签 (非 CSV 字段名). 这里的键是图表语义维度,
-        # 不参与 CSV 列解析, 故保持原样, 不经 CSVSchemaRegistry.
+        # Business-level metric_type -> display label. These keys describe chart
+        # semantics, not CSV fields, so they do not go through CSVSchemaRegistry.
         metric_map = {
             'normalized_iops': 'Normalized IOPS',
             'normalized_throughput': 'Normalized Throughput', 
@@ -561,8 +558,8 @@ class DeviceManager:
         }
         
         # Check DATA device
-        # 这些是业务逻辑别名 (经 get_mapped_field -> patterns -> CSVSchemaRegistry 解析为物理列),
-        # 不是裸 CSV 字段名; provider_aware 的 *_normalized_iops 物理后缀已随云解析.
+        # These are business aliases that resolve to physical columns through
+        # get_mapped_field/patterns/CSVSchemaRegistry.
         data_fields = ['data_normalized_iops', 'data_util', 'data_avg_await']
         data_available, data_missing = self.check_data_availability(data_fields)
         validation_result['data_configured'] = len(data_available) > 0
@@ -570,7 +567,7 @@ class DeviceManager:
         
         # Check ACCOUNTS device
         if self.is_accounts_configured():
-            # 同上: 业务别名, 经 registry 解析为物理列名.
+            # Same as DATA: business aliases resolved to physical column names.
             accounts_fields = ['accounts_normalized_iops', 'accounts_util', 'accounts_avg_await']
             accounts_available, accounts_missing = self.check_data_availability(accounts_fields)
             validation_result['accounts_configured'] = len(accounts_available) > 0

@@ -1,9 +1,7 @@
-name: parallel-entry-trap-guard
+name: monitoring-entry-guard
 
-# v1.4.6 Step A: enforce ci/check_parallel_entry.sh on every push/PR.
-# Skill: parallel-entry-trap. Locks in the v1.4.5 fix permanence
-# (cgroup_collector / kubelet_stats_client / pod_device_mapper / etc.
-# never silently re-orphan from main pipeline).
+# Enforce ci/check_parallel_entry.sh on every push/PR so monitoring helper
+# modules stay wired into the main pipeline.
 
 on:
   push:
@@ -14,7 +12,7 @@ on:
 
 jobs:
   parallel-entry-guard:
-    name: parallel-entry CI guard + self-test
+    name: monitoring entry guard + self-test
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -36,7 +34,7 @@ jobs:
           chmod +x ci/check_parallel_entry.sh
           chmod +x tests/test_ci_check_parallel_entry.sh
 
-      - name: Run parallel-entry-trap guard (primary check)
+      - name: Run monitoring entry guard
         run: bash ci/check_parallel_entry.sh
 
       - name: Run guard's own regression suite (negative-test driven)

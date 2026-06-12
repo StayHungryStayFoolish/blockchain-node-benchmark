@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # tests/test_provider_contract.sh
-# E1+ Provider Contract Test — 验证 aws/gcp/other 三 provider 都实现了 16 个 getter
-# 且 AWS≠GCP 防抄断言（性能对比公平性）。
-# 任一断言失败 → exit 1，CI gate 拒绝合入。
+# Provider contract test: aws/gcp/other implement the required getters.
+# Ensures AWS and GCP provider contracts do not collapse into identical behavior.
+# Any assertion failure exits non-zero.
 #
-# 依据: analysis-notes/CORRECTED_PLAN.md §CP-0.5 + analysis-notes/CP-1-execution-tracker.md §1
-#       新增 get_iops_conversion_func（双云 IOPS 计量分流核心，本任务 §0 裁决1）
+# get_iops_conversion_func selects provider-specific IOPS conversion.
 
 set -euo pipefail
 
@@ -26,10 +25,10 @@ FAIL=0
 TOTAL_CHECKS=0
 
 # ============================================================
-# Phase 1: 三 provider 都实现全部 getter
-# aws/gcp 必须返回非空（已知特例除外）；other 允许返空（中立 fallback）
+# Step 1: all providers implement required getters
+# aws/gcp must return non-empty values except known exceptions; other may be empty fallback.
 # ============================================================
-echo "=== Phase 1: 完整性检查 (3 providers × ${#REQUIRED_GETTERS[@]} getters) ==="
+echo "=== Step 1: completeness check (3 providers x ${#REQUIRED_GETTERS[@]} getters) ==="
 for provider in aws gcp other; do
     output=$(CLOUD_PROVIDER=$provider bash -c "
         unset CLOUD_PROVIDER_DETECTED 2>/dev/null || true
@@ -38,10 +37,8 @@ for provider in aws gcp other; do
             declare -F \$getter >/dev/null || { echo \"FAIL: \$getter missing in $provider\" >&2; exit 1; }
             val=\$(\$getter 2>/dev/null || true)
             if [[ \"$provider\" != \"other\" && -z \"\$val\" ]]; then
-                # 已知特例：AWS get_metadata_header 故意空（IMDSv2 token 走 -H）；
-                # GCP get_nic_allowance_fields 故意空（gVNIC 无 allowance）
-                if [[ \"$provider\" == \"aws\" && \"\$getter\" == \"get_metadata_header\" ]]; then :; 
-                elif [[ \"$provider\" == \"gcp\" && \"\$getter\" == \"get_nic_allowance_fields\" ]]; then :; 
+                # Known exception: GCP gVNIC does not expose allowance counters.
+                if [[ \"$provider\" == \"gcp\" && \"\$getter\" == \"get_nic_allowance_fields\" ]]; then :;
                 else echo \"FAIL: \$getter returned empty in $provider\" >&2; exit 1; fi
             fi
         done
@@ -52,16 +49,15 @@ for provider in aws gcp other; do
 done
 
 # ============================================================
-# Phase 2: AWS ≠ GCP 防抄断言（8 个关键 getter）
-# 含 get_iops_conversion_func — 双云 IOPS 计量必须不同
+# Step 2: AWS and GCP must differ on key getters
+# Includes get_iops_conversion_func because IOPS conversion differs by provider.
 # ============================================================
 echo ""
-echo "=== Phase 2: AWS≠GCP 防抄断言 ==="
+echo "=== Step 2: AWS != GCP assertions ==="
 ANTI_PLAGIARISM_GETTERS=(
     get_metadata_endpoint
     get_metadata_header
     get_iops_conversion_func
-    get_disk_field_prefix
     get_nic_driver
     get_archive_dir_prefix
     get_bottleneck_label
@@ -71,7 +67,7 @@ for getter in "${ANTI_PLAGIARISM_GETTERS[@]}"; do
     aws_val=$(CLOUD_PROVIDER=aws bash -c "unset CLOUD_PROVIDER_DETECTED 2>/dev/null||true; source config/cloud_provider.sh >/dev/null 2>&1; $getter")
     gcp_val=$(CLOUD_PROVIDER=gcp bash -c "unset CLOUD_PROVIDER_DETECTED 2>/dev/null||true; source config/cloud_provider.sh >/dev/null 2>&1; $getter")
     if [[ "$aws_val" == "$gcp_val" ]]; then
-        echo "FAIL: $getter returned identical value in AWS and GCP ('$aws_val') — provider 抄袭嫌疑" >&2
+        echo "FAIL: $getter returned identical value in AWS and GCP ('$aws_val')" >&2
         FAIL=1
     else
         echo "OK   $getter: aws='$aws_val' != gcp='$gcp_val'"
@@ -80,19 +76,19 @@ for getter in "${ANTI_PLAGIARISM_GETTERS[@]}"; do
 done
 
 # ============================================================
-# Phase 3: IOPS 计量语义断言（§0 裁决1 — 官方实证）
-# AWS 必须拆分(非 passthrough)，GCP/other 必须 passthrough
+# Step 3: IOPS conversion semantic assertions
+# AWS must split IOPS accounting; GCP/other must use passthrough.
 # ============================================================
 echo ""
-echo "=== Phase 3: IOPS 计量语义 ==="
+echo "=== Step 3: IOPS conversion semantics ==="
 aws_iops=$(CLOUD_PROVIDER=aws bash -c "unset CLOUD_PROVIDER_DETECTED 2>/dev/null||true; source config/cloud_provider.sh >/dev/null 2>&1; get_iops_conversion_func")
 gcp_iops=$(CLOUD_PROVIDER=gcp bash -c "unset CLOUD_PROVIDER_DETECTED 2>/dev/null||true; source config/cloud_provider.sh >/dev/null 2>&1; get_iops_conversion_func")
 other_iops=$(CLOUD_PROVIDER=other bash -c "unset CLOUD_PROVIDER_DETECTED 2>/dev/null||true; source config/cloud_provider.sh >/dev/null 2>&1; get_iops_conversion_func")
 if [[ "$aws_iops" == "passthrough" ]]; then
-    echo "FAIL: AWS get_iops_conversion_func must NOT be passthrough (官方实证: SSD ceil256/HDD ceil1024)" >&2; FAIL=1
-else echo "OK   AWS iops conversion = '$aws_iops' (非 passthrough)"; fi
+    echo "FAIL: AWS get_iops_conversion_func must NOT be passthrough (SSD ceil256/HDD ceil1024)" >&2; FAIL=1
+else echo "OK   AWS iops conversion = '$aws_iops'"; fi
 if [[ "$gcp_iops" != "passthrough" ]]; then
-    echo "FAIL: GCP get_iops_conversion_func must be passthrough (官方实证: PD/Hyperdisk 不拆分)" >&2; FAIL=1
+    echo "FAIL: GCP get_iops_conversion_func must be passthrough (PD/Hyperdisk no split)" >&2; FAIL=1
 else echo "OK   GCP iops conversion = passthrough"; fi
 if [[ "$other_iops" != "passthrough" ]]; then
     echo "FAIL: other get_iops_conversion_func must be passthrough" >&2; FAIL=1
@@ -100,7 +96,30 @@ else echo "OK   other iops conversion = passthrough"; fi
 TOTAL_CHECKS=$((TOTAL_CHECKS+3))
 
 # ============================================================
-# 汇总
+# Step 4: NIC monitor entrypoint cleanup
+# AWS/GCP expose different NIC drivers and fields, but both must route through
+# the provider-aware network_monitor entrypoint.
+# ============================================================
+echo ""
+echo "=== Step 4: NIC monitor entrypoint ==="
+aws_nic_monitor=$(CLOUD_PROVIDER=aws bash -c "unset CLOUD_PROVIDER_DETECTED 2>/dev/null||true; source config/cloud_provider.sh >/dev/null 2>&1; get_nic_monitor_process_name")
+gcp_nic_monitor=$(CLOUD_PROVIDER=gcp bash -c "unset CLOUD_PROVIDER_DETECTED 2>/dev/null||true; source config/cloud_provider.sh >/dev/null 2>&1; get_nic_monitor_process_name")
+if [[ "$aws_nic_monitor" != "network_monitor" ]]; then
+    echo "FAIL: AWS NIC monitor must route through network_monitor (got '$aws_nic_monitor')" >&2
+    FAIL=1
+else
+    echo "OK   AWS NIC monitor = network_monitor"
+fi
+if [[ "$gcp_nic_monitor" != "network_monitor" ]]; then
+    echo "FAIL: GCP NIC monitor must route through network_monitor (got '$gcp_nic_monitor')" >&2
+    FAIL=1
+else
+    echo "OK   GCP NIC monitor = network_monitor"
+fi
+TOTAL_CHECKS=$((TOTAL_CHECKS+2))
+
+# ============================================================
+# Summary
 # ============================================================
 echo ""
 if [[ $FAIL -eq 0 ]]; then

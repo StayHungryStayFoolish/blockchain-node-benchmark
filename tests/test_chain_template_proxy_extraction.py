@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 """
-W1.3 — chain template 二字段 (proxy_extraction + mixed_weighted) schema 校验
+chain template proxy_extraction and mixed_weighted schema validation
 
-校验 spec §1.7 + §1.8 的所有硬约束:
+Validate required schema constraints:
 
 proxy_extraction:
-  - 顶层必须有 extractors 数组,非空
-  - 每个 extractor.protocol ∈ {json_rpc, rest}
-  - json_rpc: 必须含 method_source/id_source/params_source/url_pattern/batch_handling
+  - top-level object must include a non-empty extractors array
+  - each extractor.protocol ∈ {json_rpc, rest}
+  - json_rpc must include method_source/id_source/params_source/url_pattern/batch_handling
   - json_rpc.batch_handling ∈ {reject, split, tag_batch}
-  - json_rpc.auth.type ∈ {none, basic, bearer} (auth 可选)
-  - rest: 必须含 url_patterns 数组,非空
-  - rest.url_patterns[*]: 必须含 pattern + method_name
-  - rest.url_patterns[*].pattern: 必须是合法正则
+  - json_rpc.auth.type ∈ {none, basic, bearer} when auth is present
+  - rest must include a non-empty url_patterns array
+  - rest.url_patterns[*] must include pattern + method_name
+  - rest.url_patterns[*].pattern must be a valid regex
 
 mixed_weighted:
-  - 必须是数组,非空
-  - 每项必须含 method (str, 非空) + weight (int, >0)
+  - must be a non-empty array
+  - each item must include method (non-empty str) + weight (positive int)
+  - weights must sum to 100, representing mixed workload percentages
 
-执行:python3 tests/test_chain_template_proxy_extraction.py
+Run: python3 tests/test_chain_template_proxy_extraction.py
 """
 import json
 import re
@@ -30,6 +31,8 @@ CHAINS_DIR = Path(__file__).parent.parent / "config" / "chains"
 JSON_RPC_REQUIRED = {"method_source", "id_source", "params_source", "url_pattern", "batch_handling"}
 BATCH_HANDLING_VALUES = {"reject", "split", "tag_batch"}
 AUTH_TYPES = {"none", "basic", "bearer"}
+SYNC_HEALTH_MODES = {"absolute_gap", "conditional_gap", "reported_lag", "freshness_only", "health_only"}
+SYNC_HEALTH_REQUIRED = {"mode", "local_probe", "comparison", "time_threshold_env", "threshold_unit", "notes"}
 
 
 def validate_proxy_extraction(chain: str, pe: dict, errors: list) -> None:
@@ -92,6 +95,7 @@ def validate_mixed_weighted(chain: str, mw, errors: list) -> None:
     if not isinstance(mw, list) or not mw:
         errors.append(f"[{chain}] mixed_weighted must be non-empty array")
         return
+    total_weight = 0
     for i, item in enumerate(mw):
         tag = f"[{chain}].mixed_weighted[{i}]"
         if not isinstance(item, dict):
@@ -103,6 +107,30 @@ def validate_mixed_weighted(chain: str, mw, errors: list) -> None:
             errors.append(f"{tag}.method must be non-empty string")
         if not isinstance(weight, int) or isinstance(weight, bool) or weight <= 0:
             errors.append(f"{tag}.weight must be positive integer, got {weight!r}")
+        else:
+            total_weight += weight
+    if total_weight != 100:
+        errors.append(f"[{chain}] mixed_weighted weights must sum to 100, got {total_weight}")
+
+
+def validate_sync_health(chain: str, sync_health, errors: list) -> None:
+    if not isinstance(sync_health, dict):
+        errors.append(f"[{chain}] _meta.sync_health must be object")
+        return
+
+    missing = SYNC_HEALTH_REQUIRED - set(sync_health.keys())
+    if missing:
+        errors.append(f"[{chain}] _meta.sync_health missing fields: {sorted(missing)}")
+
+    mode = sync_health.get("mode")
+    if mode not in SYNC_HEALTH_MODES:
+        errors.append(f"[{chain}] _meta.sync_health.mode must be one of {sorted(SYNC_HEALTH_MODES)}, got {mode!r}")
+
+    if mode == "absolute_gap" and not sync_health.get("target_probe"):
+        errors.append(f"[{chain}] absolute_gap sync health requires target_probe")
+
+    if sync_health.get("time_threshold_env") != "BLOCK_HEIGHT_TIME_THRESHOLD":
+        errors.append(f"[{chain}] _meta.sync_health.time_threshold_env must reuse BLOCK_HEIGHT_TIME_THRESHOLD")
 
 
 def main() -> int:
@@ -114,6 +142,7 @@ def main() -> int:
     errors: list = []
     chains_with_proxy = 0
     chains_with_weighted = 0
+    chains_with_sync_health = 0
 
     for cf in chain_files:
         chain = cf.stem
@@ -137,9 +166,17 @@ def main() -> int:
             chains_with_weighted += 1
             validate_mixed_weighted(chain, mw, errors)
 
+        sync_health = d.get("_meta", {}).get("sync_health")
+        if sync_health is None:
+            errors.append(f"[{chain}] missing _meta.sync_health field")
+        else:
+            chains_with_sync_health += 1
+            validate_sync_health(chain, sync_health, errors)
+
     print(f"Total chains: {len(chain_files)}")
     print(f"  with proxy_extraction:  {chains_with_proxy}")
     print(f"  with mixed_weighted:    {chains_with_weighted}")
+    print(f"  with sync_health:       {chains_with_sync_health}")
     print()
 
     if errors:

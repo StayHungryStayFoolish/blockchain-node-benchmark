@@ -1,0 +1,20 @@
+{
+  "catchpoint": "",
+  "catchpoint-acquired-blocks": 0,
+  "catchpoint-processed-accounts": 0,
+  "catchpoint-processed-kvs": 0,
+  "catchpoint-total-accounts": 0,
+  "catchpoint-total-blocks": 0,
+  "catchpoint-total-kvs": 0,
+  "catchpoint-verified-accounts": 0,
+  "catchpoint-verified-kvs": 0,
+  "catchup-time": 0,
+  "last-catchpoint": "",
+  "last-round": 61960885,
+  "last-version": "https://github.com/algorandfoundation/specs/tree/953304de35264fc3ef91bcd05c123242015eeaed",
+  "next-version": "https://github.com/algorandfoundation/specs/tree/953304de35264fc3ef91bcd05c123242015eeaed",
+  "next-version-round": 62000000,
+  "next-version-supported": true,
+  "stopped-at-unsupported-round": false,
+  "time-since-last-round": 0
+}

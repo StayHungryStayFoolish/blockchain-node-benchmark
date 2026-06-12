@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify fix: regex 现在能匹配 ● 前缀的 unit
+# Verify regex matches systemd units with a leading status glyph.
 set -u
 
 SIMULATED_OUTPUT='  solana-validator.service                  loaded active running Solana

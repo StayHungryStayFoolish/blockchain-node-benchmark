@@ -1,4 +1,4 @@
-// Package handlers — tendermint family handler (ADR-0005).
+// Package handlers — tendermint family handler.
 //
 // Covers 5/36 chains: cosmos-hub, osmosis, celestia, injective, sei.
 //

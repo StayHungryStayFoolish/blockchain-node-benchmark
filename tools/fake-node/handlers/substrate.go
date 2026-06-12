@@ -1,4 +1,4 @@
-// Package handlers — substrate family handler (ADR-0005).
+// Package handlers — substrate family handler.
 //
 // Covers 5/36 chains: polkadot, kusama, acala, astar, moonbeam.
 //
@@ -47,16 +47,13 @@ func (h *SubstrateHandler) Validate(chainName string, tpl map[string]any) error 
 	if !ok || mixed == "" {
 		return fmt.Errorf("chain %s: rpc_methods.mixed missing", chainName)
 	}
-	// Substrate methods follow namespace_camelCase (system_*, chain_*, state_*),
-	// but several chain templates still carry REST-style "GET /path" leftovers
-	// from the pre-S0 era. Log a warning instead of failing startup — step 9
-	// (36-chain rollout) is the wave that normalizes those templates. Failing
-	// here would block all 5 substrate chains' fake-node startup before that
-	// rollout, which violates phase separation.
+	// Substrate methods follow namespace_camelCase (system_*, chain_*, state_*).
+	// REST-style "GET /path" entries are handled by REST adapters, so warn
+	// instead of failing startup when older templates contain mixed method names.
 	for _, m := range strings.Split(mixed, ",") {
 		m = strings.TrimSpace(m)
 		if !strings.Contains(m, "_") {
-			fmt.Printf("WARN: chain %s: method %q does not look like substrate (expected namespace_method) — template needs step-9 normalization\n", chainName, m)
+			fmt.Printf("WARN: chain %s: method %q does not look like substrate (expected namespace_method) — check chain template adapter routing\n", chainName, m)
 		}
 	}
 	return nil

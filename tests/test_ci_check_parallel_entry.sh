@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/test_ci_check_parallel_entry.sh
-# L2: 验 ci/check_parallel_entry.sh 自身正/反向都对
-# Round-05 v1.4.5 Step 6 自审收尾:必须验"删 caller 引用真触发 FAIL"
+# L2: verify ci/check_parallel_entry.sh positive and negative paths.
+# Verifies that removing a required caller reference causes the guard to fail.
 
 set -u
 cd "$(dirname "$0")/.."
@@ -22,36 +22,36 @@ check() {
     fi
 }
 
-# T1: 正向 — 当前 HEAD 应 PASS
+# T1: positive path.
 bash ci/check_parallel_entry.sh >/dev/null 2>&1
 check "T1 baseline POS" 0 $?
 
-# T2: 删 cgroup_collector.py — 应 FAIL (file missing)
+# T2: removing cgroup_collector.py should fail.
 mv monitoring/cgroup_collector.py monitoring/cgroup_collector.py.tmp
 bash ci/check_parallel_entry.sh >/dev/null 2>&1
 rc=$?
 mv monitoring/cgroup_collector.py.tmp monitoring/cgroup_collector.py
 check "T2 missing file NEG" 1 $rc
 
-# T3: 破坏 unified_monitor.sh 里的 cgroup_collector 引用 — 应 FAIL (no live reference)
+# T3: breaking unified_monitor.sh's wrapper source should fail.
 cp monitoring/unified_monitor.sh /tmp/u_test.bak
-sed -i 's/cgroup_collector/XXX_cgroup_collector_XXX/g' monitoring/unified_monitor.sh
+perl -0pi -e 's/cgroup_collector_wrapper/XXX_cgroup_collector_wrapper_XXX/g' monitoring/unified_monitor.sh
 bash ci/check_parallel_entry.sh >/dev/null 2>&1
 rc=$?
 cp /tmp/u_test.bak monitoring/unified_monitor.sh
 rm -f /tmp/u_test.bak
 check "T3 broken caller NEG (word boundary)" 1 $rc
 
-# T4: 仅在注释里引用 — 应 FAIL (comment filter)
+# T4: comment-only references should fail.
 cp monitoring/unified_monitor.sh /tmp/u_test.bak
-sed -i 's/^[^#]*cgroup_collector/# &/' monitoring/unified_monitor.sh
+perl -0pi -e 's/^([^#\n]*cgroup_collector_wrapper[^\n]*)/# $1/m' monitoring/unified_monitor.sh
 bash ci/check_parallel_entry.sh >/dev/null 2>&1
 rc=$?
 cp /tmp/u_test.bak monitoring/unified_monitor.sh
 rm -f /tmp/u_test.bak
 check "T4 comment-only NEG" 1 $rc
 
-# T5: 还原后再跑一次 — 应 PASS (确认 T2-T4 restore 干净)
+# T5: positive path after restoration.
 bash ci/check_parallel_entry.sh >/dev/null 2>&1
 check "T5 restore-check POS" 0 $?
 

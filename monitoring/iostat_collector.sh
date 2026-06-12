@@ -12,7 +12,7 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/config_loader.sh" 2>/dev/n
     LOGS_DIR=${LOGS_DIR:-"/tmp/blockchain-node-benchmark/logs"}
 fi
 source "$(dirname "${BASH_SOURCE[0]}")/../utils/disk_converter.sh"
-# CSV Schema Registry (S1: disk 段 header 单一事实源, 替代手工字符串拼接)
+# CSV Schema Registry for disk headers
 source "$(dirname "${BASH_SOURCE[0]}")/../config/csv_schema_registry.sh"
 
 # Load logging functions
@@ -34,8 +34,10 @@ get_iostat_data() {
     
     # Implement true iostat continuous sampling
     local monitor_rate=${DISK_MONITOR_RATE:-1}
-    local iostat_pid_file="/tmp/iostat_${device}_${logical_name}.pid"
-    local iostat_data_file="/tmp/iostat_${device}_${logical_name}.data"
+    local iostat_runtime_dir="${TMP_DIR:-/tmp}"
+    mkdir -p "$iostat_runtime_dir" 2>/dev/null || true
+    local iostat_pid_file="${iostat_runtime_dir}/iostat_${device}_${logical_name}.pid"
+    local iostat_data_file="${iostat_runtime_dir}/iostat_${device}_${logical_name}.data"
     
     # Check if continuous sampling process already exists
     if [[ ! -f "$iostat_pid_file" ]] || ! kill -0 "$(cat "$iostat_pid_file" 2>/dev/null)" 2>/dev/null; then
@@ -118,12 +120,10 @@ get_iostat_data() {
     fi
     
     # Calculate provider-standard IOPS (based on real-time data)
-    # NOTE(latent, HDD 未覆盖): convert_to_standard_iops 第3参 io_cap 默认 256 (SSD).
-    #   AWS EBS HDD (st1/sc1) 官方按 1024 KiB 拆分,需传 io_cap=1024; 但当前 provider 层
-    #   get_iops_conversion_func 固定返 aws_ssd_ceil_256, 未按卷类型 (DATA_VOL_TYPE) 区分 SSD/HDD.
-    #   现实: 区块链节点几乎不用 HDD (st1 ~500 IOPS 跑不动), 故此路径低优先未实现.
-    #   若将来支持 HDD: provider 层加 aws_hdd_ceil_1024 分支 + 此处按 $DATA_VOL_TYPE 传 io_cap.
-    #   对 SSD (gp3/io2, 区块链实际用) 当前完全正确.
+    # NOTE: HDD-specific conversion is not implemented. convert_to_standard_iops
+    # defaults to a 256 KiB I/O cap, which matches SSD-oriented cloud volumes.
+    # If HDD support is added later, provider conversion should branch by volume
+    # type and pass the correct I/O cap.
     local standard_iops
     if [[ $(awk "BEGIN {print ($avg_io_kib > 0) ? 1 : 0}") -eq 1 ]]; then
         standard_iops=$(convert_to_standard_iops "$total_iops" "$avg_io_kib")
@@ -136,11 +136,11 @@ get_iostat_data() {
 }
 
 # Generate CSV header for device
-# 列名由 csv_schema_registry 单一事实源生成 (替代手工字符串拼接).
-# 方案甲(中立命名): provider_aware 字段三云统一 normalized_iops/normalized_throughput_mibs (ADR-0002),
-#   物理名不含云厂商烙印; provider 信息由 CSV cloud_provider 列承载 (与配置一致).
-# 第 3 参 provider: 仅作 registry 接口透传 (当前三云同名, 留作将来某云特殊命名挂点).
-#   不传则用 get_provider_name (配置驱动: CLOUD_PROVIDER 配置优先, 未配则探测).
+# Column names are generated through csv_schema_registry.
+# Provider-normalized disk fields use normalized_iops/normalized_throughput_mibs.
+#   Provider identity is carried by the CSV cloud_provider column.
+# The optional provider argument is passed through to the registry.
+# When omitted, get_provider_name is used.
 generate_device_header() {
     local device="$1"
     local logical_name="$2"
@@ -149,7 +149,7 @@ generate_device_header() {
         if declare -F get_provider_name >/dev/null 2>&1; then
             provider="$(get_provider_name 2>/dev/null)"
         fi
-        provider="${provider:-other}"   # getter 不可用时中立兜底, 不偏向任何云
+        provider="${provider:-other}"
     fi
 
     # Use unified naming convention {logical_name}_{device_name}_{metric}
@@ -161,12 +161,11 @@ generate_device_header() {
         *) prefix="${logical_name}_${device}" ;;
     esac
 
-    # 从 registry 生成整段 21 列 header (单一事实源, reader 经 registry resolve 对齐)
+    # Generate the 21-column disk header through the registry.
     if declare -F csv_registry_disk_header >/dev/null 2>&1; then
         csv_registry_disk_header "$prefix" "$provider"
     else
-        # 防御: registry 未 source 时回退. 用 get_disk_field_prefix 保持与 provider 一致,
-        # 仍不硬编码 aws (无倾向兜底). 默认值与三云统一前缀 normalized 对齐.
+        # Defensive fallback when the registry was not loaded.
         local dfp="normalized"
         declare -F get_disk_field_prefix >/dev/null 2>&1 && dfp="$(get_disk_field_prefix 2>/dev/null || echo normalized)"
         log_warn "csv_registry_disk_header unavailable — fallback header (dfp=$dfp)"
@@ -216,9 +215,9 @@ get_all_devices_data() {
 generate_all_devices_header() {
     local device_header=""
 
-    # S1(方案甲): provider 随云变. writer 端 provider 唯一合法源 = get_provider_name (运行时探测);
-    # reader 端则必须从 CSV cloud_provider 列取 (见 proposal §4.5 铁律). 二者不可混用.
-    # 此处解析一次, 4 处 generate_device_header 同源传入, 保证 device 列名与 cloud_provider 列值自洽.
+    # Writer-side provider comes from get_provider_name at runtime;
+    # reader-side provider must come from the CSV cloud_provider column. Do not mix the two.
+    # Resolve once and pass it to each generate_device_header call.
     local provider="aws"
     if declare -F get_provider_name >/dev/null 2>&1; then
         local _p; _p=$(get_provider_name 2>/dev/null)

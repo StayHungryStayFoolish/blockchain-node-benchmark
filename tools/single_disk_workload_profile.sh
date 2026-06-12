@@ -2,8 +2,8 @@
 # =====================================================================
 # single_disk_workload_profile.sh — single-disk synthetic I/O workload
 # =====================================================================
-# v1.4.5 plan §S0.3: generate predictable disk read/write workload using
-# dd, so the e2e_smoke harness can verify that:
+# Generate predictable disk read/write workload using dd, so the e2e_smoke
+# harness can verify that:
 #   1. unified_monitor.sh captures non-zero I/O
 #   2. cgroup_collector.py reports non-zero cgroup_io_*
 #   3. HTML report shows the workload window
