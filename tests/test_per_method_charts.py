@@ -28,6 +28,7 @@ from visualization.per_method_charts import (  # noqa: E402
     plot_success_failure_totals,
     plot_error_rate,
     plot_latency_p99,
+    plot_latency_percentiles,
     plot_qps,
     plot_resource_stacked,
 )
@@ -36,10 +37,10 @@ from visualization.per_method_charts import (  # noqa: E402
 class TestHelpers(unittest.TestCase):
     def test_top_n_by_qps(self):
         rows = [
-            PerMethodQpsRow(100, "a", 5, 0, 1.0, 2.0),
-            PerMethodQpsRow(101, "a", 3, 0, 1.0, 2.0),
-            PerMethodQpsRow(100, "b", 10, 0, 1.0, 2.0),
-            PerMethodQpsRow(100, "c", 1, 0, 1.0, 2.0),
+            PerMethodQpsRow(100, "a", 5, 0, 1.0, 1.8, 2.0),
+            PerMethodQpsRow(101, "a", 3, 0, 1.0, 1.8, 2.0),
+            PerMethodQpsRow(100, "b", 10, 0, 1.0, 1.8, 2.0),
+            PerMethodQpsRow(100, "c", 1, 0, 1.0, 1.8, 2.0),
         ]
         top = _top_n_methods_by_qps(rows, n=2)
         self.assertEqual(top, ["b", "a"])  # b=10, a=8
@@ -59,11 +60,11 @@ class TestHelpers(unittest.TestCase):
 
 def _make_fixture():
     qps_rows = [
-        PerMethodQpsRow(100, "getSlot", 5, 1, 2.5, 9.9),
-        PerMethodQpsRow(100, "getBlock", 3, 0, 10.0, 20.0),
-        PerMethodQpsRow(101, "getSlot", 6, 0, 3.0, 11.0),
-        PerMethodQpsRow(102, "getSlot", 4, 2, 5.0, 15.0),
-        PerMethodQpsRow(102, "getBlock", 2, 0, 8.0, 18.0),
+        PerMethodQpsRow(100, "getSlot", 5, 1, 2.5, 7.5, 9.9),
+        PerMethodQpsRow(100, "getBlock", 3, 0, 10.0, 18.0, 20.0),
+        PerMethodQpsRow(101, "getSlot", 6, 0, 3.0, 9.0, 11.0),
+        PerMethodQpsRow(102, "getSlot", 4, 2, 5.0, 13.0, 15.0),
+        PerMethodQpsRow(102, "getBlock", 2, 0, 8.0, 16.0, 18.0),
     ]
     resource_rows = [
         PerMethodResourceRow(100, "getSlot", 0.625, 50.0, 500.0),
@@ -103,6 +104,15 @@ class TestPlots(unittest.TestCase):
         out = plot_latency_p99(self.qps_rows, Path(self.tmp) / "p99.svg")
         self._assert_valid_svg(out, ["getSlot", "getBlock"])
 
+    def test_plot_latency_percentiles(self):
+        out = plot_latency_percentiles(self.qps_rows, Path(self.tmp) / "percentiles.svg")
+        self._assert_valid_svg(out, ["getSlot", "getBlock"])
+        content = out.read_text()
+        self.assertIn("P50", content)
+        self.assertIn("P90", content)
+        self.assertIn("P99", content)
+        self.assertIn("<rect", content)
+
     def test_plot_error_rate(self):
         out = plot_error_rate(self.qps_rows, Path(self.tmp) / "err.svg")
         self._assert_valid_svg(out, ["getSlot", "getBlock"])
@@ -126,7 +136,10 @@ class TestPlots(unittest.TestCase):
         paths = generate_all_charts(
             self.qps_rows, self.res_rows, self.tmp, chain_name="solana",
         )
-        self.assertEqual(set(paths.keys()), {"qps", "latency", "error_rate", "success_failure", "resource"})
+        self.assertEqual(
+            set(paths.keys()),
+            {"qps", "latency", "latency_percentiles", "error_rate", "success_failure", "resource"},
+        )
         for kind, p in paths.items():
             self.assertTrue(p.exists(), f"{kind} → {p} missing")
             self.assertIn(f"_solana.svg", p.name)
@@ -138,12 +151,14 @@ class TestPlots(unittest.TestCase):
             titles={
                 "qps": "\u6bcf\u65b9\u6cd5 QPS",
                 "latency": "\u6bcf\u65b9\u6cd5 p99 \u5ef6\u8fdf",
+                "latency_percentiles": "\u6bcf\u65b9\u6cd5\u5ef6\u8fdf\u5206\u4f4d\u6570",
                 "error_rate": "\u6bcf\u65b9\u6cd5\u9519\u8bef\u7387",
                 "resource": "\u6bcf\u65b9\u6cd5 CPU \u5f52\u56e0",
             },
         )
         self.assertIn("\u6bcf\u65b9\u6cd5 QPS", paths["qps"].read_text())
         self.assertIn("\u6bcf\u65b9\u6cd5 p99 \u5ef6\u8fdf", paths["latency"].read_text())
+        self.assertIn("\u6bcf\u65b9\u6cd5\u5ef6\u8fdf\u5206\u4f4d\u6570", paths["latency_percentiles"].read_text())
         self.assertIn("\u6bcf\u65b9\u6cd5 CPU \u5f52\u56e0", paths["resource"].read_text())
 
 
@@ -164,13 +179,13 @@ class TestEdgeCases(unittest.TestCase):
         self.assertTrue(out.exists())
 
     def test_single_data_point(self):
-        rows = [PerMethodQpsRow(100, "m", 1, 0, 1.0, 1.0)]
+        rows = [PerMethodQpsRow(100, "m", 1, 0, 1.0, 1.0, 1.0)]
         out = plot_qps(rows, Path(self.tmp) / "single.svg")
         self.assertTrue(out.exists())
 
     def test_top_n_limits(self):
         # 25 methods -> only top 10 are included.
-        rows = [PerMethodQpsRow(100, f"m{i}", 100 - i, 0, 1.0, 1.0) for i in range(25)]
+        rows = [PerMethodQpsRow(100, f"m{i}", 100 - i, 0, 1.0, 1.0, 1.0) for i in range(25)]
         out = plot_qps(rows, Path(self.tmp) / "top.svg", top_n=10)
         content = out.read_text()
         # m0..m9 appear in the legend; m10+ do not.
@@ -180,7 +195,7 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_html_escape_method_name(self):
         # Method names containing < > & must not break SVG markup.
-        rows = [PerMethodQpsRow(100, "m<x>&y", 1, 0, 1.0, 1.0)]
+        rows = [PerMethodQpsRow(100, "m<x>&y", 1, 0, 1.0, 1.0, 1.0)]
         out = plot_qps(rows, Path(self.tmp) / "esc.svg")
         content = out.read_text()
         # The string should be escaped, not rendered as a raw <x> tag.

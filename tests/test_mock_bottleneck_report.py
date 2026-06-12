@@ -320,6 +320,7 @@ class MockBottleneckReportTest(unittest.TestCase):
             expected_per_method_charts = {
                 "per_method_qps_solana.svg",
                 "per_method_latency_solana.svg",
+                "per_method_latency_percentiles_solana.svg",
                 "per_method_error_rate_solana.svg",
                 "per_method_resource_solana.svg",
                 "per_method_success_failure_solana.svg",

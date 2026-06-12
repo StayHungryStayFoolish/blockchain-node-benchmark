@@ -1,11 +1,12 @@
 """Per-method chart generator.
 
-Generates 4 SVG chart types using only Python stdlib:
+Generates SVG chart types using only Python stdlib:
 1. per_method_qps_<chain>.svg         - per-second per-method QPS line chart
 2. per_method_latency_<chain>.svg     - per-second per-method p99 latency line chart
-3. per_method_error_rate_<chain>.svg  - per-second per-method error-rate line chart
-4. per_method_resource_<chain>.svg    - per-second attributed-resource stacked area chart
-5. per_method_success_failure_<chain>.svg - per-method success/failure totals
+3. per_method_latency_percentiles_<chain>.svg - per-method P50/P90/P99 latency bars
+4. per_method_error_rate_<chain>.svg  - per-second per-method error-rate line chart
+5. per_method_resource_<chain>.svg    - per-second attributed-resource stacked area chart
+6. per_method_success_failure_<chain>.svg - per-method success/failure totals
 
 Design principles:
 - no matplotlib/numpy/pandas dependency for this path
@@ -212,6 +213,77 @@ def plot_latency_p99(rows: Sequence[PerMethodQpsRow], output: str | Path,
     return _write_svg(svg, output)
 
 
+def plot_latency_percentiles(
+    rows: Sequence[PerMethodQpsRow],
+    output: str | Path,
+    top_n: int = 10,
+    title: str = "Per-Method Latency Percentiles",
+) -> Path:
+    """Grouped bar chart of average per-second P50/P90/P99 latency by method."""
+    methods = _top_n_methods_by_qps(rows, top_n)
+    if not methods:
+        svg = _svg_header(title) + _svg_axes(0, 1, 0, 1, "method", "latency (ms)")
+        return _write_svg(svg, output)
+
+    by_method: dict[str, list[PerMethodQpsRow]] = defaultdict(list)
+    for r in rows:
+        if r.method_name in methods:
+            by_method[r.method_name].append(r)
+
+    percentiles: dict[str, tuple[float, float, float]] = {}
+    for method in methods:
+        method_rows = by_method.get(method, [])
+        if not method_rows:
+            percentiles[method] = (0.0, 0.0, 0.0)
+            continue
+        n = len(method_rows)
+        percentiles[method] = (
+            sum(r.p50_ms for r in method_rows) / n,
+            sum(r.p90_ms for r in method_rows) / n,
+            sum(r.p99_ms for r in method_rows) / n,
+        )
+
+    y_max = max(max(values) for values in percentiles.values()) * 1.15
+    if y_max <= 0:
+        y_max = 1.0
+
+    colors = {"P50": "#2ca02c", "P90": "#ff7f0e", "P99": "#d62728"}
+    group_w = _PLOT_W / max(len(methods), 1)
+    bar_w = min(22, group_w / 5)
+    parts = [_svg_header(title)]
+
+    for i in range(6):
+        y = _PAD_T + _PLOT_H - i * _PLOT_H / 5
+        val = y_max * i / 5
+        parts.append(f'<line class="gridline" x1="{_PAD_L}" y1="{y}" x2="{_PAD_L + _PLOT_W}" y2="{y}"/>')
+        parts.append(f'<text class="label" x="{_PAD_L - 5}" y="{y + 3}" text-anchor="end">{val:.1f}</text>')
+
+    for idx, method in enumerate(methods):
+        center = _PAD_L + group_w * idx + group_w / 2
+        values = percentiles[method]
+        labels = ("P50", "P90", "P99")
+        for j, label in enumerate(labels):
+            value = values[j]
+            height = _scale(value, 0, y_max, 0, _PLOT_H)
+            x = center + (j - 1) * (bar_w + 3) - bar_w / 2
+            y = _PAD_T + _PLOT_H - height
+            parts.append(f'<rect x="{x:.2f}" y="{y:.2f}" width="{bar_w:.2f}" height="{height:.2f}" fill="{colors[label]}" opacity="0.9"/>')
+        safe_method = html.escape(method)
+        parts.append(
+            f'<text class="label" x="{center:.2f}" y="{_PAD_T + _PLOT_H + 16}" '
+            f'text-anchor="end" transform="rotate(-25 {center:.2f} {_PAD_T + _PLOT_H + 16})">{safe_method}</text>'
+        )
+
+    parts.append(f'<text class="label" x="15" y="{_PAD_T + _PLOT_H/2}" text-anchor="middle" transform="rotate(-90 15 {_PAD_T + _PLOT_H/2})">latency (ms)</text>')
+    legend_x = _PAD_L + _PLOT_W + 12
+    for i, label in enumerate(("P50", "P90", "P99")):
+        y = _PAD_T + 10 + i * 20
+        parts.append(f'<rect x="{legend_x}" y="{y - 8}" width="12" height="12" fill="{colors[label]}"/>')
+        parts.append(f'<text class="label" x="{legend_x + 16}" y="{y + 2}">{label}</text>')
+
+    return _write_svg("\n".join(parts), output)
+
+
 def plot_error_rate(rows: Sequence[PerMethodQpsRow], output: str | Path,
                     top_n: int = 10, title: str = "Per-Method Error Rate") -> Path:
     svg = _build_qps_chart(rows, top_n, title, "error rate (%)",
@@ -331,6 +403,10 @@ def generate_all_charts(
         "latency": plot_latency_p99(qps_rows, out_dir / f"per_method_latency_{chain_name}.svg",
                                     top_n=top_n,
                                     title=titles.get("latency", f"Per-Method p99 Latency — {chain_name}")),
+        "latency_percentiles": plot_latency_percentiles(
+            qps_rows, out_dir / f"per_method_latency_percentiles_{chain_name}.svg",
+            top_n=top_n,
+            title=titles.get("latency_percentiles", f"Per-Method Latency Percentiles — {chain_name}")),
         "error_rate": plot_error_rate(qps_rows, out_dir / f"per_method_error_rate_{chain_name}.svg",
                                       top_n=top_n,
                                       title=titles.get("error_rate", f"Per-Method Error Rate — {chain_name}")),

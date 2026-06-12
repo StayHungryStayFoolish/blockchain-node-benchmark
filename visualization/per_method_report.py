@@ -33,6 +33,8 @@ PER_METHOD_TRANSLATIONS = {
         "summary_title": "Summary",
         "method_col": "Method",
         "total_qps_col": "Total Requests",
+        "avg_p50_col": "Avg p50 (ms)",
+        "avg_p90_col": "Avg p90 (ms)",
         "avg_p99_col": "Avg p99 (ms)",
         "max_p99_col": "Max p99 (ms)",
         "error_count_col": "Errors",
@@ -48,6 +50,11 @@ PER_METHOD_TRANSLATIONS = {
         "chart_latency_desc": (
             "p99 latency per method per second. Identifies which methods drive tail latency "
             "and when degradation begins."
+        ),
+        "chart_latency_percentiles_title": "Per-Method Latency Percentiles",
+        "chart_latency_percentiles_desc": (
+            "Average per-second P50, P90, and P99 response latency per method. This shows "
+            "the latency distribution for the workload methods selected in single or mixed mode."
         ),
         "chart_error_title": "Per-Method Error Rate",
         "chart_error_desc": (
@@ -77,6 +84,8 @@ PER_METHOD_TRANSLATIONS = {
         "summary_title": "摘要",
         "method_col": "方法",
         "total_qps_col": "请求总数",
+        "avg_p50_col": "平均 p50 (ms)",
+        "avg_p90_col": "平均 p90 (ms)",
         "avg_p99_col": "平均 p99 (ms)",
         "max_p99_col": "最大 p99 (ms)",
         "error_count_col": "错误数",
@@ -90,6 +99,11 @@ PER_METHOD_TRANSLATIONS = {
         "chart_latency_title": "每方法 p99 延迟",
         "chart_latency_desc": (
             "每秒每 method 的 p99 延迟。识别哪些 method 主导尾延迟以及何时开始劣化。"
+        ),
+        "chart_latency_percentiles_title": "每方法延迟分位数",
+        "chart_latency_percentiles_desc": (
+            "每个 method 的平均每秒 P50、P90、P99 响应延迟。用于观察 single 或 mixed 模式下"
+            "业务 RPC method 的响应时间分布。"
         ),
         "chart_error_title": "每方法错误率",
         "chart_error_desc": (
@@ -127,7 +141,7 @@ def compute_summary(
 ) -> list[dict]:
     """Aggregate method-level summary rows for the table.
 
-    One row per method: total_requests, avg_p99, max_p99, errors,
+    One row per method: total_requests, avg_p50, avg_p90, avg_p99, max_p99, errors,
     error_rate, peak_cpu_share.
     """
     by_method_qps: dict[str, list[PerMethodQpsRow]] = {}
@@ -142,6 +156,8 @@ def compute_summary(
         total = sum(r.qps for r in qrs)
         errors = sum(r.error_count for r in qrs)
         successes = max(total - errors, 0)
+        avg_p50 = sum(r.p50_ms for r in qrs) / len(qrs) if qrs else 0
+        avg_p90 = sum(r.p90_ms for r in qrs) / len(qrs) if qrs else 0
         avg_p99 = sum(r.p99_ms for r in qrs) / len(qrs) if qrs else 0
         max_p99 = max((r.p99_ms for r in qrs), default=0)
         rrs = by_method_res.get(method, [])
@@ -150,6 +166,8 @@ def compute_summary(
             "method": method,
             "total_requests": total,
             "success_count": successes,
+            "avg_p50_ms": avg_p50,
+            "avg_p90_ms": avg_p90,
             "avg_p99_ms": avg_p99,
             "max_p99_ms": max_p99,
             "error_count": errors,
@@ -174,6 +192,8 @@ def _render_summary_table(summary: list[dict], language: str) -> str:
         ("success_count_col", "success_count", lambda v: f"{v:,}"),
         ("error_count_col", "error_count", lambda v: f"{v:,}"),
         ("error_rate_col", "error_rate", lambda v: f"{v*100:.2f}%"),
+        ("avg_p50_col", "avg_p50_ms", lambda v: f"{v:.2f}"),
+        ("avg_p90_col", "avg_p90_ms", lambda v: f"{v:.2f}"),
         ("avg_p99_col", "avg_p99_ms", lambda v: f"{v:.2f}"),
         ("max_p99_col", "max_p99_ms", lambda v: f"{v:.2f}"),
         ("cpu_share_col", "peak_cpu_share_pct", lambda v: f"{v:.1f}%"),
@@ -227,7 +247,7 @@ def render_per_method_section(
     Args:
         language: 'en' | 'zh'
         chain_name: display chain name
-        chart_paths: {'qps', 'latency', 'error_rate', 'resource'} -> chart paths
+        chart_paths: {'qps', 'latency', 'latency_percentiles', 'error_rate', 'resource'} -> chart paths
         summary: output from compute_summary()
         top_n: number of top methods displayed
     """
@@ -246,6 +266,8 @@ def render_per_method_section(
                             str(chart_paths.get("qps", "")), language),
         _render_chart_block("chart_latency_title", "chart_latency_desc",
                             str(chart_paths.get("latency", "")), language),
+        _render_chart_block("chart_latency_percentiles_title", "chart_latency_percentiles_desc",
+                            str(chart_paths.get("latency_percentiles", "")), language),
         _render_chart_block("chart_error_title", "chart_error_desc",
                             str(chart_paths.get("error_rate", "")), language),
         _render_chart_block("chart_success_failure_title", "chart_success_failure_desc",
@@ -262,6 +284,7 @@ def get_chart_titles_for_language(language: str) -> dict[str, str]:
     return {
         "qps": _t(language, "chart_qps_title"),
         "latency": _t(language, "chart_latency_title"),
+        "latency_percentiles": _t(language, "chart_latency_percentiles_title"),
         "error_rate": _t(language, "chart_error_title"),
         "success_failure": _t(language, "chart_success_failure_title"),
         "resource": _t(language, "chart_resource_title"),
