@@ -15,7 +15,7 @@ matplotlib>=3.3.0
 seaborn>=0.11.0
 
 # Statistics and machine learning
-scipy>=1.7.0
+scipy>=1.17.1
 scikit-learn>=1.0.0
 statsmodels>=0.12.0
 
