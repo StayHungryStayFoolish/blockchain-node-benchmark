@@ -2,8 +2,8 @@
 
 [English](README.md) | [中文](README_ZH.md)
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Commercial License](https://img.shields.io/badge/License-Commercial-green.svg)](LICENSE.COMMERCIAL)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Commercial License](https://img.shields.io/badge/License-Commercial-green.svg)](COMMERCIAL.md)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Shell Script](https://img.shields.io/badge/shell-bash-green.svg)](https://www.gnu.org/software/bash/)
 
@@ -1116,11 +1116,11 @@ done
 
 We welcome contributions! By contributing to this project, you agree to the following:
 
-### Contributor License Agreement (CLA)
+### Contributor License Terms
 
 By submitting a pull request, you agree that:
-- Your contributions will be licensed under both AGPL 3.0 and our Commercial License
-- You grant the project maintainers the right to use your contributions in commercial versions
+- Your contributions may be licensed under AGPL 3.0 or later and under the project's commercial licensing terms
+- You grant the project maintainers the right to use and sublicense your contributions in commercial versions
 - You have the right to submit the contributions (no third-party IP conflicts)
 
 ### Development Environment Setup
@@ -1160,17 +1160,16 @@ Open an issue with the `question` label for any contribution-related questions.
 
 This project is dual-licensed:
 
-### Open Source License (AGPL 3.0)
-- Free for personal, academic, and open-source projects
-- Modifications must be open-sourced
-- Network use requires source disclosure
+### Open Source License (AGPL 3.0 or later)
+- Commercial and non-commercial use are allowed under AGPL terms
+- If you modify, distribute, or provide network access to the software, follow the AGPL source-disclosure requirements
 - See [LICENSE](LICENSE) for full terms
 
-### Commercial License
-- Required for commercial/proprietary use
+### Commercial Licensing Option
+- Available for proprietary use cases that need terms different from the AGPL
 - Closed-source integration allowed
-- No AGPL obligations
+- No AGPL obligations under a separate written commercial agreement
 - Enterprise support available
-- See [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL) for details
+- See [COMMERCIAL.md](COMMERCIAL.md) for details
 
 **Contact:** Open a GitHub Issue with label `commercial-license` for commercial licensing inquiries

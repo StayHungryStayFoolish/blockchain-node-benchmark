@@ -15,6 +15,16 @@ runtime data contracts as well as code correctness.
 Do not commit local benchmark outputs, private RPC endpoints, API keys,
 provider credentials, or machine-specific paths.
 
+## Contribution License Terms
+
+By submitting a pull request, you confirm that:
+
+- You have the right to submit the contribution.
+- Your contribution may be licensed under AGPL 3.0 or later and under the
+  project's commercial licensing terms.
+- You grant the project maintainers the right to use and sublicense your
+  contribution in commercial versions.
+
 ## Commit and PR Title Convention
 
 Use Conventional Commits for PR titles and for local commits when practical:
@@ -154,6 +164,6 @@ bash ci/check_csv_registry_bypass.sh
 python3 tools/check_public_repo_markers.py --root .
 ```
 
-The public repo marker check rejects internal AI execution markers, stale
+The public repo marker check rejects internal execution markers, stale
 planning labels, runtime Chinese output in code paths, and other public-release
 cleanup issues.
