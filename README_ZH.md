@@ -1112,9 +1112,13 @@ bash --version
 3. 修改运行时监控前，先增加 row width、required fields、report behavior 相关 contract tests。
 4. 运行时数据 contract 稳定后，再添加对应的分析和可视化逻辑。
 
-### 有疑问？
+### 社区与支持
 
-对于任何贡献相关的问题，请提交带有 `question` 标签的 Issue。
+- 可复现 bug、功能请求、chain/RPC 支持请求请使用 GitHub Issues。
+- 安装、配置、路线讨论和运行经验请使用 GitHub Discussions。
+- 漏洞、泄露密钥、私有 RPC endpoint 或敏感 benchmark artifact 请按
+  [SECURITY.md](SECURITY.md) 处理。
+- 支持渠道说明见 [SUPPORT.md](SUPPORT.md)。
 
 
 ## 📄 许可证

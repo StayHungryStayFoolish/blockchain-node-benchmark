@@ -1151,9 +1151,15 @@ bash --version
 3. Add contract tests for row width, required fields, and report behavior before changing runtime monitoring.
 4. Add corresponding analysis and visualization logic only after the runtime data contract is stable.
 
-### Questions?
+### Community and Support
 
-Open an issue with the `question` label for any contribution-related questions.
+- Use GitHub Issues for reproducible bugs, feature requests, and chain/RPC
+  support requests.
+- Use GitHub Discussions for installation questions, configuration questions,
+  roadmap discussion, and operational experience.
+- Follow [SECURITY.md](SECURITY.md) for vulnerabilities, leaked secrets, private
+  RPC endpoints, or sensitive benchmark artifacts.
+- See [SUPPORT.md](SUPPORT.md) for support routing details.
 
 
 ## 📄 License
