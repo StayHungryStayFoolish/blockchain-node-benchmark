@@ -7,6 +7,7 @@ Run: python3 tests/test_per_method_report.py
 """
 
 import csv
+import json
 import os
 import sys
 import tempfile
@@ -31,7 +32,7 @@ from visualization.per_method_report import (  # noqa: E402
     get_chart_titles_for_language,
     render_per_method_section,
 )
-from visualization.report_generator import ReportGenerator  # noqa: E402
+from visualization.report_generator import ReportGenerator, TRANSLATIONS  # noqa: E402
 
 
 class TestI18n(unittest.TestCase):
@@ -50,6 +51,24 @@ class TestI18n(unittest.TestCase):
 
     def test_zh_section_title(self):
         self.assertIn("Per-Method", _t("zh", "section_title"))
+
+
+class TestReportGeneratorI18n(unittest.TestCase):
+    def test_report_en_zh_both_have_all_keys(self):
+        en_keys = set(TRANSLATIONS["en"].keys())
+        zh_keys = set(TRANSLATIONS["zh"].keys())
+        self.assertEqual(
+            en_keys,
+            zh_keys,
+            f"report i18n key mismatch: en-zh={en_keys-zh_keys}, zh-en={zh_keys-en_keys}",
+        )
+
+    def test_report_generator_uses_external_i18n_files(self):
+        i18n_path = Path(__file__).resolve().parents[1] / "i18n" / "report.zh.json"
+        external_zh = json.loads(i18n_path.read_text(encoding="utf-8"))
+        self.assertEqual(TRANSLATIONS["zh"], external_zh)
+        self.assertEqual(TRANSLATIONS["zh"]["data_quality_summary"], "数据质量摘要")
+        self.assertIn("监控开销", TRANSLATIONS["zh"]["overhead_auto_generated"])
 
 
 class TestComputeSummary(unittest.TestCase):
