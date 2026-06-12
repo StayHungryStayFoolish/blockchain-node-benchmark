@@ -172,6 +172,7 @@ jobs:
           python3 tests/test_per_method_report.py
           python3 tests/test_degraded_report.py
           python3 tests/test_disk_visualization_synthetic.py
+          python3 tests/test_mock_bottleneck_report.py
           python3 tests/test_prometheus_exporter.py
 
   monitoring-contracts:
