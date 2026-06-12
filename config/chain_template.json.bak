@@ -5,7 +5,7 @@
     "The rpc_url value should normally remain LOCAL_RPC_URL so the framework can point traffic at the local node, proxy, or fake-node.",
     "Runtime endpoint overrides should be configured in config/user_config.sh: MAINNET_RPC_URL, CHAIN_REST_URL, CHAIN_INDEXER_URL, CHAIN_SIDECAR_URL, CHAIN_EVM_RPC_URL, CHAIN_JSON_RPC_URL, CHAIN_MIRROR_URL, and RPC_API_KEY.",
     "Runtime sample values should also be configured in config/user_config.sh when needed. Use ${TARGET_ADDRESS:-measured-default} style values in params so templates keep working without user overrides.",
-    "Every JSON-RPC-style method listed in rpc_methods.single, rpc_methods.mixed, or rpc_methods.mixed_weighted must have a matching entry in param_formats. REST/path-style methods must have matching _meta.rest_paths entries. Do not add a top-level methods field or _meta.account_discovery aliases; target seed generation uses params.target_address.",
+    "Every method listed in rpc_methods.single, rpc_methods.mixed, or rpc_methods.mixed_weighted must be buildable by the selected adapter. Use param_formats for common JSON-RPC shapes, _meta.rest_paths for REST paths, and optional param_spec only when a method needs explicit positional/object/path/query/body bindings.",
     "mixed_weighted weights are relative weights. They do not need to sum to 100, but using a clear total such as 100 is easier for humans to audit.",
     "adapter_family controls request construction, response parsing, fake-node dispatch, and sync-health parsing. Use one of: jsonrpc, rest, bitcoin_jsonrpc, substrate, tendermint, hedera_dual."
   ],
@@ -17,7 +17,8 @@
     "rpc_methods.single": "Default single-mode method.",
     "rpc_methods.mixed": "Human-readable mixed-mode method list.",
     "rpc_methods.mixed_weighted": "Mixed-mode weighted method list used by tools/target_generator.sh.",
-    "param_formats": "Maps each method to the parameter builder used by tools/chain_adapters.",
+    "param_formats": "Maps each method to a built-in parameter builder used by tools/chain_adapters.",
+    "param_spec": "Optional per-method structured parameter spec for complex JSON-RPC params, REST path bindings, query values, or request bodies when param_formats/rest_paths alone are not expressive enough.",
     "_meta.adapter_family": "Protocol family used by chain adapters and fake-node.",
     "_meta.sync_health": "Node sync-health probe definition used by block-height and health monitoring.",
     "_meta.original_public_endpoints": "Default public endpoints used as fallbacks only. Production users should prefer user_config.sh endpoint overrides.",
@@ -35,6 +36,7 @@
     "target_txid": "${TARGET_TXID:-0000000000000000000000000000000000000000000000000000000000000000}",
     "target_block_hash": "${TARGET_BLOCK_HASH:-0000000000000000000000000000000000000000000000000000000000000000}",
     "target_height": "${TARGET_HEIGHT:-1}",
+    "target_storage_slot": "${TARGET_STORAGE_SLOT:-0x0}",
     "target_asset": "${TARGET_ASSET:-[\"policy_id\",\"asset_name_hex\"]}"
   },
   "system_addresses": {
@@ -60,6 +62,41 @@
   "param_formats": {
     "example_getBalance": "single_address",
     "example_getTransaction": "tx_hash"
+  },
+  "param_spec": {
+    "example_getBalance": {
+      "transport": "jsonrpc_list",
+      "params": [
+        {
+          "source": "address"
+        },
+        {
+          "literal": "latest"
+        }
+      ]
+    },
+    "example_getStorageAt": {
+      "transport": "jsonrpc_list",
+      "params": [
+        {
+          "source": "address"
+        },
+        {
+          "source": "target_storage_slot"
+        },
+        {
+          "literal": "latest"
+        }
+      ]
+    },
+    "example_getTransaction": {
+      "transport": "jsonrpc_list",
+      "params": [
+        {
+          "source": "target_tx_hash"
+        }
+      ]
+    }
   },
   "_meta": {
     "adapter_family": "jsonrpc",

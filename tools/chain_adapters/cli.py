@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 # cli.py lives in tools/chain_adapters/. Add tools/ to sys.path so
 # `from chain_adapters import …` resolves as a top-level package.
@@ -23,6 +24,10 @@ _TOOLS_DIR = os.path.dirname(_THIS_DIR)                          # tools
 sys.path.insert(0, _TOOLS_DIR)
 
 from chain_adapters import get_adapter  # noqa: E402
+from chain_adapters.param_spec import get_param_spec  # noqa: E402
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_CHAINS_DIR = _REPO_ROOT / "config" / "chains"
 
 
 def _get_param_format(chain: str, method: str) -> str:
@@ -54,6 +59,100 @@ def _get_param_format(chain: str, method: str) -> str:
     if isinstance(param_formats, dict):
         return param_formats.get(method, "single_address")
     return "single_address"
+
+
+def _load_chain_template(chain: str) -> dict:
+    chain_file = _CHAINS_DIR / f"{chain}.json"
+    with open(chain_file) as f:
+        return json.load(f)
+
+
+def _chain_methods(tpl: dict) -> list[str]:
+    methods: list[str] = []
+    rpc_methods = tpl.get("rpc_methods", {})
+    single = rpc_methods.get("single")
+    if isinstance(single, str) and single:
+        methods.append(single)
+    mixed = rpc_methods.get("mixed", [])
+    if isinstance(mixed, list):
+        methods.extend(m for m in mixed if isinstance(m, str) and m)
+    mixed_weighted = rpc_methods.get("mixed_weighted", [])
+    if isinstance(mixed_weighted, list):
+        for item in mixed_weighted:
+            if isinstance(item, dict) and isinstance(item.get("method"), str):
+                methods.append(item["method"])
+            elif isinstance(item, str):
+                methods.append(item)
+    return sorted(set(methods))
+
+
+def _sample_address(tpl: dict) -> str:
+    params = tpl.get("params", {}) if isinstance(tpl.get("params"), dict) else {}
+    value = params.get("target_address") or params.get("address")
+    if isinstance(value, str) and value:
+        return value
+    chain_type = str(tpl.get("chain_type", ""))
+    if chain_type in {"solana"}:
+        return "11111111111111111111111111111111"
+    if chain_type in {"near"}:
+        return "example.near"
+    return "0x0000000000000000000000000000000000000000"
+
+
+def _method_has_declared_builder(tpl: dict, method: str) -> bool:
+    param_formats = tpl.get("param_formats", {})
+    rest_paths = tpl.get("_meta", {}).get("rest_paths", {})
+    param_spec = tpl.get("param_spec", {})
+    return (
+        method.startswith("/")
+        or (isinstance(param_formats, dict) and method in param_formats)
+        or (isinstance(rest_paths, dict) and method in rest_paths)
+        or (isinstance(param_spec, dict) and method in param_spec)
+    )
+
+
+def cmd_validate_template(args):
+    chains = [p.stem for p in sorted(_CHAINS_DIR.glob("*.json"))] if args.chain == "all" else [args.chain]
+    failures: list[str] = []
+    for chain in chains:
+        try:
+            tpl = _load_chain_template(chain)
+            adapter = get_adapter(chain)
+            os.environ["BLOCKCHAIN_NODE"] = chain
+            methods = _chain_methods(tpl)
+            if not methods:
+                raise ValueError("no rpc_methods.single/mixed/mixed_weighted methods found")
+            used_methods = set(methods)
+            specs = tpl.get("param_spec", {})
+            if specs is not None and not isinstance(specs, dict):
+                raise ValueError("param_spec must be an object when configured")
+            if isinstance(specs, dict):
+                for method in specs:
+                    get_param_spec(tpl, method)
+                    if method not in used_methods:
+                        print(f"WARN {chain}/{method}: param_spec is not referenced by rpc_methods")
+            address = _sample_address(tpl)
+            for method in methods:
+                if not _method_has_declared_builder(tpl, method):
+                    raise ValueError(
+                        f"{method}: missing param_formats, _meta.rest_paths, or param_spec entry"
+                    )
+                param_format = _get_param_format(chain, method)
+                adapter.build_vegeta_target(
+                    method=method,
+                    address=address,
+                    rpc_url=args.rpc_url,
+                    param_format=param_format,
+                )
+            print(f"OK {chain}: {len(methods)} methods")
+        except Exception as exc:
+            failures.append(f"{chain}: {exc}")
+            print(f"ERROR {chain}: {exc}", file=sys.stderr)
+    if failures:
+        print("\nTemplate validation failed:", file=sys.stderr)
+        for failure in failures:
+            print(f"  - {failure}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_build_target(args):
@@ -163,6 +262,11 @@ def main():
     ph = sub.add_parser("parse-height", help="Read response JSON from stdin, print height")
     ph.add_argument("--chain", required=True)
     ph.set_defaults(func=cmd_parse_height)
+
+    vt = sub.add_parser("validate-template", help="Validate chain template target construction")
+    vt.add_argument("--chain", required=True, help="Chain name or 'all'")
+    vt.add_argument("--rpc-url", default="http://localhost:19000")
+    vt.set_defaults(func=cmd_validate_template)
 
     args = ap.parse_args()
     args.func(args)

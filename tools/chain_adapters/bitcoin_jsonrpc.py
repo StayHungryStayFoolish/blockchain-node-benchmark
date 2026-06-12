@@ -19,8 +19,10 @@ import json
 import os
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 
 from .base import ChainAdapter, register, _vegeta_get, _vegeta_post_json, _try_int, _b64
+from .param_spec import apply_rest_param_spec, build_jsonrpc_params, get_param_spec
 from .rest import _is_fake_node_url
 from .url_overrides import first_url, resolve_param
 
@@ -92,12 +94,24 @@ class BitcoinJsonRpcAdapter(ChainAdapter):
             path = spec["path"]
             for key, value in samples.items():
                 path = path.replace("{" + key + "}", str(value))
+            query_values = {}
+            param_spec = get_param_spec(tpl, method)
+            if param_spec:
+                path, _, query_values = apply_rest_param_spec(param_spec, path, None, tpl, address)
             base_url = (
                 rpc_url if _is_fake_node_url(rpc_url)
                 else first_url("CHAIN_INDEXER_URL", "CHAIN_REST_URL", spec.get("base_url"), rpc_url)
             )
-            return _vegeta_get(base_url.rstrip("/") + path, headers=self._extra_headers())
-        params = self._build_params(param_format, address, method, tpl)
+            full_url = base_url.rstrip("/") + path
+            if query_values:
+                separator = "&" if "?" in full_url else "?"
+                full_url += separator + urlencode(query_values, doseq=True)
+            return _vegeta_get(full_url, headers=self._extra_headers())
+        param_spec = get_param_spec(tpl, method)
+        if param_spec:
+            params = build_jsonrpc_params(param_spec, tpl, address)
+        else:
+            params = self._build_params(param_format, address, method, tpl)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         body_str = json.dumps(body, separators=(",", ":"))
         header = {"Content-Type": ["application/json"]}

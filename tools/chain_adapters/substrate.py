@@ -17,9 +17,11 @@ import json
 import os
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 
 from .base import ChainAdapter, register, _vegeta_get, _vegeta_post_json, _try_int
 from .jsonrpc import JsonRpcAdapter
+from .param_spec import apply_rest_param_spec, build_jsonrpc_params, get_param_spec
 from .rest import _is_fake_node_url
 from .url_overrides import first_url, resolve_param
 
@@ -60,7 +62,15 @@ class SubstrateAdapter(ChainAdapter):
             target_height = resolve_param(tpl.get("params", {}), "target_height", 1)
             path = path.replace("{height}", str(target_height))
             path = path.replace("{n}", str(target_height))
-            return _vegeta_get(base.rstrip("/") + path)
+            query_values = {}
+            param_spec = get_param_spec(tpl, method)
+            if param_spec:
+                path, _, query_values = apply_rest_param_spec(param_spec, path, None, tpl, address)
+            full_url = base.rstrip("/") + path
+            if query_values:
+                separator = "&" if "?" in full_url else "?"
+                full_url += separator + urlencode(query_values, doseq=True)
+            return _vegeta_get(full_url)
         if method.startswith("eth_") and tpl.get("_meta", {}).get("evm_rpc_url"):
             return self._jsonrpc.build_vegeta_target(
                 method,
@@ -69,7 +79,11 @@ class SubstrateAdapter(ChainAdapter):
                 else first_url("CHAIN_EVM_RPC_URL", tpl["_meta"]["evm_rpc_url"]),
                 param_format,
             )
-        params = self._build_params(param_format, address, tpl)
+        param_spec = get_param_spec(tpl, method)
+        if param_spec:
+            params = build_jsonrpc_params(param_spec, tpl, address)
+        else:
+            params = self._build_params(param_format, address, tpl)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
 

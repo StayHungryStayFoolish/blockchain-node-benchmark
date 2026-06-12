@@ -39,6 +39,11 @@ flowchart LR
 
 - **36-chain template model**: chain support lives in `config/chains/*.json`,
   grouped by 6 RPC protocol families and backed by `tools/chain_adapters/`.
+- **Custom RPC method extension**: `param_formats`, `_meta.rest_paths`, and
+  optional `param_spec` let users add chain-specific methods with positional
+  params, object params, REST path bindings, query values, or request bodies;
+  validated methods can participate in weighted mixed workloads and
+  per-method reporting.
 - **Single or weighted mixed workloads**: users choose `single` or `mixed`;
   mixed mode uses `rpc_methods.mixed_weighted` from the selected chain template.
 - **Per-method RPC attribution**: workload traffic passes through a proxy that
@@ -308,13 +313,16 @@ If the new chain uses an existing RPC shape, add a chain template and record rea
 1. Create `config/chains/<chain>.json`.
 2. Set `_meta.adapter_family` to one of the 6 families.
 3. Define `rpc_methods.single`, `rpc_methods.mixed`, and `rpc_methods.mixed_weighted`.
-4. Define `param_formats.<method>` for JSON-RPC-style methods.
+4. Define `param_formats.<method>` for common JSON-RPC-style methods.
 5. For REST or sidecar paths, define `_meta.rest_paths.<method>`.
-6. Define `_meta.sync_health` so the monitor knows whether the chain uses block-height gap, reported lag, or freshness-only health.
-7. Add real sample params under `params` using `${TARGET_*:-measured-default}` placeholders, such as `target_address`, `target_tx_hash`, `target_height`, `target_block_hash`, or method-specific samples.
-8. Record and verify fixtures:
+6. If a method needs explicit positional params, object fields, path bindings, query values, or a request body that existing formats cannot express, add `param_spec.<method>`.
+7. Define `_meta.sync_health` so the monitor knows whether the chain uses block-height gap, reported lag, or freshness-only health.
+8. Add real sample params under `params` using `${TARGET_*:-measured-default}` placeholders, such as `target_address`, `target_tx_hash`, `target_height`, `target_block_hash`, `target_storage_slot`, or method-specific samples.
+9. Validate request construction, then record and verify fixtures:
 
 ```bash
+python3 tools/chain_adapters/cli.py validate-template --chain <chain>
+
 tools/fake-node/record_rpc_fixtures.sh <chain>
 
 python3 tools/fake-node/check_fixture_coverage.py
@@ -362,6 +370,41 @@ python3 tools/fake-node/check_fixture_coverage.py
     ]
   }
 }
+```
+
+### Example: Add a Method with Explicit Parameter Bindings
+
+Use `param_spec` when a method cannot be represented clearly by a built-in
+`param_formats` value. This keeps the request construction rule attached to the
+specific `chain + method`, which avoids assuming two methods with the same
+input names have the same request shape.
+
+```json
+{
+  "param_spec": {
+    "eth_getBalance": {
+      "transport": "jsonrpc_list",
+      "params": [
+        {"source": "address"},
+        {"literal": "latest"}
+      ]
+    },
+    "example_getByHeight": {
+      "transport": "jsonrpc_dict",
+      "fields": {
+        "height": {"source": "target_height", "type": "int"},
+        "encoding": {"literal": "json"}
+      }
+    }
+  }
+}
+```
+
+Supported transports are `jsonrpc_list`, `jsonrpc_dict`, `rest_path`,
+`rest_query`, and `rest_body`. Validate the template before running a benchmark:
+
+```bash
+python3 tools/chain_adapters/cli.py validate-template --chain <chain>
 ```
 
 ### Example: Add a REST Method to an Existing Chain
@@ -420,7 +463,7 @@ The framework intentionally reuses `BLOCK_HEIGHT_TIME_THRESHOLD` for sustained u
 
 RPC matching is strict by `chain + method + fixture`, not by parameter name alone. Two methods may both accept `address` or `tx_hash`, but their response structures can be different. For that reason:
 
-- `param_formats` and `_meta.rest_paths` define how the request is built.
+- `param_formats`, `_meta.rest_paths`, and optional `param_spec` define how the request is built.
 - `tools/fake-node/record_rpc_fixtures.py` records the real request and response.
 - `tools/fake-node/fixtures/<chain>/<fixture>.json` replays the chain-specific response.
 - `tools/fake-node/validate_fixture_authenticity.py` can be run after local fixture recording to reject placeholders, HTTP errors, and JSON-RPC semantic errors.

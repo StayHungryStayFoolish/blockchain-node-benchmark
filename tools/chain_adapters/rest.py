@@ -32,9 +32,10 @@ import os
 import re
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from .base import ChainAdapter, register, _vegeta_get, _vegeta_post_json, _try_int
+from .param_spec import apply_rest_param_spec, get_param_spec
 from .url_overrides import first_url, resolve_param
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -110,8 +111,8 @@ class RestAdapter(ChainAdapter):
             return {k: cls._substitute_placeholders(v, samples) for k, v in value.items()}
         return value
 
-    def _resolve_path(self, chain_name: str, method: str, address: str) -> tuple[str, str, dict | None]:
-        """Return (http_method, path_with_substituted_address, body_dict_or_None).
+    def _resolve_path(self, chain_name: str, method: str, address: str) -> tuple[str, str, dict | None, str | None, dict]:
+        """Return (http_method, path, body_dict_or_None, base_url, query_values).
 
         body comes from optional `_meta.rest_paths[method].body` template.
         Body may contain placeholders ({address}, {addresses_array}) which are
@@ -135,7 +136,11 @@ class RestAdapter(ChainAdapter):
                     body = json.loads(body)
                 except json.JSONDecodeError:
                     pass
-        return spec.get("method", "GET"), path, body, spec.get("base_url")
+        param_spec = get_param_spec(tpl, method)
+        query_values = {}
+        if param_spec:
+            path, body, query_values = apply_rest_param_spec(param_spec, path, body, tpl, address)
+        return spec.get("method", "GET"), path, body, spec.get("base_url"), query_values
 
     def build_vegeta_target(
         self, method: str, address: str, rpc_url: str, param_format: str = "",
@@ -148,7 +153,7 @@ class RestAdapter(ChainAdapter):
         chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
         if not chain_name:
             raise RuntimeError("RestAdapter requires BLOCKCHAIN_NODE env var")
-        http_method, path, body, method_base_url = self._resolve_path(chain_name, method, address)
+        http_method, path, body, method_base_url, query_values = self._resolve_path(chain_name, method, address)
         # Strip trailing slash from rpc_url, ensure path starts with /
         base = (
             rpc_url if _is_fake_node_url(rpc_url)
@@ -157,6 +162,9 @@ class RestAdapter(ChainAdapter):
         if not path.startswith("/"):
             path = "/" + path
         full_url = base + path
+        if query_values:
+            separator = "&" if "?" in full_url else "?"
+            full_url += separator + urlencode(query_values, doseq=True)
         extra_headers = self._extra_headers()
         if http_method.upper() == "GET":
             return _vegeta_get(full_url, headers=extra_headers)

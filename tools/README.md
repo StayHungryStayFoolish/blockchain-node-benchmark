@@ -24,7 +24,7 @@ Fake-node closed-loop test assets:
 - `fake-node/runtime_probe.py`: starts fake-node and verifies adapter-generated requests against it.
 - `fake-node/runtime_probe_block_height.py`: verifies sync-health and block-height paths against fake-node fixtures.
 - `fake-node/record_rpc_fixtures.sh`: central human-facing entrypoint for recording all chains or a selected chain list.
-- `record_rpc_fixtures.py`: records real RPC request/response fixtures.
+- `fake-node/record_rpc_fixtures.py`: records real RPC request/response fixtures.
 - `fake-node/validate_fixture_authenticity.py`: validates local recording evidence before trusting fixture updates.
 
 Monitoring and public-repo quality gates:
@@ -62,7 +62,7 @@ Use these tools for the current framework:
 - `audit_sync_health_registry.py`: local sync-health registry audit.
 - `fake-node/audit_health_probe_fixtures.py`: health-probe fixture audit.
 - `fake-node/record_rpc_fixtures.sh`: record fixtures for `all`, one chain, or a comma-separated chain list.
-- `record_rpc_fixtures.py`: real endpoint request/response recording.
+- `fake-node/record_rpc_fixtures.py`: real endpoint request/response recording.
 - `fake-node/validate_fixture_authenticity.py`: authenticity check for local recording evidence.
 
 The legacy mock RPC path is compatibility-only. It does not validate the full

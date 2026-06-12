@@ -12,6 +12,8 @@ Use these sets when validating changes:
 # Chain template, RPC target generation, fake-node coverage, and sync health.
 python3 tests/test_chain_template_proxy_extraction.py
 python3 tests/test_chain_adapters.py
+python3 tests/test_param_spec.py
+python3 tools/chain_adapters/cli.py validate-template --chain all
 bash tests/test_target_generator_mixed_weighted.sh
 python3 tests/test_sync_health_audit.py
 python3 tools/fake-node/check_fixture_coverage.py --json
@@ -43,6 +45,8 @@ rather than on macOS.
   be parsed for proxy method extraction.
 - `test_chain_adapters.py`: verifies the chain adapter factory, family routing,
   request generation, and 36-chain CLI target generation.
+- `test_param_spec.py`: verifies custom RPC parameter specs, including
+  three-argument JSON-RPC methods and REST query/body construction.
 - `test_target_generator_mixed_weighted.sh`: verifies mixed mode honors
   `rpc_methods.mixed_weighted`.
 - `test_sync_health_audit.py`: verifies the 36-chain sync-health registry is

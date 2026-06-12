@@ -38,6 +38,10 @@ flowchart LR
 
 - **36 链模板模型**：链支持集中在 `config/chains/*.json`，按 6 个 RPC
   protocol family 归类，并由 `tools/chain_adapters/` 生成真实请求。
+- **自定义 RPC method 扩展**：通过 `param_formats`、`_meta.rest_paths` 和
+  可选 `param_spec`，用户可以新增带位置参数、对象参数、REST path 绑定、
+  query 参数或 request body 的链特定 method；验证通过后可参与 weighted
+  mixed workload 和 per-method 报告。
 - **Single 或 weighted mixed workload**：用户选择 `single` 或 `mixed`；
   mixed 模式读取 chain template 中的 `rpc_methods.mixed_weighted`。
 - **Per-method RPC 归因**：workload 流量经过 proxy，记录 method、status、
@@ -292,13 +296,16 @@ admission policy、hostPath、hostPID 和 privileged workload 权限配置。
 1. 新建 `config/chains/<chain>.json`。
 2. 设置 `_meta.adapter_family` 为 6 个 family 之一。
 3. 配置 `rpc_methods.single`、`rpc_methods.mixed`、`rpc_methods.mixed_weighted`。
-4. 对 JSON-RPC 类 method，配置 `param_formats.<method>`。
+4. 对常见 JSON-RPC 类 method，配置 `param_formats.<method>`。
 5. 对 REST 或 sidecar method，配置 `_meta.rest_paths.<method>`。
-6. 配置 `_meta.sync_health`，声明该链使用区块高度差、节点自报 lag，还是只能使用 freshness/health 信号。
-7. 在 `params` 中使用 `${TARGET_*:-measured-default}` 形式准备真实样本，例如 `target_address`、`target_tx_hash`、`target_height`、`target_block_hash`。
-8. 录制并验证：
+6. 如果 method 需要显式声明位置参数、对象字段、path 绑定、query 参数或 request body，并且现有格式无法表达，配置 `param_spec.<method>`。
+7. 配置 `_meta.sync_health`，声明该链使用区块高度差、节点自报 lag，还是只能使用 freshness/health 信号。
+8. 在 `params` 中使用 `${TARGET_*:-measured-default}` 形式准备真实样本，例如 `target_address`、`target_tx_hash`、`target_height`、`target_block_hash`、`target_storage_slot`。
+9. 先验证请求构造，再录制并验证：
 
 ```bash
+python3 tools/chain_adapters/cli.py validate-template --chain <chain>
+
 tools/fake-node/record_rpc_fixtures.sh <chain>
 
 python3 tools/fake-node/check_fixture_coverage.py
@@ -346,6 +353,40 @@ python3 tools/fake-node/check_fixture_coverage.py
     ]
   }
 }
+```
+
+### 示例：使用显式参数绑定新增 method
+
+当内置 `param_formats` 不能清晰表达某个 method 的参数结构时，使用
+`param_spec`。这样请求构造规则会绑定到具体的 `chain + method`，不会因为
+两个 method 都使用 `address` 或 `tx_hash` 就误认为它们有相同请求结构。
+
+```json
+{
+  "param_spec": {
+    "eth_getBalance": {
+      "transport": "jsonrpc_list",
+      "params": [
+        {"source": "address"},
+        {"literal": "latest"}
+      ]
+    },
+    "example_getByHeight": {
+      "transport": "jsonrpc_dict",
+      "fields": {
+        "height": {"source": "target_height", "type": "int"},
+        "encoding": {"literal": "json"}
+      }
+    }
+  }
+}
+```
+
+支持的 transport 包括 `jsonrpc_list`、`jsonrpc_dict`、`rest_path`、
+`rest_query`、`rest_body`。压测前先验证模板：
+
+```bash
+python3 tools/chain_adapters/cli.py validate-template --chain <chain>
 ```
 
 ### 示例：给现有 REST 链新增一个 RPC method
@@ -404,7 +445,7 @@ REST 类 method 的名字可以是逻辑 key，真实 HTTP 请求由 `_meta.rest
 
 框架不是只按参数名匹配响应，也不会认为“都传 `tx_hash` 就能共用响应”。匹配粒度是 `chain + method + fixture`：
 
-- `param_formats` 和 `_meta.rest_paths` 决定请求如何构造。
+- `param_formats`、`_meta.rest_paths` 和可选的 `param_spec` 决定请求如何构造。
 - `tools/fake-node/record_rpc_fixtures.py` 记录真实 request/response。
 - `tools/fake-node/fixtures/<chain>/<fixture>.json` 保存并回放对应链、对应 method 的真实响应。
 - `tools/fake-node/validate_fixture_authenticity.py` 可在本地重新录制 fixture evidence 后运行，用于拒绝 placeholder、HTTP 错误和 JSON-RPC 语义错误。

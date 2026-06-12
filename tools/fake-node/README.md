@@ -244,4 +244,4 @@ If a new chain or method needs behavior that existing adapters cannot express, i
 - New authentication or header rules.
 - Multiple protocol endpoints inside one chain where the existing family cannot route by method.
 - A new block-height parsing mode.
-- Chain-specific parameter encoding that cannot be represented by `param_formats` or `_meta.rest_paths`.
+- Chain-specific parameter encoding that cannot be represented by `param_formats`, `_meta.rest_paths`, or `param_spec`.

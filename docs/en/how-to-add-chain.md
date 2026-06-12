@@ -133,8 +133,11 @@ When changing `mixed_weighted`:
 2. Add the matching `param_formats.<method>`.
 3. Add real sample values in `params` using `${TARGET_*:-measured-default}`.
 4. For REST/path methods, add `_meta.rest_paths.<method>`.
-5. Add the fake-node family YAML mapping under `tools/fake-node/configs/`.
-6. Record the method's own fixture and run coverage/runtime probes.
+5. If the method needs explicit positional params, object fields, query values,
+   or body fields, add `param_spec.<method>`.
+6. Validate request construction with `python3 tools/chain_adapters/cli.py validate-template --chain <chain>`.
+7. Add the fake-node family YAML mapping under `tools/fake-node/configs/`.
+8. Record the method's own fixture and run coverage/runtime probes.
 
 Do not add a method only because it is listed in official docs. Add it when the
 framework can build a valid request, record a real response, replay it through
@@ -142,7 +145,8 @@ fake-node, and include it in the proxy/HTML attribution path.
 
 ### 4. Configure Parameter Formats
 
-Every method used by `single` or `mixed_weighted` must have a `param_formats` entry.
+Every method used by `single` or `mixed_weighted` must be buildable by the
+selected adapter. For simple JSON-RPC methods, use a `param_formats` entry.
 
 Example:
 
@@ -157,7 +161,103 @@ Example:
 }
 ```
 
-If you need a new parameter format, such as special address encoding, body templates, or query parameters, first check whether the existing adapter supports it. If yes, only JSON changes are needed. If not, extend `tools/chain_adapters/<family>.py`.
+For simple methods, prefer `param_formats` because it keeps templates compact.
+For methods that need explicit positional params, object fields, REST path
+bindings, query parameters, or body templates, use optional `param_spec`:
+
+```json
+{
+  "param_spec": {
+    "eth_getBalance": {
+      "transport": "jsonrpc_list",
+      "params": [
+        {"source": "address"},
+        {"literal": "latest"}
+      ]
+    },
+    "GET_ACCOUNT_TXS": {
+      "transport": "rest_query",
+      "bindings": {
+        "address": {"source": "address"}
+      },
+      "query": {
+        "limit": {"literal": 10}
+      }
+    }
+  }
+}
+```
+
+Supported transports are `jsonrpc_list`, `jsonrpc_dict`, `rest_path`,
+`rest_query`, and `rest_body`. After editing the template, run:
+
+```bash
+python3 tools/chain_adapters/cli.py validate-template --chain <chain>
+```
+
+If the method is still not expressible by `param_formats`, `_meta.rest_paths`,
+or `param_spec`, extend `tools/chain_adapters/<family>.py`.
+
+#### Complete Example: Three-Argument JSON-RPC Method
+
+`eth_getStorageAt(address, storageSlot, blockTag)` needs three ordered
+arguments. Add the method to the workload, provide a real sample slot, define
+`param_spec`, then make sure proxy extraction and fake-node fixtures use the
+same method name.
+
+Chain template:
+
+```json
+{
+  "params": {
+    "target_address": "${TARGET_ADDRESS:-0x0000000000000000000000000000000000000000}",
+    "target_storage_slot": "${TARGET_STORAGE_SLOT:-0x0}"
+  },
+  "rpc_methods": {
+    "single": "eth_getBalance",
+    "mixed_weighted": [
+      {"method": "eth_getBalance", "weight": 40},
+      {"method": "eth_blockNumber", "weight": 30},
+      {"method": "eth_getStorageAt", "weight": 30}
+    ]
+  },
+  "param_spec": {
+    "eth_getStorageAt": {
+      "transport": "jsonrpc_list",
+      "params": [
+        {"source": "address"},
+        {"source": "target_storage_slot"},
+        {"literal": "latest"}
+      ]
+    }
+  },
+  "proxy_extraction": {
+    "protocol": "jsonrpc",
+    "method_path": "method",
+    "fallback_method": "unknown"
+  }
+}
+```
+
+fake-node family YAML:
+
+```yaml
+methods:
+  eth_getStorageAt:
+    fixture: eth_getStorageAt.json
+    tier: expensive
+```
+
+Validation:
+
+```bash
+python3 tools/chain_adapters/cli.py validate-template --chain <chain>
+tools/fake-node/record_rpc_fixtures.sh <chain>
+python3 tools/fake-node/check_fixture_coverage.py
+```
+
+After these pass, `eth_getStorageAt` participates in mixed weighted target
+generation and appears in the per-method report charts by the same method name.
 
 ### 5. Configure Real Sample Parameters
 
@@ -353,13 +453,14 @@ Look for:
 
 If you are only adding a method to an existing chain:
 
-1. Add `param_formats.<method>` to `config/chains/<chain>.json`.
+1. Add `param_formats.<method>` to `config/chains/<chain>.json`, or add `param_spec.<method>` if the request shape is too specific for a built-in format.
 2. If the method participates in mixed mode, add it to `rpc_methods.mixed` and `mixed_weighted`.
 3. If it is a REST method, add `_meta.rest_paths.<method>`.
-4. Add the method-to-fixture mapping in the fake-node family YAML.
-5. Prepare real sample parameters.
-6. Record fixtures again.
-7. Run authenticity, coverage, and runtime probes.
+4. Validate request construction with `python3 tools/chain_adapters/cli.py validate-template --chain <chain>`.
+5. Add the method-to-fixture mapping in the fake-node family YAML.
+6. Prepare real sample parameters.
+7. Record fixtures again.
+8. Run authenticity, coverage, and runtime probes.
 
 JSON-RPC example:
 
@@ -396,7 +497,7 @@ Code changes are required when:
 
 - The new request envelope is not expressible as existing JSON-RPC or REST/sidecar behavior.
 - Authentication or header rules cannot be expressed by current configuration.
-- Parameters need chain-specific encoding not supported by existing `param_formats`.
+- Parameters need chain-specific encoding not supported by existing `param_formats` or `param_spec`.
 - Block height or health status responses cannot be parsed by existing sync health logic.
 - The current fake-node family handler cannot route or replay the request.
 - A chain routes methods to multiple endpoints in a way that the existing family cannot express.
@@ -417,9 +518,11 @@ If you add a new family, update all of these:
 
 Do not do this. `address` or `tx_hash` being the same does not mean the response structure is the same. Record the fixture for that exact `chain + method`.
 
-### Mistake 2: `mixed_weighted` Has a Method Missing from `param_formats`
+### Mistake 2: `mixed_weighted` Has a Method the Adapter Cannot Build
 
-The target generator cannot build the request. Every method must have a parameter format.
+The target generator cannot build the request. Every method must be covered by
+`param_formats`, `_meta.rest_paths`, or `param_spec`, depending on its family
+and request shape.
 
 ### Mistake 3: A REST Method Has No `_meta.rest_paths`
 
@@ -442,8 +545,9 @@ Coverage only says files exist. Authenticity says they are not placeholders or e
 Before considering the chain complete:
 
 - [ ] `config/chains/<chain>.json` exists and `_meta.adapter_family` is correct.
-- [ ] Every method in `single` and `mixed_weighted` has `param_formats`.
+- [ ] Every method in `single` and `mixed_weighted` is buildable by `param_formats`, `_meta.rest_paths`, or `param_spec`.
 - [ ] REST/sidecar methods have `_meta.rest_paths`.
+- [ ] `python3 tools/chain_adapters/cli.py validate-template --chain <chain>` passes.
 - [ ] `_meta.sync_health` is configured.
 - [ ] `params` contains real queryable sample values.
 - [ ] fake-node fixtures are recorded under `tools/fake-node/fixtures`.

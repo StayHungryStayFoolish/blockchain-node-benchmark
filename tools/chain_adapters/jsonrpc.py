@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Optional
 
 from .base import ChainAdapter, register, _vegeta_post_json, _try_int
+from .param_spec import apply_rest_param_spec, build_jsonrpc_params, get_param_spec
 from .url_overrides import resolve_param
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -56,7 +57,11 @@ class JsonRpcAdapter(ChainAdapter):
         chain_name = os.environ.get("BLOCKCHAIN_NODE", "").lower()
         tpl = self._load_chain(chain_name) if chain_name else {}
         if method.startswith("/"):
-            body = self._build_path_body(method, param_format, address)
+            param_spec = get_param_spec(tpl, method)
+            if param_spec and param_spec.get("transport") == "rest_body":
+                _, body, _ = apply_rest_param_spec(param_spec, method, {}, tpl, address)
+            else:
+                body = self._build_path_body(method, param_format, address)
             return _vegeta_post_json(rpc_url.rstrip("/") + method, body)
         if method.startswith("eth_") and rpc_url.rstrip("/") == "https://api.trongrid.io":
             rpc_url = rpc_url.rstrip("/") + "/jsonrpc"
@@ -74,7 +79,11 @@ class JsonRpcAdapter(ChainAdapter):
             params = [resolve_param(cfg_params, "target_token_account", address)]
             body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
             return _vegeta_post_json(rpc_url, body)
-        params = self._build_params(param_format, address, tpl)
+        param_spec = get_param_spec(tpl, method)
+        if param_spec:
+            params = build_jsonrpc_params(param_spec, tpl, address)
+        else:
+            params = self._build_params(param_format, address, tpl)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
 

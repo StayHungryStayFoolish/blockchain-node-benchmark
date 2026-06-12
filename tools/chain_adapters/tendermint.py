@@ -19,9 +19,11 @@ import json
 import os
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 
 from .base import ChainAdapter, register, _vegeta_get, _vegeta_post_json, _try_int
 from .jsonrpc import JsonRpcAdapter
+from .param_spec import apply_rest_param_spec, build_jsonrpc_params, get_param_spec
 from .rest import _is_fake_node_url
 from .url_overrides import first_url, resolve_param
 
@@ -111,8 +113,20 @@ class TendermintAdapter(ChainAdapter):
                 spec.get("base_url") or (rpc_url if path in ("/status", "/block") else self._pick_url(tpl, "rest", rpc_url))
             )
             path = self._replace_path_samples(path, address, tpl)
-            return _vegeta_get(base_url.rstrip("/") + path)
-        params = self._build_params(param_format, address)
+            query_values = {}
+            param_spec = get_param_spec(tpl, method)
+            if param_spec:
+                path, _, query_values = apply_rest_param_spec(param_spec, path, None, tpl, address)
+            full_url = base_url.rstrip("/") + path
+            if query_values:
+                separator = "&" if "?" in full_url else "?"
+                full_url += separator + urlencode(query_values, doseq=True)
+            return _vegeta_get(full_url)
+        param_spec = get_param_spec(tpl, method)
+        if param_spec:
+            params = build_jsonrpc_params(param_spec, tpl, address)
+        else:
+            params = self._build_params(param_format, address)
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         return _vegeta_post_json(rpc_url, body)
 
