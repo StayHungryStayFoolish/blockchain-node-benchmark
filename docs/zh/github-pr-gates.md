@@ -73,13 +73,14 @@ gh repo view --json nameWithOwner
 type(scope): short summary
 ```
 
-允许的 type 包括 `feat`、`fix`、`docs`、`test`、`refactor`、`perf`、`ci`、`chore`。
+允许的 type 包括 `feat`、`fix`、`docs`、`test`、`refactor`、`perf`、`ci`、`build`、`chore`。
 示例：
 
 ```text
 feat(fake-node): add fixture coverage validation
 fix(monitoring): read sync health from runtime cache
 docs(readme): clarify Kubernetes quick start
+build(deps): update requests requirement
 ```
 
 PR 中间 commit 建议使用同样格式，但强制检查以 PR title 为准。

@@ -30,11 +30,11 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
-          pattern='^(feat|fix|docs|test|refactor|perf|ci|chore)(\([a-z0-9._-]+\))?: .+'
+          pattern='^(feat|fix|docs|test|refactor|perf|ci|build|chore)(\([a-z0-9._-]+\))?: .+'
           if [[ ! "$PR_TITLE" =~ $pattern ]]; then
             echo "PR title must follow Conventional Commits:"
             echo "  type(scope): short summary"
-            echo "Allowed types: feat, fix, docs, test, refactor, perf, ci, chore"
+            echo "Allowed types: feat, fix, docs, test, refactor, perf, ci, build, chore"
             echo "Current title: $PR_TITLE"
             exit 1
           fi
