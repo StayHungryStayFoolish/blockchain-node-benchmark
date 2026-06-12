@@ -58,12 +58,15 @@ assert_eq "$UNIFIED_EVENTS_FILE" "$memory_dir/unified_events.json" "UNIFIED_EVEN
 assert_eq "$EVENT_MANAGER_LOCK_FILE" "$memory_dir/event_manager.lock" "EVENT_MANAGER_LOCK_FILE"
 assert_eq "$EVENT_NOTIFICATION_FILE" "$memory_dir/event_notification.json" "EVENT_NOTIFICATION_FILE"
 
+export_snapshot="$TEST_ROOT/export_snapshot.txt"
+export -p >"$export_snapshot"
+
 for exported_var in \
     UNIFIED_LOG PERFORMANCE_LATEST_CSV PROXY_METHOD_CSV PROXY_SELF_CSV RPC_PROXY_LOG \
     NETWORK_CSV NETWORK_PID_FILE LATEST_METRICS_FILE UNIFIED_METRICS_FILE \
     BLOCK_HEIGHT_CACHE_FILE QPS_STATUS_FILE BOTTLENECK_STATUS_FILE BOTTLENECK_COUNTERS_FILE NODE_HEALTH_CACHE_DIR \
     UNIFIED_EVENTS_FILE EVENT_MANAGER_LOCK_FILE EVENT_NOTIFICATION_FILE; do
-    if ! export -p | grep -q "declare -x ${exported_var}="; then
+    if ! grep -q "declare -x ${exported_var}=" "$export_snapshot"; then
         echo "FAIL: $exported_var is not exported"
         exit 1
     fi
