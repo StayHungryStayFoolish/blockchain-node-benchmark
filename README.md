@@ -47,8 +47,9 @@ flowchart LR
 - **Single or weighted mixed workloads**: users choose `single` or `mixed`;
   mixed mode uses `rpc_methods.mixed_weighted` from the selected chain template.
 - **Per-method RPC attribution**: workload traffic passes through a proxy that
-  records method, status, and latency, enabling method-level QPS, latency,
-  error-rate, and resource-attribution reports.
+  records method, status, and request-to-response latency, enabling method-level
+  QPS, P50/P90/P99 latency, error-rate, success/failure, and
+  resource-attribution reports.
 - **Real sync-health model**: chain templates describe whether health is based
   on absolute height gap, conditional sync objects, reported lag, freshness, or
   boolean health signals.
@@ -829,9 +830,9 @@ produce a given signal.
   latency, utilization, normalized IOPS, and throughput.
 - **Sync Health**: block-height gap, reported lag, freshness, or health-only
   status depending on chain capability.
-- **Per-Method Attribution**: workload method QPS, latency, RPC failure rate,
-  success/failure counts, and resource attribution. Sync-health probe methods
-  are excluded.
+- **Per-Method Attribution**: workload method QPS, request-to-response
+  P50/P90/P99 latency, RPC failure rate, success/failure counts, and resource
+  attribution. Sync-health probe methods are excluded.
 - **Monitoring Overhead**: framework observer cost and comparison with the
   blockchain node process.
 - **Chart Gallery**: charts generated from the current run, with notices for

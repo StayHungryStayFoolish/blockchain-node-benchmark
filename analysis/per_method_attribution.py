@@ -10,7 +10,7 @@ Inputs:
 - unified monitor CSV (existing per-second rows)
 
 Outputs:
-- per_method_qps_<chain>.csv          per-method per-second QPS, error rate, and p50/p99 latency
+- per_method_qps_<chain>.csv          per-method per-second QPS, error rate, and p50/p90/p99 latency
 - per_method_resource_<chain>.csv     per-method per-second attributed CPU%/MEM% weighted by method counts
 
 Attribution formula:
@@ -63,6 +63,7 @@ class PerMethodQpsRow:
     qps: int                # request count for this method in this second (= QPS for a 1s window)
     error_count: int        # rpc_success=false count
     p50_ms: float
+    p90_ms: float
     p99_ms: float
 
 
@@ -196,7 +197,7 @@ def _percentile(sorted_values: Sequence[float], pct: float) -> float:
 def compute_per_method_qps(
     proxy_records: Iterable[ProxyRecord],
 ) -> list[PerMethodQpsRow]:
-    """Group by (method, timestamp_s) and compute QPS, error rate, p50, and p99.
+    """Group by (method, timestamp_s) and compute QPS, error rate, p50, p90, and p99.
 
     Returns rows sorted by (timestamp_s, method_name).
     """
@@ -221,6 +222,7 @@ def compute_per_method_qps(
             qps=len(lats),
             error_count=errors.get(key, 0),
             p50_ms=_percentile(lats_sorted, 0.5),
+            p90_ms=_percentile(lats_sorted, 0.9),
             p99_ms=_percentile(lats_sorted, 0.99),
         ))
     rows.sort(key=lambda x: (x.timestamp_s, x.method_name))
@@ -290,10 +292,10 @@ def compute_per_method_resource(
 def write_qps_csv(rows: list[PerMethodQpsRow], path: str | Path) -> None:
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["timestamp_s", "method_name", "qps", "error_count", "p50_ms", "p99_ms"])
+        w.writerow(["timestamp_s", "method_name", "qps", "error_count", "p50_ms", "p90_ms", "p99_ms"])
         for r in rows:
             w.writerow([r.timestamp_s, r.method_name, r.qps, r.error_count,
-                       f"{r.p50_ms:.3f}", f"{r.p99_ms:.3f}"])
+                       f"{r.p50_ms:.3f}", f"{r.p90_ms:.3f}", f"{r.p99_ms:.3f}"])
 
 
 def write_resource_csv(rows: list[PerMethodResourceRow], path: str | Path) -> None:

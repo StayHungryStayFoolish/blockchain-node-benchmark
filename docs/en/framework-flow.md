@@ -188,8 +188,8 @@ Vegeta target -> proxy -> real node or fake-node
 
 `analysis/per_method_attribution.py` and the report generator use
 `proxy_method.csv` together with the unified monitor CSV to produce per-method
-QPS, latency, RPC failure-rate, success/failure count, and
-resource-attribution charts.
+QPS, request-to-response P50/P90/P99 latency, RPC failure-rate,
+success/failure count, and resource-attribution charts.
 
 The proxy does not persist full RPC response bodies. It only parses a limited
 response prefix in memory and writes lightweight success fields to

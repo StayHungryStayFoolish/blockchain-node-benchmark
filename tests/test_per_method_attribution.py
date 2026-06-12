@@ -205,6 +205,8 @@ class TestComputePerMethodQps(unittest.TestCase):
         self.assertEqual(rows[1].method_name, "getSlot")
         self.assertEqual(rows[1].qps, 2)
         self.assertAlmostEqual(rows[1].p50_ms, 3.0)  # [2,4] p50 = 3
+        self.assertAlmostEqual(rows[1].p90_ms, 3.8)  # [2,4] p90 = 2 + 0.9*(4-2)
+        self.assertAlmostEqual(rows[1].p99_ms, 3.98)
         self.assertEqual(rows[2].qps, 1)
 
     def test_error_count(self):
@@ -279,15 +281,15 @@ class TestComputePerMethodResource(unittest.TestCase):
 
 class TestWriteCsv(unittest.TestCase):
     def test_qps_csv_header_and_rows(self):
-        rows = [PerMethodQpsRow(100, "getSlot", 5, 1, 2.5, 9.9)]
+        rows = [PerMethodQpsRow(100, "getSlot", 5, 1, 2.5, 8.8, 9.9)]
         fd, path = tempfile.mkstemp(suffix=".csv")
         os.close(fd)
         try:
             write_qps_csv(rows, path)
             with open(path) as f:
                 content = f.read()
-            self.assertIn("timestamp_s,method_name,qps,error_count,p50_ms,p99_ms", content)
-            self.assertIn("100,getSlot,5,1,2.500,9.900", content)
+            self.assertIn("timestamp_s,method_name,qps,error_count,p50_ms,p90_ms,p99_ms", content)
+            self.assertIn("100,getSlot,5,1,2.500,8.800,9.900", content)
         finally:
             os.unlink(path)
 

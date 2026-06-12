@@ -79,9 +79,9 @@ class TestReportGeneratorI18n(unittest.TestCase):
 class TestComputeSummary(unittest.TestCase):
     def test_basic_summary(self):
         qps_rows = [
-            PerMethodQpsRow(100, "a", 5, 1, 2.0, 8.0),
-            PerMethodQpsRow(100, "a", 3, 0, 3.0, 9.0),  # same method, different second
-            PerMethodQpsRow(100, "b", 1, 0, 5.0, 5.0),
+            PerMethodQpsRow(100, "a", 5, 1, 2.0, 6.0, 8.0),
+            PerMethodQpsRow(100, "a", 3, 0, 3.0, 7.0, 9.0),  # same method, different second
+            PerMethodQpsRow(100, "b", 1, 0, 5.0, 5.0, 5.0),
         ]
         res_rows = [
             PerMethodResourceRow(100, "a", 0.8, 80, 800),
@@ -95,12 +95,14 @@ class TestComputeSummary(unittest.TestCase):
         self.assertEqual(summary[0]["success_count"], 7)
         self.assertEqual(summary[0]["error_count"], 1)
         self.assertAlmostEqual(summary[0]["error_rate"], 1/8)
+        self.assertAlmostEqual(summary[0]["avg_p50_ms"], 2.5)  # (2+3)/2
+        self.assertAlmostEqual(summary[0]["avg_p90_ms"], 6.5)  # (6+7)/2
         self.assertAlmostEqual(summary[0]["avg_p99_ms"], 8.5)  # (8+9)/2
         self.assertAlmostEqual(summary[0]["max_p99_ms"], 9.0)
         self.assertAlmostEqual(summary[0]["peak_cpu_share_pct"], 80.0)  # max weight a 0.8
 
     def test_top_n_truncates(self):
-        qps_rows = [PerMethodQpsRow(100, f"m{i}", 100 - i, 0, 1, 1) for i in range(20)]
+        qps_rows = [PerMethodQpsRow(100, f"m{i}", 100 - i, 0, 1, 1, 1) for i in range(20)]
         summary = compute_summary(qps_rows, [], top_n=5)
         self.assertEqual(len(summary), 5)
         self.assertEqual([s["method"] for s in summary], ["m0", "m1", "m2", "m3", "m4"])
@@ -109,8 +111,8 @@ class TestComputeSummary(unittest.TestCase):
 class TestRenderHtml(unittest.TestCase):
     def _fixture(self):
         qps_rows = [
-            PerMethodQpsRow(100, "getSlot", 5, 0, 2.0, 8.0),
-            PerMethodQpsRow(100, "getBlock", 3, 1, 10.0, 20.0),
+            PerMethodQpsRow(100, "getSlot", 5, 0, 2.0, 6.0, 8.0),
+            PerMethodQpsRow(100, "getBlock", 3, 1, 10.0, 18.0, 20.0),
         ]
         res_rows = [
             PerMethodResourceRow(100, "getSlot", 0.625, 50, 500),
@@ -124,7 +126,7 @@ class TestRenderHtml(unittest.TestCase):
         html = render_per_method_section(
             "en", "solana",
             {"qps": "a.svg", "latency": "b.svg", "error_rate": "c.svg",
-             "success_failure": "e.svg", "resource": "d.svg"},
+             "latency_percentiles": "p.svg", "success_failure": "e.svg", "resource": "d.svg"},
             summary,
         )
         self.assertIn('<div class="section"', html)
@@ -133,9 +135,10 @@ class TestRenderHtml(unittest.TestCase):
         self.assertIn("getSlot", html)
         self.assertIn("getBlock", html)
         self.assertIn('<img src="a.svg"', html)
+        self.assertIn('<img src="p.svg"', html)
         self.assertIn('<img src="d.svg"', html)
-        # Includes 5 charts: qps, latency, error_rate, success_failure, resource.
-        self.assertEqual(html.count("<img"), 5)
+        # Includes 6 charts: qps, latency, latency_percentiles, error_rate, success_failure, resource.
+        self.assertEqual(html.count("<img"), 6)
 
     def test_render_zh(self):
         qps_rows, res_rows = self._fixture()
@@ -143,17 +146,18 @@ class TestRenderHtml(unittest.TestCase):
         html = render_per_method_section(
             "zh", "solana",
             {"qps": "a.svg", "latency": "b.svg", "error_rate": "c.svg",
-             "success_failure": "e.svg", "resource": "d.svg"},
+             "latency_percentiles": "p.svg", "success_failure": "e.svg", "resource": "d.svg"},
             summary,
         )
         self.assertIn("Per-Method \u6027\u80fd\u5f52\u56e0", html)
         self.assertIn("\u6bcf\u65b9\u6cd5 QPS", html)
+        self.assertIn("\u6bcf\u65b9\u6cd5\u5ef6\u8fdf\u5206\u4f4d\u6570", html)
         self.assertIn("\u65b9\u6cd5", html)  # table header
 
     def test_empty_summary_shows_no_data(self):
         html = render_per_method_section(
             "en", "chain",
-            {"qps": "", "latency": "", "error_rate": "", "success_failure": "", "resource": ""},
+            {"qps": "", "latency": "", "latency_percentiles": "", "error_rate": "", "success_failure": "", "resource": ""},
             [],
         )
         self.assertIn("No per-method data", html)
@@ -163,7 +167,7 @@ class TestRenderHtml(unittest.TestCase):
         summary = []
         html = render_per_method_section(
             "en", "<script>alert(1)</script>",
-            {"qps": "", "latency": "", "error_rate": "", "success_failure": "", "resource": ""},
+            {"qps": "", "latency": "", "latency_percentiles": "", "error_rate": "", "success_failure": "", "resource": ""},
             summary,
         )
         self.assertNotIn("<script>alert(1)</script>", html)
@@ -172,7 +176,7 @@ class TestRenderHtml(unittest.TestCase):
     def test_get_chart_titles_for_language(self):
         en = get_chart_titles_for_language("en")
         zh = get_chart_titles_for_language("zh")
-        self.assertEqual(set(en.keys()), {"qps", "latency", "error_rate", "success_failure", "resource"})
+        self.assertEqual(set(en.keys()), {"qps", "latency", "latency_percentiles", "error_rate", "success_failure", "resource"})
         self.assertNotEqual(en["qps"], zh["qps"])
 
 
@@ -262,7 +266,7 @@ class TestPerMethodE2E(unittest.TestCase):
             content = out_html.read_text()
             self.assertIn("getSlot", content)
             self.assertIn("getBlock", content)
-            self.assertEqual(content.count("<img"), 5)
+            self.assertEqual(content.count("<img"), 6)
             # Error count is non-zero because t=30 contains the spike.
             self.assertGreater(summary[0]["error_count"], 0)
 

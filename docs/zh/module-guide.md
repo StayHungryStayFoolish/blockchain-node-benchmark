@@ -127,9 +127,11 @@ blockchain-node-benchmark/
 
 - 在 Vegeta 与真实节点/fake-node 之间启动本地 reverse proxy。
 - 从 JSON-RPC 或 REST 请求中抽取 method name。
-- 写入 method、HTTP status、RPC success/failure、latency 和 proxy self metrics。
+- 写入 method、HTTP status、RPC success/failure、request-to-response latency
+  和 proxy self metrics。
 - 让 per-method attribution 不依赖 backend node。
 - Vegeta 压测期间不保存完整 RPC response body，只保存轻量成功/失败摘要。
+- 报告使用同一个 proxy latency 字段生成 per-method P50/P90/P99 延迟分位数图。
 
 ## Monitoring
 

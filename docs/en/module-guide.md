@@ -174,8 +174,8 @@ Responsibilities:
 
 - Start a local reverse proxy in front of the real node or fake-node.
 - Extract method names from JSON-RPC or REST requests.
-- Write per-request method, status, RPC success/failure, latency, and proxy
-  self-metrics.
+- Write per-request method, status, RPC success/failure, request-to-response
+  latency, and proxy self-metrics.
 - Keep per-method attribution independent from the backend node.
 - It does not record full RPC response bodies during a Vegeta run.
 
@@ -188,7 +188,8 @@ Primary outputs:
 `proxy_method.csv` includes both transport-level and RPC-level success fields.
 For JSON-RPC, HTTP 200 responses with an `error` object are counted as RPC
 failures. The report uses these fields for per-method failure rate and
-success/failure charts.
+success/failure charts. The same proxy latency field is used for per-method
+P50/P90/P99 latency percentile charts.
 
 Extension boundary:
 

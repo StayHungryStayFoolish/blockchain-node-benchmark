@@ -45,7 +45,8 @@ flowchart LR
 - **Single 或 weighted mixed workload**：用户选择 `single` 或 `mixed`；
   mixed 模式读取 chain template 中的 `rpc_methods.mixed_weighted`。
 - **Per-method RPC 归因**：workload 流量经过 proxy，记录 method、status、
-  latency，用于生成 method 级 QPS、延迟、错误率和资源归因。
+  request-to-response latency，用于生成 method 级 QPS、P50/P90/P99 延迟、
+  错误率、成功/失败请求数和资源归因。
 - **真实 sync-health 模型**：chain template 声明该链使用高度差、条件同步对象、
   节点自报 lag、freshness 或 boolean health 信号。
 - **可插拔监控栈**：coordinator 统一启动系统监控、provider-aware 网络监控、
@@ -793,8 +794,9 @@ blockchain-node-benchmark-result/archives/run_<number>_<session>/reports/
   normalized IOPS 和吞吐量。
 - **Sync Health**：根据链能力展示高度差、reported lag、freshness 或
   health-only 状态。
-- **Per-Method 归因**：workload method 的 QPS、延迟、RPC 失败率、
-  成功/失败请求数和资源归因；sync-health probe method 会被排除。
+- **Per-Method 归因**：workload method 的 QPS、request-to-response
+  P50/P90/P99 延迟、RPC 失败率、成功/失败请求数和资源归因；
+  sync-health probe method 会被排除。
 - **监控开销**：框架 observer cost 以及与区块链节点进程的资源对比。
 - **图表库**：基于当前运行生成的图表，以及缺失输入的提示。
 
