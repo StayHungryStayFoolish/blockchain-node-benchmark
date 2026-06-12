@@ -3,7 +3,7 @@
 # =====================================================================
 
 # HTTP requests and async processing
-requests>=2.25.0
+requests>=2.34.2
 aiohttp>=3.8.0,<4.0.0
 
 # Data processing and analysis
