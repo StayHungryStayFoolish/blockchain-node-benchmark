@@ -17,7 +17,7 @@ seaborn>=0.11.0
 # Statistics and machine learning
 scipy>=1.7.0
 scikit-learn>=1.0.0
-statsmodels>=0.12.0
+statsmodels>=0.14.6
 
 # =====================================================================
 # Installation:
