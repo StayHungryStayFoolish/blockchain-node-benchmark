@@ -34,7 +34,7 @@ from utils.csv_schema_registry import CSVSchemaRegistry
 
 # Report text is stored outside Python code so report layout and copy can evolve independently.
 def _load_report_translations() -> Dict[str, Dict[str, str]]:
-    i18n_dir = os.path.join(project_root, 'i18n')
+    i18n_dir = os.path.join(script_dir, 'i18n')
     translations: Dict[str, Dict[str, str]] = {}
     for language in ('en', 'zh'):
         path = os.path.join(i18n_dir, f'report.{language}.json')
