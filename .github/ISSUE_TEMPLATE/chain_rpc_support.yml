@@ -1,0 +1,64 @@
+name: Chain or RPC method support
+description: Request support for a new chain, RPC method, or RPC parameter shape.
+title: "feat(chain): "
+labels:
+  - chain
+  - rpc
+body:
+  - type: input
+    id: chain
+    attributes:
+      label: Chain name
+      placeholder: ethereum, solana, bitcoin, new-chain
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol_family
+    attributes:
+      label: RPC protocol family
+      description: Choose the closest existing adapter family.
+      options:
+        - json_rpc
+        - rest
+        - bitcoin_jsonrpc
+        - substrate
+        - tendermint
+        - hedera_dual
+        - unknown / needs investigation
+    validations:
+      required: true
+  - type: textarea
+    id: methods
+    attributes:
+      label: RPC methods or endpoints
+      description: Include method names, parameter shapes, and official documentation links.
+      value: |
+        - method:
+          parameters:
+          expected response fields:
+          official docs:
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample request and response
+      description: Provide a redacted sample. Do not include private endpoints, keys, or real user data.
+      render: json
+  - type: textarea
+    id: workload
+    attributes:
+      label: Workload expectation
+      description: Should this be available in single mode, mixed mode, fake-node, sync-health, or all of them?
+      placeholder: mixed_weighted with weight 20; fake-node fixture required; per-method report should include this method.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I included official documentation or a reason why it is unavailable.
+          required: true
+        - label: I removed secrets, private RPC URLs, API keys, and local machine paths.
+          required: true

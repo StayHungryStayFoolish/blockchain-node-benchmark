@@ -1,0 +1,81 @@
+name: Bug report
+description: Report a reproducible framework bug.
+title: "fix: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail for maintainers to reproduce the failure without access to your private node or cloud account.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+      placeholder: The benchmark completed, but the per-method report did not include mixed workload methods.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Entry command / workload generation
+        - Chain template / RPC adapter
+        - fake-node / fixtures
+        - Proxy / per-method attribution
+        - Monitoring / runtime files
+        - Sync health / block height
+        - Analysis / charts / HTML report
+        - Kubernetes / observability
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: chain
+    attributes:
+      label: Chain and mode
+      description: Include the chain name and whether you used single or mixed mode.
+      placeholder: solana, mixed
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide commands and configuration changes. Redact private endpoints, keys, and local paths.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+      description: Paste the smallest useful excerpt. Do not include secrets, private RPC URLs, API keys, or local machine paths.
+      render: text
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, deployment mode, container/runtime, cloud provider, and dependency versions.
+      value: |
+        - OS:
+        - Deployment mode:
+        - Cloud provider / instance type:
+        - Python:
+        - Go:
+        - Vegeta:
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I removed secrets, private RPC URLs, API keys, and local machine paths.
+          required: true
+        - label: I searched existing issues before opening this one.
+          required: true

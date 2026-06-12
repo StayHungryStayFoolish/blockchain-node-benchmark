@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a framework capability or improvement.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow, chain, report, or deployment scenario is hard today?
+      placeholder: I need to run the benchmark against a chain whose RPC method requires three positional parameters.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior, configuration, or documentation you expect.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Chain template / RPC adapter
+        - fake-node / fixture recording
+        - Workload generation
+        - Monitoring / sync health
+        - Reports / charts
+        - Kubernetes / observability
+        - CI / developer workflow
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: How should this be validated?
+      description: Include expected tests, fake-node fixtures, smoke checks, or report outputs.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues before opening this one.
+          required: true
