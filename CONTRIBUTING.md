@@ -42,6 +42,7 @@ Allowed types:
 - `refactor`: code restructuring without intended behavior change
 - `perf`: performance improvement
 - `ci`: GitHub Actions or CI changes
+- `build`: dependency updates or build-system changes
 - `chore`: repository maintenance, build tooling, or cleanup
 
 Examples:

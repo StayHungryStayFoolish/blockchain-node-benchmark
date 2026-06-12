@@ -79,13 +79,14 @@ Commits because it becomes the final commit subject:
 type(scope): short summary
 ```
 
-Allowed types are `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `ci`, and
-`chore`. Examples:
+Allowed types are `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `ci`,
+`build`, and `chore`. Examples:
 
 ```text
 feat(fake-node): add fixture coverage validation
 fix(monitoring): read sync health from runtime cache
 docs(readme): clarify Kubernetes quick start
+build(deps): update requests requirement
 ```
 
 Intermediate commits should follow the same style when practical, but the PR
