@@ -2,8 +2,8 @@
 
 [English](README.md) | [中文](README_ZH.md)
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Commercial License](https://img.shields.io/badge/License-Commercial-green.svg)](LICENSE.COMMERCIAL)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Commercial License](https://img.shields.io/badge/License-Commercial-green.svg)](COMMERCIAL.md)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Shell Script](https://img.shields.io/badge/shell-bash-green.svg)](https://www.gnu.org/software/bash/)
 
@@ -1077,11 +1077,11 @@ done
 
 我们欢迎贡献！贡献本项目即表示您同意以下条款：
 
-### 贡献者许可协议（CLA）
+### 贡献者授权条款
 
 提交 Pull Request 即表示您同意：
-- 您的贡献将同时在 AGPL 3.0 和商业许可证下授权
-- 您授予项目维护者在商业版本中使用您贡献的权利
+- 您的贡献可以在 AGPL 3.0 或更高版本以及项目商业授权条款下授权
+- 您授予项目维护者在商业版本中使用和再授权您贡献的权利
 - 您有权提交这些贡献（无第三方知识产权冲突）
 
 ### 开发环境设置
@@ -1121,17 +1121,16 @@ bash --version
 
 本项目采用双许可证模式：
 
-### 开源许可证（AGPL 3.0）
-- 个人、学术和开源项目免费使用
-- 修改后必须开源
-- 网络使用需要公开源码
+### 开源许可证（AGPL 3.0 或更高版本）
+- 商业和非商业用途都可以在 AGPL 条款下使用
+- 如果修改、分发，或通过网络向用户提供该软件，需要遵守 AGPL 的源码公开要求
 - 详见 [LICENSE](LICENSE) 文件
 
-### 商业许可证
-- 商业/专有用途需要购买
+### 商业授权选项
+- 面向需要不同于 AGPL 条款的专有使用场景
 - 允许闭源集成
-- 无 AGPL 义务
+- 在单独签署的商业授权协议下无 AGPL 义务
 - 提供企业支持
-- 详见 [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL) 文件
+- 详见 [COMMERCIAL.md](COMMERCIAL.md) 文件
 
 **联系方式：** 在 GitHub 提交 Issue 并添加 `commercial-license` 标签咨询商业许可
